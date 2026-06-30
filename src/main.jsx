@@ -1,28 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { supabase } from './services/supabase'
+import Layout from './components/layout/Layout'
 import {
-  Shield,
-  Users,
-  Boxes,
-  ClipboardCheck,
-  FileText,
   Search,
-  LogOut,
   UserPlus,
-  Activity,
   AlertTriangle
 } from 'lucide-react'
-import './styles.css'
-
-const NAV = [
-  { id: 'dashboard', label: 'Painel Operacional', icon: Shield },
-  { id: 'usuarios', label: 'Usuários', icon: Users },
-  { id: 'materiais', label: 'Materiais', icon: Boxes },
-  { id: 'entrega', label: 'Entrega', icon: ClipboardCheck },
-  { id: 'relatorios', label: 'Relatórios', icon: FileText },
-  { id: 'auditoria', label: 'Auditoria', icon: Activity }
-]
+import './styles/styles.css'
 
 function saveSession(user) {
   localStorage.setItem('sigmo_user', JSON.stringify(user))
@@ -132,66 +117,6 @@ function Login({ onLogin }) {
   )
 }
 
-function Layout({ user, route, setRoute, onLogout, children }) {
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-row">
-          <div className="brand-mark">S</div>
-          <div>
-            <h2>SIGMO</h2>
-            <span>Sistema Integrado de Gestão de Material Operacional</span>
-          </div>
-        </div>
-
-        <nav>
-          {NAV.map(item => {
-            const Icon = item.icon
-            return (
-              <button
-                key={item.id}
-                className={route === item.id ? 'nav-item active' : 'nav-item'}
-                onClick={() => setRoute(item.id)}
-              >
-                <Icon size={19} />
-                {item.label}
-              </button>
-            )
-          })}
-        </nav>
-
-        <div className="sidebar-footer">
-          <strong>5ª Companhia</strong>
-          <span>27º BPM/M</span>
-          <span>Versão 0.2.0</span>
-        </div>
-      </aside>
-
-      <main className="main">
-        <header className="topbar">
-          <div>
-            <h1>{NAV.find(n => n.id === route)?.label || 'SIGMO'}</h1>
-            <p>Ambiente de desenvolvimento funcional.</p>
-          </div>
-
-          <div className="user-card">
-            <div className="avatar">{user?.nome?.charAt(0) || 'U'}</div>
-            <div>
-              <strong>{user?.nome}</strong>
-              <span>{user?.perfil}</span>
-            </div>
-            <button className="icon-btn" onClick={onLogout} title="Sair">
-              <LogOut size={18} />
-            </button>
-          </div>
-        </header>
-
-        {children}
-      </main>
-    </div>
-  )
-}
-
 function Dashboard() {
   const [stats, setStats] = useState({ users: 0, pending: 0, audit: 0 })
 
@@ -200,6 +125,7 @@ function Dashboard() {
       const users = await supabase.from('sigmo_users').select('*', { count: 'exact', head: true })
       const pending = await supabase.from('sigmo_users').select('*', { count: 'exact', head: true }).eq('situacao', 'Aguardando Aprovação')
       const audit = await supabase.from('sigmo_audit').select('*', { count: 'exact', head: true })
+
       setStats({
         users: users.count || 0,
         pending: pending.count || 0,
@@ -260,6 +186,7 @@ function Usuarios({ user }) {
     situacao: 'Ativo',
     pin: ''
   })
+
   const [users, setUsers] = useState([])
   const [message, setMessage] = useState('')
 
@@ -302,7 +229,9 @@ function Usuarios({ user }) {
     }
 
     await registerAudit('CADASTRO_USUARIO', `Cadastro criado para ${form.nome} (${form.re}).`, user, 'Usuários')
+
     setMessage('Cadastro salvo com sucesso.')
+
     setForm({
       nome: '',
       re: '',
@@ -314,6 +243,7 @@ function Usuarios({ user }) {
       situacao: 'Ativo',
       pin: ''
     })
+
     loadUsers()
   }
 
@@ -346,6 +276,7 @@ function Usuarios({ user }) {
 
       <section className="panel">
         <h2>Últimos cadastros</h2>
+
         <div className="table-wrap">
           <table>
             <thead>
@@ -356,13 +287,18 @@ function Usuarios({ user }) {
                 <th>Situação</th>
               </tr>
             </thead>
+
             <tbody>
               {users.map(item => (
                 <tr key={item.id}>
                   <td>{item.nome}</td>
                   <td>{item.re}</td>
                   <td>{item.perfil}</td>
-                  <td><span className={item.situacao === 'Ativo' ? 'status ok' : 'status wait'}>{item.situacao}</span></td>
+                  <td>
+                    <span className={item.situacao === 'Ativo' ? 'status ok' : 'status wait'}>
+                      {item.situacao}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -378,9 +314,15 @@ function Auditoria() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from('sigmo_audit').select('*').order('created_at', { ascending: false }).limit(100)
+      const { data } = await supabase
+        .from('sigmo_audit')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100)
+
       setLogs(data || [])
     }
+
     load()
   }, [])
 
@@ -402,6 +344,7 @@ function Auditoria() {
               <th>Descrição</th>
             </tr>
           </thead>
+
           <tbody>
             {logs.map(log => (
               <tr key={log.id}>
