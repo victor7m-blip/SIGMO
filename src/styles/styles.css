@@ -29,17 +29,22 @@ input,
 select {
   font: inherit;
 }
-
-.login-page {
+..login-page {
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  align-items: center;
-  gap: 60px;
-  padding: 60px 10%;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(7, 94, 234, 0.18), transparent 30%),
-    linear-gradient(135deg, #041426, #093763);
+  width: 100vw;
+  position: relative;
+  overflow: hidden;
+  background-image: url('../assets/SIGMO_01_Login.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+@media (max-width: 768px) {
+  .login-page {
+    background-image: url('../assets/SIGMO_01_Login_Mobile.png');
+    background-size: cover;
+    background-position: center top;
+  }
 }
 
 .login-card {

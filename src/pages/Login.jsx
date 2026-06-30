@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase'
 import { saveSession } from '../services/auth'
 import { registerAudit } from '../services/audit'
 import backgroundLogin from '../assets/SIGMO_01_Login.png'
+import backgroundMobile from '../assets/SIGMO_01_Login_Mobile.png'
 
 export default function Login({ onLogin }) {
   const [re, setRe] = useState('')
@@ -48,8 +49,7 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div
-      className="login-page"
+  <div className="login-page">
       style={{
         backgroundImage: `url(${backgroundLogin})`,
         backgroundSize: 'cover',
