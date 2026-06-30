@@ -64,11 +64,12 @@ export default function Login({ onLogin }) {
     <div
       className="login-page"
       style={{
-        backgroundImage: `url(${background})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      }}
+  backgroundImage: `url(${background})`,
+  backgroundSize: 'contain',
+  backgroundPosition: 'center center',
+  backgroundRepeat: 'no-repeat',
+  backgroundColor: '#030913'
+}}
     >
       <section className="login-card">
         <form onSubmit={handleLogin}>

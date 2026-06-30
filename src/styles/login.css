@@ -7,42 +7,129 @@
 
 .login-card {
   position: absolute;
-  width: 360px;
-  left: 8%;
-  top: 52%;
-  transform: translateY(-50%);
+  left: 19.4%;
+  top: 51.2%;
+  width: 27.6%;
+  height: 27%;
   background: transparent;
   padding: 0;
+  border: 0;
   box-shadow: none;
-  border-radius: 0;
+  z-index: 2;
 }
 
 .login-card form {
-  margin-top: 0;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
 }
 
-.login-card label,
-.field span {
-  display: block;
-  margin: 14px 0 7px;
-  font-weight: 700;
+.login-card label {
+  display: none;
+}
+
+.login-card input {
+  position: absolute;
+  left: 6.5%;
+  width: 87%;
+  height: 15%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: white;
+  padding: 0 16px 0 54px;
+  outline: none;
+  font-size: 14px;
+}
+
+.login-card input::placeholder {
+  color: transparent;
+}
+
+.login-card input:focus {
+  box-shadow: inset 0 0 0 2px rgba(0, 174, 255, 0.35);
+}
+
+.login-card input:nth-of-type(1) {
+  top: 27%;
+}
+
+.login-card input:nth-of-type(2) {
+  top: 49.5%;
+}
+
+.login-card .primary-btn {
+  position: absolute;
+  left: 6.5%;
+  top: 72.5%;
+  width: 87%;
+  height: 15%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+
+.login-card .primary-btn:hover {
+  background: rgba(0, 132, 255, 0.14);
+}
+
+.login-card .primary-btn:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+.error {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 18%;
+  color: #ff5555;
   font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+}
+
+.hint {
+  display: none;
 }
 
 @media (max-width: 768px), (pointer: coarse) {
-  .login-page {
-    min-height: 100vh;
-    width: 100vw;
-    position: relative;
-    overflow: hidden;
+  .login-card {
+    left: 18.8%;
+    top: 53.8%;
+    width: 28.2%;
+    height: 28.5%;
+}
   }
 
-  .login-card {
-    width: auto;
-    left: 24px;
-    right: 24px;
-    top: auto;
-    bottom: 70px;
-    transform: none;
+  .login-card input {
+    left: 4.8%;
+    width: 90.5%;
+    height: 14%;
+    padding-left: 68px;
+    font-size: 16px;
   }
-}
+
+  .login-card input:nth-of-type(1) {
+    top: 27%;
+  }
+
+  .login-card input:nth-of-type(2) {
+    top: 49.5%;
+  }
+
+ ;.login-card .primary-btn {
+    left: 4.8%;
+    top: 72.5%;
+    width: 90.5%;
+    height: 14%;
+  }
+
+  .error {
+    top: 18%;
+    font-size: 13px;
+  }
