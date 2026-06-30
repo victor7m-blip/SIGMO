@@ -1,0 +1,48 @@
+.login-page {
+  min-height: 100vh;
+  width: 100vw;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-card {
+  position: absolute;
+  width: 360px;
+  left: 8%;
+  top: 52%;
+  transform: translateY(-50%);
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.login-card form {
+  margin-top: 0;
+}
+
+.login-card label,
+.field span {
+  display: block;
+  margin: 14px 0 7px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .login-page {
+    min-height: 100vh;
+    width: 100vw;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .login-card {
+    width: auto;
+    left: 24px;
+    right: 24px;
+    top: auto;
+    bottom: 70px;
+    transform: none;
+  }
+}
