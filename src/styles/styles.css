@@ -37,7 +37,7 @@ select {
   width: 100vw;
   position: relative;
   overflow: hidden;
-  background-image: url('../assets/SIGMO_01_Login.png');
+  background-image: url('/src/assets/SIGMO_01_Login.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -409,7 +409,7 @@ th {
   .login-page {
     min-height: 100vh;
     width: 100vw;
-    background-image: url('../assets/SIGMO_01_Login_Mobile.png');
+    background-image: url('/src/assets/SIGMO_01_Login_Mobile.png');
     background-size: cover;
     background-position: center top;
     background-repeat: no-repeat;
