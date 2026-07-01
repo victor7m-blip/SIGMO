@@ -24,110 +24,142 @@ export default function Login({ onLogin }) {
   }, [])
 
   async function handleLogin(e) {
-  e.preventDefault()
-  setError('')
+    e.preventDefault()
+    setError('')
+    setLoading(true)
 
-  if (!re.trim() || !pin.trim()) {
-    setError('Informe o RE e o PIN.')
-    return
-  }
+    const reLimpo = re.trim()
+    const pinLimpo = pin.trim()
 
-  setLoading(true)
+    console.log('1 - Clicou no login', { reLimpo, pinLimpo })
 
-  // 1 - Procura o policial pelo RE
-  const { data: policial, error: policialError } = await supabase
-    .from('policiais')
-    .select('*')
-    .eq('re', re.trim())
-    .maybeSingle()
+    if (!reLimpo || !pinLimpo) {
+      setError('Informe o RE e o PIN.')
+      setLoading(false)
+      return
+    }
 
-  if (policialError) {
+    const { data: policial, error: policialError } = await supabase
+      .from('policiais')
+      .select('*')
+      .eq('re', reLimpo)
+      .maybeSingle()
+
+    console.log('2 - Resultado policial:', policial, policialError)
+
+    if (policialError) {
+      setError('Erro ao consultar policial.')
+      setLoading(false)
+      return
+    }
+
+    if (!policial) {
+      setError('RE não encontrado.')
+      setLoading(false)
+      return
+    }
+
+    const { data: usuario, error: usuarioError } = await supabase
+      .from('sigmo_users')
+      .select('*')
+      .eq('policial_id', policial.id)
+      .eq('pin', Number(pinLimpo))
+      .eq('ativo', true)
+      .maybeSingle()
+
+    console.log('3 - Resultado usuário:', usuario, usuarioError)
+
+    if (usuarioError) {
+      setError('Erro ao validar usuário.')
+      setLoading(false)
+      return
+    }
+
+    if (!usuario) {
+      setError('PIN incorreto ou usuário inativo.')
+      setLoading(false)
+      return
+    }
+
+    const sessionUser = {
+      id: policial.id,
+      re: policial.re,
+      nome: policial.nome,
+      nome_guerra: policial.nome_guerra,
+      posto_graduacao: policial.posto_graduacao,
+      perfil: usuario.perfil,
+      ativo: usuario.ativo,
+      user_id: usuario.id
+    }
+
+    console.log('4 - Sessão criada:', sessionUser)
+
+    try {
+      await registerAudit(
+        'LOGIN',
+        'Usuário acessou o SIGMO.',
+        sessionUser,
+        'Login'
+      )
+    } catch (auditError) {
+      console.error('Erro ao registrar auditoria:', auditError)
+    }
+
+    saveSession(sessionUser)
+    onLogin(sessionUser)
     setLoading(false)
-    console.error(policialError)
-    setError('Erro ao consultar policiais.')
-    return
   }
-
-  if (!policial) {
-    setLoading(false)
-    setError('RE não encontrado.')
-    return
-  }
-
-  // 2 - Procura o login desse policial
-  const { data: usuario, error: usuarioError } = await supabase
-    .from('sigmo_users')
-    .select('*')
-    .eq('policial_id', policial.id)
-    .eq('pin', pin.trim())
-    .eq('ativo', true)
-    .maybeSingle()
-
-  setLoading(false)
-
-  if (usuarioError) {
-    console.error(usuarioError)
-    setError('Erro ao validar o PIN.')
-    return
-  }
-
-  if (!usuario) {
-    setError('PIN incorreto ou usuário inativo.')
-    return
-  }
-
-  const sessionUser = {
-    ...policial,
-    perfil: usuario.perfil,
-    ativo: usuario.ativo,
-    user_id: usuario.id
-  }
-
-  await registerAudit(
-    'LOGIN',
-    'Usuário acessou o SIGMO.',
-    sessionUser,
-    'Login'
-  )
-
-  saveSession(sessionUser)
-  onLogin(sessionUser)
-}
 
   return (
     <div
       className="login-page"
       style={{
-  backgroundImage: `url(${background})`,
-  backgroundSize: 'contain',
-  backgroundPosition: 'center center',
-  backgroundRepeat: 'no-repeat',
-  backgroundColor: '#030913'
-}}
+        backgroundImage: `url(${background})`,
+        backgroundSize: 'contain',
+        backgroundPosition: 'center center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: '#030913'
+      }}
     >
       <section className="login-card">
         <form onSubmit={handleLogin}>
           <label>RE / Matrícula</label>
           <input
-  value={re}
-  onChange={(e) => setRe(e.target.value.replace(/\D/g, '').slice(0, 6))}
-  placeholder="Digite o RE"
-  maxLength={6}
-  inputMode="numeric"
-/>
+            value={re}
+            onChange={(e) => setRe(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="Digite o RE"
+            maxLength={6}
+            inputMode="numeric"
+          />
 
           <label>PIN</label>
           <input
-  type="password"
-  value={pin}
-  onChange={(e) => setPin(e.target.value.slice(0, 6))}
-  placeholder="Digite o PIN"
-  maxLength={6}
-/>
+            type="password"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="Digite o PIN"
+            maxLength={6}
+            inputMode="numeric"
+          />
 
           {error && <div className="error">{error}</div>}
 
-          <button className="primary-btn" disabled={loading}>
+          <button
+            type="submit"
+            style={{
+              display: 'block',
+              width: '100%',
+              height: '48px',
+              marginTop: '20px',
+              background: '#075eea',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              cursor: 'pointer'
+            }}
+            disabled={loading}
+          >
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>

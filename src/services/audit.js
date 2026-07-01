@@ -1,17 +1,25 @@
 import { supabase } from './supabase'
 
-export async function registerAudit(action, description, user, module = 'Sistema', severity = 'Informativo') {
+export async function registerAudit(
+  acao,
+  descricao,
+  user,
+  modulo = 'Sistema',
+  severidade = 'Informativo'
+) {
   try {
-    await supabase.from('sigmo_audit').insert({
-      action,
-      description,
-      actor_id: user?.id || null,
-      actor_name: user?.nome || null,
-      actor_profile: user?.perfil || null,
-      module,
-      severity
-    })
-  } catch (error) {
-    console.warn('Falha ao registrar auditoria:', error)
+    await supabase
+      .from('auditoria')
+      .insert({
+        acao,
+        descricao,
+        ator_id: user?.id || null,
+        ator_nome: user?.nome || null,
+        perfil: user?.perfil || null,
+        modulo,
+        severidade
+      })
+  } catch (err) {
+    console.error(err)
   }
 }
