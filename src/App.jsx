@@ -3,7 +3,8 @@ import Layout from './components/layout/Layout'
 
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Usuarios from './pages/Usuarios'
+import Policiais from './pages/Policiais'
+import CadastroPolicial from './pages/CadastroPolicial'
 import Auditoria from './pages/Auditoria'
 import Placeholder from './pages/Placeholder'
 
@@ -26,7 +27,8 @@ export default function App() {
 
   let page = <Dashboard />
 
-  if (route === 'usuarios') page = <Usuarios user={user} />
+if (route === 'policiais') page = <Policiais user={user} setRoute={setRoute} />
+if (route === 'novo-policial') page = <CadastroPolicial />
   if (route === 'auditoria') page = <Auditoria />
   if (route === 'materiais') page = <Placeholder title="Cadastro de Materiais" />
   if (route === 'entrega') page = <Placeholder title="Entrega de Material" />

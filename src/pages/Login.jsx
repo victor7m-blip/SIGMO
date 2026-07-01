@@ -24,41 +24,75 @@ export default function Login({ onLogin }) {
   }, [])
 
   async function handleLogin(e) {
-    e.preventDefault()
-    setError('')
+  e.preventDefault()
+  setError('')
 
-    if (!re.trim() || !pin.trim()) {
-      setError('Informe RE e PIN.')
-      return
-    }
-
-    setLoading(true)
-
-    const { data, error: queryError } = await supabase
-      .from('sigmo_users')
-      .select('*')
-      .eq('re', re.trim())
-      .eq('pin', pin.trim())
-      .eq('situacao', 'Ativo')
-      .maybeSingle()
-
-    setLoading(false)
-
-    if (queryError) {
-      console.error(queryError)
-      setError('Erro ao consultar o banco.')
-      return
-    }
-
-    if (!data) {
-      setError('Usuário não encontrado, PIN incorreto ou usuário inativo.')
-      return
-    }
-
-    await registerAudit('LOGIN', 'Usuário acessou o SIGMO.', data, 'Login')
-    saveSession(data)
-    onLogin(data)
+  if (!re.trim() || !pin.trim()) {
+    setError('Informe o RE e o PIN.')
+    return
   }
+
+  setLoading(true)
+
+  // 1 - Procura o policial pelo RE
+  const { data: policial, error: policialError } = await supabase
+    .from('policiais')
+    .select('*')
+    .eq('re', re.trim())
+    .maybeSingle()
+
+  if (policialError) {
+    setLoading(false)
+    console.error(policialError)
+    setError('Erro ao consultar policiais.')
+    return
+  }
+
+  if (!policial) {
+    setLoading(false)
+    setError('RE não encontrado.')
+    return
+  }
+
+  // 2 - Procura o login desse policial
+  const { data: usuario, error: usuarioError } = await supabase
+    .from('sigmo_users')
+    .select('*')
+    .eq('policial_id', policial.id)
+    .eq('pin', pin.trim())
+    .eq('ativo', true)
+    .maybeSingle()
+
+  setLoading(false)
+
+  if (usuarioError) {
+    console.error(usuarioError)
+    setError('Erro ao validar o PIN.')
+    return
+  }
+
+  if (!usuario) {
+    setError('PIN incorreto ou usuário inativo.')
+    return
+  }
+
+  const sessionUser = {
+    ...policial,
+    perfil: usuario.perfil,
+    ativo: usuario.ativo,
+    user_id: usuario.id
+  }
+
+  await registerAudit(
+    'LOGIN',
+    'Usuário acessou o SIGMO.',
+    sessionUser,
+    'Login'
+  )
+
+  saveSession(sessionUser)
+  onLogin(sessionUser)
+}
 
   return (
     <div
@@ -74,10 +108,22 @@ export default function Login({ onLogin }) {
       <section className="login-card">
         <form onSubmit={handleLogin}>
           <label>RE / Matrícula</label>
-          <input value={re} onChange={(e) => setRe(e.target.value)} placeholder="Digite o RE" />
+          <input
+  value={re}
+  onChange={(e) => setRe(e.target.value.replace(/\D/g, '').slice(0, 6))}
+  placeholder="Digite o RE"
+  maxLength={6}
+  inputMode="numeric"
+/>
 
           <label>PIN</label>
-          <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Digite o PIN" />
+          <input
+  type="password"
+  value={pin}
+  onChange={(e) => setPin(e.target.value.slice(0, 6))}
+  placeholder="Digite o PIN"
+  maxLength={6}
+/>
 
           {error && <div className="error">{error}</div>}
 
