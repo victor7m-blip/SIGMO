@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import './DashboardV2.css'
 
-export default function DashboardV2() {
+export default function DashboardV2({ user, onLogout }) {
   const resumo = [
     {
       titulo: 'Materiais cadastrados',
@@ -100,19 +100,27 @@ export default function DashboardV2() {
     ['Sistema operacional', 'Normal', 'success']
   ]
 
-  return (
-  <main className="sigmo-dashboard-v2">
-    <img
-      src={painelOperacional}
-      alt="Painel Operacional SIGMO"
-      className="sigmo-mockup-image sigmo-desktop"
-    />
+   return (
+    <main className="sigmo-dashboard-v2">
+      <button
+        className="sigmo-floating-logout"
+        onClick={onLogout}
+        title="Sair"
+      >
+        Sair
+      </button>
 
-    <img
-      src={painelOperacionalMobile}
-      alt="Painel Operacional SIGMO Mobile"
-      className="sigmo-mockup-image sigmo-mobile"
-    />
-  </main>
-)
+      <img
+        src={painelOperacional}
+        alt="Painel Operacional SIGMO"
+        className="sigmo-mockup-image sigmo-desktop"
+      />
+
+      <img
+        src={painelOperacionalMobile}
+        alt="Painel Operacional SIGMO Mobile"
+        className="sigmo-mockup-image sigmo-mobile"
+      />
+    </main>
+  )
 }

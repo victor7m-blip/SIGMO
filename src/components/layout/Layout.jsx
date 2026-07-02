@@ -1,8 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { LogOut } from 'lucide-react'
 import { NAV } from '../../data/navigation'
 
 function Layout({ user, route, setRoute, onLogout, children }) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -53,7 +55,11 @@ function Layout({ user, route, setRoute, onLogout, children }) {
               <span>{user?.perfil}</span>
             </div>
 
-            <button className="icon-btn" onClick={onLogout} title="Sair">
+            <button
+              className="icon-btn"
+              onClick={() => setShowLogoutConfirm(true)}
+              title="Sair"
+            >
               <LogOut size={18} />
             </button>
           </div>
@@ -61,6 +67,40 @@ function Layout({ user, route, setRoute, onLogout, children }) {
 
         {children}
       </main>
+
+      {showLogoutConfirm && (
+        <div className="sigmo-modal-overlay">
+          <div className="sigmo-confirm-modal">
+            <div className="sigmo-confirm-icon">
+              <LogOut size={28} />
+            </div>
+
+            <h2>Encerrar sessão</h2>
+
+            <p>
+              Deseja realmente sair do SIGMO?
+              <br />
+              Salve seu trabalho antes de encerrar a sessão.
+            </p>
+
+            <div className="sigmo-confirm-actions">
+              <button
+                className="sigmo-btn-cancel"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                className="sigmo-btn-danger"
+                onClick={onLogout}
+              >
+                Encerrar Sessão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

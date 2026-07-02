@@ -295,3 +295,9 @@ grid-template-columns:1fr;
     grid-template-columns:1fr;
   }
 }
+
+.sigmo-mockup-image {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
