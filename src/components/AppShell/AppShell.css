@@ -1,0 +1,118 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+  background: #f3f6fb;
+}
+
+.app-sidebar {
+  background: linear-gradient(180deg, #061a32 0%, #092544 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.app-brand {
+  padding: 28px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.app-brand strong {
+  display: block;
+  font-size: 26px;
+  letter-spacing: 1px;
+}
+
+.app-brand span {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: .75;
+}
+
+.app-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px 12px;
+  flex: 1;
+}
+
+.app-menu button {
+  border: none;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  padding: 14px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: .2s;
+}
+
+.app-menu button:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.app-menu button.active {
+  background: #075eea;
+  font-weight: 700;
+}
+
+.app-user {
+  padding: 20px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.app-user span {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.app-user button {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  background: #dc2626;
+  color: white;
+  padding: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.app-user button:hover {
+  background: #b91c1c;
+}
+
+.app-content {
+  padding: 30px;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+
+  .app-menu {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 10px;
+    padding: 15px;
+  }
+
+  .app-menu button {
+    white-space: nowrap;
+  }
+
+  .app-content {
+    padding: 18px;
+  }
+}
