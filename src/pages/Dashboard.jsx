@@ -1,5 +1,9 @@
+import painelDesktop from '../assets/painel-operacional.png'
+import painelMobile from '../assets/painel-operacional-mobile.png'
+
+import './DashboardV2.css'
 import { useEffect, useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+
 import { supabase } from '../services/supabase'
 
 function Metric({ title, value, detail, tone = 'blue' }) {

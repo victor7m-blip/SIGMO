@@ -1,19 +1,13 @@
 import { useState } from 'react'
-import Layout from './components/layout/Layout'
 
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Policiais from './pages/Policiais'
-import CadastroPolicial from './pages/CadastroPolicial'
-import Auditoria from './pages/Auditoria'
-import Placeholder from './pages/Placeholder'
+import DashboardV2 from './pages/DashboardV2'
 
 import { loadSession, clearSession } from './services/auth'
 import { registerAudit } from './services/audit'
 
 export default function App() {
   const [user, setUser] = useState(loadSession)
-  const [route, setRoute] = useState('dashboard')
 
   function logout() {
     registerAudit('LOGOUT', 'Usuário saiu do SIGMO.', user, 'Login')
@@ -25,18 +19,5 @@ export default function App() {
     return <Login onLogin={setUser} />
   }
 
-  let page = <Dashboard />
-
-if (route === 'policiais') page = <Policiais user={user} setRoute={setRoute} />
-if (route === 'novo-policial') page = <CadastroPolicial />
-  if (route === 'auditoria') page = <Auditoria />
-  if (route === 'materiais') page = <Placeholder title="Cadastro de Materiais" />
-  if (route === 'entrega') page = <Placeholder title="Entrega de Material" />
-  if (route === 'relatorios') page = <Placeholder title="Relatórios" />
-
-  return (
-    <Layout user={user} route={route} setRoute={setRoute} onLogout={logout}>
-      {page}
-    </Layout>
-  )
+  return <DashboardV2 user={user} onLogout={logout} />
 }
