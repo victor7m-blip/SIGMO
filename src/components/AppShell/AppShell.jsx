@@ -1,6 +1,15 @@
+import { useEffect, useState } from 'react'
 import './AppShell.css'
 
-export default function AppShell({ user, route, setRoute, onLogout, children }) {
+export default function AppShell({
+  user,
+  route,
+  setRoute,
+  onLogout,
+  children,
+}) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   const menuItems = [
     { key: 'dashboard', label: 'Painel' },
     { key: 'materiais', label: 'Materiais' },
@@ -10,9 +19,32 @@ export default function AppShell({ user, route, setRoute, onLogout, children }) 
     { key: 'relatorios', label: 'Relatórios' },
   ]
 
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [route])
+
   return (
     <div className="app-shell">
-      <aside className="app-sidebar">
+
+      <button
+        className="menu-toggle"
+        onClick={() => setMobileMenuOpen(true)}
+      >
+        ☰
+      </button>
+
+      {mobileMenuOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`app-sidebar ${
+          mobileMenuOpen ? 'sidebar-open' : ''
+        }`}
+      >
         <div className="app-brand">
           <strong>SIGMO</strong>
           <span>Gestão Operacional</span>
@@ -31,14 +63,18 @@ export default function AppShell({ user, route, setRoute, onLogout, children }) 
         </nav>
 
         <div className="app-user">
-          <span>{user?.nome || 'Usuário'}</span>
-          <button onClick={onLogout}>Sair</button>
+          <span>{user?.nome}</span>
+
+          <button onClick={onLogout}>
+            Sair
+          </button>
         </div>
       </aside>
 
       <section className="app-content">
         {children}
       </section>
+
     </div>
   )
 }
