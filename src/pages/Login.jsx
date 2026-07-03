@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../services/supabase'
-import { saveSession } from '../services/auth'
-import { registerAudit } from '../services/audit'
+import { supabase } from '../services/supabaseClient'
+import { saveSession } from '../services/authService'
+import { registerAudit } from '../services/auditoriaService'
 import backgroundDesktop from '../assets/SIGMO_01_Login.png'
 import backgroundMobile from '../assets/SIGMO_01_Login_Mobile.png'
 

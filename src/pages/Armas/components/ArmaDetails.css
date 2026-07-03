@@ -1,0 +1,46 @@
+.arma-details{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:16px;
+}
+
+.arma-detail-card{
+    background:#f8fafc;
+    border:1px solid #dbe4ef;
+    border-radius:12px;
+    padding:14px 16px;
+}
+
+.arma-detail-card span{
+    display:block;
+    font-size:12px;
+    color:#64748b;
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:.6px;
+    font-weight:600;
+}
+
+.arma-detail-card strong{
+    display:block;
+    color:#0f172a;
+    font-size:17px;
+    font-weight:700;
+    word-break:break-word;
+}
+
+.arma-detail-card.full{
+    grid-column:1 / -1;
+}
+
+@media (max-width:700px){
+
+    .arma-details{
+        grid-template-columns:1fr;
+    }
+
+    .arma-detail-card.full{
+        grid-column:auto;
+    }
+
+}

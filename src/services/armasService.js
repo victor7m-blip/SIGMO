@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from './supabaseClient'
 
 export async function cadastrarArma(dados) {
   const { data, error } = await supabase
@@ -30,6 +30,19 @@ export async function listarArmas() {
     .from('sigmo_armas')
     .select('*')
     .order('created_at', { ascending: false })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function excluirArma(id) {
+  const { data, error } = await supabase
+    .from('sigmo_armas')
+    .delete()
+    .eq('id', id)
+    .select()
+    .single()
 
   if (error) throw error
 

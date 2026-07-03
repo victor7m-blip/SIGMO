@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from './supabaseClient'
 
 export async function registerAudit(
   action,
@@ -7,23 +7,21 @@ export async function registerAudit(
   module = 'Sistema',
   severity = 'Informativo'
 ) {
-  try {
-    const { error } = await supabase
-      .from('auditoria')
-      .insert({
-        acao: action,
-        descricao: description,
-        ator_id: user?.id || null,
-        ator_nome: user?.nome || null,
-        modulo: module,
-        severidade: severity
-      })
+  const { data, error } = await supabase
+    .from('auditoria')
+    .insert({
+      acao: action,
+      descricao: description,
+      ator_id: user?.id || null,
+      ator_nome: user?.nome || user?.nome_guerra || null,
+      perfil: user?.perfil || null,
+      modulo: module,
+      severidade: severity
+    })
+    .select()
+    .single()
 
-    if (error) {
-      console.error('Erro na auditoria:', error)
-      alert(JSON.stringify(error, null, 2))
-    }
-  } catch (err) {
-    console.error('Erro inesperado na auditoria:', err)
-  }
+  if (error) throw error
+
+  return data
 }

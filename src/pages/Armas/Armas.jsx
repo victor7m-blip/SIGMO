@@ -2,15 +2,22 @@ import { useState } from 'react'
 import './Armas.css'
 
 import { ArmaFilters, ArmaForm, ArmaTable } from './components'
+import DetailsModal from '../../components/DetailsModal/DetailsModal'
+import ArmaDetails from './components/ArmaDetails'
 
 export default function Armas({ user }) {
   const [showForm, setShowForm] = useState(false)
   const [armaEditando, setArmaEditando] = useState(null)
+  const [armaVisualizando, setArmaVisualizando] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
 
   function handleNovaArma() {
     setArmaEditando(null)
     setShowForm(true)
+  }
+
+  function handleView(arma) {
+    setArmaVisualizando(arma)
   }
 
   function handleEditar(arma) {
@@ -40,6 +47,7 @@ export default function Armas({ user }) {
         </div>
 
         <button
+          type="button"
           className="armas-primary-button"
           onClick={handleNovaArma}
         >
@@ -58,11 +66,23 @@ export default function Armas({ user }) {
 
       <section className="armas-panel">
         <ArmaFilters />
+
         <ArmaTable
+          user={user}
           reloadKey={reloadKey}
+          onView={handleView}
           onEdit={handleEditar}
         />
       </section>
+
+      <DetailsModal
+        isOpen={!!armaVisualizando}
+        title="Detalhes da Arma"
+        subtitle={armaVisualizando?.patrimonio}
+        onClose={() => setArmaVisualizando(null)}
+      >
+        <ArmaDetails arma={armaVisualizando} />
+      </DetailsModal>
     </main>
   )
 }
