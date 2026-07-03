@@ -1,0 +1,50 @@
+/* Paginação e avisos */
+
+.armas-pagination{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+
+.armas-pagination button{
+  min-width:38px;
+  border:1px solid #d9e2ef;
+  background:#fff;
+  color:#061a32;
+  padding:9px 12px;
+  border-radius:9px;
+  cursor:pointer;
+  font-weight:700;
+}
+
+.armas-pagination button.active{
+  background:#0b4fc2;
+  color:#fff;
+  border-color:#0b4fc2;
+}
+
+.armas-pagination button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.armas-pagination-dots{
+  color:#667085;
+  font-weight:700;
+}
+
+.armas-feedback{
+  padding:18px;
+  border-radius:12px;
+  background:#f8fbff;
+  color:#061a32;
+  font-weight:700;
+}
+
+.armas-feedback-error{
+  background:#fee2e2;
+  color:#991b1b;
+}

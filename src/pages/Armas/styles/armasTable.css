@@ -1,0 +1,131 @@
+/* Tabela */
+
+.armas-table-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin:10px 0 12px;
+  color:#667085;
+  font-size:14px;
+  font-weight:600;
+}
+
+.armas-table-wrap{
+  width:100%;
+  overflow-x:auto;
+}
+
+.armas-table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+
+.armas-table thead{
+  background:#061a32;
+  color:#fff;
+}
+
+.armas-table th,
+.armas-table td{
+  padding:12px 10px;
+  text-align:left;
+  font-size:14px;
+  vertical-align:middle;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.armas-table td{
+  border-bottom:1px solid #eef2f7;
+  color:#101828;
+}
+
+.armas-table tbody tr:hover{
+  background:#f8fbff;
+}
+
+.armas-table th:nth-child(1),
+.armas-table td:nth-child(1){width:13%}
+
+.armas-table th:nth-child(2),
+.armas-table td:nth-child(2){width:10%}
+
+.armas-table th:nth-child(3),
+.armas-table td:nth-child(3){width:10%}
+
+.armas-table th:nth-child(4),
+.armas-table td:nth-child(4){width:10%}
+
+.armas-table th:nth-child(5),
+.armas-table td:nth-child(5){width:8%}
+
+.armas-table th:nth-child(6),
+.armas-table td:nth-child(6){width:12%}
+
+.armas-table th:nth-child(7),
+.armas-table td:nth-child(7){width:12%}
+
+.armas-table th:nth-child(8),
+.armas-table td:nth-child(8){width:13%}
+
+.armas-table th:nth-child(9),
+.armas-table td:nth-child(9){width:12%}
+
+.armas-sort-button{
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:6px;
+  border:none;
+  background:transparent;
+  color:#fff;
+  cursor:pointer;
+  font-weight:700;
+  text-align:left;
+  padding:0;
+}
+
+.armas-sort-button small{
+  opacity:.75;
+  font-size:11px;
+}
+
+.armas-status{
+  display:inline-flex;
+  background:#d8f5df;
+  color:#0c7a33;
+  padding:6px 10px;
+  border-radius:20px;
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap;
+}
+
+.armas-actions{
+  display:flex;
+  gap:5px;
+  flex-wrap:nowrap;
+  white-space:nowrap;
+}
+
+.armas-actions button{
+  border:none;
+  background:#0b4fc2;
+  color:#fff;
+  padding:7px 8px;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:700;
+}
+
+.armas-actions button:hover{
+  background:#093d97;
+}
+
+.armas-delete-button{
+  background:#dc2626 !important;
+}

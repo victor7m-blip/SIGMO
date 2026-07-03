@@ -156,7 +156,7 @@ export default function Armas({ user }) {
   }
 
   return (
-    <main className="armas-page">
+    <main className="page">
       <header className="armas-header">
         <div>
           <span className="armas-kicker">SIGMO</span>
@@ -171,7 +171,7 @@ export default function Armas({ user }) {
 
         <button
           type="button"
-          className="armas-primary-button"
+          className="btn-primary"
           onClick={handleNovaArma}
         >
           + Nova Arma
@@ -187,7 +187,7 @@ export default function Armas({ user }) {
         />
       )}
 
-      <section className="armas-panel">
+      <section className="panel">
         <ArmaFilters
           filtros={filters}
           onChange={handleFiltersChange}

@@ -1,4 +1,7 @@
-@media(max-width:1200px){
+/* Responsivo */
+
+@media (max-width:1200px){
+
   .filters-grid{
     grid-template-columns:repeat(3,minmax(0,1fr));
   }
@@ -12,9 +15,11 @@
   .armas-actions button{
     padding:6px 8px;
   }
+
 }
 
-@media(max-width:900px){
+@media (max-width:900px){
+
   .armas-header{
     flex-direction:column;
     align-items:stretch;
@@ -25,16 +30,18 @@
   }
 
   .armas-table-wrap{
+    width:100%;
     overflow-x:hidden;
   }
 
   .armas-table,
   .armas-table thead,
   .armas-table tbody,
+  .armas-table tr,
   .armas-table th,
-  .armas-table td,
-  .armas-table tr{
+  .armas-table td{
     display:block;
+    width:100%;
     max-width:100%;
   }
 
@@ -42,38 +49,39 @@
     min-width:0;
   }
 
+  /* Remove as larguras da versão desktop */
+  .armas-table th:nth-child(n),
+  .armas-table td:nth-child(n){
+    width:100%;
+  }
+
   .armas-table thead{
     display:none;
   }
 
   .armas-table tr{
-    width:100%;
     border:1px solid #e5eaf2;
     border-radius:14px;
     margin-bottom:12px;
     padding:10px;
     background:#fff;
-    overflow:hidden;
   }
 
   .armas-table td{
-    width:100%;
     display:flex;
     justify-content:space-between;
     align-items:flex-start;
     gap:12px;
-    border-bottom:1px solid #eef2f7;
     padding:10px 4px;
+    border-bottom:1px solid #eef2f7;
     white-space:normal;
-    overflow-wrap:anywhere;
     word-break:break-word;
   }
 
   .armas-table td::before{
     content:attr(data-label);
     flex:0 0 90px;
-    max-width:90px;
-    font-weight:800;
+    font-weight:700;
     color:#061a32;
   }
 
@@ -83,7 +91,8 @@
   }
 
   .armas-actions{
-    justify-content:flex-start;
+    display:flex;
+    gap:8px;
     margin-top:8px;
   }
 
@@ -91,9 +100,11 @@
     flex:1;
     min-width:80px;
   }
+
 }
 
-@media(max-width:600px){
+@media (max-width:600px){
+
   .armas-page{
     gap:18px;
   }
@@ -115,8 +126,8 @@
   }
 
   .armas-table-toolbar{
-    align-items:flex-start;
     flex-direction:column;
+    align-items:flex-start;
   }
 
   .armas-pagination{
@@ -126,9 +137,11 @@
   .armas-pagination button{
     flex:1;
   }
+
 }
 
-@media(max-width:420px){
+@media (max-width:420px){
+
   .armas-header,
   .armas-panel{
     border-radius:14px;
@@ -141,7 +154,6 @@
 
   .armas-table td::before{
     flex:none;
-    max-width:none;
   }
 
   .armas-actions{
@@ -151,4 +163,5 @@
   .armas-actions button{
     width:100%;
   }
+
 }

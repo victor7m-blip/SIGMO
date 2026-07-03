@@ -1,0 +1,43 @@
+/* Filtros */
+
+.filters-card{
+  margin-bottom:18px;
+}
+
+.filters-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+}
+
+.filters-grid input,
+.filters-grid select,
+.filters-grid button{
+  width:100%;
+  min-width:0;
+  padding:12px 14px;
+  border-radius:10px;
+  font-size:14px;
+}
+
+.filters-grid input,
+.filters-grid select{
+  border:1px solid #d9e2ef;
+  background:#fff;
+  color:#101828;
+  outline:none;
+}
+
+.filters-grid input:focus,
+.filters-grid select:focus{
+  border-color:#0b4fc2;
+  box-shadow:0 0 0 3px rgba(11,79,194,.12);
+}
+
+.filters-grid button{
+  border:none;
+  background:#061a32;
+  color:#fff;
+  cursor:pointer;
+  font-weight:700;
+}
