@@ -164,6 +164,12 @@
   text-align:left;
   font-size:14px;
   vertical-align:middle;
+  white-space:nowrap;
+}
+.armas-table td:nth-child(6),
+.armas-table td:nth-child(8){
+  white-space:normal;
+  min-width:110px;
 }
 
 .armas-table td{
@@ -209,7 +215,8 @@
 .armas-actions{
   display:flex;
   gap:6px;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
+  white-space:nowrap;
 }
 
 .armas-actions button{
