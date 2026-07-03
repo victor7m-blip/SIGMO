@@ -150,7 +150,57 @@
 .armas-table{
   width:100%;
   border-collapse:collapse;
-  table-layout:auto;
+  table-layout:fixed;
+}
+.armas-table th,
+.armas-table td{
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.armas-table th:nth-child(1),
+.armas-table td:nth-child(1){
+  width:13%;
+}
+
+.armas-table th:nth-child(2),
+.armas-table td:nth-child(2){
+  width:10%;
+}
+
+.armas-table th:nth-child(3),
+.armas-table td:nth-child(3){
+  width:10%;
+}
+
+.armas-table th:nth-child(4),
+.armas-table td:nth-child(4){
+  width:10%;
+}
+
+.armas-table th:nth-child(5),
+.armas-table td:nth-child(5){
+  width:8%;
+}
+
+.armas-table th:nth-child(6),
+.armas-table td:nth-child(6){
+  width:12%;
+}
+
+.armas-table th:nth-child(7),
+.armas-table td:nth-child(7){
+  width:12%;
+}
+
+.armas-table th:nth-child(8),
+.armas-table td:nth-child(8){
+  width:13%;
+}
+
+.armas-table th:nth-child(9),
+.armas-table td:nth-child(9){
+  width:12%;
 }
 
 .armas-table thead{
@@ -166,11 +216,7 @@
   vertical-align:middle;
   white-space:nowrap;
 }
-.armas-table td:nth-child(6),
-.armas-table td:nth-child(8){
-  white-space:normal;
-  min-width:110px;
-}
+
 
 .armas-table td{
   border-bottom:1px solid #eef2f7;
@@ -214,7 +260,7 @@
 
 .armas-actions{
   display:flex;
-  gap:6px;
+  gap:5px;
   flex-wrap:nowrap;
   white-space:nowrap;
 }
@@ -223,7 +269,7 @@
   border:none;
   background:#0b4fc2;
   color:#fff;
-  padding:7px 10px;
+  padding:7px 8px;
   border-radius:8px;
   cursor:pointer;
   font-size:12px;
