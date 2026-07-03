@@ -1,28 +1,37 @@
-import { useEffect, useState } from 'react'
-import { listarArmas, excluirArma } from '../../../services/armasService'
+import { useState } from 'react'
+import { excluirArma } from '../../../services/armasService'
 import { registerAudit } from '../../../services/auditoriaService'
 import ConfirmModal from '../../../components/ConfirmModal'
 
-export default function ArmaTable({ user, reloadKey, onView, onEdit }) {
-  const [armas, setArmas] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [erro, setErro] = useState('')
+const colunasOrdenaveis = [
+  { campo: 'patrimonio', label: 'Patrimônio' },
+  { campo: 'especie', label: 'Espécie' },
+  { campo: 'marca', label: 'Marca' },
+  { campo: 'modelo', label: 'Modelo' },
+  { campo: 'calibre', label: 'Calibre' },
+  { campo: 'numero_serie', label: 'Série' },
+  { campo: 'status', label: 'Status' },
+  { campo: 'unidade', label: 'Unidade' }
+]
+
+export default function ArmaTable({
+  user,
+  armas,
+  loading,
+  erro,
+  sortBy,
+  sortDirection,
+  onSort,
+  onView,
+  onEdit,
+  onDeleted
+}) {
   const [armaParaExcluir, setArmaParaExcluir] = useState(null)
   const [excluindo, setExcluindo] = useState(false)
 
-  async function carregarArmas() {
-    try {
-      setLoading(true)
-      setErro('')
-
-      const data = await listarArmas()
-      setArmas(data || [])
-    } catch (error) {
-      console.error(error)
-      setErro('Erro ao carregar armas.')
-    } finally {
-      setLoading(false)
-    }
+  function renderSortIcon(campo) {
+    if (sortBy !== campo) return '↕'
+    return sortDirection === 'asc' ? '▲' : '▼'
   }
 
   async function confirmarExclusao() {
@@ -41,10 +50,7 @@ export default function ArmaTable({ user, reloadKey, onView, onEdit }) {
         'Crítico'
       )
 
-      setArmas((listaAtual) =>
-        listaAtual.filter((arma) => arma.id !== armaParaExcluir.id)
-      )
-
+      onDeleted(armaParaExcluir.id)
       setArmaParaExcluir(null)
     } catch (error) {
       console.error(error)
@@ -53,10 +59,6 @@ export default function ArmaTable({ user, reloadKey, onView, onEdit }) {
       setExcluindo(false)
     }
   }
-
-  useEffect(() => {
-    carregarArmas()
-  }, [reloadKey])
 
   if (loading) {
     return <p className="armas-feedback">Carregando armas...</p>
@@ -72,14 +74,19 @@ export default function ArmaTable({ user, reloadKey, onView, onEdit }) {
         <table className="armas-table">
           <thead>
             <tr>
-              <th>Patrimônio</th>
-              <th>Espécie</th>
-              <th>Marca</th>
-              <th>Modelo</th>
-              <th>Calibre</th>
-              <th>Série</th>
-              <th>Status</th>
-              <th>Unidade</th>
+              {colunasOrdenaveis.map((coluna) => (
+                <th key={coluna.campo}>
+                  <button
+                    type="button"
+                    className="armas-sort-button"
+                    onClick={() => onSort(coluna.campo)}
+                  >
+                    <span>{coluna.label}</span>
+                    <small>{renderSortIcon(coluna.campo)}</small>
+                  </button>
+                </th>
+              ))}
+
               <th>Ações</th>
             </tr>
           </thead>
@@ -87,24 +94,22 @@ export default function ArmaTable({ user, reloadKey, onView, onEdit }) {
           <tbody>
             {armas.length === 0 ? (
               <tr>
-                <td colSpan="9">Nenhuma arma cadastrada.</td>
+                <td colSpan="9">Nenhuma arma encontrada.</td>
               </tr>
             ) : (
               armas.map((arma) => (
                 <tr key={arma.id}>
-                  <td>{arma.patrimonio}</td>
-                  <td>{arma.especie}</td>
-                  <td>{arma.marca}</td>
-                  <td>{arma.modelo}</td>
-                  <td>{arma.calibre}</td>
-                  <td>{arma.numero_serie}</td>
-                  <td>
-                    <span className="armas-status">
-                      {arma.status}
-                    </span>
+                  <td data-label="Patrimônio">{arma.patrimonio || '-'}</td>
+                  <td data-label="Espécie">{arma.especie || '-'}</td>
+                  <td data-label="Marca">{arma.marca || '-'}</td>
+                  <td data-label="Modelo">{arma.modelo || '-'}</td>
+                  <td data-label="Calibre">{arma.calibre || '-'}</td>
+                  <td data-label="Série">{arma.numero_serie || '-'}</td>
+                  <td data-label="Status">
+                    <span className="armas-status">{arma.status || '-'}</span>
                   </td>
-                  <td>{arma.unidade || '-'}</td>
-                  <td>
+                  <td data-label="Unidade">{arma.unidade || '-'}</td>
+                  <td data-label="Ações">
                     <div className="armas-actions">
                       <button type="button" onClick={() => onView(arma)}>
                         Ver
