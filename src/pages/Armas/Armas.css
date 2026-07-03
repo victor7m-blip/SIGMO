@@ -4,38 +4,19 @@
 }
 
 .armas-page{
-  max-width:100%;
-  overflow-x:hidden;
-}
-
-.armas-panel,
-.armas-header,
-.filters-card,
-.filters-grid,
-.armas-table-wrap{
-  max-width:100%;
-}
-.armas-page,
-.armas-page *{
-  box-sizing:border-box;
-}
-
-.armas-page{
-  max-width:100%;
-  overflow-x:hidden;
-}
-
-.armas-panel,
-.armas-header,
-.filters-card,
-.filters-grid,
-.armas-table-wrap{
-  max-width:100%;
-}
-.armas-page{
   display:flex;
   flex-direction:column;
   gap:24px;
+  max-width:100%;
+  overflow-x:hidden;
+}
+
+.armas-panel,
+.armas-header,
+.filters-card,
+.filters-grid,
+.armas-table-wrap{
+  max-width:100%;
 }
 
 .armas-header{
@@ -93,6 +74,7 @@
   box-shadow:0 10px 30px rgba(0,0,0,.08);
 }
 
+/* Filtros */
 .filters-card{
   margin-bottom:18px;
 }
@@ -104,15 +86,20 @@
 }
 
 .filters-grid input,
-.filters-grid select{
+.filters-grid select,
+.filters-grid button{
   width:100%;
   min-width:0;
   padding:12px 14px;
-  border:1px solid #d9e2ef;
   border-radius:10px;
+  font-size:14px;
+}
+
+.filters-grid input,
+.filters-grid select{
+  border:1px solid #d9e2ef;
   background:#fff;
   color:#101828;
-  font-size:14px;
   outline:none;
 }
 
@@ -126,12 +113,11 @@
   border:none;
   background:#061a32;
   color:#fff;
-  padding:12px 16px;
-  border-radius:10px;
   cursor:pointer;
   font-weight:700;
 }
 
+/* Tabela */
 .armas-table-toolbar{
   display:flex;
   justify-content:space-between;
@@ -152,56 +138,6 @@
   border-collapse:collapse;
   table-layout:fixed;
 }
-.armas-table th,
-.armas-table td{
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.armas-table th:nth-child(1),
-.armas-table td:nth-child(1){
-  width:13%;
-}
-
-.armas-table th:nth-child(2),
-.armas-table td:nth-child(2){
-  width:10%;
-}
-
-.armas-table th:nth-child(3),
-.armas-table td:nth-child(3){
-  width:10%;
-}
-
-.armas-table th:nth-child(4),
-.armas-table td:nth-child(4){
-  width:10%;
-}
-
-.armas-table th:nth-child(5),
-.armas-table td:nth-child(5){
-  width:8%;
-}
-
-.armas-table th:nth-child(6),
-.armas-table td:nth-child(6){
-  width:12%;
-}
-
-.armas-table th:nth-child(7),
-.armas-table td:nth-child(7){
-  width:12%;
-}
-
-.armas-table th:nth-child(8),
-.armas-table td:nth-child(8){
-  width:13%;
-}
-
-.armas-table th:nth-child(9),
-.armas-table td:nth-child(9){
-  width:12%;
-}
 
 .armas-table thead{
   background:#061a32;
@@ -215,8 +151,9 @@
   font-size:14px;
   vertical-align:middle;
   white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
-
 
 .armas-table td{
   border-bottom:1px solid #eef2f7;
@@ -226,6 +163,33 @@
 .armas-table tbody tr:hover{
   background:#f8fbff;
 }
+
+.armas-table th:nth-child(1),
+.armas-table td:nth-child(1){width:13%}
+
+.armas-table th:nth-child(2),
+.armas-table td:nth-child(2){width:10%}
+
+.armas-table th:nth-child(3),
+.armas-table td:nth-child(3){width:10%}
+
+.armas-table th:nth-child(4),
+.armas-table td:nth-child(4){width:10%}
+
+.armas-table th:nth-child(5),
+.armas-table td:nth-child(5){width:8%}
+
+.armas-table th:nth-child(6),
+.armas-table td:nth-child(6){width:12%}
+
+.armas-table th:nth-child(7),
+.armas-table td:nth-child(7){width:12%}
+
+.armas-table th:nth-child(8),
+.armas-table td:nth-child(8){width:13%}
+
+.armas-table th:nth-child(9),
+.armas-table td:nth-child(9){width:12%}
 
 .armas-sort-button{
   width:100%;
@@ -284,6 +248,7 @@
   background:#dc2626 !important;
 }
 
+/* Paginação e avisos */
 .armas-pagination{
   display:flex;
   justify-content:center;
@@ -333,6 +298,7 @@
   color:#991b1b;
 }
 
+/* Responsivo */
 @media(max-width:1200px){
   .filters-grid{
     grid-template-columns:repeat(3,minmax(0,1fr));
@@ -350,7 +316,6 @@
 }
 
 @media(max-width:900px){
-
   .armas-header{
     flex-direction:column;
     align-items:stretch;
@@ -361,13 +326,7 @@
   }
 
   .armas-table-wrap{
-    width:100%;
     overflow-x:hidden;
-  }
-
-  .armas-table{
-    width:100%;
-    min-width:0;
   }
 
   .armas-table,
@@ -378,6 +337,10 @@
   .armas-table tr{
     display:block;
     max-width:100%;
+  }
+
+  .armas-table{
+    min-width:0;
   }
 
   .armas-table thead{
@@ -402,6 +365,7 @@
     gap:12px;
     border-bottom:1px solid #eef2f7;
     padding:10px 4px;
+    white-space:normal;
     overflow-wrap:anywhere;
     word-break:break-word;
   }
@@ -451,10 +415,6 @@
     padding:14px;
   }
 
-  .filters-grid{
-    grid-template-columns:1fr;
-  }
-
   .armas-table-toolbar{
     align-items:flex-start;
     flex-direction:column;
@@ -470,7 +430,6 @@
 }
 
 @media(max-width:420px){
-
   .armas-header,
   .armas-panel{
     border-radius:14px;
@@ -493,5 +452,4 @@
   .armas-actions button{
     width:100%;
   }
-
 }
