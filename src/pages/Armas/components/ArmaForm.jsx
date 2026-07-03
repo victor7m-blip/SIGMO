@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { cadastrarArma } from '../../../services/armasService'
+import { useEffect, useState } from 'react'
+import { cadastrarArma, atualizarArma } from '../../../services/armasService'
+import { registerAudit } from '../../../services/auditoriaService'
 
 const initialForm = {
   patrimonio: '',
@@ -14,10 +15,36 @@ const initialForm = {
   observacoes: '',
 }
 
-export default function ArmaForm({ onCancel, onSaved }) {
+export default function ArmaForm({
+  user,
+  armaEditando,
+  onCancel,
+  onSaved
+}) {
   const [form, setForm] = useState(initialForm)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
+
+  const isEditing = Boolean(armaEditando?.id)
+
+  useEffect(() => {
+    if (armaEditando) {
+      setForm({
+        patrimonio: armaEditando.patrimonio || '',
+        numero_serie: armaEditando.numero_serie || '',
+        especie: armaEditando.especie || '',
+        marca: armaEditando.marca || '',
+        modelo: armaEditando.modelo || '',
+        calibre: armaEditando.calibre || '',
+        acabamento: armaEditando.acabamento || '',
+        unidade: armaEditando.unidade || '',
+        status: armaEditando.status || 'Disponível',
+        observacoes: armaEditando.observacoes || '',
+      })
+    } else {
+      setForm(initialForm)
+    }
+  }, [armaEditando])
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -31,13 +58,37 @@ export default function ArmaForm({ onCancel, onSaved }) {
       setSaving(true)
       setErro('')
 
-      await cadastrarArma(form)
+      if (isEditing) {
+        const arma = await atualizarArma(armaEditando.id, form)
+
+        await registerAudit(
+          'ARMA_UPDATE',
+          `Arma editada: ${arma.patrimonio} - ${arma.marca} ${arma.modelo}`,
+          user,
+          'Armas',
+          'Informativo'
+        )
+      } else {
+        const arma = await cadastrarArma(form)
+
+        await registerAudit(
+          'ARMA_CREATE',
+          `Arma cadastrada: ${arma.patrimonio} - ${arma.marca} ${arma.modelo}`,
+          user,
+          'Armas',
+          'Informativo'
+        )
+      }
 
       setForm(initialForm)
       onSaved()
     } catch (error) {
       console.error(error)
-      setErro('Erro ao cadastrar arma. Verifique patrimônio e série.')
+      setErro(
+        isEditing
+          ? 'Erro ao editar arma.'
+          : 'Erro ao cadastrar arma. Verifique patrimônio e série.'
+      )
     } finally {
       setSaving(false)
     }
@@ -47,8 +98,12 @@ export default function ArmaForm({ onCancel, onSaved }) {
     <section className="armas-form-card">
       <div className="armas-form-header">
         <div>
-          <h2>Nova Arma</h2>
-          <p>Cadastre o armamento institucional.</p>
+          <h2>{isEditing ? 'Editar Arma' : 'Nova Arma'}</h2>
+          <p>
+            {isEditing
+              ? 'Atualize os dados do armamento institucional.'
+              : 'Cadastre o armamento institucional.'}
+          </p>
         </div>
 
         <button type="button" onClick={onCancel}>
@@ -85,7 +140,11 @@ export default function ArmaForm({ onCancel, onSaved }) {
           </button>
 
           <button type="submit" disabled={saving}>
-            {saving ? 'Salvando...' : 'Salvar arma'}
+            {saving
+              ? 'Salvando...'
+              : isEditing
+                ? 'Salvar alterações'
+                : 'Salvar arma'}
           </button>
         </div>
       </form>

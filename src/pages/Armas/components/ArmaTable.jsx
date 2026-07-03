@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { listarArmas } from '../../../services/armasService'
 
-export default function ArmaTable() {
+export default function ArmaTable({ reloadKey, onView, onEdit }) {
   const [armas, setArmas] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
@@ -23,7 +23,7 @@ export default function ArmaTable() {
 
   useEffect(() => {
     carregarArmas()
-  }, [])
+  }, [reloadKey])
 
   if (loading) {
     return <p className="armas-feedback">Carregando armas...</p>
@@ -72,8 +72,13 @@ export default function ArmaTable() {
                 <td>{arma.unidade || '-'}</td>
                 <td>
                   <div className="armas-actions">
-                    <button>Ver</button>
-                    <button>Editar</button>
+                    <button onClick={() => onView(arma)}>
+                      Ver
+                    </button>
+
+                    <button onClick={() => onEdit(arma)}>
+                      Editar
+                    </button>
                   </div>
                 </td>
               </tr>

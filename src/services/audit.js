@@ -1,25 +1,32 @@
 import { supabase } from './supabase'
 
-export async function registerAudit(
+export async function registerAudit({
   acao,
   descricao,
-  user,
-  modulo = 'Sistema',
-  severidade = 'Informativo'
-) {
+  ator_id,
+  ator_nome,
+  perfil,
+  modulo,
+  severidade
+}) {
   try {
-    await supabase
+    const { error } = await supabase
       .from('auditoria')
       .insert({
         acao,
         descricao,
-        ator_id: user?.id || null,
-        ator_nome: user?.nome || null,
-        perfil: user?.perfil || null,
+        ator_id,
+        ator_nome,
+        perfil,
         modulo,
         severidade
       })
+
+    if (error) {
+      console.error(error)
+      alert(error.message)
+    }
   } catch (err) {
-    console.error(err)
+    console.error('Erro inesperado na auditoria:', err)
   }
 }
