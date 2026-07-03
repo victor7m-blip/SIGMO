@@ -37,11 +37,17 @@ export default function Armas({ user }) {
 
   const totalPaginas = Math.ceil(total / LIMITE_POR_PAGINA) || 1
 
-  const registroInicial = total === 0 ? 0 : (pagina - 1) * LIMITE_POR_PAGINA + 1
-  const registroFinal = Math.min(pagina * LIMITE_POR_PAGINA, total)
+  const registroInicial =
+    total === 0 ? 0 : (pagina - 1) * LIMITE_POR_PAGINA + 1
+
+  const registroFinal = Math.min(
+    pagina * LIMITE_POR_PAGINA,
+    total
+  )
 
   const paginasVisiveis = useMemo(() => {
     const paginas = []
+
     const inicio = Math.max(1, pagina - 2)
     const fim = Math.min(totalPaginas, pagina + 2)
 
@@ -51,6 +57,19 @@ export default function Armas({ user }) {
 
     return paginas
   }, [pagina, totalPaginas])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(filters)
+      setPagina(1)
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [filters])
+
+  useEffect(() => {
+    carregarArmas()
+  }, [debouncedFilters, pagina, reloadKey, sortBy, sortDirection])
 
   async function carregarArmas() {
     try {
@@ -75,19 +94,6 @@ export default function Armas({ user }) {
     }
   }
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedFilters(filters)
-      setPagina(1)
-    }, 400)
-
-    return () => clearTimeout(timer)
-  }, [filters])
-
-  useEffect(() => {
-    carregarArmas()
-  }, [debouncedFilters, pagina, reloadKey, sortBy, sortDirection])
-
   function handleNovaArma() {
     setArmaEditando(null)
     setShowForm(true)
@@ -100,7 +106,10 @@ export default function Armas({ user }) {
   function handleEditar(arma) {
     setArmaEditando(arma)
     setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
   }
 
   function handleCancel() {
@@ -125,7 +134,10 @@ export default function Armas({ user }) {
   }
 
   function handleDeleted(id) {
-    setArmas((listaAtual) => listaAtual.filter((arma) => arma.id !== id))
+    setArmas((listaAtual) =>
+      listaAtual.filter((arma) => arma.id !== id)
+    )
+
     setTotal((atual) => Math.max(atual - 1, 0))
   }
 
@@ -133,7 +145,9 @@ export default function Armas({ user }) {
     setPagina(1)
 
     if (sortBy === campo) {
-      setSortDirection((atual) => (atual === 'asc' ? 'desc' : 'asc'))
+      setSortDirection((atual) =>
+        atual === 'asc' ? 'desc' : 'asc'
+      )
       return
     }
 
@@ -146,8 +160,13 @@ export default function Armas({ user }) {
       <header className="armas-header">
         <div>
           <span className="armas-kicker">SIGMO</span>
+
           <h1>Cadastro de Armas</h1>
-          <p>Gestão, consulta e controle de armamento institucional.</p>
+
+          <p>
+            Gestão, consulta e controle de armamento
+            institucional.
+          </p>
         </div>
 
         <button
@@ -177,7 +196,8 @@ export default function Armas({ user }) {
 
         <div className="armas-table-toolbar">
           <span>
-            Mostrando {registroInicial}–{registroFinal} de {total} registros
+            Mostrando {registroInicial}–{registroFinal} de{' '}
+            {total} registros
           </span>
         </div>
 
@@ -206,18 +226,26 @@ export default function Armas({ user }) {
           <button
             type="button"
             disabled={pagina <= 1}
-            onClick={() => setPagina((prev) => prev - 1)}
+            onClick={() =>
+              setPagina((prev) => prev - 1)
+            }
           >
             Anterior
           </button>
 
-          {pagina > 3 && <span className="armas-pagination-dots">...</span>}
+          {pagina > 3 && (
+            <span className="armas-pagination-dots">
+              ...
+            </span>
+          )}
 
           {paginasVisiveis.map((numero) => (
             <button
               key={numero}
               type="button"
-              className={numero === pagina ? 'active' : ''}
+              className={
+                numero === pagina ? 'active' : ''
+              }
               onClick={() => setPagina(numero)}
             >
               {numero}
@@ -225,13 +253,17 @@ export default function Armas({ user }) {
           ))}
 
           {pagina < totalPaginas - 2 && (
-            <span className="armas-pagination-dots">...</span>
+            <span className="armas-pagination-dots">
+              ...
+            </span>
           )}
 
           <button
             type="button"
             disabled={pagina >= totalPaginas}
-            onClick={() => setPagina((prev) => prev + 1)}
+            onClick={() =>
+              setPagina((prev) => prev + 1)
+            }
           >
             Próxima
           </button>
@@ -250,7 +282,9 @@ export default function Armas({ user }) {
         isOpen={!!armaVisualizando}
         title="Detalhes da Arma"
         subtitle={armaVisualizando?.patrimonio}
-        onClose={() => setArmaVisualizando(null)}
+        onClose={() =>
+          setArmaVisualizando(null)
+        }
       >
         <ArmaDetails arma={armaVisualizando} />
       </DetailsModal>

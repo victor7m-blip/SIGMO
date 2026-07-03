@@ -1,3 +1,8 @@
+@import '../../styles/armasHeader.css';
+@import '../../styles/armasFilters.css';
+@import '../../styles/armasTable.css';
+@import '../../styles/armasPagination.css';
+@import '../../styles/armasResponsive.css';
 .armas-page,
 .armas-page *{
   box-sizing:border-box;
