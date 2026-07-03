@@ -71,7 +71,10 @@
 .armas-table td:nth-child(8){width:13%}
 
 .armas-table th:nth-child(9),
-.armas-table td:nth-child(9){width:12%}
+.armas-table td:nth-child(9){
+  width:16%;
+  min-width:150px;
+}
 
 .armas-sort-button{
   width:100%;
