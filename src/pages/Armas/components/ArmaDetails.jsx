@@ -1,6 +1,34 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../../../services/supabaseClient'
 import './ArmaDetails.css'
 
 export default function ArmaDetails({ arma }) {
+  const [fotos, setFotos] = useState([])
+  const [loadingFotos, setLoadingFotos] = useState(false)
+
+  useEffect(() => {
+    if (arma?.id) carregarFotos()
+  }, [arma?.id])
+
+  async function carregarFotos() {
+    setLoadingFotos(true)
+
+    const { data, error } = await supabase
+      .from('sigmo_armas_fotos')
+      .select('*')
+      .eq('arma_id', arma.id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Erro ao carregar fotos:', error)
+      setFotos([])
+    } else {
+      setFotos(data || [])
+    }
+
+    setLoadingFotos(false)
+  }
+
   if (!arma) return null
 
   function Campo(label, valor, full = false) {
@@ -26,6 +54,32 @@ export default function ArmaDetails({ arma }) {
       {Campo('Origem', arma.origem)}
       {Campo('Tombamento', arma.numero_tombamento, true)}
       {Campo('Observações', arma.observacoes, true)}
+
+      <div className="arma-detail-card full">
+        <span>Fotos</span>
+
+        {loadingFotos && <strong>Carregando fotos...</strong>}
+
+        {!loadingFotos && fotos.length === 0 && (
+          <strong>Nenhuma foto cadastrada.</strong>
+        )}
+
+        {!loadingFotos && fotos.length > 0 && (
+          <div className="arma-detail-fotos">
+            {fotos.map((foto) => (
+              <a
+                key={foto.id}
+                href={foto.url}
+                target="_blank"
+                rel="noreferrer"
+                className="arma-detail-foto"
+              >
+                <img src={foto.url} alt="Foto da arma" />
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
