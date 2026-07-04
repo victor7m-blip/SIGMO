@@ -5,6 +5,7 @@ import './DashboardV2.css'
 import { useEffect, useState } from 'react'
 
 import { supabase } from '../services/supabase'
+import Policiais from './Policiais'
 
 function Metric({ title, value, detail, tone = 'blue' }) {
   return (

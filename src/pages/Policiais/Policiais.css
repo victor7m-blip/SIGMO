@@ -1,0 +1,262 @@
+.policiais-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.policiais-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.policiais-header h1 {
+  margin: 0;
+  color: #061a32;
+}
+
+.policiais-header p {
+  margin: 4px 0 0;
+  color: #667085;
+}
+
+.policiais-card {
+  background: #fff;
+  border: 1px solid #d9e2ef;
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 10px 30px rgba(2, 8, 23, 0.06);
+}
+
+.policiais-card h2 {
+  margin: 0 0 14px;
+  color: #061a32;
+  font-size: 18px;
+}
+
+.policiais-error {
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+  color: #a8071a;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+
+.policiais-grid,
+.policiais-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.policiais-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.policiais-form input,
+.policiais-form select,
+.policiais-form textarea,
+.policiais-filters input,
+.policiais-filters select {
+  width: 100%;
+  border: 1px solid #cfd8e3;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.policiais-form textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.policiais-span {
+  grid-column: span 3;
+}
+
+.policiais-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.policiais-actions button,
+.policiais-filters button,
+.row-actions button,
+.pagination button {
+  border: 0;
+  background: #075eea;
+  color: #fff;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #eef2f7;
+  color: #061a32;
+}
+
+button.danger,
+.row-actions button.danger {
+  background: #d92d20;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.policiais-table-top {
+  display: flex;
+  justify-content: space-between;
+  color: #667085;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.policiais-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.policiais-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.policiais-table th {
+  background: #061a32;
+  color: #fff;
+  padding: 11px 10px;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.policiais-table td {
+  border-bottom: 1px solid #edf2f7;
+  padding: 10px;
+  font-size: 14px;
+  color: #344054;
+}
+
+.empty {
+  text-align: center;
+  color: #667085;
+  padding: 22px !important;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.row-actions button {
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.status {
+  display: inline-flex;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-ativo {
+  background: #dcfae6;
+  color: #067647;
+}
+
+.status-afastado {
+  background: #fef0c7;
+  color: #b54708;
+}
+
+.status-transferido {
+  background: #e0f2fe;
+  color: #026aa2;
+}
+
+.status-inativo {
+  background: #fee4e2;
+  color: #b42318;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  color: #344054;
+  font-weight: 700;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 8, 23, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.policiais-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.policiais-modal h2 {
+  margin: 0 0 14px;
+  color: #061a32;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+}
+
+.detail-grid p {
+  margin: 0;
+  color: #344054;
+}
+
+.detail-span {
+  grid-column: span 2;
+}
+
+@media (max-width: 900px) {
+  .policiais-grid,
+  .policiais-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .policiais-span,
+  .detail-span {
+    grid-column: span 1;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

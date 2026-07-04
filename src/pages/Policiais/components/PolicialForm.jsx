@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   cadastrarPessoa,
   atualizarPessoa
-} from '../../../services/pessoasService'
+} from '../../../services/policiaisService.js'
 import { registerAudit } from '../../../services/auditoriaService'
 
 const initialForm = {

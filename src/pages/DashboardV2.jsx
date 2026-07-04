@@ -6,7 +6,7 @@ import painelOperacionalMobile from '../assets/painel-operacional-mobile.png'
 import AppShell from '../components/AppShell/AppShell'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
-import Policiais from './Policiais/Policiais'
+import Policiais from './Policiais'
 
 import './DashboardV2.css'
 

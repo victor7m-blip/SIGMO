@@ -82,15 +82,15 @@ export default function Login({ onLogin }) {
     }
 
     const sessionUser = {
-      id: policial.id,
-      re: policial.re,
-      nome: policial.nome,
-      nome_guerra: policial.nome_guerra,
-      posto_graduacao: policial.posto_graduacao,
-      perfil: usuario.perfil,
-      ativo: usuario.ativo,
-      user_id: usuario.id
-    }
+  id: policial.id,
+  re: policial.re,
+  nome: policial.nome_completo,
+  nome_guerra: policial.nome_guerra,
+  posto_graduacao: policial.posto_graduacao,
+  perfil: usuario.perfil,
+  ativo: usuario.ativo,
+  user_id: usuario.id
+}
 
     console.log('4 - Sessão criada:', sessionUser)
 
