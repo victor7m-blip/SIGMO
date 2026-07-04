@@ -14,6 +14,7 @@ export default function AppShell({
     { key: 'dashboard', label: 'Painel' },
     { key: 'materiais', label: 'Materiais' },
     { key: 'armas', label: 'Armas' },
+    { key: 'policiais', label: 'Policiais' },
     { key: 'municoes', label: 'Munições' },
     { key: 'acautelamento', label: 'Acautelamento' },
     { key: 'relatorios', label: 'Relatórios' },
@@ -25,7 +26,6 @@ export default function AppShell({
 
   return (
     <div className="app-shell">
-
       <button
         className="menu-toggle"
         onClick={() => setMobileMenuOpen(true)}
@@ -74,7 +74,6 @@ export default function AppShell({
       <section className="app-content">
         {children}
       </section>
-
     </div>
   )
 }

@@ -6,6 +6,7 @@ import painelOperacionalMobile from '../assets/painel-operacional-mobile.png'
 import AppShell from '../components/AppShell/AppShell'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
+import Policiais from './Policiais/Policiais'
 
 import './DashboardV2.css'
 
@@ -15,6 +16,7 @@ export default function DashboardV2({ user, onLogout }) {
   function renderPage() {
     if (route === 'materiais') return <Materiais user={user} />
     if (route === 'armas') return <Armas user={user} />
+    if (route === 'policiais') return <Policiais user={user} />
 
     return (
       <main className="sigmo-dashboard-v2">

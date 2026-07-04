@@ -4,6 +4,7 @@ import {
   listarFotosArma,
   excluirFotoArma
 } from '../../../services/armasFotosService'
+import ArmaFotoCard from './ArmaFotoCard'
 
 const MAX_FOTOS = 5
 
@@ -13,15 +14,21 @@ export default function ArmaFotos({ armaId, user }) {
   const [erro, setErro] = useState('')
 
   async function carregarFotos() {
-    if (!armaId) return
-
-    try {
-      const data = await listarFotosArma(armaId)
-      setFotos(data || [])
-    } catch (error) {
-      setErro('Erro ao carregar fotos da arma.')
-    }
+  if (!armaId) {
+    setFotos([])
+    setErro('')
+    return
   }
+
+  try {
+    setErro('')
+    const data = await listarFotosArma(armaId)
+    setFotos(data || [])
+  } catch (error) {
+    console.error(error)
+    setErro('Erro ao carregar fotos da arma.')
+  }
+}
 
   useEffect(() => {
     carregarFotos()
@@ -32,11 +39,13 @@ export default function ArmaFotos({ armaId, user }) {
 
     if (!armaId) {
       setErro('Salve a arma antes de adicionar fotos.')
+      event.target.value = ''
       return
     }
 
     if (fotos.length + arquivos.length > MAX_FOTOS) {
       setErro(`Limite máximo de ${MAX_FOTOS} fotos por arma.`)
+      event.target.value = ''
       return
     }
 
@@ -51,6 +60,7 @@ export default function ArmaFotos({ armaId, user }) {
       await carregarFotos()
       event.target.value = ''
     } catch (error) {
+      console.error(error)
       setErro('Erro ao enviar foto.')
     } finally {
       setLoading(false)
@@ -63,9 +73,12 @@ export default function ArmaFotos({ armaId, user }) {
 
     try {
       setLoading(true)
+      setErro('')
+
       await excluirFotoArma(foto.id, foto.caminho)
       await carregarFotos()
     } catch (error) {
+      console.error(error)
       setErro('Erro ao excluir foto.')
     } finally {
       setLoading(false)
@@ -97,18 +110,12 @@ export default function ArmaFotos({ armaId, user }) {
 
       <div className="arma-fotos-grid">
         {fotos.map((foto) => (
-          <div className="arma-foto-card" key={foto.id}>
-            <img src={foto.url} alt="Foto da arma" />
-
-            <button
-              type="button"
-              className="btn-danger-small"
-              onClick={() => handleExcluir(foto)}
-              disabled={loading}
-            >
-              Excluir
-            </button>
-          </div>
+          <ArmaFotoCard
+            key={foto.id}
+            foto={foto}
+            onExcluir={handleExcluir}
+            disabled={loading}
+          />
         ))}
 
         {fotos.length === 0 && (

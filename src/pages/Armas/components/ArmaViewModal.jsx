@@ -1,96 +1,110 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../../../services/supabase'
+import { listarFotosArma } from '../../../services/armasFotosService'
 
 export default function ArmaViewModal({ arma, onClose }) {
   const [fotos, setFotos] = useState([])
-  const [loadingFotos, setLoadingFotos] = useState(false)
 
   useEffect(() => {
-    if (arma?.id) {
-      carregarFotos()
+    async function carregarFotos() {
+      if (!arma?.id) return
+
+      try {
+        const data = await listarFotosArma(arma.id)
+        setFotos(data || [])
+      } catch (error) {
+        console.error('Erro ao carregar fotos da arma:', error)
+      }
     }
+
+    carregarFotos()
   }, [arma])
-
-  async function carregarFotos() {
-    setLoadingFotos(true)
-
-    const { data, error } = await supabase
-      .from('sigmo_armas_fotos')
-      .select('*')
-      .eq('arma_id', arma.id)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Erro ao carregar fotos da arma:', error)
-      setFotos([])
-    } else {
-      setFotos(data || [])
-    }
-
-    setLoadingFotos(false)
-  }
 
   if (!arma) return null
 
- console.log('ARMA RECEBIDA:', arma) 
-
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card arma-view-modal">
+    <div className="modal-overlay">
+      <div className="modal-card modal-large">
         <div className="modal-header">
-          <div>
-            <h2>Detalhes da arma</h2>
-            <p>Visualização completa do cadastro</p>
-          </div>
-
-          <button type="button" className="modal-close" onClick={onClose}>
+          <h2>Detalhes da Arma</h2>
+          <button className="modal-close" onClick={onClose}>
             ×
           </button>
         </div>
 
-        <div className="arma-view-grid">
-          <Info label="Patrimônio" value={arma.patrimonio} />
-          <Info label="Número de série" value={arma.numero_serie} />
-          <Info label="Espécie" value={arma.especie} />
-          <Info label="Marca" value={arma.marca} />
-          <Info label="Modelo" value={arma.modelo} />
-          <Info label="Calibre" value={arma.calibre} />
-          <Info label="Acabamento" value={arma.acabamento} />
-          <Info label="Unidade" value={arma.unidade} />
-          <Info label="Status" value={arma.status} />
-        </div>
-
-        <div className="arma-view-section">
-          <h3>Observações</h3>
-          <p className="arma-view-observacoes">
-            {arma.observacoes || 'Nenhuma observação registrada.'}
-          </p>
-        </div>
-
-        <div className="arma-view-section">
-          <h3>Fotos</h3>
-
-          {loadingFotos && <p>Carregando fotos...</p>}
-
-          {!loadingFotos && fotos.length === 0 && (
-            <p>Nenhuma foto cadastrada para esta arma.</p>
-          )}
-
-          {!loadingFotos && fotos.length > 0 && (
-            <div className="arma-fotos-grid">
-              {fotos.map((foto) => (
-                <a
-                  key={foto.id}
-                  href={foto.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="arma-foto-card"
-                >
-                  <img src={foto.url} alt="Foto da arma" />
-                </a>
-              ))}
+        <div className="modal-body">
+          <div className="details-grid">
+            <div>
+              <strong>Patrimônio</strong>
+              <span>{arma.patrimonio || '-'}</span>
             </div>
-          )}
+
+            <div>
+              <strong>Número de Série</strong>
+              <span>{arma.numero_serie || '-'}</span>
+            </div>
+
+            <div>
+              <strong>Espécie</strong>
+              <span>{arma.especie || '-'}</span>
+            </div>
+
+            <div>
+              <strong>Marca</strong>
+              <span>{arma.marca || '-'}</span>
+            </div>
+
+            <div>
+              <strong>Modelo</strong>
+              <span>{arma.modelo || '-'}</span>
+            </div>
+
+            <div>
+              <strong>Calibre</strong>
+              <span>{arma.calibre || '-'}</span>
+            </div>
+
+            <div>
+              <strong>Acabamento</strong>
+              <span>{arma.acabamento || '-'}</span>
+            </div>
+
+            <div>
+              <strong>Unidade</strong>
+              <span>{arma.unidade || '-'}</span>
+            </div>
+
+            <div>
+              <strong>Status</strong>
+              <span>{arma.status || '-'}</span>
+            </div>
+
+            <div className="details-full">
+              <strong>Observações</strong>
+              <span>{arma.observacoes || '-'}</span>
+            </div>
+          </div>
+
+          <div className="arma-fotos-section">
+            <h3>Fotos da arma</h3>
+
+            {fotos.length === 0 ? (
+              <p className="empty-text">Nenhuma foto cadastrada.</p>
+            ) : (
+              <div className="arma-fotos-grid">
+                {fotos.map((foto) => (
+                  <a
+                    key={foto.id}
+                    href={foto.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="arma-foto-card"
+                  >
+                    <img src={foto.url} alt="Foto da arma" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="modal-actions">
@@ -99,15 +113,6 @@ export default function ArmaViewModal({ arma, onClose }) {
           </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function Info({ label, value }) {
-  return (
-    <div className="arma-view-info">
-      <span>{label}</span>
-      <strong>{value || '-'}</strong>
     </div>
   )
 }
