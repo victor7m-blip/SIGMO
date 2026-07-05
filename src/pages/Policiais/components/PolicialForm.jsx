@@ -125,6 +125,7 @@ export default function PolicialForm({
   const [uploadingFoto, setUploadingFoto] = useState(false)
 
   const isEditing = Boolean(policialEditando?.id)
+ console.log('POLICIAL EDITANDO:', policialEditando)
   const policialId = useMemo(() => policialEditando?.id || null, [policialEditando])
 
   useEffect(() => {
@@ -484,7 +485,7 @@ export default function PolicialForm({
             </label>
           </div>
 
-          <PolicialFotos fotos={fotos} onExcluir={handleExcluirFoto} />
+          <PolicialFotos policialId={policialId} user={user} />
         </div>
       )}
 
