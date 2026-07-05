@@ -1,0 +1,37 @@
+.policiais-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.policiais-kicker {
+  display: block;
+  color: #075eea;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.policiais-header h1 {
+  margin: 0;
+  color: #061a32;
+  font-size: 30px;
+}
+
+.policiais-header p {
+  margin: 6px 0 0;
+  color: #667085;
+}
+
+@media (max-width: 720px) {
+  .policiais-header {
+    flex-direction: column;
+  }
+
+  .policiais-header .btn-primary {
+    width: 100%;
+  }
+}

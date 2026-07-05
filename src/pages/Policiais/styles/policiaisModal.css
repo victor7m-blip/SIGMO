@@ -1,141 +1,67 @@
-.policial-view-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 8, 23, 0.55);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+.policial-details{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:16px;
 }
 
-.policial-view-modal {
-  width: min(920px, 100%);
-  max-height: 92vh;
-  overflow-y: auto;
-  background: #fff;
-  border-radius: 18px;
-  box-shadow: 0 30px 80px rgba(2, 8, 23, 0.28);
-  padding: 22px;
+.policial-detail-card{
+  background:#f8fafc;
+  border:1px solid #e4e7ec;
+  border-radius:12px;
+  padding:14px;
 }
 
-.policial-view-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+.policial-detail-card.full{
+  grid-column:1/-1;
 }
 
-.policial-view-header h2 {
-  margin: 0;
-  color: #061a32;
+.policial-detail-card span{
+  display:block;
+  font-size:12px;
+  color:#667085;
+  margin-bottom:6px;
+  text-transform:uppercase;
+  font-weight:700;
 }
 
-.policial-view-header p {
-  margin: 5px 0 0;
-  color: #667085;
-  font-weight: 700;
+.policial-detail-card strong{
+  color:#101828;
+  font-size:15px;
+  word-break:break-word;
 }
 
-.policial-view-body {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 18px;
+.policial-detail-qrcode{
+  display:flex;
+  justify-content:center;
+  padding:20px 0;
 }
 
-.policial-photo-box {
-  width: 180px;
-  height: 220px;
-  border-radius: 16px;
-  border: 1px dashed #cfd8e3;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #667085;
-  font-weight: 800;
-  overflow: hidden;
+.policial-detail-qrcode img{
+  width:220px;
+  max-width:100%;
 }
 
-.policial-photo-box img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.policial-detail-fotos{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+  gap:16px;
 }
 
-.policial-details-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.policial-detail-foto{
+  display:block;
+  overflow:hidden;
+  border-radius:10px;
+  border:1px solid #d0d5dd;
 }
 
-.detail-item {
-  border: 1px solid #edf2f7;
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 12px;
+.policial-detail-foto img{
+  width:100%;
+  height:180px;
+  object-fit:cover;
+  display:block;
+  transition:.25s;
 }
 
-.detail-item span {
-  display: block;
-  color: #667085;
-  font-size: 12px;
-  font-weight: 800;
-  margin-bottom: 5px;
-}
-
-.detail-item strong {
-  display: block;
-  color: #061a32;
-  font-size: 14px;
-}
-
-.policial-observacoes {
-  grid-column: span 2;
-  border: 1px solid #edf2f7;
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 14px;
-}
-
-.policial-observacoes h3 {
-  margin: 0 0 8px;
-  color: #061a32;
-  font-size: 16px;
-}
-
-.policial-observacoes p {
-  margin: 0;
-  color: #475467;
-  white-space: pre-wrap;
-}
-
-.policial-view-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 18px;
-}
-
-@media (max-width: 720px) {
-  .policial-view-overlay {
-    padding: 12px;
-    align-items: flex-start;
-  }
-
-  .policial-view-body {
-    grid-template-columns: 1fr;
-  }
-
-  .policial-photo-box {
-    width: 100%;
-    height: 240px;
-  }
-
-  .policial-details-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .policial-observacoes {
-    grid-column: auto;
-  }
+.policial-detail-foto:hover img{
+  transform:scale(1.04);
 }

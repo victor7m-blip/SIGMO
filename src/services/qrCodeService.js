@@ -8,6 +8,14 @@ export function gerarQrCodeArma() {
   return `SIGMO-ARMA-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+export function gerarQrCodePolicial() {
+  if (crypto?.randomUUID) {
+    return `SIGMO-POLICIAL-${crypto.randomUUID()}`
+  }
+
+  return `SIGMO-POLICIAL-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 export async function gerarImagemQrCode(valor) {
   if (!valor) return ''
 

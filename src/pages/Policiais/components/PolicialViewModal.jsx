@@ -1,114 +1,128 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import DetailsModal from '../../../components/DetailsModal/DetailsModal'
+import { supabase } from '../../../services/supabaseClient'
+import { gerarImagemQrCode } from '../../../services/qrCodeService'
 
-const colunasOrdenaveis = [
-  { campo: 'nome_guerra', label: 'Nome de guerra' },
-  { campo: 're', label: 'RE' },
-  { campo: 'posto_graduacao', label: 'Posto/Graduação' },
-  { campo: 'companhia', label: 'Companhia' },
-  { campo: 'pelotao', label: 'Pelotão' },
-  { campo: 'perfil', label: 'Perfil' },
-  { campo: 'situacao', label: 'Situação' }
-]
+export default function PolicialViewModal({ policial, onClose }) {
+  const [fotos, setFotos] = useState([])
+  const [loadingFotos, setLoadingFotos] = useState(false)
+  const [qrImagem, setQrImagem] = useState('')
 
-export default function PolicialTable({
-  policiais,
-  loading,
-  erro,
-  sortBy,
-  sortDirection,
-  onSort,
-  onView,
-  onEdit,
-  onDelete
-}) {
-  const [excluindoId, setExcluindoId] = useState(null)
+  useEffect(() => {
+    if (policial?.id) carregarFotos()
+  }, [policial?.id])
 
-  function sortIcon(campo) {
-    if (sortBy !== campo) return '↕'
-    return sortDirection === 'asc' ? '↑' : '↓'
-  }
+  useEffect(() => {
+    async function carregarQrCode() {
+      if (!policial?.qr_code) {
+        setQrImagem('')
+        return
+      }
 
-  async function confirmarExclusao(policial) {
-    const confirmou = window.confirm(
-      `Deseja excluir o policial ${policial.nome_guerra || policial.nome}?`
-    )
-
-    if (!confirmou) return
-
-    try {
-      setExcluindoId(policial.id)
-      await onDelete(policial)
-    } finally {
-      setExcluindoId(null)
+      try {
+        const imagem = await gerarImagemQrCode(policial.qr_code)
+        setQrImagem(imagem)
+      } catch (error) {
+        console.error('Erro ao gerar QR Code:', error)
+        setQrImagem('')
+      }
     }
+
+    carregarQrCode()
+  }, [policial?.qr_code])
+
+  async function carregarFotos() {
+    setLoadingFotos(true)
+
+    const { data, error } = await supabase
+      .from('sigmo_policiais_fotos')
+      .select('*')
+      .eq('policial_id', policial.id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Erro ao carregar fotos:', error)
+      setFotos([])
+    } else {
+      setFotos(data || [])
+    }
+
+    setLoadingFotos(false)
   }
 
-  if (loading) {
-    return <div className="table-state">Carregando policiais...</div>
-  }
+  if (!policial) return null
 
-  if (erro) {
-    return <div className="table-error">{erro}</div>
-  }
-
-  if (!policiais.length) {
-    return <div className="table-state">Nenhum policial encontrado.</div>
+  function Campo(label, valor, full = false) {
+    return (
+      <div className={`policial-detail-card ${full ? 'full' : ''}`}>
+        <span>{label}</span>
+        <strong>{valor || '-'}</strong>
+      </div>
+    )
   }
 
   return (
-    <div className="policiais-table-wrap">
-      <table className="policiais-table">
-        <thead>
-          <tr>
-            {colunasOrdenaveis.map(coluna => (
-              <th key={coluna.campo}>
-                <button
-                  type="button"
-                  className="sort-button"
-                  onClick={() => onSort(coluna.campo)}
-                >
-                  {coluna.label} {sortIcon(coluna.campo)}
-                </button>
-              </th>
-            ))}
-            <th>Ações</th>
-          </tr>
-        </thead>
+    <DetailsModal
+      isOpen={!!policial}
+      title="Detalhes do Policial"
+      subtitle={`${policial.posto_graduacao || ''} ${policial.nome_guerra || ''}`}
+      onClose={onClose}
+    >
+      <div className="policial-details">
+        {Campo('Nome completo', policial.nome, true)}
+        {Campo('Nome de guerra', policial.nome_guerra)}
+        {Campo('RE', policial.re)}
+        {Campo('Posto/Graduação', policial.posto_graduacao)}
+        {Campo('Companhia', policial.companhia)}
+        {Campo('Pelotão', policial.pelotao)}
+        {Campo('Equipe', policial.equipe)}
+        {Campo('Função', policial.funcao)}
+        {Campo('Telefone', policial.telefone)}
+        {Campo('E-mail', policial.email)}
+        {Campo('CPF', policial.cpf)}
+        {Campo('RG', policial.rg)}
+        {Campo('Perfil', policial.perfil)}
+        {Campo('Situação', policial.situacao)}
+        {Campo('QR Code', policial.qr_code, true)}
 
-        <tbody>
-          {policiais.map(policial => (
-            <tr key={policial.id}>
-              <td>
-                <strong>{policial.nome_guerra || '-'}</strong>
-                <span>{policial.nome || '-'}</span>
-              </td>
-              <td>{policial.re || '-'}</td>
-              <td>{policial.posto_graduacao || '-'}</td>
-              <td>{policial.companhia || '-'}</td>
-              <td>{policial.pelotao || '-'}</td>
-              <td>{policial.perfil || '-'}</td>
-              <td>
-                <span className={`status-badge status-${policial.situacao?.toLowerCase()}`}>
-                  {policial.situacao || '-'}
-                </span>
-              </td>
-              <td>
-                <div className="table-actions">
-                  <button onClick={() => onView(policial)}>Ver</button>
-                  <button onClick={() => onEdit(policial)}>Editar</button>
-                  <button
-                    className="danger"
-                    disabled={excluindoId === policial.id}
-                    onClick={() => confirmarExclusao(policial)}
-                  >
-                    {excluindoId === policial.id ? '...' : 'Excluir'}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        {qrImagem && (
+          <div className="policial-detail-card full">
+            <span>Etiqueta QR Code</span>
+
+            <div className="policial-detail-qrcode">
+              <img src={qrImagem} alt="QR Code do policial" />
+            </div>
+          </div>
+        )}
+
+        {Campo('Observações', policial.observacoes, true)}
+
+        <div className="policial-detail-card full">
+          <span>Fotos</span>
+
+          {loadingFotos && <strong>Carregando fotos...</strong>}
+
+          {!loadingFotos && fotos.length === 0 && (
+            <strong>Nenhuma foto cadastrada.</strong>
+          )}
+
+          {!loadingFotos && fotos.length > 0 && (
+            <div className="policial-detail-fotos">
+              {fotos.map((foto) => (
+                <a
+                  key={foto.id}
+                  href={foto.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="policial-detail-foto"
+                >
+                  <img src={foto.url} alt="Foto do policial" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </DetailsModal>
   )
 }

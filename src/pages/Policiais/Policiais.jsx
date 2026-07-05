@@ -1,258 +1,462 @@
-import { useEffect, useState } from 'react'
-import {
-  listarPoliciais,
-  excluirPolicial
-} from '../../services/policiaisService'
+import { useEffect, useMemo, useState } from 'react'
+import './Policiais.css'
 
 import PolicialForm from './components/PolicialForm'
 import PolicialTable from './components/PolicialTable'
 import PolicialViewModal from './components/PolicialViewModal'
+import QrScanner from '../../components/QrScanner/QrScanner'
 
-import './Policiais.css'
-import './styles/policiaisForm.css'
-import './styles/policiaisTable.css'
-import './styles/policiaisModal.css'
+import { listarPoliciais } from '../../services/policiaisService'
 
 const initialFilters = {
-  busca: '',
-  situacao: '',
+  nome: '',
+  nome_guerra: '',
+  re: '',
+  qr_code: '',
+  posto_graduacao: '',
   companhia: '',
   pelotao: '',
-  perfil: ''
+  situacao: ''
+}
+
+const postosGraduacoes = [
+  'SD PM',
+  'CB PM',
+  '3º SGT PM',
+  '2º SGT PM',
+  '1º SGT PM',
+  'SUBTEN PM',
+  'ASP OF PM',
+  '2º TEN PM',
+  '1º TEN PM',
+  'CAP PM',
+  'MAJ PM',
+  'TEN CEL PM',
+  'CEL PM'
+]
+
+const situacoes = [
+  'ATIVO',
+  'AFASTADO',
+  'FÉRIAS',
+  'LICENÇA',
+  'TRANSFERIDO',
+  'INATIVO'
+]
+
+const LIMITE_POR_PAGINA = 20
+
+function maskRE(value) {
+  const limpo = String(value || '')
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, '')
+    .slice(0, 7)
+
+  const numeros = limpo.slice(0, 6).replace(/\D/g, '')
+  const digito = limpo.slice(6, 7)
+
+  if (numeros.length < 6) return numeros
+  return digito ? `${numeros}-${digito}` : `${numeros}-`
 }
 
 export default function Policiais({ user }) {
-  const [policiais, setPoliciais] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState('')
-  const [filters, setFilters] = useState(initialFilters)
-
-  const [pagina, setPagina] = useState(1)
-  const [limite] = useState(10)
-  const [total, setTotal] = useState(0)
-
-  const [sortBy, setSortBy] = useState('nome')
-  const [sortDirection, setSortDirection] = useState('asc')
-
   const [showForm, setShowForm] = useState(false)
   const [policialEditando, setPolicialEditando] = useState(null)
   const [policialVisualizando, setPolicialVisualizando] = useState(null)
 
-  const totalPaginas = Math.max(1, Math.ceil(total / limite))
+  const [policiais, setPoliciais] = useState([])
+  const [filters, setFilters] = useState(initialFilters)
+  const [debouncedFilters, setDebouncedFilters] = useState(initialFilters)
+
+  const [pagina, setPagina] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const [sortBy, setSortBy] = useState('nome_guerra')
+  const [sortDirection, setSortDirection] = useState('asc')
+  const [scannerAberto, setScannerAberto] = useState(false)
+
+  const totalPaginas = Math.ceil(total / LIMITE_POR_PAGINA) || 1
+
+  const registroInicial =
+    total === 0 ? 0 : (pagina - 1) * LIMITE_POR_PAGINA + 1
+
+  const registroFinal = Math.min(pagina * LIMITE_POR_PAGINA, total)
+
+  const paginasVisiveis = useMemo(() => {
+    const paginas = []
+    const inicio = Math.max(1, pagina - 2)
+    const fim = Math.min(totalPaginas, pagina + 2)
+
+    for (let i = inicio; i <= fim; i++) {
+      paginas.push(i)
+    }
+
+    return paginas
+  }, [pagina, totalPaginas])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(filters)
+      setPagina(1)
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [filters])
+
+  useEffect(() => {
+    carregarPoliciais()
+  }, [debouncedFilters, pagina, reloadKey, sortBy, sortDirection])
 
   async function carregarPoliciais() {
     try {
       setLoading(true)
       setErro('')
 
-      const response = await listarPoliciais({
-        ...filters,
-        sortBy,
-        sortDirection,
+      const resultado = await listarPoliciais({
+        filtros: debouncedFilters,
         pagina,
-        limite
+        limite: LIMITE_POR_PAGINA,
+        sortBy,
+        sortDirection
       })
 
-      setPoliciais(response.data)
-      setTotal(response.count)
-    } catch (err) {
-      console.error(err)
+      setPoliciais(resultado.data || [])
+      setTotal(resultado.total || 0)
+    } catch (error) {
+      console.error(error)
       setErro('Erro ao carregar policiais.')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    carregarPoliciais()
-  }, [filters, sortBy, sortDirection, pagina])
-
-  function handleFilterChange(event) {
-    const { name, value } = event.target
-
-    setFilters(prev => ({
-      ...prev,
-      [name]: value
-    }))
-
-    setPagina(1)
-  }
-
-  function limparFiltros() {
-    setFilters(initialFilters)
-    setPagina(1)
-  }
-
-  function abrirCadastro() {
+  function handleNovoPolicial() {
     setPolicialEditando(null)
     setShowForm(true)
   }
 
-  function abrirEdicao(policial) {
-    setPolicialEditando(policial)
-    setShowForm(true)
+  function handleView(policial) {
+    setPolicialVisualizando(policial)
   }
 
-  function fecharForm() {
+  function handleEditar(policial) {
+    setPolicialEditando(policial)
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function handleCancel() {
     setPolicialEditando(null)
     setShowForm(false)
   }
 
   function handleSaved() {
-    fecharForm()
-    carregarPoliciais()
+    setPolicialEditando(null)
+    setShowForm(false)
+    setReloadKey((prev) => prev + 1)
   }
 
-  async function handleDelete(policial) {
-    await excluirPolicial(policial.id)
-    carregarPoliciais()
+  function handleFiltersChange(newFilters) {
+    setFilters(newFilters)
+  }
+
+  function handleClearFilters() {
+    setFilters(initialFilters)
+    setDebouncedFilters(initialFilters)
+    setPagina(1)
+  }
+
+  function handleDeleted(id) {
+    setPoliciais((listaAtual) =>
+      listaAtual.filter((policial) => policial.id !== id)
+    )
+
+    setTotal((atual) => Math.max(atual - 1, 0))
   }
 
   function handleSort(campo) {
+    setPagina(1)
+
     if (sortBy === campo) {
-      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortBy(campo)
-      setSortDirection('asc')
+      setSortDirection((atual) => (atual === 'asc' ? 'desc' : 'asc'))
+      return
     }
+
+    setSortBy(campo)
+    setSortDirection('asc')
+  }
+
+  function handleQrRead(valor) {
+    setFilters({
+      ...initialFilters,
+      qr_code: valor
+    })
+
+    setDebouncedFilters({
+      ...initialFilters,
+      qr_code: valor
+    })
+
+    setPagina(1)
+    setScannerAberto(false)
   }
 
   return (
-    <div className="policiais-page">
-      <div className="policiais-header">
+    <main className="page policiais-page">
+      <header className="policiais-header">
         <div>
-          <h1>Policiais</h1>
-          <p>Cadastro e controle do efetivo operacional.</p>
+          <span className="policiais-kicker">SIGMO</span>
+          <h1>Cadastro de Policiais</h1>
+          <p>Gestão, consulta e controle do efetivo institucional.</p>
         </div>
 
-        <button className="btn-primary" onClick={abrirCadastro}>
-          + Novo policial
+        <button type="button" className="btn-primary" onClick={handleNovoPolicial}>
+          + Novo Policial
         </button>
-      </div>
+      </header>
 
-      <div className="policiais-panel">
-        <div className="policiais-filters">
-          <div className="filter-group filter-wide">
-            <label>Buscar</label>
-            <input
-              name="busca"
-              value={filters.busca}
-              onChange={handleFilterChange}
-              placeholder="Nome, nome de guerra, RE ou CPF"
-            />
+      {showForm && (
+        <PolicialForm
+          user={user}
+          policialEditando={policialEditando}
+          onCancel={handleCancel}
+          onSaved={handleSaved}
+        />
+      )}
+
+      <section className="panel">
+        <div className="policiais-filters-card">
+          <div className="policiais-filters-header">
+            <div>
+              <strong>Filtros</strong>
+              <span>Pesquise por nome, RE, QR Code ou dados funcionais.</span>
+            </div>
+
+            <button type="button" className="btn-secondary" onClick={handleClearFilters}>
+              Limpar filtros
+            </button>
           </div>
 
-          <div className="filter-group">
-            <label>Situação</label>
-            <select
-              name="situacao"
-              value={filters.situacao}
-              onChange={handleFilterChange}
-            >
-              <option value="">Todas</option>
-              <option value="Ativo">Ativo</option>
-              <option value="Afastado">Afastado</option>
-              <option value="Transferido">Transferido</option>
-              <option value="Inativo">Inativo</option>
-            </select>
-          </div>
+          <div className="policiais-filters-grid">
+            <label>
+              Nome
+              <input
+                value={filters.nome}
+                onChange={(e) =>
+                  handleFiltersChange({
+                    ...filters,
+                    nome: e.target.value.toUpperCase()
+                  })
+                }
+                placeholder="Nome completo"
+              />
+            </label>
 
-          <div className="filter-group">
-            <label>Companhia</label>
-            <input
-              name="companhia"
-              value={filters.companhia}
-              onChange={handleFilterChange}
-              placeholder="Ex: 1ª Cia"
-            />
-          </div>
+            <label>
+              Nome de guerra
+              <input
+                value={filters.nome_guerra}
+                onChange={(e) =>
+                  handleFiltersChange({
+                    ...filters,
+                    nome_guerra: e.target.value.toUpperCase()
+                  })
+                }
+                placeholder="Ex: SILVA"
+              />
+            </label>
 
-          <div className="filter-group">
-            <label>Pelotão</label>
-            <input
-              name="pelotao"
-              value={filters.pelotao}
-              onChange={handleFilterChange}
-              placeholder="Ex: 1º Pelotão"
-            />
-          </div>
+            <label>
+              RE
+              <input
+                value={filters.re}
+                maxLength={8}
+                placeholder="123456-A"
+                onChange={(e) =>
+                  handleFiltersChange({
+                    ...filters,
+                    re: maskRE(e.target.value)
+                  })
+                }
+              />
+            </label>
 
-          <div className="filter-group">
-            <label>Perfil</label>
-            <select
-              name="perfil"
-              value={filters.perfil}
-              onChange={handleFilterChange}
-            >
-              <option value="">Todos</option>
-              <option value="Administrador">Administrador</option>
-              <option value="Gestor">Gestor</option>
-              <option value="Operador">Operador</option>
-              <option value="Consulta">Consulta</option>
-            </select>
-          </div>
+            <label>
+              QR Code
+              <div className="qr-filter-group">
+                <input
+                  value={filters.qr_code}
+                  onChange={(e) =>
+                    handleFiltersChange({
+                      ...filters,
+                      qr_code: e.target.value
+                    })
+                  }
+                  placeholder="Pesquisar por QR Code"
+                />
 
-          <button className="btn-secondary" onClick={limparFiltros}>
-            Limpar
-          </button>
+                <button
+                  type="button"
+                  className="qr-filter-button"
+                  onClick={() => setScannerAberto(true)}
+                >
+                  📷 Ler QR
+                </button>
+              </div>
+            </label>
+
+            <label>
+              Posto / Graduação
+              <select
+                value={filters.posto_graduacao}
+                onChange={(e) =>
+                  handleFiltersChange({
+                    ...filters,
+                    posto_graduacao: e.target.value
+                  })
+                }
+              >
+                <option value="">Todos</option>
+
+                {postosGraduacoes.map((posto) => (
+                  <option key={posto} value={posto}>
+                    {posto}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Companhia
+              <input
+                value={filters.companhia}
+                onChange={(e) =>
+                  handleFiltersChange({
+                    ...filters,
+                    companhia: e.target.value.toUpperCase()
+                  })
+                }
+                placeholder="Companhia"
+              />
+            </label>
+
+            <label>
+              Pelotão
+              <input
+                value={filters.pelotao}
+                onChange={(e) =>
+                  handleFiltersChange({
+                    ...filters,
+                    pelotao: e.target.value.toUpperCase()
+                  })
+                }
+                placeholder="Pelotão"
+              />
+            </label>
+
+            <label>
+              Situação
+              <select
+                value={filters.situacao}
+                onChange={(e) =>
+                  handleFiltersChange({
+                    ...filters,
+                    situacao: e.target.value
+                  })
+                }
+              >
+                <option value="">Todas</option>
+
+                {situacoes.map((situacao) => (
+                  <option key={situacao} value={situacao}>
+                    {situacao}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="policiais-table-toolbar">
+          <span>
+            Mostrando {registroInicial}–{registroFinal} de {total} registros
+          </span>
         </div>
 
         <PolicialTable
+          user={user}
           policiais={policiais}
           loading={loading}
           erro={erro}
           sortBy={sortBy}
           sortDirection={sortDirection}
           onSort={handleSort}
-          onView={setPolicialVisualizando}
-          onEdit={abrirEdicao}
-          onDelete={handleDelete}
+          onView={handleView}
+          onEdit={handleEditar}
+          onDeleted={handleDeleted}
         />
 
         <div className="policiais-pagination">
-          <span>
-            Total: <strong>{total}</strong>
-          </span>
+          <button type="button" disabled={pagina <= 1} onClick={() => setPagina(1)}>
+            Primeira
+          </button>
 
-          <div>
+          <button
+            type="button"
+            disabled={pagina <= 1}
+            onClick={() => setPagina((prev) => prev - 1)}
+          >
+            Anterior
+          </button>
+
+          {pagina > 3 && <span className="policiais-pagination-dots">...</span>}
+
+          {paginasVisiveis.map((numero) => (
             <button
-              className="btn-secondary"
-              disabled={pagina <= 1}
-              onClick={() => setPagina(prev => prev - 1)}
+              key={numero}
+              type="button"
+              className={numero === pagina ? 'active' : ''}
+              onClick={() => setPagina(numero)}
             >
-              Anterior
+              {numero}
             </button>
+          ))}
 
-            <span>
-              Página {pagina} de {totalPaginas}
-            </span>
+          {pagina < totalPaginas - 2 && (
+            <span className="policiais-pagination-dots">...</span>
+          )}
 
-            <button
-              className="btn-secondary"
-              disabled={pagina >= totalPaginas}
-              onClick={() => setPagina(prev => prev + 1)}
-            >
-              Próxima
-            </button>
-          </div>
+          <button
+            type="button"
+            disabled={pagina >= totalPaginas}
+            onClick={() => setPagina((prev) => prev + 1)}
+          >
+            Próxima
+          </button>
+
+          <button
+            type="button"
+            disabled={pagina >= totalPaginas}
+            onClick={() => setPagina(totalPaginas)}
+          >
+            Última
+          </button>
         </div>
-      </div>
+      </section>
 
-      {showForm && (
-        <PolicialForm
-          user={user}
-          policialEditando={policialEditando}
-          onCancel={fecharForm}
-          onSaved={handleSaved}
-        />
-      )}
+      <PolicialViewModal
+        policial={policialVisualizando}
+        onClose={() => setPolicialVisualizando(null)}
+      />
 
-      {policialVisualizando && (
-        <PolicialViewModal
-          policial={policialVisualizando}
-          onClose={() => setPolicialVisualizando(null)}
-        />
-      )}
-    </div>
+      <QrScanner
+        open={scannerAberto}
+        onRead={handleQrRead}
+        onClose={() => setScannerAberto(false)}
+      />
+    </main>
   )
 }

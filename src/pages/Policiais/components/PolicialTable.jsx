@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { excluirPolicial } from '../../../services/policiaisService'
+import { registerAudit } from '../../../services/auditoriaService'
+import ConfirmModal from '../../../components/ConfirmModal'
 
 const colunasOrdenaveis = [
   { campo: 'nome_guerra', label: 'Nome de guerra' },
@@ -6,11 +9,13 @@ const colunasOrdenaveis = [
   { campo: 'posto_graduacao', label: 'Posto/Graduação' },
   { campo: 'companhia', label: 'Companhia' },
   { campo: 'pelotao', label: 'Pelotão' },
-  { campo: 'perfil', label: 'Perfil' },
+  { campo: 'equipe', label: 'Equipe' },
+  { campo: 'funcao', label: 'Função' },
   { campo: 'situacao', label: 'Situação' }
 ]
 
 export default function PolicialTable({
+  user,
   policiais,
   loading,
   erro,
@@ -19,96 +24,157 @@ export default function PolicialTable({
   onSort,
   onView,
   onEdit,
-  onDelete
+  onDeleted
 }) {
-  const [excluindoId, setExcluindoId] = useState(null)
+  const [policialParaExcluir, setPolicialParaExcluir] = useState(null)
+  const [excluindo, setExcluindo] = useState(false)
+  const [mostrarQrCode, setMostrarQrCode] = useState(false)
 
-  function sortIcon(campo) {
+  function renderSortIcon(campo) {
     if (sortBy !== campo) return '↕'
-    return sortDirection === 'asc' ? '↑' : '↓'
+    return sortDirection === 'asc' ? '▲' : '▼'
   }
 
-  async function confirmarExclusao(policial) {
-    const confirmou = window.confirm(
-      `Deseja excluir o policial ${policial.nome_guerra || policial.nome}?`
-    )
-
-    if (!confirmou) return
+  async function confirmarExclusao() {
+    if (!policialParaExcluir) return
 
     try {
-      setExcluindoId(policial.id)
-      await onDelete(policial)
+      setExcluindo(true)
+
+      await excluirPolicial(policialParaExcluir.id)
+
+      await registerAudit(
+        'DELETE',
+        `Policial excluído: ${policialParaExcluir.posto_graduacao || ''} ${policialParaExcluir.nome_guerra || 'não informado'} - RE ${policialParaExcluir.re || 'não informado'}.`,
+        user,
+        'Policiais',
+        'Crítico'
+      )
+
+      onDeleted(policialParaExcluir.id)
+      setPolicialParaExcluir(null)
+    } catch (error) {
+      console.error(error)
+      alert(JSON.stringify(error, null, 2))
     } finally {
-      setExcluindoId(null)
+      setExcluindo(false)
     }
   }
 
   if (loading) {
-    return <div className="table-state">Carregando policiais...</div>
+    return <p className="policiais-feedback">Carregando policiais...</p>
   }
 
   if (erro) {
-    return <div className="table-error">{erro}</div>
-  }
-
-  if (!policiais.length) {
-    return <div className="table-state">Nenhum policial encontrado.</div>
+    return <p className="policiais-feedback policiais-feedback-error">{erro}</p>
   }
 
   return (
-    <div className="policiais-table-wrap">
-      <table className="policiais-table">
-        <thead>
-          <tr>
-            {colunasOrdenaveis.map(coluna => (
-              <th key={coluna.campo}>
-                <button
-                  type="button"
-                  className="sort-button"
-                  onClick={() => onSort(coluna.campo)}
-                >
-                  {coluna.label} {sortIcon(coluna.campo)}
-                </button>
-              </th>
-            ))}
-            <th>Ações</th>
-          </tr>
-        </thead>
+    <>
+      <div className="policiais-table-toolbar">
+        <span>
+          {policiais.length} {policiais.length === 1 ? 'policial encontrado' : 'policiais encontrados'}
+        </span>
 
-        <tbody>
-          {policiais.map(policial => (
-            <tr key={policial.id}>
-              <td>
-                <strong>{policial.nome_guerra || '-'}</strong>
-                <span>{policial.nome || '-'}</span>
-              </td>
-              <td>{policial.re || '-'}</td>
-              <td>{policial.posto_graduacao || '-'}</td>
-              <td>{policial.companhia || '-'}</td>
-              <td>{policial.pelotao || '-'}</td>
-              <td>{policial.perfil || '-'}</td>
-              <td>
-                <span className={`status-badge status-${policial.situacao?.toLowerCase()}`}>
-                  {policial.situacao || '-'}
-                </span>
-              </td>
-              <td>
-                <div className="table-actions">
-                  <button onClick={() => onView(policial)}>Ver</button>
-                  <button onClick={() => onEdit(policial)}>Editar</button>
+        <label className="policiais-table-toggle">
+          <input
+            type="checkbox"
+            checked={mostrarQrCode}
+            onChange={(event) => setMostrarQrCode(event.target.checked)}
+          />
+          Exibir QR Code
+        </label>
+      </div>
+
+      <div className="policiais-table-wrap">
+        <table className="policiais-table">
+          <thead>
+            <tr>
+              {colunasOrdenaveis.map((coluna) => (
+                <th key={coluna.campo}>
                   <button
-                    className="danger"
-                    disabled={excluindoId === policial.id}
-                    onClick={() => confirmarExclusao(policial)}
+                    type="button"
+                    className="policiais-sort-button"
+                    onClick={() => onSort(coluna.campo)}
                   >
-                    {excluindoId === policial.id ? '...' : 'Excluir'}
+                    <span>{coluna.label}</span>
+                    <small>{renderSortIcon(coluna.campo)}</small>
                   </button>
-                </div>
-              </td>
+                </th>
+              ))}
+
+              {mostrarQrCode && <th>QR Code</th>}
+
+              <th>Ações</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+
+          <tbody>
+            {policiais.length === 0 ? (
+              <tr>
+                <td colSpan={mostrarQrCode ? 10 : 9}>
+                  Nenhum policial encontrado.
+                </td>
+              </tr>
+            ) : (
+              policiais.map((policial) => (
+                <tr key={policial.id}>
+                  <td data-label="Nome de guerra">{policial.nome_guerra || '-'}</td>
+                  <td data-label="RE">{policial.re || '-'}</td>
+                  <td data-label="Posto/Graduação">{policial.posto_graduacao || '-'}</td>
+                  <td data-label="Companhia">{policial.companhia || '-'}</td>
+                  <td data-label="Pelotão">{policial.pelotao || '-'}</td>
+                  <td data-label="Equipe">{policial.equipe || '-'}</td>
+                  <td data-label="Função">{policial.funcao || '-'}</td>
+
+                  <td data-label="Situação">
+                    <span className="policiais-status">{policial.situacao || '-'}</span>
+                  </td>
+
+                  {mostrarQrCode && (
+                    <td data-label="QR Code">
+                      <span className="policiais-qr-code-text">
+                        {policial.qr_code || '-'}
+                      </span>
+                    </td>
+                  )}
+
+                  <td data-label="Ações">
+                    <div className="policiais-actions">
+                      <button type="button" onClick={() => onView(policial)}>
+                        Ver
+                      </button>
+
+                      <button type="button" onClick={() => onEdit(policial)}>
+                        Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        className="policiais-delete-button"
+                        onClick={() => setPolicialParaExcluir(policial)}
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <ConfirmModal
+        open={!!policialParaExcluir}
+        title="Excluir policial"
+        message={`Deseja realmente excluir o policial ${policialParaExcluir?.nome_guerra || 'não informado'} - RE ${policialParaExcluir?.re || 'não informado'}? Essa ação não poderá ser desfeita.`}
+        confirmText={excluindo ? 'Excluindo...' : 'Excluir'}
+        cancelText="Cancelar"
+        danger
+        onClose={() => setPolicialParaExcluir(null)}
+        onConfirm={confirmarExclusao}
+      />
+    </>
   )
 }

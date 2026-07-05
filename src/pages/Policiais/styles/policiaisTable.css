@@ -1,135 +1,82 @@
-.policiais-table-wrap {
-  width: 100%;
-  overflow-x: auto;
+.policiais-table-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin:10px 0 12px;
+  color:#667085;
+  font-size:14px;
+  font-weight:600;
 }
 
-.policiais-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
+.policiais-table-wrap{
+  width:100%;
+  overflow-x:auto;
 }
 
-.policiais-table thead {
-  background: #061a32;
-  color: #fff;
+.policiais-table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+
+.policiais-table thead{
+  background:#061a32;
+  color:#fff;
 }
 
 .policiais-table th,
-.policiais-table td {
-  padding: 12px 10px;
-  text-align: left;
-  font-size: 14px;
-  vertical-align: middle;
-  border-bottom: 1px solid #edf2f7;
+.policiais-table td{
+  padding:12px 10px;
+  text-align:left;
+  font-size:14px;
+  vertical-align:middle;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  border-bottom:1px solid #e5e7eb;
 }
 
-.policiais-table th {
-  font-size: 13px;
-  font-weight: 800;
+.policiais-sort-button{
+  width:100%;
+  background:none;
+  border:0;
+  color:inherit;
+  display:flex;
+  justify-content:space-between;
+  gap:6px;
+  cursor:pointer;
+  font-weight:700;
 }
 
-.policiais-table td {
-  color: #344054;
+.policiais-status{
+  display:inline-block;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#e7f8ef;
+  color:#067647;
+  font-weight:700;
+  font-size:12px;
 }
 
-.policiais-table td strong {
-  display: block;
-  color: #061a32;
+.policiais-actions{
+  display:flex;
+  gap:6px;
 }
 
-.policiais-table td span {
-  display: block;
-  color: #667085;
-  font-size: 12px;
-  margin-top: 3px;
+.policiais-actions button{
+  border:0;
+  border-radius:8px;
+  padding:7px 9px;
+  cursor:pointer;
+  font-weight:700;
 }
 
-.sort-button {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-weight: 800;
-  cursor: pointer;
-  padding: 0;
-  text-align: left;
+.policiais-delete-button{
+  background:#fee4e2;
+  color:#b42318;
 }
 
-.table-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.table-actions button {
-  border: 0;
-  border-radius: 8px;
-  background: #eef3fb;
-  color: #061a32;
-  padding: 7px 9px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.table-actions button:hover {
-  background: #dfe8f5;
-}
-
-.table-actions .danger {
-  background: #fff1f1;
-  color: #b42318;
-}
-
-.table-actions .danger:hover {
-  background: #ffd9d6;
-}
-
-.status-badge {
-  display: inline-flex !important;
-  width: fit-content;
-  padding: 5px 9px;
-  border-radius: 999px;
-  font-weight: 800;
-  font-size: 12px !important;
-}
-
-.status-ativo {
-  background: #dcfae6;
-  color: #067647 !important;
-}
-
-.status-afastado {
-  background: #fff7cd;
-  color: #b54708 !important;
-}
-
-.status-transferido {
-  background: #e0f2fe;
-  color: #026aa2 !important;
-}
-
-.status-inativo {
-  background: #f2f4f7;
-  color: #475467 !important;
-}
-
-.table-state,
-.table-error {
-  padding: 26px;
-  text-align: center;
-  border: 1px dashed #cfd8e3;
-  border-radius: 14px;
-  color: #667085;
-  font-weight: 700;
-}
-
-.table-error {
-  color: #b42318;
-  background: #fff1f1;
-  border-color: #ffcdca;
-}
-
-@media (max-width: 900px) {
-  .policiais-table {
-    min-width: 900px;
-  }
+.policiais-qr-code-text{
+  font-size:12px;
+  color:#475467;
 }

@@ -1,123 +1,138 @@
-.policial-form-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 8, 23, 0.55);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+.policiais-form-card{
+  background:#fff;
+  border-radius:16px;
+  padding:24px;
+  margin-bottom:24px;
+  border:1px solid #e5e7eb;
+  box-shadow:0 10px 30px rgba(0,0,0,.05);
 }
 
-.policial-form-modal {
-  width: min(980px, 100%);
-  max-height: 92vh;
-  overflow-y: auto;
-  background: #fff;
-  border-radius: 18px;
-  box-shadow: 0 30px 80px rgba(2, 8, 23, 0.28);
-  padding: 22px;
+.policiais-form-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:20px;
+  margin-bottom:20px;
 }
 
-.policial-form-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+.policiais-form-header h2{
+  margin:0;
+  color:#061a32;
 }
 
-.policial-form-header h2 {
-  margin: 0;
-  color: #061a32;
+.policiais-form-header p{
+  margin-top:6px;
+  color:#667085;
 }
 
-.policial-form-header p {
-  margin: 5px 0 0;
-  color: #667085;
+.policiais-form{
+  display:grid;
+  gap:16px;
 }
 
-.policial-form {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.policiais-form input,
+.policiais-form select,
+.policiais-form textarea{
+  width:100%;
+  padding:12px 14px;
+  border:1px solid #d0d5dd;
+  border-radius:10px;
+  font-size:14px;
+  transition:.2s;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.policiais-form input:focus,
+.policiais-form select:focus,
+.policiais-form textarea:focus{
+  outline:none;
+  border-color:#075eea;
+  box-shadow:0 0 0 3px rgba(7,94,234,.12);
 }
 
-.form-span-2 {
-  grid-column: span 2;
+.policiais-form textarea{
+  min-height:110px;
+  resize:vertical;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.policiais-form-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:12px;
+  margin-top:8px;
 }
 
-.form-group label {
-  color: #344054;
-  font-size: 13px;
-  font-weight: 800;
+.policiais-form-actions button{
+  padding:12px 20px;
 }
 
-.form-group input,
-.form-group select,
-.form-group textarea {
-  border: 1px solid #cfd8e3;
-  border-radius: 10px;
-  padding: 11px 12px;
-  font-size: 14px;
-  outline: none;
-  background: #fff;
-  resize: vertical;
+.policiais-feedback{
+  margin-bottom:14px;
+  font-weight:600;
 }
 
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-  border-color: #075eea;
-  box-shadow: 0 0 0 3px rgba(7, 94, 234, 0.12);
+.policiais-feedback-error{
+  color:#d92d20;
 }
 
-.form-error {
-  background: #fff1f1;
-  color: #b42318;
-  border: 1px solid #ffcdca;
-  border-radius: 12px;
-  padding: 12px;
-  font-weight: 700;
-  margin-bottom: 14px;
+.policiais-qr-field{
+  display:flex;
+  gap:10px;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+.policiais-qr-field button{
+  white-space:nowrap;
 }
 
-@media (max-width: 720px) {
-  .policial-form-overlay {
-    padding: 12px;
-    align-items: flex-start;
-  }
+.policiais-fotos-box{
+  border:1px solid #e4e7ec;
+  border-radius:12px;
+  padding:18px;
+}
 
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
+.policiais-fotos-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:16px;
+}
 
-  .form-span-2 {
-    grid-column: auto;
-  }
+.policiais-upload-btn{
+  background:#075eea;
+  color:#fff;
+  padding:10px 16px;
+  border-radius:10px;
+  cursor:pointer;
+  font-weight:600;
+}
 
-  .form-actions {
-    flex-direction: column-reverse;
-  }
+.policiais-fotos-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:16px;
+}
 
-  .form-actions button {
-    width: 100%;
-  }
+.policiais-foto-card{
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  overflow:hidden;
+}
+
+.policiais-foto-card img{
+  width:100%;
+  height:180px;
+  object-fit:cover;
+  display:block;
+}
+
+.policiais-foto-card button{
+  width:100%;
+  border:none;
+  background:#ef4444;
+  color:#fff;
+  padding:10px;
+  cursor:pointer;
+}
+
+.policiais-empty-fotos{
+  color:#667085;
 }
