@@ -52,6 +52,10 @@ function upper(value) {
   return String(value || '').toUpperCase()
 }
 
+function clean(value) {
+  return String(value || '').trim()
+}
+
 function maskRE(value) {
   const raw = String(value || '')
     .toUpperCase()
@@ -60,13 +64,8 @@ function maskRE(value) {
   const numeros = raw.replace(/[^0-9]/g, '').slice(0, 6)
   const digito = raw.slice(6).replace(/[^0-9A-Z]/g, '').slice(0, 1)
 
-  if (numeros.length === 6 && !digito) {
-    return `${numeros}-`
-  }
-
-  if (numeros.length === 6 && digito) {
-    return `${numeros}-${digito}`
-  }
+  if (numeros.length === 6 && !digito) return `${numeros}-`
+  if (numeros.length === 6 && digito) return `${numeros}-${digito}`
 
   return numeros
 }
@@ -85,6 +84,34 @@ function gerarTextoQrCode(form) {
   })
 }
 
+function montarPayload(form) {
+  const payload = {
+    nome: upper(form.nome).trim(),
+    nome_guerra: upper(form.nome_guerra).trim(),
+    re: maskRE(form.re),
+    posto_graduacao: upper(form.posto_graduacao).trim(),
+    companhia: upper(form.companhia).trim(),
+    pelotao: upper(form.pelotao).trim(),
+    equipe: upper(form.equipe).trim(),
+    funcao: upper(form.funcao).trim(),
+    telefone: upper(form.telefone).trim(),
+    email: clean(form.email),
+    cpf: upper(form.cpf).trim(),
+    rg: upper(form.rg).trim(),
+    perfil: upper(form.perfil).trim(),
+    situacao: upper(form.situacao || 'ATIVO'),
+    observacoes: upper(form.observacoes).trim(),
+    foto_url: clean(form.foto_url),
+    qr_code: clean(form.qr_code)
+  }
+
+  if (!payload.qr_code) {
+    payload.qr_code = gerarTextoQrCode(payload)
+  }
+
+  return payload
+}
+
 export default function PolicialForm({
   user,
   policialEditando,
@@ -98,7 +125,6 @@ export default function PolicialForm({
   const [uploadingFoto, setUploadingFoto] = useState(false)
 
   const isEditing = Boolean(policialEditando?.id)
-
   const policialId = useMemo(() => policialEditando?.id || null, [policialEditando])
 
   useEffect(() => {
@@ -165,8 +191,16 @@ export default function PolicialForm({
   function gerarQrCode() {
     setForm((prev) => ({
       ...prev,
-      qr_code: gerarTextoQrCode(prev)
+      qr_code: gerarTextoQrCode(montarPayload(prev))
     }))
+  }
+
+  async function registrarAuditoriaSegura(dados) {
+    try {
+      await registerAudit(dados)
+    } catch (error) {
+      console.error('Erro ao registrar auditoria:', error)
+    }
   }
 
   async function handleSubmit(e) {
@@ -175,45 +209,24 @@ export default function PolicialForm({
     setErro('')
 
     try {
-      if (!form.nome.trim()) {
+      const payload = montarPayload(form)
+
+      if (!payload.nome) {
         throw new Error('Informe o nome do policial.')
       }
 
-      if (!form.nome_guerra.trim()) {
+      if (!payload.nome_guerra) {
         throw new Error('Informe o nome de guerra.')
       }
 
-      if (!/^\d{6}-[0-9A-Z]$/.test(form.re)) {
+      if (!/^\d{6}-[0-9A-Z]$/.test(payload.re)) {
         throw new Error('Informe o RE no padrão 123456-A ou 123456-7.')
-      }
-
-      const payload = {
-        ...form,
-        nome: upper(form.nome).trim(),
-        nome_guerra: upper(form.nome_guerra).trim(),
-        re: maskRE(form.re),
-        posto_graduacao: upper(form.posto_graduacao).trim(),
-        companhia: upper(form.companhia).trim(),
-        pelotao: upper(form.pelotao).trim(),
-        equipe: upper(form.equipe).trim(),
-        funcao: upper(form.funcao).trim(),
-        telefone: upper(form.telefone).trim(),
-        email: form.email.trim(),
-        cpf: upper(form.cpf).trim(),
-        rg: upper(form.rg).trim(),
-        perfil: upper(form.perfil).trim(),
-        situacao: upper(form.situacao || 'ATIVO'),
-        observacoes: upper(form.observacoes).trim()
-      }
-
-      if (!payload.qr_code) {
-        payload.qr_code = gerarTextoQrCode(payload)
       }
 
       if (isEditing) {
         await atualizarPolicial(policialEditando.id, payload)
 
-        await registerAudit({
+        await registrarAuditoriaSegura({
           acao: 'ATUALIZAR',
           descricao: `Policial atualizado: ${payload.nome_guerra} - RE ${payload.re}`,
           ator_id: user?.id,
@@ -225,7 +238,7 @@ export default function PolicialForm({
       } else {
         await cadastrarPolicial(payload)
 
-        await registerAudit({
+        await registrarAuditoriaSegura({
           acao: 'CADASTRAR',
           descricao: `Policial cadastrado: ${payload.nome_guerra} - RE ${payload.re}`,
           ator_id: user?.id,
@@ -236,9 +249,11 @@ export default function PolicialForm({
         })
       }
 
+      setForm(initialForm)
       onSaved?.()
     } catch (error) {
-      setErro(error.message || 'Erro ao salvar policial.')
+      console.error('Erro ao salvar policial:', error)
+      setErro(error.message || error.details || 'Erro ao salvar policial.')
     } finally {
       setSaving(false)
     }
@@ -263,11 +278,11 @@ export default function PolicialForm({
       }))
 
       await atualizarPolicial(policialId, {
-        ...form,
+        ...montarPayload(form),
         foto_url: form.foto_url || url
       })
 
-      await registerAudit({
+      await registrarAuditoriaSegura({
         acao: 'UPLOAD_FOTO',
         descricao: `Foto adicionada ao policial: ${form.nome_guerra || form.nome} - RE ${form.re}`,
         ator_id: user?.id,
@@ -277,6 +292,7 @@ export default function PolicialForm({
         severidade: 'INFO'
       })
     } catch (error) {
+      console.error('Erro ao enviar foto:', error)
       setErro(error.message || 'Erro ao enviar foto.')
     } finally {
       setUploadingFoto(false)
@@ -293,7 +309,7 @@ export default function PolicialForm({
       const lista = await listarFotosPolicial(policialId)
       setFotos(lista || [])
 
-      await registerAudit({
+      await registrarAuditoriaSegura({
         acao: 'EXCLUIR_FOTO',
         descricao: `Foto removida do policial: ${form.nome_guerra || form.nome} - RE ${form.re}`,
         ator_id: user?.id,
@@ -303,6 +319,7 @@ export default function PolicialForm({
         severidade: 'ATENÇÃO'
       })
     } catch (error) {
+      console.error('Erro ao excluir foto:', error)
       setErro(error.message || 'Erro ao excluir foto.')
     }
   }
@@ -331,22 +348,12 @@ export default function PolicialForm({
       <div className="form-grid">
         <label>
           Nome completo
-          <input
-            name="nome"
-            value={form.nome}
-            onChange={handleChange}
-            required
-          />
+          <input name="nome" value={form.nome} onChange={handleChange} required />
         </label>
 
         <label>
           Nome de guerra
-          <input
-            name="nome_guerra"
-            value={form.nome_guerra}
-            onChange={handleChange}
-            required
-          />
+          <input name="nome_guerra" value={form.nome_guerra} onChange={handleChange} required />
         </label>
 
         <label>
@@ -363,11 +370,7 @@ export default function PolicialForm({
 
         <label>
           Posto / graduação
-          <select
-            name="posto_graduacao"
-            value={form.posto_graduacao}
-            onChange={handleChange}
-          >
+          <select name="posto_graduacao" value={form.posto_graduacao} onChange={handleChange}>
             <option value="">SELECIONE</option>
             {postosGraduacoes.map((item) => (
               <option key={item} value={item}>
@@ -379,93 +382,52 @@ export default function PolicialForm({
 
         <label>
           Companhia
-          <input
-            name="companhia"
-            value={form.companhia}
-            onChange={handleChange}
-          />
+          <input name="companhia" value={form.companhia} onChange={handleChange} />
         </label>
 
         <label>
           Pelotão
-          <input
-            name="pelotao"
-            value={form.pelotao}
-            onChange={handleChange}
-          />
+          <input name="pelotao" value={form.pelotao} onChange={handleChange} />
         </label>
 
         <label>
           Equipe
-          <input
-            name="equipe"
-            value={form.equipe}
-            onChange={handleChange}
-          />
+          <input name="equipe" value={form.equipe} onChange={handleChange} />
         </label>
 
         <label>
           Função
-          <input
-            name="funcao"
-            value={form.funcao}
-            onChange={handleChange}
-          />
+          <input name="funcao" value={form.funcao} onChange={handleChange} />
         </label>
 
         <label>
           Telefone
-          <input
-            name="telefone"
-            value={form.telefone}
-            onChange={handleChange}
-          />
+          <input name="telefone" value={form.telefone} onChange={handleChange} />
         </label>
 
         <label>
           E-mail
-          <input
-            name="email"
-            type="email"
-            value={form.email}
-            onChange={handleChange}
-          />
+          <input name="email" type="email" value={form.email} onChange={handleChange} />
         </label>
 
         <label>
           CPF
-          <input
-            name="cpf"
-            value={form.cpf}
-            onChange={handleChange}
-          />
+          <input name="cpf" value={form.cpf} onChange={handleChange} />
         </label>
 
         <label>
           RG
-          <input
-            name="rg"
-            value={form.rg}
-            onChange={handleChange}
-          />
+          <input name="rg" value={form.rg} onChange={handleChange} />
         </label>
 
         <label>
           Perfil
-          <input
-            name="perfil"
-            value={form.perfil}
-            onChange={handleChange}
-          />
+          <input name="perfil" value={form.perfil} onChange={handleChange} />
         </label>
 
         <label>
           Situação
-          <select
-            name="situacao"
-            value={form.situacao}
-            onChange={handleChange}
-          >
+          <select name="situacao" value={form.situacao} onChange={handleChange}>
             {situacoes.map((item) => (
               <option key={item} value={item}>
                 {item}
@@ -522,10 +484,7 @@ export default function PolicialForm({
             </label>
           </div>
 
-          <PolicialFotos
-            fotos={fotos}
-            onExcluir={handleExcluirFoto}
-          />
+          <PolicialFotos fotos={fotos} onExcluir={handleExcluirFoto} />
         </div>
       )}
 
