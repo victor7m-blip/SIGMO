@@ -28,6 +28,7 @@ export default function ArmaTable({
 }) {
   const [armaParaExcluir, setArmaParaExcluir] = useState(null)
   const [excluindo, setExcluindo] = useState(false)
+  const [mostrarQrCode, setMostrarQrCode] = useState(false)
 
   function renderSortIcon(campo) {
     if (sortBy !== campo) return '↕'
@@ -70,6 +71,21 @@ export default function ArmaTable({
 
   return (
     <>
+      <div className="armas-table-toolbar">
+        <span>
+          {armas.length} {armas.length === 1 ? 'arma encontrada' : 'armas encontradas'}
+        </span>
+
+        <label className="armas-table-toggle">
+          <input
+            type="checkbox"
+            checked={mostrarQrCode}
+            onChange={(event) => setMostrarQrCode(event.target.checked)}
+          />
+          Exibir QR Code
+        </label>
+      </div>
+
       <div className="armas-table-wrap">
         <table className="armas-table">
           <thead>
@@ -87,6 +103,8 @@ export default function ArmaTable({
                 </th>
               ))}
 
+              {mostrarQrCode && <th>QR Code</th>}
+
               <th>Ações</th>
             </tr>
           </thead>
@@ -94,7 +112,9 @@ export default function ArmaTable({
           <tbody>
             {armas.length === 0 ? (
               <tr>
-                <td colSpan="9">Nenhuma arma encontrada.</td>
+                <td colSpan={mostrarQrCode ? 10 : 9}>
+                  Nenhuma arma encontrada.
+                </td>
               </tr>
             ) : (
               armas.map((arma) => (
@@ -105,10 +125,21 @@ export default function ArmaTable({
                   <td data-label="Modelo">{arma.modelo || '-'}</td>
                   <td data-label="Calibre">{arma.calibre || '-'}</td>
                   <td data-label="Série">{arma.numero_serie || '-'}</td>
+
                   <td data-label="Status">
                     <span className="armas-status">{arma.status || '-'}</span>
                   </td>
+
                   <td data-label="Unidade">{arma.unidade || '-'}</td>
+
+                  {mostrarQrCode && (
+                    <td data-label="QR Code">
+                      <span className="armas-qr-code-text">
+                        {arma.qr_code || '-'}
+                      </span>
+                    </td>
+                  )}
+
                   <td data-label="Ações">
                     <div className="armas-actions">
                       <button type="button" onClick={() => onView(arma)}>

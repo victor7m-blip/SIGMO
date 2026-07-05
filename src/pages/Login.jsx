@@ -23,15 +23,17 @@ export default function Login({ onLogin }) {
     return () => window.removeEventListener('resize', updateBackground)
   }, [])
 
+  function limparRE(value) {
+    return value.replace(/\D/g, '').slice(0, 6)
+  }
+
   async function handleLogin(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    const reLimpo = re.trim()
+    const reLimpo = limparRE(re)
     const pinLimpo = pin.trim()
-
-    console.log('1 - Clicou no login', { reLimpo, pinLimpo })
 
     if (!reLimpo || !pinLimpo) {
       setError('Informe o RE e o PIN.')
@@ -39,75 +41,77 @@ export default function Login({ onLogin }) {
       return
     }
 
-    const { data: policial, error: policialError } = await supabase
-      .from('policiais')
-      .select('*')
-      .eq('re', reLimpo)
-      .maybeSingle()
-
-    console.log('2 - Resultado policial:', policial, policialError)
-
-    if (policialError) {
-      setError('Erro ao consultar policial.')
-      setLoading(false)
-      return
-    }
-
-    if (!policial) {
-      setError('RE não encontrado.')
-      setLoading(false)
-      return
-    }
-
-    const { data: usuario, error: usuarioError } = await supabase
-      .from('sigmo_users')
-      .select('*')
-      .eq('policial_id', policial.id)
-      .eq('pin', Number(pinLimpo))
-      .eq('ativo', true)
-      .maybeSingle()
-
-    console.log('3 - Resultado usuário:', usuario, usuarioError)
-
-    if (usuarioError) {
-      setError('Erro ao validar usuário.')
-      setLoading(false)
-      return
-    }
-
-    if (!usuario) {
-      setError('PIN incorreto ou usuário inativo.')
-      setLoading(false)
-      return
-    }
-
-    const sessionUser = {
-  id: policial.id,
-  re: policial.re,
-  nome: policial.nome_completo,
-  nome_guerra: policial.nome_guerra,
-  posto_graduacao: policial.posto_graduacao,
-  perfil: usuario.perfil,
-  ativo: usuario.ativo,
-  user_id: usuario.id
-}
-
-    console.log('4 - Sessão criada:', sessionUser)
-
     try {
-      await registerAudit(
-        'LOGIN',
-        'Usuário acessou o SIGMO.',
-        sessionUser,
-        'Login'
-      )
-    } catch (auditError) {
-      console.error('Erro ao registrar auditoria:', auditError)
-    }
+      const { data: policial, error: policialError } = await supabase
+        .from('policiais')
+        .select('*')
+        .ilike('re', `${reLimpo}-%`)
+        .maybeSingle()
 
-    saveSession(sessionUser)
-    onLogin(sessionUser)
-    setLoading(false)
+      if (policialError) {
+        setError('Erro ao consultar policial.')
+        setLoading(false)
+        return
+      }
+
+      if (!policial) {
+        setError('RE não encontrado.')
+        setLoading(false)
+        return
+      }
+
+      const { data: usuario, error: usuarioError } = await supabase
+        .from('sigmo_users')
+        .select('*')
+        .eq('policial_id', policial.id)
+        .eq('pin', Number(pinLimpo))
+        .eq('ativo', true)
+        .maybeSingle()
+
+      if (usuarioError) {
+        setError('Erro ao validar usuário.')
+        setLoading(false)
+        return
+      }
+
+      if (!usuario) {
+        setError('PIN incorreto ou usuário inativo.')
+        setLoading(false)
+        return
+      }
+
+      const sessionUser = {
+        id: policial.id,
+        re: policial.re,
+        nome: policial.nome,
+        nome_guerra: policial.nome_guerra,
+        posto_graduacao: policial.posto_graduacao,
+        companhia: policial.companhia,
+        pelotao: policial.pelotao,
+        perfil: usuario.perfil,
+        ativo: usuario.ativo,
+        user_id: usuario.id
+      }
+
+      try {
+        await registerAudit(
+          'LOGIN',
+          'Usuário acessou o SIGMO.',
+          sessionUser,
+          'Login'
+        )
+      } catch (auditError) {
+        console.error('Erro ao registrar auditoria:', auditError)
+      }
+
+      saveSession(sessionUser)
+      onLogin(sessionUser)
+    } catch (err) {
+      console.error(err)
+      setError('Erro inesperado ao acessar o SIGMO.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -123,10 +127,10 @@ export default function Login({ onLogin }) {
     >
       <section className="login-card">
         <form onSubmit={handleLogin}>
-          <label>RE / Matrícula</label>
+          <label>RE</label>
           <input
             value={re}
-            onChange={(e) => setRe(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onChange={(e) => setRe(limparRE(e.target.value))}
             placeholder="Digite o RE"
             maxLength={6}
             inputMode="numeric"
@@ -146,6 +150,7 @@ export default function Login({ onLogin }) {
 
           <button
             type="submit"
+            disabled={loading}
             style={{
               display: 'block',
               width: '100%',
@@ -156,9 +161,9 @@ export default function Login({ onLogin }) {
               border: 'none',
               borderRadius: '8px',
               fontSize: '16px',
-              cursor: 'pointer'
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.75 : 1
             }}
-            disabled={loading}
           >
             {loading ? 'Entrando...' : 'Entrar'}
           </button>

@@ -1,33 +1,35 @@
 import { supabase } from './supabaseClient'
 
-const TABLE = 'sigmo_pessoas'
+const TABLE = 'policiais'
 
 export async function listarPoliciais({
-  filters = {},
+  busca = '',
+  situacao = '',
+  companhia = '',
+  pelotao = '',
+  perfil = '',
+  sortBy = 'nome',
+  sortDirection = 'asc',
   pagina = 1,
-  limite = 10,
-  sortBy = 'nome_completo',
-  sortDirection = 'asc'
-}) {
+  limite = 10
+} = {}) {
+  const from = (pagina - 1) * limite
+  const to = from + limite - 1
+
   let query = supabase
     .from(TABLE)
     .select('*', { count: 'exact' })
 
-  if (filters.busca) {
-    const busca = `%${filters.busca}%`
-
+  if (busca) {
     query = query.or(
-      `nome_completo.ilike.${busca},nome_guerra.ilike.${busca},matricula.ilike.${busca},cpf.ilike.${busca},rg.ilike.${busca},posto_graduacao.ilike.${busca},unidade.ilike.${busca}`
+      `nome.ilike.%${busca}%,nome_guerra.ilike.%${busca}%,re.ilike.%${busca}%,cpf.ilike.%${busca}%`
     )
   }
 
-  if (filters.status) query = query.eq('status', filters.status)
-  if (filters.unidade) query = query.ilike('unidade', `%${filters.unidade}%`)
-  if (filters.posto_graduacao) query = query.ilike('posto_graduacao', `%${filters.posto_graduacao}%`)
-  if (filters.perfil_operacional) query = query.eq('perfil_operacional', filters.perfil_operacional)
-
-  const from = (pagina - 1) * limite
-  const to = from + limite - 1
+  if (situacao) query = query.eq('situacao', situacao)
+  if (companhia) query = query.eq('companhia', companhia)
+  if (pelotao) query = query.eq('pelotao', pelotao)
+  if (perfil) query = query.eq('perfil', perfil)
 
   const { data, error, count } = await query
     .order(sortBy, { ascending: sortDirection === 'asc' })
@@ -37,7 +39,7 @@ export async function listarPoliciais({
 
   return {
     data: data || [],
-    total: count || 0
+    count: count || 0
   }
 }
 
@@ -71,4 +73,5 @@ export async function excluirPolicial(id) {
     .eq('id', id)
 
   if (error) throw error
+  return true
 }

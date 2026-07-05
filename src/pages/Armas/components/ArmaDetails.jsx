@@ -1,14 +1,35 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../services/supabaseClient'
+import { gerarImagemQrCode } from '../../../services/qrCodeService'
 import './ArmaDetails.css'
 
 export default function ArmaDetails({ arma }) {
   const [fotos, setFotos] = useState([])
   const [loadingFotos, setLoadingFotos] = useState(false)
+  const [qrImagem, setQrImagem] = useState('')
 
   useEffect(() => {
     if (arma?.id) carregarFotos()
   }, [arma?.id])
+
+  useEffect(() => {
+    async function carregarQrCode() {
+      if (!arma?.qr_code) {
+        setQrImagem('')
+        return
+      }
+
+      try {
+        const imagem = await gerarImagemQrCode(arma.qr_code)
+        setQrImagem(imagem)
+      } catch (error) {
+        console.error('Erro ao gerar QR Code:', error)
+        setQrImagem('')
+      }
+    }
+
+    carregarQrCode()
+  }, [arma?.qr_code])
 
   async function carregarFotos() {
     setLoadingFotos(true)
@@ -53,6 +74,18 @@ export default function ArmaDetails({ arma }) {
       {Campo('Carga', arma.carga)}
       {Campo('Origem', arma.origem)}
       {Campo('Tombamento', arma.numero_tombamento, true)}
+      {Campo('QR Code', arma.qr_code, true)}
+
+      {qrImagem && (
+        <div className="arma-detail-card full">
+          <span>Etiqueta QR Code</span>
+
+          <div className="arma-detail-qrcode">
+            <img src={qrImagem} alt="QR Code da arma" />
+          </div>
+        </div>
+      )}
+
       {Campo('Observações', arma.observacoes, true)}
 
       <div className="arma-detail-card full">

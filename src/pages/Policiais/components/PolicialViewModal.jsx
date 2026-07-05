@@ -1,95 +1,114 @@
-export default function PolicialViewModal({ policial, onClose }) {
-  if (!policial) return null
+import { useState } from 'react'
+
+const colunasOrdenaveis = [
+  { campo: 'nome_guerra', label: 'Nome de guerra' },
+  { campo: 're', label: 'RE' },
+  { campo: 'posto_graduacao', label: 'Posto/Graduação' },
+  { campo: 'companhia', label: 'Companhia' },
+  { campo: 'pelotao', label: 'Pelotão' },
+  { campo: 'perfil', label: 'Perfil' },
+  { campo: 'situacao', label: 'Situação' }
+]
+
+export default function PolicialTable({
+  policiais,
+  loading,
+  erro,
+  sortBy,
+  sortDirection,
+  onSort,
+  onView,
+  onEdit,
+  onDelete
+}) {
+  const [excluindoId, setExcluindoId] = useState(null)
+
+  function sortIcon(campo) {
+    if (sortBy !== campo) return '↕'
+    return sortDirection === 'asc' ? '↑' : '↓'
+  }
+
+  async function confirmarExclusao(policial) {
+    const confirmou = window.confirm(
+      `Deseja excluir o policial ${policial.nome_guerra || policial.nome}?`
+    )
+
+    if (!confirmou) return
+
+    try {
+      setExcluindoId(policial.id)
+      await onDelete(policial)
+    } finally {
+      setExcluindoId(null)
+    }
+  }
+
+  if (loading) {
+    return <div className="table-state">Carregando policiais...</div>
+  }
+
+  if (erro) {
+    return <div className="table-error">{erro}</div>
+  }
+
+  if (!policiais.length) {
+    return <div className="table-state">Nenhum policial encontrado.</div>
+  }
 
   return (
-    <div className="policiais-modal-overlay">
-      <div className="policiais-modal-card">
-        <div className="policiais-modal-header">
-          <h2>Detalhes do Policial</h2>
+    <div className="policiais-table-wrap">
+      <table className="policiais-table">
+        <thead>
+          <tr>
+            {colunasOrdenaveis.map(coluna => (
+              <th key={coluna.campo}>
+                <button
+                  type="button"
+                  className="sort-button"
+                  onClick={() => onSort(coluna.campo)}
+                >
+                  {coluna.label} {sortIcon(coluna.campo)}
+                </button>
+              </th>
+            ))}
+            <th>Ações</th>
+          </tr>
+        </thead>
 
-          <button type="button" onClick={onClose}>
-            ×
-          </button>
-        </div>
-
-        <div className="policiais-details-grid">
-          <div>
-            <strong>Nome completo</strong>
-            <span>{policial.nome_completo || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Nome de guerra</strong>
-            <span>{policial.nome_guerra || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Matrícula</strong>
-            <span>{policial.matricula || '-'}</span>
-          </div>
-
-          <div>
-            <strong>CPF</strong>
-            <span>{policial.cpf || '-'}</span>
-          </div>
-
-          <div>
-            <strong>RG</strong>
-            <span>{policial.rg || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Posto/Graduação</strong>
-            <span>{policial.posto_graduacao || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Unidade</strong>
-            <span>{policial.unidade || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Função</strong>
-            <span>{policial.funcao || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Telefone</strong>
-            <span>{policial.telefone || '-'}</span>
-          </div>
-
-          <div>
-            <strong>E-mail</strong>
-            <span>{policial.email || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Perfil operacional</strong>
-            <span>{policial.perfil_operacional || '-'}</span>
-          </div>
-
-          <div>
-            <strong>Equipe piloto</strong>
-            <span>{policial.participa_teste ? 'Sim' : 'Não'}</span>
-          </div>
-
-          <div>
-            <strong>Status</strong>
-            <span>{policial.status || '-'}</span>
-          </div>
-
-          <div className="policiais-details-full">
-            <strong>Observações</strong>
-            <span>{policial.observacoes || '-'}</span>
-          </div>
-        </div>
-
-        <div className="policiais-modal-actions">
-          <button type="button" onClick={onClose}>
-            Fechar
-          </button>
-        </div>
-      </div>
+        <tbody>
+          {policiais.map(policial => (
+            <tr key={policial.id}>
+              <td>
+                <strong>{policial.nome_guerra || '-'}</strong>
+                <span>{policial.nome || '-'}</span>
+              </td>
+              <td>{policial.re || '-'}</td>
+              <td>{policial.posto_graduacao || '-'}</td>
+              <td>{policial.companhia || '-'}</td>
+              <td>{policial.pelotao || '-'}</td>
+              <td>{policial.perfil || '-'}</td>
+              <td>
+                <span className={`status-badge status-${policial.situacao?.toLowerCase()}`}>
+                  {policial.situacao || '-'}
+                </span>
+              </td>
+              <td>
+                <div className="table-actions">
+                  <button onClick={() => onView(policial)}>Ver</button>
+                  <button onClick={() => onEdit(policial)}>Editar</button>
+                  <button
+                    className="danger"
+                    disabled={excluindoId === policial.id}
+                    onClick={() => confirmarExclusao(policial)}
+                  >
+                    {excluindoId === policial.id ? '...' : 'Excluir'}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

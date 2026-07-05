@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { listarFotosArma } from '../../../services/armasFotosService'
+import { gerarImagemQrCode } from '../../../services/qrCodeService'
 
 export default function ArmaViewModal({ arma, onClose }) {
   const [fotos, setFotos] = useState([])
+  const [qrImagem, setQrImagem] = useState('')
 
   useEffect(() => {
     async function carregarFotos() {
@@ -19,6 +21,25 @@ export default function ArmaViewModal({ arma, onClose }) {
     carregarFotos()
   }, [arma])
 
+  useEffect(() => {
+    async function carregarQr() {
+      if (!arma?.qr_code) {
+        setQrImagem('')
+        return
+      }
+
+      try {
+        const imagem = await gerarImagemQrCode(arma.qr_code)
+        setQrImagem(imagem)
+      } catch (error) {
+        console.error(error)
+        setQrImagem('')
+      }
+    }
+
+    carregarQr()
+  }, [arma])
+
   if (!arma) return null
 
   return (
@@ -26,13 +47,16 @@ export default function ArmaViewModal({ arma, onClose }) {
       <div className="modal-card modal-large">
         <div className="modal-header">
           <h2>Detalhes da Arma</h2>
+
           <button className="modal-close" onClick={onClose}>
             ×
           </button>
         </div>
 
         <div className="modal-body">
+
           <div className="details-grid">
+
             <div>
               <strong>Patrimônio</strong>
               <span>{arma.patrimonio || '-'}</span>
@@ -78,17 +102,60 @@ export default function ArmaViewModal({ arma, onClose }) {
               <span>{arma.status || '-'}</span>
             </div>
 
+            <div>
+              <strong>QR Code</strong>
+
+              <span
+                style={{
+                  wordBreak: 'break-all',
+                  fontFamily: 'monospace'
+                }}
+              >
+                {arma.qr_code || '-'}
+              </span>
+            </div>
+
+            {qrImagem && (
+              <div className="details-full">
+                <strong>Etiqueta QR Code</strong>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: 'flex',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <img
+                    src={qrImagem}
+                    alt="QR Code"
+                    style={{
+                      width: 220,
+                      height: 220,
+                      border: '1px solid #ddd',
+                      borderRadius: 8,
+                      background: '#fff',
+                      padding: 10
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="details-full">
               <strong>Observações</strong>
               <span>{arma.observacoes || '-'}</span>
             </div>
+
           </div>
 
           <div className="arma-fotos-section">
             <h3>Fotos da arma</h3>
 
             {fotos.length === 0 ? (
-              <p className="empty-text">Nenhuma foto cadastrada.</p>
+              <p className="empty-text">
+                Nenhuma foto cadastrada.
+              </p>
             ) : (
               <div className="arma-fotos-grid">
                 {fotos.map((foto) => (
@@ -99,16 +166,24 @@ export default function ArmaViewModal({ arma, onClose }) {
                     rel="noreferrer"
                     className="arma-foto-card"
                   >
-                    <img src={foto.url} alt="Foto da arma" />
+                    <img
+                      src={foto.url}
+                      alt="Foto da arma"
+                    />
                   </a>
                 ))}
               </div>
             )}
           </div>
+
         </div>
 
         <div className="modal-actions">
-          <button type="button" className="btn-secondary" onClick={onClose}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onClose}
+          >
             Fechar
           </button>
         </div>

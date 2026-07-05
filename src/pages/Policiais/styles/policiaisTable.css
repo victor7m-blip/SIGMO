@@ -1,13 +1,3 @@
-.policiais-table-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  color: #667085;
-  font-size: 14px;
-  font-weight: 700;
-}
-
 .policiais-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -29,53 +19,113 @@
   padding: 12px 10px;
   text-align: left;
   font-size: 14px;
-  border-bottom: 1px solid #e4e7ec;
   vertical-align: middle;
+  border-bottom: 1px solid #edf2f7;
 }
 
-.policiais-table th button {
-  border: none;
+.policiais-table th {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.policiais-table td {
+  color: #344054;
+}
+
+.policiais-table td strong {
+  display: block;
+  color: #061a32;
+}
+
+.policiais-table td span {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.sort-button {
+  border: 0;
   background: transparent;
   color: inherit;
   font-weight: 800;
   cursor: pointer;
   padding: 0;
+  text-align: left;
 }
 
-.policiais-table tbody tr:hover {
-  background: #f8fafc;
-}
-
-.policiais-status {
-  display: inline-flex;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: #ecfdf3;
-  color: #027a48;
-  font-weight: 800;
-  font-size: 12px;
-}
-
-.policiais-actions {
+.table-actions {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-.policiais-actions button {
-  border: none;
+.table-actions button {
+  border: 0;
   border-radius: 8px;
+  background: #eef3fb;
+  color: #061a32;
   padding: 7px 9px;
-  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
-  background: #eef2f7;
-  color: #061a32;
 }
 
-.policiais-actions button.danger {
-  background: #fee4e2;
+.table-actions button:hover {
+  background: #dfe8f5;
+}
+
+.table-actions .danger {
+  background: #fff1f1;
   color: #b42318;
+}
+
+.table-actions .danger:hover {
+  background: #ffd9d6;
+}
+
+.status-badge {
+  display: inline-flex !important;
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 12px !important;
+}
+
+.status-ativo {
+  background: #dcfae6;
+  color: #067647 !important;
+}
+
+.status-afastado {
+  background: #fff7cd;
+  color: #b54708 !important;
+}
+
+.status-transferido {
+  background: #e0f2fe;
+  color: #026aa2 !important;
+}
+
+.status-inativo {
+  background: #f2f4f7;
+  color: #475467 !important;
+}
+
+.table-state,
+.table-error {
+  padding: 26px;
+  text-align: center;
+  border: 1px dashed #cfd8e3;
+  border-radius: 14px;
+  color: #667085;
+  font-weight: 700;
+}
+
+.table-error {
+  color: #b42318;
+  background: #fff1f1;
+  border-color: #ffcdca;
 }
 
 @media (max-width: 900px) {

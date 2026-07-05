@@ -3,3 +3,36 @@
 @import './styles/armasTable.css';
 @import './styles/armasPagination.css';
 @import './styles/armasResponsive.css';
+
+.qr-filter-group {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qr-filter-group input {
+  flex: 1;
+  min-width: 0;
+}
+
+.qr-filter-button {
+  white-space: nowrap;
+  border: none;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: #075eea;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .qr-filter-group {
+    flex-direction: column;
+  }
+
+  .qr-filter-button {
+    width: 100%;
+    padding: 12px;
+  }
+}

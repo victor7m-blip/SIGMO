@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { cadastrarArma, atualizarArma } from '../../../services/armasService'
 import { registerAudit } from '../../../services/auditoriaService'
+import { gerarQrCodeArma } from '../../../services/qrCodeService'
 import ArmaFotos from './ArmaFotos'
 
 const initialForm = {
   patrimonio: '',
   numero_serie: '',
+  qr_code: '',
   especie: '',
   marca: '',
   modelo: '',
@@ -13,7 +15,7 @@ const initialForm = {
   acabamento: '',
   unidade: '',
   status: 'Disponível',
-  observacoes: '',
+  observacoes: ''
 }
 
 export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
@@ -28,6 +30,7 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
       setForm({
         patrimonio: armaEditando.patrimonio || '',
         numero_serie: armaEditando.numero_serie || '',
+        qr_code: armaEditando.qr_code || '',
         especie: armaEditando.especie || '',
         marca: armaEditando.marca || '',
         modelo: armaEditando.modelo || '',
@@ -35,10 +38,13 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
         acabamento: armaEditando.acabamento || '',
         unidade: armaEditando.unidade || '',
         status: armaEditando.status || 'Disponível',
-        observacoes: armaEditando.observacoes || '',
+        observacoes: armaEditando.observacoes || ''
       })
     } else {
-      setForm(initialForm)
+      setForm({
+        ...initialForm,
+        qr_code: gerarQrCodeArma()
+      })
     }
 
     setErro('')
@@ -49,6 +55,13 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
     setForm((prev) => ({ ...prev, [name]: value }))
   }
 
+  function gerarNovoQrCode() {
+    setForm((prev) => ({
+      ...prev,
+      qr_code: gerarQrCodeArma()
+    }))
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
 
@@ -56,10 +69,15 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
       setSaving(true)
       setErro('')
 
+      const payload = {
+        ...form,
+        qr_code: form.qr_code.trim() || gerarQrCodeArma()
+      }
+
       let arma
 
       if (isEditing) {
-        arma = await atualizarArma(armaEditando.id, form)
+        arma = await atualizarArma(armaEditando.id, payload)
 
         await registerAudit(
           'ARMA_UPDATE',
@@ -69,7 +87,7 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
           'Informativo'
         )
       } else {
-        arma = await cadastrarArma(form)
+        arma = await cadastrarArma(payload)
 
         await registerAudit(
           'ARMA_CREATE',
@@ -80,14 +98,18 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
         )
       }
 
-      setForm(initialForm)
+      setForm({
+        ...initialForm,
+        qr_code: gerarQrCodeArma()
+      })
+
       onSaved()
     } catch (error) {
       console.error(error)
       setErro(
         isEditing
           ? 'Erro ao editar arma.'
-          : 'Erro ao cadastrar arma. Verifique patrimônio e série.'
+          : 'Erro ao cadastrar arma. Verifique patrimônio, série e QR Code.'
       )
     } finally {
       setSaving(false)
@@ -129,6 +151,19 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
           onChange={handleChange}
           required
         />
+
+        <div className="armas-qr-field">
+          <input
+            name="qr_code"
+            placeholder="QR Code"
+            value={form.qr_code}
+            onChange={handleChange}
+          />
+
+          <button type="button" onClick={gerarNovoQrCode}>
+            Gerar QR
+          </button>
+        </div>
 
         <input
           name="especie"

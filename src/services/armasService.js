@@ -29,6 +29,10 @@ export async function listarArmas({
     query = query.ilike('numero_serie', `%${filtros.numero_serie.trim()}%`)
   }
 
+  if (filtros.qr_code?.trim()) {
+    query = query.ilike('qr_code', `%${filtros.qr_code.trim()}%`)
+  }
+
   if (filtros.especie?.trim()) {
     query = query.ilike('especie', `%${filtros.especie.trim()}%`)
   }
@@ -84,23 +88,31 @@ export function listarUnidades() {
 export async function cadastrarArma(payload) {
   const { data, error } = await supabase
     .from(TABLE)
-    .insert(payload)
+    .insert({
+      ...payload,
+      qr_code: payload.qr_code || null
+    })
     .select()
     .single()
 
   if (error) throw error
+
   return data
 }
 
 export async function atualizarArma(id, payload) {
   const { data, error } = await supabase
     .from(TABLE)
-    .update(payload)
+    .update({
+      ...payload,
+      qr_code: payload.qr_code || null
+    })
     .eq('id', id)
     .select()
     .single()
 
   if (error) throw error
+
   return data
 }
 

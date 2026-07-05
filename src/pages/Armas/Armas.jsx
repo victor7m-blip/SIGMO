@@ -9,6 +9,7 @@ import { listarArmas } from '../../services/armasService'
 const initialFilters = {
   patrimonio: '',
   numero_serie: '',
+  qr_code: '',
   especie: '',
   calibre: '',
   status: '',
@@ -47,7 +48,6 @@ export default function Armas({ user }) {
 
   const paginasVisiveis = useMemo(() => {
     const paginas = []
-
     const inicio = Math.max(1, pagina - 2)
     const fim = Math.min(totalPaginas, pagina + 2)
 
@@ -106,10 +106,7 @@ export default function Armas({ user }) {
   function handleEditar(arma) {
     setArmaEditando(arma)
     setShowForm(true)
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function handleCancel() {
@@ -160,20 +157,11 @@ export default function Armas({ user }) {
       <header className="armas-header">
         <div>
           <span className="armas-kicker">SIGMO</span>
-
           <h1>Cadastro de Armas</h1>
-
-          <p>
-            Gestão, consulta e controle de armamento
-            institucional.
-          </p>
+          <p>Gestão, consulta e controle de armamento institucional.</p>
         </div>
 
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={handleNovaArma}
-        >
+        <button type="button" className="btn-primary" onClick={handleNovaArma}>
           + Nova Arma
         </button>
       </header>
@@ -196,8 +184,7 @@ export default function Armas({ user }) {
 
         <div className="armas-table-toolbar">
           <span>
-            Mostrando {registroInicial}–{registroFinal} de{' '}
-            {total} registros
+            Mostrando {registroInicial}–{registroFinal} de {total} registros
           </span>
         </div>
 
@@ -215,64 +202,34 @@ export default function Armas({ user }) {
         />
 
         <div className="armas-pagination">
-          <button
-            type="button"
-            disabled={pagina <= 1}
-            onClick={() => setPagina(1)}
-          >
+          <button type="button" disabled={pagina <= 1} onClick={() => setPagina(1)}>
             Primeira
           </button>
 
-          <button
-            type="button"
-            disabled={pagina <= 1}
-            onClick={() =>
-              setPagina((prev) => prev - 1)
-            }
-          >
+          <button type="button" disabled={pagina <= 1} onClick={() => setPagina((prev) => prev - 1)}>
             Anterior
           </button>
 
-          {pagina > 3 && (
-            <span className="armas-pagination-dots">
-              ...
-            </span>
-          )}
+          {pagina > 3 && <span className="armas-pagination-dots">...</span>}
 
           {paginasVisiveis.map((numero) => (
             <button
               key={numero}
               type="button"
-              className={
-                numero === pagina ? 'active' : ''
-              }
+              className={numero === pagina ? 'active' : ''}
               onClick={() => setPagina(numero)}
             >
               {numero}
             </button>
           ))}
 
-          {pagina < totalPaginas - 2 && (
-            <span className="armas-pagination-dots">
-              ...
-            </span>
-          )}
+          {pagina < totalPaginas - 2 && <span className="armas-pagination-dots">...</span>}
 
-          <button
-            type="button"
-            disabled={pagina >= totalPaginas}
-            onClick={() =>
-              setPagina((prev) => prev + 1)
-            }
-          >
+          <button type="button" disabled={pagina >= totalPaginas} onClick={() => setPagina((prev) => prev + 1)}>
             Próxima
           </button>
 
-          <button
-            type="button"
-            disabled={pagina >= totalPaginas}
-            onClick={() => setPagina(totalPaginas)}
-          >
+          <button type="button" disabled={pagina >= totalPaginas} onClick={() => setPagina(totalPaginas)}>
             Última
           </button>
         </div>
@@ -282,9 +239,7 @@ export default function Armas({ user }) {
         isOpen={!!armaVisualizando}
         title="Detalhes da Arma"
         subtitle={armaVisualizando?.patrimonio}
-        onClose={() =>
-          setArmaVisualizando(null)
-        }
+        onClose={() => setArmaVisualizando(null)}
       >
         <ArmaDetails arma={armaVisualizando} />
       </DetailsModal>

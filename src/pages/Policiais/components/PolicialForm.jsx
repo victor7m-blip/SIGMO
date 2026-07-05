@@ -1,29 +1,46 @@
 import { useEffect, useState } from 'react'
 import {
-  cadastrarPessoa,
-  atualizarPessoa
-} from '../../../services/policiaisService.js'
-import { registerAudit } from '../../../services/auditoriaService'
+  cadastrarPolicial,
+  atualizarPolicial
+} from '../../../services/policiaisService'
 
 const initialForm = {
-  nome_completo: '',
+  nome: '',
   nome_guerra: '',
-  matricula: '',
-  cpf: '',
-  rg: '',
+  re: '',
   posto_graduacao: '',
-  unidade: '',
+  companhia: '',
+  pelotao: '',
+  equipe: '',
   funcao: '',
   telefone: '',
   email: '',
-  perfil_operacional: 'Policial',
-  participa_teste: false,
-  status: 'Ativo',
-  observacoes: ''
+  cpf: '',
+  rg: '',
+  perfil: 'Operador',
+  situacao: 'Ativo',
+  observacoes: '',
+  foto_url: '',
+  qr_code: ''
 }
 
+const postosGraduacoes = [
+  'Sd PM',
+  'Cb PM',
+  '3º Sgt PM',
+  '2º Sgt PM',
+  '1º Sgt PM',
+  'Subten PM',
+  'Asp Of PM',
+  '2º Ten PM',
+  '1º Ten PM',
+  'Cap PM',
+  'Maj PM',
+  'Ten Cel PM',
+  'Cel PM'
+]
+
 export default function PolicialForm({
-  user,
   policialEditando,
   onCancel,
   onSaved
@@ -37,157 +54,272 @@ export default function PolicialForm({
   useEffect(() => {
     if (policialEditando) {
       setForm({
-        nome_completo: policialEditando.nome_completo || '',
+        nome: policialEditando.nome || '',
         nome_guerra: policialEditando.nome_guerra || '',
-        matricula: policialEditando.matricula || '',
-        cpf: policialEditando.cpf || '',
-        rg: policialEditando.rg || '',
+        re: policialEditando.re || '',
         posto_graduacao: policialEditando.posto_graduacao || '',
-        unidade: policialEditando.unidade || '',
+        companhia: policialEditando.companhia || '',
+        pelotao: policialEditando.pelotao || '',
+        equipe: policialEditando.equipe || '',
         funcao: policialEditando.funcao || '',
         telefone: policialEditando.telefone || '',
         email: policialEditando.email || '',
-        perfil_operacional: policialEditando.perfil_operacional || 'Policial',
-        participa_teste: Boolean(policialEditando.participa_teste),
-        status: policialEditando.status || 'Ativo',
-        observacoes: policialEditando.observacoes || ''
+        cpf: policialEditando.cpf || '',
+        rg: policialEditando.rg || '',
+        perfil: policialEditando.perfil || 'Operador',
+        situacao: policialEditando.situacao || 'Ativo',
+        observacoes: policialEditando.observacoes || '',
+        foto_url: policialEditando.foto_url || '',
+        qr_code: policialEditando.qr_code || ''
       })
     } else {
       setForm(initialForm)
     }
-
-    setErro('')
   }, [policialEditando])
 
   function handleChange(event) {
-    const { name, value, type, checked } = event.target
+    const { name, value } = event.target
 
-    setForm((prev) => ({
+    setForm(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: value
     }))
+  }
+
+  function validar() {
+    if (!form.nome.trim()) return 'Informe o nome completo.'
+    if (!form.nome_guerra.trim()) return 'Informe o nome de guerra.'
+    if (!form.re.trim()) return 'Informe o RE.'
+    if (!/^\d{6}-[A-Za-z0-9]$/.test(form.re.trim())) {
+      return 'O RE deve estar no formato 123456-A.'
+    }
+    if (!form.posto_graduacao.trim()) return 'Informe o posto ou graduação.'
+    if (!form.companhia.trim()) return 'Informe a companhia.'
+    if (!form.pelotao.trim()) return 'Informe o pelotão.'
+    return ''
   }
 
   async function handleSubmit(event) {
     event.preventDefault()
 
+    const erroValidacao = validar()
+    if (erroValidacao) {
+      setErro(erroValidacao)
+      return
+    }
+
     try {
       setSaving(true)
       setErro('')
 
-      let policial
-
-      if (isEditing) {
-        policial = await atualizarPessoa(policialEditando.id, form)
-
-        await registerAudit(
-          'POLICIAL_UPDATE',
-          `Policial editado: ${policial.nome_completo}`,
-          user,
-          'Policiais',
-          'Informativo'
-        )
-      } else {
-        policial = await cadastrarPessoa(form, user)
-
-        await registerAudit(
-          'POLICIAL_CREATE',
-          `Policial cadastrado: ${policial.nome_completo}`,
-          user,
-          'Policiais',
-          'Informativo'
-        )
+      const payload = {
+        ...form,
+        re: form.re.trim().toUpperCase(),
+        nome: form.nome.trim(),
+        nome_guerra: form.nome_guerra.trim()
       }
 
-      setForm(initialForm)
+      if (isEditing) {
+        await atualizarPolicial(policialEditando.id, payload)
+      } else {
+        await cadastrarPolicial(payload)
+      }
+
       onSaved()
-    } catch (error) {
-      console.error(error)
-      setErro('Erro ao salvar policial. Verifique matrícula e dados obrigatórios.')
+    } catch (err) {
+      console.error(err)
+      setErro('Erro ao salvar policial.')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <section className="policiais-form-card">
-      <div className="policiais-form-header">
-        <div>
-          <h2>{isEditing ? 'Editar Policial' : 'Novo Policial'}</h2>
-          <p>{isEditing ? 'Atualize os dados do policial.' : 'Cadastre um policial ou servidor.'}</p>
-        </div>
+    <div className="policial-form-overlay">
+      <div className="policial-form-modal">
+        <div className="policial-form-header">
+          <div>
+            <h2>{isEditing ? 'Editar policial' : 'Novo policial'}</h2>
+            <p>Preencha os dados cadastrais do efetivo.</p>
+          </div>
 
-        <button type="button" onClick={onCancel}>
-          Fechar
-        </button>
-      </div>
-
-      {erro && <p className="policiais-error">{erro}</p>}
-
-      <form className="policiais-form" onSubmit={handleSubmit}>
-        <input name="nome_completo" placeholder="Nome completo" value={form.nome_completo} onChange={handleChange} required />
-        <input name="nome_guerra" placeholder="Nome de guerra" value={form.nome_guerra} onChange={handleChange} />
-        <input name="matricula" placeholder="Matrícula" value={form.matricula} onChange={handleChange} />
-        <input name="cpf" placeholder="CPF" value={form.cpf} onChange={handleChange} />
-        <input name="rg" placeholder="RG" value={form.rg} onChange={handleChange} />
-
-        <select name="posto_graduacao" value={form.posto_graduacao} onChange={handleChange}>
-          <option value="">Posto/Graduação</option>
-          <option value="Soldado">Soldado</option>
-          <option value="Cabo">Cabo</option>
-          <option value="3º Sargento">3º Sargento</option>
-          <option value="2º Sargento">2º Sargento</option>
-          <option value="1º Sargento">1º Sargento</option>
-          <option value="Subtenente">Subtenente</option>
-          <option value="Aspirante">Aspirante</option>
-          <option value="2º Tenente">2º Tenente</option>
-          <option value="1º Tenente">1º Tenente</option>
-          <option value="Capitão">Capitão</option>
-          <option value="Major">Major</option>
-          <option value="Tenente-Coronel">Tenente-Coronel</option>
-          <option value="Coronel">Coronel</option>
-          <option value="Servidor Civil">Servidor Civil</option>
-        </select>
-
-        <input name="unidade" placeholder="Unidade" value={form.unidade} onChange={handleChange} />
-        <input name="funcao" placeholder="Função" value={form.funcao} onChange={handleChange} />
-        <input name="telefone" placeholder="Telefone" value={form.telefone} onChange={handleChange} />
-        <input name="email" placeholder="E-mail" value={form.email} onChange={handleChange} />
-
-        <select name="perfil_operacional" value={form.perfil_operacional} onChange={handleChange}>
-          <option value="Administrador">Administrador</option>
-          <option value="Armeiro">Armeiro</option>
-          <option value="Testador">Testador</option>
-          <option value="Policial">Policial</option>
-          <option value="Consulta">Consulta</option>
-        </select>
-
-        <select name="status" value={form.status} onChange={handleChange}>
-          <option value="Ativo">Ativo</option>
-          <option value="Afastado">Afastado</option>
-          <option value="Transferido">Transferido</option>
-          <option value="Inativo">Inativo</option>
-        </select>
-
-        <label className="policiais-checkbox">
-          <input
-            type="checkbox"
-            name="participa_teste"
-            checked={form.participa_teste}
-            onChange={handleChange}
-          />
-          Participa da equipe piloto do SIGMO
-        </label>
-
-        <textarea name="observacoes" placeholder="Observações" value={form.observacoes} onChange={handleChange} />
-
-        <div className="policiais-form-actions">
-          <button type="button" onClick={onCancel}>Cancelar</button>
-          <button type="submit" disabled={saving}>
-            {saving ? 'Salvando...' : isEditing ? 'Salvar alterações' : 'Salvar policial'}
+          <button className="btn-icon" onClick={onCancel}>
+            ×
           </button>
         </div>
-      </form>
-    </section>
+
+        {erro && <div className="form-error">{erro}</div>}
+
+        <form onSubmit={handleSubmit} className="policial-form">
+          <div className="form-grid">
+            <div className="form-group form-span-2">
+              <label>Nome completo *</label>
+              <input
+                name="nome"
+                value={form.nome}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Nome de guerra *</label>
+              <input
+                name="nome_guerra"
+                value={form.nome_guerra}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>RE *</label>
+              <input
+                name="re"
+                value={form.re}
+                onChange={handleChange}
+                placeholder="123456-A"
+                maxLength={8}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Posto / Graduação *</label>
+              <select
+                name="posto_graduacao"
+                value={form.posto_graduacao}
+                onChange={handleChange}
+              >
+                <option value="">Selecione</option>
+                {postosGraduacoes.map(item => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Companhia *</label>
+              <input
+                name="companhia"
+                value={form.companhia}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Pelotão *</label>
+              <input
+                name="pelotao"
+                value={form.pelotao}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Equipe</label>
+              <input
+                name="equipe"
+                value={form.equipe}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Função</label>
+              <input
+                name="funcao"
+                value={form.funcao}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Telefone</label>
+              <input
+                name="telefone"
+                value={form.telefone}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>E-mail</label>
+              <input
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>CPF</label>
+              <input
+                name="cpf"
+                value={form.cpf}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>RG</label>
+              <input
+                name="rg"
+                value={form.rg}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Perfil</label>
+              <select
+                name="perfil"
+                value={form.perfil}
+                onChange={handleChange}
+              >
+                <option value="Administrador">Administrador</option>
+                <option value="Gestor">Gestor</option>
+                <option value="Operador">Operador</option>
+                <option value="Consulta">Consulta</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Situação</label>
+              <select
+                name="situacao"
+                value={form.situacao}
+                onChange={handleChange}
+              >
+                <option value="Ativo">Ativo</option>
+                <option value="Afastado">Afastado</option>
+                <option value="Transferido">Transferido</option>
+                <option value="Inativo">Inativo</option>
+              </select>
+            </div>
+
+            <div className="form-group form-span-2">
+              <label>Observações</label>
+              <textarea
+                name="observacoes"
+                value={form.observacoes}
+                onChange={handleChange}
+                rows="4"
+              />
+            </div>
+          </div>
+
+          <div className="form-actions">
+            <button type="button" className="btn-secondary" onClick={onCancel}>
+              Cancelar
+            </button>
+
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }

@@ -1,15 +1,19 @@
+import { useState } from 'react'
+
 const colunasOrdenaveis = [
-  { campo: 'nome_completo', label: 'Nome' },
-  { campo: 'nome_guerra', label: 'Guerra' },
-  { campo: 'matricula', label: 'Matrícula' },
+  { campo: 'nome_guerra', label: 'Nome de guerra' },
+  { campo: 're', label: 'RE' },
   { campo: 'posto_graduacao', label: 'Posto/Graduação' },
-  { campo: 'unidade', label: 'Unidade' },
-  { campo: 'status', label: 'Status' }
+  { campo: 'companhia', label: 'Companhia' },
+  { campo: 'pelotao', label: 'Pelotão' },
+  { campo: 'perfil', label: 'Perfil' },
+  { campo: 'situacao', label: 'Situação' }
 ]
 
 export default function PolicialTable({
   policiais,
   loading,
+  erro,
   sortBy,
   sortDirection,
   onSort,
@@ -17,88 +21,94 @@ export default function PolicialTable({
   onEdit,
   onDelete
 }) {
-  function renderSort(campo) {
-    if (sortBy !== campo) return ''
-    return sortDirection === 'asc' ? ' ↑' : ' ↓'
+  const [excluindoId, setExcluindoId] = useState(null)
+
+  function sortIcon(campo) {
+    if (sortBy !== campo) return '↕'
+    return sortDirection === 'asc' ? '↑' : '↓'
+  }
+
+  async function confirmarExclusao(policial) {
+    const confirmou = window.confirm(
+      `Deseja excluir o policial ${policial.nome_guerra || policial.nome}?`
+    )
+
+    if (!confirmou) return
+
+    try {
+      setExcluindoId(policial.id)
+      await onDelete(policial)
+    } finally {
+      setExcluindoId(null)
+    }
+  }
+
+  if (loading) {
+    return <div className="table-state">Carregando policiais...</div>
+  }
+
+  if (erro) {
+    return <div className="table-error">{erro}</div>
+  }
+
+  if (!policiais.length) {
+    return <div className="table-state">Nenhum policial encontrado.</div>
   }
 
   return (
-    <section className="policiais-table-card">
-      <div className="policiais-table-toolbar">
-        <span>{policiais.length} registro(s) exibido(s)</span>
-      </div>
-
-      <div className="policiais-table-wrap">
-        <table className="policiais-table">
-          <thead>
-            <tr>
-              {colunasOrdenaveis.map((coluna) => (
-                <th key={coluna.campo}>
-                  <button
-                    type="button"
-                    onClick={() => onSort(coluna.campo)}
-                  >
-                    {coluna.label}{renderSort(coluna.campo)}
-                  </button>
-                </th>
-              ))}
-              <th>Piloto</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan="8">Carregando...</td>
-              </tr>
-            )}
-
-            {!loading && policiais.length === 0 && (
-              <tr>
-                <td colSpan="8">Nenhum policial encontrado.</td>
-              </tr>
-            )}
-
-            {!loading && policiais.map((policial) => (
-              <tr key={policial.id}>
-                <td>{policial.nome_completo || '-'}</td>
-                <td>{policial.nome_guerra || '-'}</td>
-                <td>{policial.matricula || '-'}</td>
-                <td>{policial.posto_graduacao || '-'}</td>
-                <td>{policial.unidade || '-'}</td>
-                <td>
-                  <span className="policiais-status">
-                    {policial.status || '-'}
-                  </span>
-                </td>
-                <td>
-                  {policial.participa_teste ? 'Sim' : 'Não'}
-                </td>
-                <td>
-                  <div className="policiais-actions">
-                    <button type="button" onClick={() => onView(policial)}>
-                      Ver
-                    </button>
-
-                    <button type="button" onClick={() => onEdit(policial)}>
-                      Editar
-                    </button>
-
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => onDelete(policial)}
-                    >
-                      Excluir
-                    </button>
-                  </div>
-                </td>
-              </tr>
+    <div className="policiais-table-wrap">
+      <table className="policiais-table">
+        <thead>
+          <tr>
+            {colunasOrdenaveis.map(coluna => (
+              <th key={coluna.campo}>
+                <button
+                  type="button"
+                  className="sort-button"
+                  onClick={() => onSort(coluna.campo)}
+                >
+                  {coluna.label} {sortIcon(coluna.campo)}
+                </button>
+              </th>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+            <th>Ações</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {policiais.map(policial => (
+            <tr key={policial.id}>
+              <td>
+                <strong>{policial.nome_guerra || '-'}</strong>
+                <span>{policial.nome || '-'}</span>
+              </td>
+              <td>{policial.re || '-'}</td>
+              <td>{policial.posto_graduacao || '-'}</td>
+              <td>{policial.companhia || '-'}</td>
+              <td>{policial.pelotao || '-'}</td>
+              <td>{policial.perfil || '-'}</td>
+              <td>
+                <span className={`status-badge status-${policial.situacao?.toLowerCase()}`}>
+                  {policial.situacao || '-'}
+                </span>
+              </td>
+              <td>
+                <div className="table-actions">
+                  <button onClick={() => onView(policial)}>Ver</button>
+                  <button onClick={() => onEdit(policial)}>Editar</button>
+                  <button
+                    className="danger"
+                    disabled={excluindoId === policial.id}
+                    onClick={() => confirmarExclusao(policial)}
+                  >
+                    {excluindoId === policial.id ? '...' : 'Excluir'}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

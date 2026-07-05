@@ -1,6 +1,12 @@
 import './DetailsModal.css'
 
-export default function DetailsModal({ title, subtitle, isOpen, onClose, children }) {
+export default function DetailsModal({
+  title,
+  subtitle,
+  isOpen,
+  onClose,
+  children
+}) {
   if (!isOpen) return null
 
   return (
@@ -20,6 +26,7 @@ export default function DetailsModal({ title, subtitle, isOpen, onClose, childre
             type="button"
             className="details-modal-close"
             onClick={onClose}
+            aria-label="Fechar"
           >
             ×
           </button>
@@ -28,6 +35,16 @@ export default function DetailsModal({ title, subtitle, isOpen, onClose, childre
         <div className="details-modal-content">
           {children}
         </div>
+
+        <footer className="details-modal-footer">
+          <button
+            type="button"
+            className="details-modal-close-button"
+            onClick={onClose}
+          >
+            Fechar
+          </button>
+        </footer>
       </section>
     </div>
   )

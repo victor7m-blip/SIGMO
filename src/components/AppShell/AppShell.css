@@ -154,6 +154,14 @@
   .sidebar-open {
     left: 0;
   }
+  .app-sidebar {
+  overflow-y: auto;
+}
+
+.sidebar-open {
+  left: 0;
+  box-shadow: 0 0 40px rgba(0,0,0,.45);
+}
 
   .sidebar-overlay {
     display: block;
@@ -172,11 +180,20 @@
   }
 
   .app-menu {
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 10px;
-    padding: 15px;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+}
+
+.app-menu button {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+}
 
   .app-menu button {
     white-space: nowrap;
