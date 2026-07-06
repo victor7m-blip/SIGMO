@@ -4,6 +4,7 @@ import { registerAudit } from '../../../services/auditoriaService'
 import ConfirmModal from '../../../components/ConfirmModal'
 
 const colunasOrdenaveis = [
+  { campo: 'foto_url', label: 'Foto' },
   { campo: 'nome_guerra', label: 'Nome de guerra' },
   { campo: 're', label: 'RE' },
   { campo: 'posto_graduacao', label: 'Posto/Graduação' },
@@ -92,14 +93,18 @@ export default function PolicialTable({
             <tr>
               {colunasOrdenaveis.map((coluna) => (
                 <th key={coluna.campo}>
-                  <button
-                    type="button"
-                    className="policiais-sort-button"
-                    onClick={() => onSort(coluna.campo)}
-                  >
+                  {coluna.campo === 'foto_url' ? (
                     <span>{coluna.label}</span>
-                    <small>{renderSortIcon(coluna.campo)}</small>
-                  </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="policiais-sort-button"
+                      onClick={() => onSort(coluna.campo)}
+                    >
+                      <span>{coluna.label}</span>
+                      <small>{renderSortIcon(coluna.campo)}</small>
+                    </button>
+                  )}
                 </th>
               ))}
 
@@ -112,13 +117,36 @@ export default function PolicialTable({
           <tbody>
             {policiais.length === 0 ? (
               <tr>
-                <td colSpan={mostrarQrCode ? 10 : 9}>
+                <td colSpan={mostrarQrCode ? 11 : 10}>
                   Nenhum policial encontrado.
                 </td>
               </tr>
             ) : (
               policiais.map((policial) => (
                 <tr key={policial.id}>
+                  <td data-label="Foto">
+                    <button
+                      type="button"
+                      className="policial-table-photo-button"
+                      onClick={() => onView(policial)}
+                      title="Ver policial"
+                    >
+                      {policial.foto_url ? (
+                        <img
+                          src={policial.foto_url}
+                          alt={`Foto de ${policial.nome_guerra || 'policial'}`}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span>
+                          {(policial.nome_guerra || policial.nome || '?')
+                            .slice(0, 1)
+                            .toUpperCase()}
+                        </span>
+                      )}
+                    </button>
+                  </td>
+
                   <td data-label="Nome de guerra">{policial.nome_guerra || '-'}</td>
                   <td data-label="RE">{policial.re || '-'}</td>
                   <td data-label="Posto/Graduação">{policial.posto_graduacao || '-'}</td>

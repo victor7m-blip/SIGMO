@@ -35,3 +35,29 @@
     padding: 12px;
   }
 }
+
+.policial-table-photo-button{
+  width:46px;
+  height:46px;
+  border:0;
+  border-radius:50%;
+  overflow:hidden;
+  padding:0;
+  background:#e5e7eb;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+
+.policial-table-photo-button img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.policial-table-photo-button span{
+  font-weight:800;
+  color:#0b2a4a;
+}

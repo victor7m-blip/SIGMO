@@ -90,6 +90,8 @@ export default function ArmaTable({
         <table className="armas-table">
           <thead>
             <tr>
+              <th>Foto</th>
+
               {colunasOrdenaveis.map((coluna) => (
                 <th key={coluna.campo}>
                   <button
@@ -112,13 +114,27 @@ export default function ArmaTable({
           <tbody>
             {armas.length === 0 ? (
               <tr>
-                <td colSpan={mostrarQrCode ? 10 : 9}>
+                <td colSpan={mostrarQrCode ? 11 : 10}>
                   Nenhuma arma encontrada.
                 </td>
               </tr>
             ) : (
               armas.map((arma) => (
                 <tr key={arma.id}>
+                  <td data-label="Foto">
+                    <div className="arma-table-foto">
+                      {arma.foto_url ? (
+                        <img
+                          src={arma.foto_url}
+                          alt={`Foto da arma ${arma.patrimonio || ''}`}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span>🔫</span>
+                      )}
+                    </div>
+                  </td>
+
                   <td data-label="Patrimônio">{arma.patrimonio || '-'}</td>
                   <td data-label="Espécie">{arma.especie || '-'}</td>
                   <td data-label="Marca">{arma.marca || '-'}</td>

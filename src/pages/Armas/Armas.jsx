@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import './Armas.css'
 
 import { ArmaFilters, ArmaForm, ArmaTable } from './components'
-import DetailsModal from '../../components/DetailsModal/DetailsModal'
-import ArmaDetails from './components/ArmaDetails'
+import ArmaViewModal from './components/ArmaViewModal'
 import { listarArmas } from '../../services/armasService'
+import { listarFotosArma } from '../../services/armasFotosService'
 
 const initialFilters = {
   patrimonio: '',
@@ -22,6 +22,7 @@ export default function Armas({ user }) {
   const [showForm, setShowForm] = useState(false)
   const [armaEditando, setArmaEditando] = useState(null)
   const [armaVisualizando, setArmaVisualizando] = useState(null)
+  const [fotosModal, setFotosModal] = useState([])
 
   const [armas, setArmas] = useState([])
   const [filters, setFilters] = useState(initialFilters)
@@ -99,8 +100,22 @@ export default function Armas({ user }) {
     setShowForm(true)
   }
 
-  function handleView(arma) {
-    setArmaVisualizando(arma)
+  async function handleView(arma) {
+    try {
+      setArmaVisualizando(arma)
+      setFotosModal([])
+
+      const fotos = await listarFotosArma(arma.id)
+      setFotosModal(fotos || [])
+    } catch (error) {
+      console.error(error)
+      setFotosModal([])
+    }
+  }
+
+  function handleCloseModal() {
+    setArmaVisualizando(null)
+    setFotosModal([])
   }
 
   function handleEditar(arma) {
@@ -150,6 +165,14 @@ export default function Armas({ user }) {
 
     setSortBy(campo)
     setSortDirection('asc')
+  }
+
+  function handlePrintFicha(arma) {
+    console.log('Impressão futura da ficha da arma:', arma)
+  }
+
+  function handlePrintEtiqueta(arma) {
+    console.log('Impressão futura da etiqueta da arma:', arma)
   }
 
   return (
@@ -202,11 +225,19 @@ export default function Armas({ user }) {
         />
 
         <div className="armas-pagination">
-          <button type="button" disabled={pagina <= 1} onClick={() => setPagina(1)}>
+          <button
+            type="button"
+            disabled={pagina <= 1}
+            onClick={() => setPagina(1)}
+          >
             Primeira
           </button>
 
-          <button type="button" disabled={pagina <= 1} onClick={() => setPagina((prev) => prev - 1)}>
+          <button
+            type="button"
+            disabled={pagina <= 1}
+            onClick={() => setPagina((prev) => prev - 1)}
+          >
             Anterior
           </button>
 
@@ -223,26 +254,35 @@ export default function Armas({ user }) {
             </button>
           ))}
 
-          {pagina < totalPaginas - 2 && <span className="armas-pagination-dots">...</span>}
+          {pagina < totalPaginas - 2 && (
+            <span className="armas-pagination-dots">...</span>
+          )}
 
-          <button type="button" disabled={pagina >= totalPaginas} onClick={() => setPagina((prev) => prev + 1)}>
+          <button
+            type="button"
+            disabled={pagina >= totalPaginas}
+            onClick={() => setPagina((prev) => prev + 1)}
+          >
             Próxima
           </button>
 
-          <button type="button" disabled={pagina >= totalPaginas} onClick={() => setPagina(totalPaginas)}>
+          <button
+            type="button"
+            disabled={pagina >= totalPaginas}
+            onClick={() => setPagina(totalPaginas)}
+          >
             Última
           </button>
         </div>
       </section>
 
-      <DetailsModal
-        isOpen={!!armaVisualizando}
-        title="Detalhes da Arma"
-        subtitle={armaVisualizando?.patrimonio}
-        onClose={() => setArmaVisualizando(null)}
-      >
-        <ArmaDetails arma={armaVisualizando} />
-      </DetailsModal>
+      <ArmaViewModal
+        arma={armaVisualizando}
+        fotos={fotosModal}
+        onClose={handleCloseModal}
+        onPrintFicha={handlePrintFicha}
+        onPrintEtiqueta={handlePrintEtiqueta}
+      />
     </main>
   )
 }

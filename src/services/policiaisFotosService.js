@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient'
 
 const BUCKET = 'policiais-fotos'
 const TABLE = 'sigmo_policiais_fotos'
+const POLICIAIS_TABLE = 'policiais'
 
 export async function uploadFotoPolicial(file, policialId, user) {
   if (!file) throw new Error('Nenhuma foto selecionada.')
@@ -21,23 +22,42 @@ export async function uploadFotoPolicial(file, policialId, user) {
 
   if (uploadError) throw uploadError
 
-  const { data } = supabase.storage
+  const { data: publicData } = supabase.storage
     .from(BUCKET)
     .getPublicUrl(nomeArquivo)
 
-  const { error: bancoError } = await supabase
+  const url = publicData.publicUrl
+
+  const { data: fotosExistentes, error: countError } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('policial_id', policialId)
+    .limit(1)
+
+  if (countError) throw countError
+
+  const primeiraFoto = !fotosExistentes || fotosExistentes.length === 0
+
+  const { data, error: bancoError } = await supabase
     .from(TABLE)
     .insert({
       policial_id: policialId,
-      url: data.publicUrl,
+      url,
       caminho: nomeArquivo,
+      principal: primeiraFoto,
       created_by: user?.id || null,
-      created_by_nome: user?.nome || null
+      created_by_nome: user?.nome || user?.email || null
     })
+    .select()
+    .single()
 
   if (bancoError) throw bancoError
 
-  return data.publicUrl
+  if (primeiraFoto) {
+    await definirFotoPrincipal(policialId, data.id, url)
+  }
+
+  return data
 }
 
 export async function listarFotosPolicial(policialId) {
@@ -47,6 +67,7 @@ export async function listarFotosPolicial(policialId) {
     .from(TABLE)
     .select('*')
     .eq('policial_id', policialId)
+    .order('principal', { ascending: false })
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -54,19 +75,74 @@ export async function listarFotosPolicial(policialId) {
   return data || []
 }
 
-export async function excluirFotoPolicial(id, caminho) {
-  if (!id) throw new Error('Foto inválida para exclusão.')
+export async function definirFotoPrincipal(policialId, fotoId, fotoUrl) {
+  if (!policialId) throw new Error('Policial não informado.')
+  if (!fotoId) throw new Error('Foto não informada.')
 
-  if (caminho) {
-    await supabase.storage
+  const { error: limparError } = await supabase
+    .from(TABLE)
+    .update({ principal: false })
+    .eq('policial_id', policialId)
+
+  if (limparError) throw limparError
+
+  const { data: foto, error: fotoError } = await supabase
+    .from(TABLE)
+    .update({ principal: true })
+    .eq('id', fotoId)
+    .eq('policial_id', policialId)
+    .select()
+    .single()
+
+  if (fotoError) throw fotoError
+
+  const urlPrincipal = fotoUrl || foto.url
+
+  const { error: policialError } = await supabase
+    .from(POLICIAIS_TABLE)
+    .update({ foto_url: urlPrincipal })
+    .eq('id', policialId)
+
+  if (policialError) throw policialError
+
+  return foto
+}
+
+export async function excluirFotoPolicial(foto, policialId) {
+  if (!foto?.id) throw new Error('Foto não informada.')
+
+  const eraPrincipal = Boolean(foto.principal)
+
+  if (foto.caminho) {
+    const { error: storageError } = await supabase.storage
       .from(BUCKET)
-      .remove([caminho])
+      .remove([foto.caminho])
+
+    if (storageError) throw storageError
   }
 
-  const { error } = await supabase
+  const { error: deleteError } = await supabase
     .from(TABLE)
     .delete()
-    .eq('id', id)
+    .eq('id', foto.id)
 
-  if (error) throw error
+  if (deleteError) throw deleteError
+
+  if (eraPrincipal && policialId) {
+    const fotosRestantes = await listarFotosPolicial(policialId)
+    const novaPrincipal = fotosRestantes?.[0]
+
+    if (novaPrincipal) {
+      await definirFotoPrincipal(policialId, novaPrincipal.id, novaPrincipal.url)
+    } else {
+      const { error: limparPolicialError } = await supabase
+        .from(POLICIAIS_TABLE)
+        .update({ foto_url: null })
+        .eq('id', policialId)
+
+      if (limparPolicialError) throw limparPolicialError
+    }
+  }
+
+  return true
 }

@@ -15,7 +15,8 @@ const initialForm = {
   acabamento: '',
   unidade: '',
   status: 'Disponível',
-  observacoes: ''
+  observacoes: '',
+  foto_url: ''
 }
 
 export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
@@ -38,7 +39,8 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
         acabamento: armaEditando.acabamento || '',
         unidade: armaEditando.unidade || '',
         status: armaEditando.status || 'Disponível',
-        observacoes: armaEditando.observacoes || ''
+        observacoes: armaEditando.observacoes || '',
+        foto_url: armaEditando.foto_url || ''
       })
     } else {
       setForm({
@@ -52,7 +54,33 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
 
   function handleChange(event) {
     const { name, value } = event.target
-    setForm((prev) => ({ ...prev, [name]: value }))
+
+    const camposMaiusculos = [
+      'patrimonio',
+      'numero_serie',
+      'qr_code',
+      'especie',
+      'marca',
+      'modelo',
+      'calibre',
+      'acabamento',
+      'unidade',
+      'observacoes'
+    ]
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: camposMaiusculos.includes(name) ? value.toUpperCase() : value
+    }))
+  }
+
+  function handleFotosChange(fotos) {
+    const principal = fotos.find((foto) => foto.principal)
+
+    setForm((prev) => ({
+      ...prev,
+      foto_url: principal?.url || fotos[0]?.url || ''
+    }))
   }
 
   function gerarNovoQrCode() {
@@ -123,8 +151,8 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
           <h2>{isEditing ? 'Editar Arma' : 'Nova Arma'}</h2>
           <p>
             {isEditing
-              ? 'Atualize os dados e informações do armamento.'
-              : 'Cadastre o armamento institucional.'}
+              ? 'Atualize os dados, fotos e informações do armamento.'
+              : 'Cadastre o armamento institucional. Após salvar, será possível adicionar fotos.'}
           </p>
         </div>
 
@@ -227,7 +255,13 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
           onChange={handleChange}
         />
 
-        {isEditing && <ArmaFotos armaId={armaEditando.id} user={user} />}
+        {isEditing && (
+          <ArmaFotos
+            armaId={armaEditando.id}
+            user={user}
+            onFotosChange={handleFotosChange}
+          />
+        )}
 
         <div className="armas-form-actions">
           <button type="button" onClick={onCancel}>

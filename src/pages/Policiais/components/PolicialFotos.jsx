@@ -1,112 +1,222 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   uploadFotoPolicial,
   listarFotosPolicial,
-  excluirFotoPolicial
+  excluirFotoPolicial,
+  definirFotoPrincipal
 } from '../../../services/policiaisFotosService'
+import PolicialFotoCard from './PolicialFotoCard'
 
-export default function PolicialFotos({ policialId, user }) {
+export default function PolicialFotos({
+  policialId,
+  user,
+  somenteLeitura = false,
+  onFotoPrincipalChange
+}) {
   const [fotos, setFotos] = useState([])
+  const [fotoSelecionada, setFotoSelecionada] = useState(null)
+  const [arquivo, setArquivo] = useState(null)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
 
-  useEffect(() => {
-    carregarFotos()
-  }, [policialId])
+  const fotoPrincipal = useMemo(() => {
+    return fotos.find((foto) => foto.principal) || fotos[0] || null
+  }, [fotos])
 
   async function carregarFotos() {
+    if (!policialId) return
+
     try {
-      setLoading(true)
       setErro('')
+      setLoading(true)
 
       const data = await listarFotosPolicial(policialId)
-      setFotos(data || [])
+
+      setFotos(data)
+
+      const principal = data.find((foto) => foto.principal) || data[0] || null
+
+      setFotoSelecionada((atual) => {
+        if (!atual) return principal
+        return data.find((foto) => foto.id === atual.id) || principal
+      })
+
+      onFotoPrincipalChange?.(principal?.url || null)
     } catch (error) {
       console.error(error)
-      setErro('Erro ao carregar fotos.')
+      setErro(error.message || 'Erro ao carregar fotos.')
     } finally {
       setLoading(false)
     }
   }
 
+  useEffect(() => {
+    carregarFotos()
+  }, [policialId])
+
   async function handleUpload(event) {
-    const arquivos = Array.from(event.target.files || [])
-    if (!arquivos.length) return
+    event.preventDefault()
+
+    if (!arquivo) {
+      setErro('Selecione uma foto antes de enviar.')
+      return
+    }
 
     try {
-      setLoading(true)
       setErro('')
+      setLoading(true)
 
-      for (const arquivo of arquivos) {
-        await uploadFotoPolicial(arquivo, policialId, user)
-      }
+      const novaFoto = await uploadFotoPolicial(arquivo, policialId, user)
 
-      event.target.value = ''
+      setArquivo(null)
+      event.target.reset()
+
       await carregarFotos()
+
+      if (novaFoto?.principal) {
+        onFotoPrincipalChange?.(novaFoto.url)
+      }
     } catch (error) {
       console.error(error)
-      setErro('Erro ao enviar foto.')
+      setErro(error.message || 'Erro ao enviar foto.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDefinirPrincipal(foto) {
+    try {
+      setErro('')
+      setLoading(true)
+
+      const atualizada = await definirFotoPrincipal(policialId, foto.id, foto.url)
+
+      await carregarFotos()
+      setFotoSelecionada(atualizada)
+      onFotoPrincipalChange?.(atualizada.url)
+    } catch (error) {
+      console.error(error)
+      setErro(error.message || 'Erro ao definir foto principal.')
     } finally {
       setLoading(false)
     }
   }
 
   async function handleExcluir(foto) {
-    const confirmar = window.confirm('Excluir esta foto?')
+    const confirmar = window.confirm('Deseja excluir esta foto?')
+
     if (!confirmar) return
 
     try {
-      setLoading(true)
       setErro('')
+      setLoading(true)
 
-      await excluirFotoPolicial(foto.id, foto.caminho)
+      await excluirFotoPolicial(foto, policialId)
       await carregarFotos()
     } catch (error) {
       console.error(error)
-      setErro('Erro ao excluir foto.')
+      setErro(error.message || 'Erro ao excluir foto.')
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="policiais-fotos-box">
-      <div className="policiais-fotos-header">
-        <div>
-          <strong>Fotos do policial</strong>
-          <span>Envie imagens para identificação funcional.</span>
-        </div>
+  if (!policialId) {
+    return (
+      <div className="policial-fotos-box">
+        <p className="policial-fotos-empty">
+          Salve o policial antes de adicionar fotos.
+        </p>
+      </div>
+    )
+  }
 
-        <label className="policiais-upload-btn">
-          Enviar fotos
+  return (
+    <div className="policial-fotos-box">
+      <div className="policial-fotos-header">
+        <div>
+          <h3>Fotos do policial</h3>
+          <p>
+            A foto principal será exibida na tabela, no modal e futuramente na credencial.
+          </p>
+        </div>
+      </div>
+
+      {erro && (
+        <div className="form-error">
+          {erro}
+        </div>
+      )}
+
+      {fotoPrincipal && (
+        <div className="policial-foto-destaque">
+          <img
+            src={(fotoSelecionada || fotoPrincipal).url}
+            alt="Foto selecionada do policial"
+          />
+
+          <div>
+            <strong>
+              {(fotoSelecionada || fotoPrincipal).principal
+                ? 'Foto principal'
+                : 'Foto selecionada'}
+            </strong>
+
+            {!somenteLeitura && fotoSelecionada && !fotoSelecionada.principal && (
+              <button
+                type="button"
+                onClick={() => handleDefinirPrincipal(fotoSelecionada)}
+                disabled={loading}
+              >
+                Usar como principal
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!somenteLeitura && (
+        <form className="policial-fotos-upload" onSubmit={handleUpload}>
           <input
             type="file"
             accept="image/*"
-            multiple
-            onChange={handleUpload}
-            hidden
+            onChange={(event) => setArquivo(event.target.files?.[0] || null)}
+            disabled={loading}
           />
-        </label>
-      </div>
 
-      {erro && <p className="policiais-feedback policiais-feedback-error">{erro}</p>}
-      {loading && <p className="policiais-feedback">Carregando fotos...</p>}
+          <button type="submit" disabled={loading || !arquivo}>
+            {loading ? 'Enviando...' : 'Enviar foto'}
+          </button>
+        </form>
+      )}
 
-      <div className="policiais-fotos-grid">
-        {fotos.map((foto) => (
-          <div className="policiais-foto-card" key={foto.id}>
-            <img src={foto.url} alt="Foto do policial" />
+      {loading && fotos.length === 0 && (
+        <p className="policial-fotos-empty">
+          Carregando fotos...
+        </p>
+      )}
 
-            <button type="button" onClick={() => handleExcluir(foto)}>
-              Excluir
-            </button>
-          </div>
-        ))}
+      {!loading && fotos.length === 0 && (
+        <p className="policial-fotos-empty">
+          Nenhuma foto cadastrada.
+        </p>
+      )}
 
-        {!loading && fotos.length === 0 && (
-          <p className="policiais-empty-fotos">Nenhuma foto cadastrada.</p>
-        )}
-      </div>
+      {fotos.length > 0 && (
+        <div className="policial-fotos-grid">
+          {fotos.map((foto) => (
+            <PolicialFotoCard
+              key={foto.id}
+              foto={foto}
+              selecionada={fotoSelecionada?.id === foto.id}
+              onSelecionar={setFotoSelecionada}
+              onDefinirPrincipal={somenteLeitura ? null : handleDefinirPrincipal}
+              onExcluir={somenteLeitura ? null : handleExcluir}
+              disabled={loading}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

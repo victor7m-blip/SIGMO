@@ -2,33 +2,38 @@ import { useEffect, useState } from 'react'
 import {
   uploadFotoArma,
   listarFotosArma,
-  excluirFotoArma
+  excluirFotoArma,
+  definirFotoPrincipalArma
 } from '../../../services/armasFotosService'
 import ArmaFotoCard from './ArmaFotoCard'
 
 const MAX_FOTOS = 5
 
-export default function ArmaFotos({ armaId, user }) {
+export default function ArmaFotos({ armaId, user, onFotosChange }) {
   const [fotos, setFotos] = useState([])
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
 
   async function carregarFotos() {
-  if (!armaId) {
-    setFotos([])
-    setErro('')
-    return
-  }
+    if (!armaId) {
+      setFotos([])
+      setErro('')
+      return
+    }
 
-  try {
-    setErro('')
-    const data = await listarFotosArma(armaId)
-    setFotos(data || [])
-  } catch (error) {
-    console.error(error)
-    setErro('Erro ao carregar fotos da arma.')
+    try {
+      setErro('')
+      const data = await listarFotosArma(armaId)
+      setFotos(data)
+
+      if (onFotosChange) {
+        onFotosChange(data)
+      }
+    } catch (error) {
+      console.error(error)
+      setErro('Erro ao carregar fotos da arma.')
+    }
   }
-}
 
   useEffect(() => {
     carregarFotos()
@@ -43,6 +48,8 @@ export default function ArmaFotos({ armaId, user }) {
       return
     }
 
+    if (!arquivos.length) return
+
     if (fotos.length + arquivos.length > MAX_FOTOS) {
       setErro(`Limite máximo de ${MAX_FOTOS} fotos por arma.`)
       event.target.value = ''
@@ -53,15 +60,37 @@ export default function ArmaFotos({ armaId, user }) {
       setLoading(true)
       setErro('')
 
-      for (const file of arquivos) {
-        await uploadFotoArma(file, armaId, user)
+      const deveSerPrincipal = fotos.length === 0
+
+      for (let index = 0; index < arquivos.length; index++) {
+        await uploadFotoArma(
+          arquivos[index],
+          armaId,
+          user,
+          deveSerPrincipal && index === 0
+        )
       }
 
       await carregarFotos()
       event.target.value = ''
     } catch (error) {
       console.error(error)
-      setErro('Erro ao enviar foto.')
+      setErro('Erro ao enviar foto da arma.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDefinirPrincipal(foto) {
+    try {
+      setLoading(true)
+      setErro('')
+
+      await definirFotoPrincipalArma(foto)
+      await carregarFotos()
+    } catch (error) {
+      console.error(error)
+      setErro('Erro ao definir foto principal.')
     } finally {
       setLoading(false)
     }
@@ -75,7 +104,7 @@ export default function ArmaFotos({ armaId, user }) {
       setLoading(true)
       setErro('')
 
-      await excluirFotoArma(foto.id, foto.caminho)
+      await excluirFotoArma(foto)
       await carregarFotos()
     } catch (error) {
       console.error(error)
@@ -90,11 +119,11 @@ export default function ArmaFotos({ armaId, user }) {
       <div className="arma-fotos-header">
         <div>
           <h3>Fotos da arma</h3>
-          <p>Adicione até {MAX_FOTOS} fotos opcionais.</p>
+          <p>Adicione até {MAX_FOTOS} fotos. A primeira será a principal.</p>
         </div>
 
         <label className="btn-secondary">
-          + Adicionar foto
+          + Adicionar fotos
           <input
             type="file"
             accept="image/*"
@@ -114,6 +143,7 @@ export default function ArmaFotos({ armaId, user }) {
             key={foto.id}
             foto={foto}
             onExcluir={handleExcluir}
+            onDefinirPrincipal={handleDefinirPrincipal}
             disabled={loading}
           />
         ))}

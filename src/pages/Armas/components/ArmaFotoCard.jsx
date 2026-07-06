@@ -1,28 +1,42 @@
 export default function ArmaFotoCard({
   foto,
   onExcluir,
-  disabled = false,
-  textoBotao = 'Excluir'
+  onDefinirPrincipal,
+  disabled = false
 }) {
   return (
-    <div className="arma-foto-card">
+    <div className={`arma-foto-card ${foto.principal ? 'principal' : ''}`}>
       <img
         src={foto.url}
         alt="Foto da arma"
         loading="lazy"
       />
 
-      {onExcluir && (
+      <div className="arma-foto-acoes">
+        {foto.principal ? (
+          <span className="foto-principal-badge">
+            ⭐ Principal
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="btn-secondary-small"
+            onClick={() => onDefinirPrincipal?.(foto)}
+            disabled={disabled}
+          >
+            Tornar principal
+          </button>
+        )}
+
         <button
           type="button"
           className="btn-danger-small"
-          onClick={() => onExcluir(foto)}
+          onClick={() => onExcluir?.(foto)}
           disabled={disabled}
-          aria-label="Excluir foto"
         >
-          {textoBotao}
+          Excluir
         </button>
-      )}
+      </div>
     </div>
   )
 }

@@ -5,7 +5,7 @@ import PolicialForm from './components/PolicialForm'
 import PolicialTable from './components/PolicialTable'
 import PolicialViewModal from './components/PolicialViewModal'
 import QrScanner from '../../components/QrScanner/QrScanner'
-
+import { listarFotosPolicial } from '../../services/policiaisFotosService'
 import { listarPoliciais } from '../../services/policiaisService'
 
 const initialFilters = {
@@ -64,6 +64,7 @@ export default function Policiais({ user }) {
   const [policialEditando, setPolicialEditando] = useState(null)
   const [policialVisualizando, setPolicialVisualizando] = useState(null)
 
+  const [fotosModal, setFotosModal] = useState([])
   const [policiais, setPoliciais] = useState([])
   const [filters, setFilters] = useState(initialFilters)
   const [debouncedFilters, setDebouncedFilters] = useState(initialFilters)
@@ -85,7 +86,7 @@ export default function Policiais({ user }) {
 
   const registroFinal = Math.min(pagina * LIMITE_POR_PAGINA, total)
 
-  const paginasVisiveis = useMemo(() => {
+    const paginasVisiveis = useMemo(() => {
     const paginas = []
     const inicio = Math.max(1, pagina - 2)
     const fim = Math.min(totalPaginas, pagina + 2)
@@ -138,9 +139,22 @@ export default function Policiais({ user }) {
     setShowForm(true)
   }
 
-  function handleView(policial) {
-    setPolicialVisualizando(policial)
+  async function handleView(policial) {
+  console.log('POLICIAL', policial)
+
+  setPolicialVisualizando(policial)
+
+  try {
+    const fotos = await listarFotosPolicial(policial.id)
+
+    console.log('FOTOS', fotos)
+
+    setFotosModal(fotos)
+  } catch (error) {
+    console.error(error)
+    setFotosModal([])
   }
+}
 
   function handleEditar(policial) {
     setPolicialEditando(policial)
@@ -202,6 +216,14 @@ export default function Policiais({ user }) {
 
     setPagina(1)
     setScannerAberto(false)
+  }
+
+  function handlePrintFicha() {
+    window.print()
+  }
+
+  function handlePrintCredencial() {
+    window.print()
   }
 
   return (
@@ -448,9 +470,15 @@ export default function Policiais({ user }) {
       </section>
 
       <PolicialViewModal
-        policial={policialVisualizando}
-        onClose={() => setPolicialVisualizando(null)}
-      />
+  policial={policialVisualizando}
+  fotos={fotosModal}
+  onClose={() => {
+    setPolicialVisualizando(null)
+    setFotosModal([])
+  }}
+  onPrintFicha={handlePrintFicha}
+  onPrintCredencial={handlePrintCredencial}
+/>
 
       <QrScanner
         open={scannerAberto}

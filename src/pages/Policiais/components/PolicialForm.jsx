@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { cadastrarPolicial, atualizarPolicial } from '../../../services/policiaisService'
-import {
-  uploadFotoPolicial,
-  listarFotosPolicial,
-  excluirFotoPolicial
-} from '../../../services/policiaisFotosService'
 import { registerAudit } from '../../../services/auditoriaService'
 
 import PolicialFotos from './PolicialFotos'
@@ -121,12 +116,13 @@ export default function PolicialForm({
   const [form, setForm] = useState(initialForm)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
-  const [fotos, setFotos] = useState([])
-  const [uploadingFoto, setUploadingFoto] = useState(false)
 
   const isEditing = Boolean(policialEditando?.id)
- console.log('POLICIAL EDITANDO:', policialEditando)
-  const policialId = useMemo(() => policialEditando?.id || null, [policialEditando])
+
+  const policialId = useMemo(
+    () => policialEditando?.id || null,
+    [policialEditando]
+  )
 
   useEffect(() => {
     if (policialEditando) {
@@ -151,24 +147,8 @@ export default function PolicialForm({
       })
     } else {
       setForm(initialForm)
-      setFotos([])
     }
   }, [policialEditando])
-
-  useEffect(() => {
-    async function carregarFotos() {
-      if (!policialId) return
-
-      try {
-        const lista = await listarFotosPolicial(policialId)
-        setFotos(lista || [])
-      } catch (error) {
-        console.error(error)
-      }
-    }
-
-    carregarFotos()
-  }, [policialId])
 
   function handleChange(e) {
     const { name, value } = e.target
@@ -257,71 +237,6 @@ export default function PolicialForm({
       setErro(error.message || error.details || 'Erro ao salvar policial.')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleUploadFoto(e) {
-    const file = e.target.files?.[0]
-    if (!file || !policialId) return
-
-    setUploadingFoto(true)
-    setErro('')
-
-    try {
-      const url = await uploadFotoPolicial(file, policialId, user)
-
-      const lista = await listarFotosPolicial(policialId)
-      setFotos(lista || [])
-
-      setForm((prev) => ({
-        ...prev,
-        foto_url: prev.foto_url || url
-      }))
-
-      await atualizarPolicial(policialId, {
-        ...montarPayload(form),
-        foto_url: form.foto_url || url
-      })
-
-      await registrarAuditoriaSegura({
-        acao: 'UPLOAD_FOTO',
-        descricao: `Foto adicionada ao policial: ${form.nome_guerra || form.nome} - RE ${form.re}`,
-        ator_id: user?.id,
-        ator_nome: user?.nome,
-        perfil: user?.perfil,
-        modulo: 'POLICIAIS',
-        severidade: 'INFO'
-      })
-    } catch (error) {
-      console.error('Erro ao enviar foto:', error)
-      setErro(error.message || 'Erro ao enviar foto.')
-    } finally {
-      setUploadingFoto(false)
-      e.target.value = ''
-    }
-  }
-
-  async function handleExcluirFoto(foto) {
-    if (!foto?.id) return
-
-    try {
-      await excluirFotoPolicial(foto)
-
-      const lista = await listarFotosPolicial(policialId)
-      setFotos(lista || [])
-
-      await registrarAuditoriaSegura({
-        acao: 'EXCLUIR_FOTO',
-        descricao: `Foto removida do policial: ${form.nome_guerra || form.nome} - RE ${form.re}`,
-        ator_id: user?.id,
-        ator_nome: user?.nome,
-        perfil: user?.perfil,
-        modulo: 'POLICIAIS',
-        severidade: 'ATENÇÃO'
-      })
-    } catch (error) {
-      console.error('Erro ao excluir foto:', error)
-      setErro(error.message || 'Erro ao excluir foto.')
     }
   }
 
@@ -466,27 +381,7 @@ export default function PolicialForm({
       )}
 
       {isEditing && (
-        <div className="fotos-card">
-          <div className="fotos-card-header">
-            <div>
-              <strong>Fotos</strong>
-              <p>Gerencie as fotos vinculadas ao policial.</p>
-            </div>
-
-            <label className="btn-secondary upload-label">
-              {uploadingFoto ? 'Enviando...' : 'Adicionar foto'}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleUploadFoto}
-                disabled={uploadingFoto}
-                hidden
-              />
-            </label>
-          </div>
-
-          <PolicialFotos policialId={policialId} user={user} />
-        </div>
+        <PolicialFotos policialId={policialId} user={user} />
       )}
 
       {!isEditing && (
