@@ -1,0 +1,82 @@
+.policiais-table-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin:10px 0 12px;
+  color:#667085;
+  font-size:14px;
+  font-weight:600;
+}
+
+.policiais-table-wrap{
+  width:100%;
+  overflow-x:auto;
+}
+
+.policiais-table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+
+.policiais-table thead{
+  background:#061a32;
+  color:#fff;
+}
+
+.policiais-table th,
+.policiais-table td{
+  padding:12px 10px;
+  text-align:left;
+  font-size:14px;
+  vertical-align:middle;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  border-bottom:1px solid #e5e7eb;
+}
+
+.policiais-sort-button{
+  width:100%;
+  background:none;
+  border:0;
+  color:inherit;
+  display:flex;
+  justify-content:space-between;
+  gap:6px;
+  cursor:pointer;
+  font-weight:700;
+}
+
+.policiais-status{
+  display:inline-block;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#e7f8ef;
+  color:#067647;
+  font-weight:700;
+  font-size:12px;
+}
+
+.policiais-actions{
+  display:flex;
+  gap:6px;
+}
+
+.policiais-actions button{
+  border:0;
+  border-radius:8px;
+  padding:7px 9px;
+  cursor:pointer;
+  font-weight:700;
+}
+
+.policiais-delete-button{
+  background:#fee4e2;
+  color:#b42318;
+}
+
+.policiais-qr-code-text{
+  font-size:12px;
+  color:#475467;
+}

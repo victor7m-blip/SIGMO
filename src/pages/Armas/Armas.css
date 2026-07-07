@@ -1,0 +1,20 @@
+.armas-page {
+  width: 100%;
+}
+
+.armas-alert {
+  background: white;
+  border: 1px solid #e5e7eb;
+  color: #374151;
+  border-radius: 14px;
+  padding: 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.armas-alert.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+  margin-bottom: 14px;
+}

@@ -1,0 +1,32 @@
+.main-fullscreen {
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #061a32;
+}
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app-shell,
+.app-main,
+.app-content,
+.dashboard-layout,
+.dashboard-main {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+main,
+section,
+article,
+div {
+  min-width: 0;
+}

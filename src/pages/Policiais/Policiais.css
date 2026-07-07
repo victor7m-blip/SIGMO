@@ -1,0 +1,63 @@
+@import './styles/policiaisHeader.css';
+@import './styles/policiaisForm.css';
+@import './styles/policiaisTable.css';
+@import './styles/policiaisModal.css';
+
+.qr-filter-group {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qr-filter-group input {
+  flex: 1;
+  min-width: 0;
+}
+
+.qr-filter-button {
+  white-space: nowrap;
+  border: none;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: #075eea;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .qr-filter-group {
+    flex-direction: column;
+  }
+
+  .qr-filter-button {
+    width: 100%;
+    padding: 12px;
+  }
+}
+
+.policial-table-photo-button{
+  width:46px;
+  height:46px;
+  border:0;
+  border-radius:50%;
+  overflow:hidden;
+  padding:0;
+  background:#e5e7eb;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+
+.policial-table-photo-button img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.policial-table-photo-button span{
+  font-weight:800;
+  color:#0b2a4a;
+}

@@ -1,0 +1,128 @@
+.login-page {
+  min-height: 100vh;
+  width: 100vw;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-card {
+  position: absolute;
+  left: 19.4%;
+  top: 51.2%;
+  width: 27.6%;
+  height: 27%;
+  background: transparent;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  z-index: 20;
+}
+
+.login-card form {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.login-card label {
+  display: none;
+}
+
+.login-card input {
+  position: absolute;
+  left: 11%;
+  width: 77%;
+  height: 11%;
+  padding: 0 8px;
+  border: none !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: #fff;
+  font-size: 14px;
+  z-index: 30;
+  pointer-events: auto;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.login-card input::placeholder {
+  color: transparent;
+}
+
+.login-card input {
+   color: #ffffff;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.login-card input::placeholder {
+  color: #94a3b8;
+}
+
+.login-card input:nth-of-type(2) {
+  top: 49.5%;
+}
+
+.login-card .primary-btn {
+  position: absolute;
+  left: 6.5%;
+  top: 72.5%;
+  width: 87%;
+  height: 15%;
+  border: none !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: transparent !important;
+  cursor: pointer;
+  z-index: 30;
+}
+
+.login-card .primary-btn:hover {
+  background: transparent !important;
+}
+
+.login-card .primary-btn:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+.login-page .error,
+.login-page .hint {
+  display: none !important;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .login-card {
+    left: 7.2%;
+    top: 43.2%;
+    width: 85.6%;
+    height: 34%;
+  }
+
+  .login-card input {
+    left: 10%;
+    width: 78%;
+    height: 11%;
+    font-size: 16px;
+  }
+
+  .login-card input:nth-of-type(1) {
+    top: 27%;
+  }
+
+  .login-card input:nth-of-type(2) {
+    top: 49.5%;
+  }
+
+  .login-card .primary-btn {
+    left: 5.5%;
+    top: 72.5%;
+    width: 89%;
+    height: 14%;
+  }
+}

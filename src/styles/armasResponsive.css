@@ -1,0 +1,154 @@
+@media(max-width:1200px){
+  .filters-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+
+  .armas-table th,
+  .armas-table td{
+    padding:10px 8px;
+    font-size:13px;
+  }
+
+  .armas-actions button{
+    padding:6px 8px;
+  }
+}
+
+@media(max-width:900px){
+  .armas-header{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .filters-grid{
+    grid-template-columns:1fr;
+  }
+
+  .armas-table-wrap{
+    overflow-x:hidden;
+  }
+
+  .armas-table,
+  .armas-table thead,
+  .armas-table tbody,
+  .armas-table th,
+  .armas-table td,
+  .armas-table tr{
+    display:block;
+    max-width:100%;
+  }
+
+  .armas-table{
+    min-width:0;
+  }
+
+  .armas-table thead{
+    display:none;
+  }
+
+  .armas-table tr{
+    width:100%;
+    border:1px solid #e5eaf2;
+    border-radius:14px;
+    margin-bottom:12px;
+    padding:10px;
+    background:#fff;
+    overflow:hidden;
+  }
+
+  .armas-table td{
+    width:100%;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    border-bottom:1px solid #eef2f7;
+    padding:10px 4px;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+
+  .armas-table td::before{
+    content:attr(data-label);
+    flex:0 0 90px;
+    max-width:90px;
+    font-weight:800;
+    color:#061a32;
+  }
+
+  .armas-table td:last-child{
+    border-bottom:none;
+    display:block;
+  }
+
+  .armas-actions{
+    justify-content:flex-start;
+    margin-top:8px;
+  }
+
+  .armas-actions button{
+    flex:1;
+    min-width:80px;
+  }
+}
+
+@media(max-width:600px){
+  .armas-page{
+    gap:18px;
+  }
+
+  .armas-header{
+    padding:18px;
+  }
+
+  .armas-header h1{
+    font-size:24px;
+  }
+
+  .armas-primary-button{
+    width:100%;
+  }
+
+  .armas-panel{
+    padding:14px;
+  }
+
+  .armas-table-toolbar{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .armas-pagination{
+    justify-content:flex-start;
+  }
+
+  .armas-pagination button{
+    flex:1;
+  }
+}
+
+@media(max-width:420px){
+  .armas-header,
+  .armas-panel{
+    border-radius:14px;
+  }
+
+  .armas-table td{
+    flex-direction:column;
+    gap:4px;
+  }
+
+  .armas-table td::before{
+    flex:none;
+    max-width:none;
+  }
+
+  .armas-actions{
+    flex-direction:column;
+  }
+
+  .armas-actions button{
+    width:100%;
+  }
+}

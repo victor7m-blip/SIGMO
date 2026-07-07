@@ -1,0 +1,19 @@
+:root{
+
+--ui-radius:14px;
+
+--ui-radius-sm:10px;
+
+--ui-shadow:
+0 6px 20px rgba(0,0,0,.18);
+
+--ui-transition:.18s;
+
+--ui-gap:20px;
+
+--ui-card-padding:22px;
+
+--ui-border:
+1px solid rgba(255,255,255,.08);
+
+}

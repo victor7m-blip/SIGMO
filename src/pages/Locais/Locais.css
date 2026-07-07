@@ -1,0 +1,144 @@
+.locais-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.locais-filtros {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 16px;
+  align-items: end;
+}
+
+.locais-select,
+.locais-textarea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.locais-select span,
+.locais-textarea span {
+  font-size: .9rem;
+  opacity: .8;
+}
+
+.locais-select select {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: #181818;
+  color: white;
+}
+
+.locais-textarea textarea {
+  min-height: 96px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: #181818;
+  color: white;
+  resize: vertical;
+}
+
+.local-badge {
+  display: inline-flex;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.status {
+  display: inline-flex;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.status.ativo {
+  background: rgba(46, 204, 113, .16);
+  color: #2ecc71;
+}
+
+.status.inativo {
+  background: rgba(231, 76, 60, .16);
+  color: #e74c3c;
+}
+
+.locais-acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.locais-alerta {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(231, 76, 60, .15);
+  color: #ff7675;
+  font-weight: 700;
+}
+
+.locais-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 99;
+}
+
+.locais-modal {
+  width: min(720px, 100%);
+}
+
+.locais-modal-header h2 {
+  margin: 0;
+}
+
+.locais-modal-header p {
+  margin-top: 6px;
+  opacity: .7;
+}
+
+.locais-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.locais-checks {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.locais-checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.locais-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+@media (max-width: 760px) {
+  .locais-filtros {
+    grid-template-columns: 1fr;
+  }
+
+  .locais-modal-backdrop {
+    align-items: flex-start;
+  }
+}

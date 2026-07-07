@@ -1,0 +1,13 @@
+.ui-card{
+
+background:var(--surface);
+
+border:var(--ui-border);
+
+border-radius:var(--ui-radius);
+
+padding:var(--ui-card-padding);
+
+box-shadow:var(--ui-shadow);
+
+}

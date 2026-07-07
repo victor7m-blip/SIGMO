@@ -1,0 +1,28 @@
+.sigmo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.sigmo-field input,
+.sigmo-field select,
+.sigmo-field textarea {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: white;
+  color: #111827;
+}
+
+.sigmo-field input:focus,
+.sigmo-field select:focus,
+.sigmo-field textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}

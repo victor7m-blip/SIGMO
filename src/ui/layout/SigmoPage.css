@@ -1,0 +1,54 @@
+.sigmo-page {
+  padding: 24px;
+  min-height: 100vh;
+  background: #f3f4f6;
+}
+
+.sigmo-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sigmo-page-header h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #111827;
+}
+
+.sigmo-page-header p {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.sigmo-page-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .sigmo-page {
+    padding: 14px;
+  }
+
+  .sigmo-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sigmo-page-header h1 {
+    font-size: 22px;
+  }
+
+  .sigmo-page-actions {
+    width: 100%;
+  }
+
+  .sigmo-page-actions .sigmo-button {
+    flex: 1;
+  }
+}

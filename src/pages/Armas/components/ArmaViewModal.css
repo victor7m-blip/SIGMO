@@ -1,0 +1,188 @@
+.arma-view-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.arma-view-card {
+  width: min(1050px, 100%);
+  max-height: 94vh;
+  background: white;
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.3);
+}
+
+.arma-view-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.arma-view-header h2 {
+  margin: 0;
+  color: #111827;
+}
+
+.arma-view-header p {
+  margin: 6px 0 0;
+  color: #6b7280;
+}
+
+.arma-view-close {
+  border: none;
+  background: #f3f4f6;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.arma-view-body {
+  padding: 20px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 20px;
+}
+
+.arma-view-foto-principal {
+  width: 100%;
+  height: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+}
+
+.arma-view-foto-principal img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.arma-view-sem-foto {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.arma-view-miniaturas {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.arma-view-miniatura {
+  width: 70px;
+  height: 55px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 0;
+  background: #f3f4f6;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.arma-view-miniatura.active {
+  border-color: #2563eb;
+}
+
+.arma-view-miniatura img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.arma-view-qr {
+  margin-top: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+}
+
+.arma-view-qr img {
+  width: 130px;
+  height: 130px;
+  object-fit: contain;
+  display: block;
+  margin: 8px auto;
+}
+
+.arma-view-qr span {
+  font-size: 12px;
+  color: #475569;
+}
+
+.arma-view-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.arma-view-grid div {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.arma-view-grid strong {
+  display: block;
+  color: #374151;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.arma-view-grid span {
+  color: #111827;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.arma-view-full {
+  grid-column: 1 / -1;
+}
+
+.arma-view-actions {
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .arma-view-body {
+    grid-template-columns: 1fr;
+  }
+
+  .arma-view-foto-principal {
+    height: 220px;
+  }
+
+  .arma-view-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .arma-view-actions {
+    flex-direction: column;
+  }
+}

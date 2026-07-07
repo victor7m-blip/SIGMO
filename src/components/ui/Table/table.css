@@ -1,0 +1,25 @@
+.ui-table{
+
+overflow:auto;
+
+}
+
+.ui-table table{
+
+width:100%;
+
+border-collapse:collapse;
+
+}
+
+.ui-table th,
+
+.ui-table td{
+
+padding:14px;
+
+text-align:left;
+
+border-bottom:1px solid rgba(255,255,255,.08);
+
+}

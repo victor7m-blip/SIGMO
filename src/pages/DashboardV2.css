@@ -1,0 +1,372 @@
+.sigmo-dashboard-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sigmo-hero-panel {
+  background: linear-gradient(135deg, #061a32 0%, #092544 58%, #075eea 135%);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 18px;
+  padding: 28px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  box-shadow: 0 22px 55px rgba(2, 8, 23, 0.18);
+}
+
+.sigmo-kicker {
+  display: inline-flex;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2.4px;
+  color: #93c5fd;
+}
+
+.sigmo-hero-panel h1 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: -0.8px;
+}
+
+.sigmo-hero-panel p {
+  margin: 10px 0 0;
+  color: #cbd5e1;
+  max-width: 640px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.sigmo-hero-status {
+  min-width: 280px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(191, 219, 254, 0.26);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sigmo-hero-status strong {
+  display: block;
+  font-size: 14px;
+}
+
+.sigmo-hero-status span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.sigmo-section h2 {
+  color: #e5edf8;
+  font-size: 16px;
+  margin: 0 0 12px;
+  letter-spacing: 0.4px;
+}
+
+.sigmo-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.sigmo-summary-card {
+  background: linear-gradient(180deg, rgba(10, 35, 66, 0.96), rgba(7, 26, 49, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  padding: 18px;
+  color: #fff;
+  min-height: 190px;
+  box-shadow: 0 16px 35px rgba(2, 8, 23, 0.14);
+}
+
+.sigmo-summary-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 52px;
+}
+
+.sigmo-summary-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #bfdbfe;
+  background: rgba(7, 94, 234, 0.22);
+  border: 1px solid rgba(147, 197, 253, 0.18);
+}
+
+.sigmo-summary-head strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.sigmo-summary-value {
+  margin-top: 18px;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+.sigmo-summary-list {
+  margin-top: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.sigmo-summary-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #cbd5e1;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.sigmo-summary-list strong {
+  color: #fff;
+}
+
+.sigmo-dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.55fr 0.95fr;
+  gap: 18px;
+}
+
+.sigmo-panel-card {
+  background: #ffffff;
+  border: 1px solid #d8e1ef;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
+
+.sigmo-panel-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.sigmo-panel-title h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+}
+
+.sigmo-panel-title span {
+  font-size: 12px;
+  color: #667085;
+}
+
+.sigmo-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sigmo-activity-item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #e4eaf3;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.sigmo-activity-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #075eea;
+  background: #e8f1ff;
+}
+
+.sigmo-activity-content strong {
+  display: block;
+  color: #101828;
+  font-size: 14px;
+}
+
+.sigmo-activity-content p {
+  margin: 4px 0;
+  color: #475467;
+  font-size: 13px;
+}
+
+.sigmo-activity-content span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.sigmo-status {
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sigmo-status-success {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.sigmo-status-warning {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.sigmo-pendency-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sigmo-pendency-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px;
+  border-radius: 14px;
+  background: #f8fbff;
+  border: 1px solid #e4eaf3;
+}
+
+.sigmo-pendency-item div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #344054;
+  font-size: 13px;
+}
+
+.sigmo-pendency-success {
+  color: #16a34a;
+}
+
+.sigmo-pendency-warning {
+  color: #d97706;
+}
+
+.sigmo-pendency-danger {
+  color: #dc2626;
+}
+
+@media (max-width: 1180px) {
+  .sigmo-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sigmo-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .sigmo-hero-panel {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 22px;
+  }
+
+  .sigmo-hero-panel h1 {
+    font-size: 26px;
+  }
+
+  .sigmo-hero-status {
+    min-width: 0;
+  }
+
+  .sigmo-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sigmo-activity-item {
+    grid-template-columns: 44px 1fr;
+  }
+
+  .sigmo-status {
+    grid-column: 2;
+    width: fit-content;
+  }
+}
+.sigmo-dashboard-v2{
+    width:100%;
+}
+
+.sigmo-desktop{
+    width:100%;
+    display:block;
+}
+
+.sigmo-mobile{
+    display:none;
+    width:100%;
+}
+
+@media (max-width:768px){
+
+    .sigmo-desktop{
+        display:none;
+    }
+
+    .sigmo-mobile{
+        display:block;
+    }
+
+}
+
+.sigmo-open-materials{
+  position:fixed;
+  top:20px;
+  right:110px;
+  z-index:1000;
+
+  background:#075eea;
+  color:#fff;
+  border:none;
+  border-radius:10px;
+  padding:10px 18px;
+  font-weight:700;
+  cursor:pointer;
+
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
+  transition:.2s;
+}
+
+.sigmo-open-materials:hover{
+  background:#0b4fc2;
+  transform:translateY(-2px);
+}
+
+@media(max-width:768px){
+
+  .sigmo-open-materials{
+    top:72px;
+    right:16px;
+    left:16px;
+  }
+
+}
+
+.sigmo-open-armas{
+  position: fixed;
+  top: 70px;     /* ajuste conforme necessário */
+  right: 20px;
+  /* copie aqui o restante das propriedades da .sigmo-open-materials */
+}

@@ -1,0 +1,303 @@
+/* ============================
+   SIGMO - Dashboard V2
+============================ */
+
+:root{
+  --sigmo-bg:#eef3f9;
+  --sigmo-sidebar:#0a2342;
+  --sigmo-sidebar-dark:#071a31;
+  --sigmo-primary:#0d47a1;
+  --sigmo-primary-light:#1976d2;
+  --sigmo-card:#ffffff;
+  --sigmo-border:#d9e3f1;
+  --sigmo-text:#1f2937;
+  --sigmo-muted:#6b7280;
+  --sigmo-success:#2e7d32;
+  --sigmo-warning:#f9a825;
+  --sigmo-danger:#d32f2f;
+}
+
+.sigmo-dashboard{
+    display:flex;
+    min-height:100vh;
+    background:var(--sigmo-bg);
+}
+
+.sigmo-main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    overflow:auto;
+}
+
+.sigmo-dashboard-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+    padding:20px;
+}
+
+@media(max-width:1100px){
+
+.sigmo-dashboard-grid{
+
+grid-template-columns:1fr;
+
+}
+
+}
+/* Sidebar */
+
+.sigmo-sidebar{
+  width:280px;
+  min-height:100vh;
+  background:linear-gradient(180deg,var(--sigmo-sidebar),var(--sigmo-sidebar-dark));
+  color:white;
+  padding:24px 18px;
+}
+
+.sigmo-sidebar-brand{
+  margin-bottom:34px;
+}
+
+.sigmo-logo{
+  font-size:28px;
+  font-weight:900;
+  letter-spacing:2px;
+}
+
+.sigmo-sidebar-brand span{
+  display:block;
+  margin-top:6px;
+  font-size:12px;
+  color:#cbd5e1;
+  line-height:1.4;
+}
+
+.sigmo-menu{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.sigmo-menu-item{
+  border:0;
+  background:transparent;
+  color:#dbeafe;
+  padding:13px 14px;
+  border-radius:12px;
+  text-align:left;
+  font-size:15px;
+  font-weight:700;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.sigmo-menu-item:hover{
+  background:rgba(255,255,255,.1);
+}
+
+.sigmo-menu-item.active{
+  background:var(--sigmo-warning);
+  color:#08203d;
+}
+
+@media(max-width:800px){
+  .sigmo-dashboard{
+    flex-direction:column;
+  }
+
+  .sigmo-sidebar{
+    width:100%;
+    min-height:auto;
+  }
+
+  .sigmo-menu{
+    flex-direction:row;
+    overflow-x:auto;
+  }
+
+  .sigmo-menu-item{
+    white-space:nowrap;
+  }
+}
+/* Header */
+
+.sigmo-header{
+  background:linear-gradient(135deg,#061a32,#092544);
+  color:white;
+  padding:28px 32px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid rgba(255,255,255,.12);
+}
+
+.sigmo-header h1{
+  margin:0;
+  font-size:56px;
+  line-height:1;
+  letter-spacing:6px;
+  font-weight:900;
+}
+
+.sigmo-header p{
+  margin:8px 0 4px;
+  font-size:16px;
+  color:#dbeafe;
+}
+
+.sigmo-header span{
+  color:#38bdf8;
+  font-size:14px;
+}
+
+.sigmo-user-card{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:260px;
+  padding:16px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;
+}
+
+.sigmo-avatar{
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  background:rgba(255,255,255,.16);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:26px;
+}
+
+.sigmo-user-card small{
+  display:block;
+  color:#cbd5e1;
+  font-size:12px;
+}
+
+.sigmo-user-card strong{
+  display:block;
+  margin:3px 0;
+  font-size:16px;
+}
+
+.sigmo-user-card span{
+  font-size:13px;
+  color:#facc15;
+}
+
+.sigmo-card{
+  background:white;
+  border:1px solid var(--sigmo-border);
+  border-radius:16px;
+  padding:20px;
+  box-shadow:0 10px 30px rgba(15,23,42,.06);
+}
+
+@media(max-width:900px){
+  .sigmo-header{
+    flex-direction:column;
+    align-items:flex-start;
+    gap:18px;
+  }
+
+  .sigmo-header h1{
+    font-size:42px;
+  }
+
+  .sigmo-user-card{
+    width:100%;
+  }
+}
+/* Resumo operacional */
+
+.sigmo-section{
+  padding:18px 24px 0;
+}
+
+.sigmo-section h2{
+  color:#e5edf8;
+  font-size:16px;
+  margin:0 0 12px;
+  letter-spacing:.4px;
+}
+
+.sigmo-summary-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:12px;
+}
+
+.sigmo-summary-card{
+  background:linear-gradient(180deg,rgba(10,35,66,.96),rgba(7,26,49,.96));
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:10px;
+  padding:18px;
+  color:#fff;
+  min-height:190px;
+}
+
+.sigmo-summary-head{
+  display:flex;
+  gap:14px;
+  align-items:center;
+  min-height:52px;
+}
+
+.sigmo-summary-head strong{
+  font-size:14px;
+  line-height:1.35;
+}
+
+.sigmo-summary-list{
+  margin-top:16px;
+  padding-bottom:12px;
+  border-bottom:1px solid rgba(148,163,184,.22);
+}
+
+.sigmo-summary-list div{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  font-size:14px;
+  margin:8px 0;
+}
+
+.sigmo-summary-total{
+  display:flex;
+  justify-content:space-between;
+  margin-top:12px;
+  font-size:16px;
+  font-weight:800;
+}
+
+.green{color:#39d353;}
+.red{color:#ff4040;}
+.yellow{color:#ffc107;}
+.blue{color:#38a5ff;}
+.white{color:#f1f5f9;}
+
+@media(max-width:1200px){
+  .sigmo-summary-grid{
+    grid-template-columns:repeat(2,1fr);
+  }
+}
+
+@media(max-width:700px){
+  .sigmo-summary-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+.sigmo-mockup-image {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}

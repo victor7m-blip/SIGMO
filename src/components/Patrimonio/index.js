@@ -1,0 +1,7 @@
+export { default as PatrimonioPage } from './PatrimonioPage'
+export { default as PatrimonioTable } from './PatrimonioTable'
+export { default as PatrimonioFilters } from './PatrimonioFilters'
+export { default as PatrimonioDetails } from './PatrimonioDetails'
+export { default as PatrimonioGallery } from './PatrimonioGallery'
+export { default as PatrimonioQRCode } from './PatrimonioQRCode'
+export { default as PatrimonioToolbar } from './PatrimonioToolbar'
