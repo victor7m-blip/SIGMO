@@ -25,9 +25,12 @@ export async function uploadFotoArma(file, armaId, user, principal = false) {
     .from(BUCKET)
     .getPublicUrl(nomeArquivo)
 
-  if (principal) {
-    await removerPrincipalFotosArma(armaId)
-  }
+  const fotosExistentes = await listarFotosArma(armaId)
+const deveSerPrincipal = principal || fotosExistentes.length === 0
+
+if (deveSerPrincipal) {
+  await removerPrincipalFotosArma(armaId)
+}
 
   const { error: bancoError } = await supabase
     .from(TABLE)
@@ -35,7 +38,7 @@ export async function uploadFotoArma(file, armaId, user, principal = false) {
       arma_id: armaId,
       url: data.publicUrl,
       caminho: nomeArquivo,
-      principal,
+      principal: deveSerPrincipal,
       created_by: user?.id,
       created_by_nome: user?.nome
     })

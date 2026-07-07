@@ -1,6 +1,31 @@
 import { supabase } from './supabaseClient'
+import {
+  criarOuAtualizarPatrimonio,
+  desativarPatrimonioPorReferencia
+} from './patrimoniosService'
 
 const TABLE = 'sigmo_armas'
+
+function normalizarStatus(status) {
+  if (!status) return 'RESERVA'
+
+  const valor = String(status).trim().toUpperCase()
+
+  if (valor === 'DISPONÍVEL' || valor === 'DISPONIVEL') {
+    return 'RESERVA'
+  }
+
+  return valor
+}
+
+function normalizarArma(arma) {
+  return {
+    ...arma,
+    status_operacional: normalizarStatus(
+      arma.status_operacional || arma.status
+    )
+  }
+}
 
 export async function listarArmas({
   filtros = {},
@@ -12,10 +37,13 @@ export async function listarArmas({
   const inicio = (pagina - 1) * limite
   const fim = inicio + limite - 1
 
+  const campoOrdenacao =
+    sortBy === 'status_operacional' ? 'status' : sortBy
+
   let query = supabase
     .from(TABLE)
     .select('*', { count: 'exact' })
-    .order(sortBy, {
+    .order(campoOrdenacao, {
       ascending: sortDirection === 'asc',
       nullsFirst: false
     })
@@ -54,7 +82,7 @@ export async function listarArmas({
   if (error) throw error
 
   return {
-    data: data ?? [],
+    data: (data ?? []).map(normalizarArma),
     total: count ?? 0
   }
 }
@@ -85,11 +113,16 @@ export function listarUnidades() {
   return buscarValoresUnicos('unidade')
 }
 
-export async function cadastrarArma(payload) {
+export async function cadastrarArma(payload, user = null) {
+  const statusNormalizado = normalizarStatus(
+    payload.status_operacional || payload.status
+  )
+
   const { data, error } = await supabase
     .from(TABLE)
     .insert({
       ...payload,
+      status: statusNormalizado,
       qr_code: payload.qr_code || null
     })
     .select()
@@ -97,14 +130,30 @@ export async function cadastrarArma(payload) {
 
   if (error) throw error
 
-  return data
+  const armaNormalizada = normalizarArma(data)
+
+  await criarOuAtualizarPatrimonio({
+    tipo: 'arma',
+    referencia_id: armaNormalizada.id,
+    dados: armaNormalizada,
+    user,
+    local_atual: armaNormalizada.local_atual || 'Guarda do Quartel',
+    companhia_atual: armaNormalizada.unidade || ''
+  })
+
+  return armaNormalizada
 }
 
-export async function atualizarArma(id, payload) {
+export async function atualizarArma(id, payload, user = null) {
+  const statusNormalizado = normalizarStatus(
+    payload.status_operacional || payload.status
+  )
+
   const { data, error } = await supabase
     .from(TABLE)
     .update({
       ...payload,
+      status: statusNormalizado,
       qr_code: payload.qr_code || null
     })
     .eq('id', id)
@@ -113,14 +162,55 @@ export async function atualizarArma(id, payload) {
 
   if (error) throw error
 
-  return data
+  const armaNormalizada = normalizarArma(data)
+
+  await criarOuAtualizarPatrimonio({
+    tipo: 'arma',
+    referencia_id: armaNormalizada.id,
+    dados: armaNormalizada,
+    user,
+    local_atual: armaNormalizada.local_atual || 'Guarda do Quartel',
+    companhia_atual: armaNormalizada.unidade || ''
+  })
+
+  return armaNormalizada
 }
 
-export async function excluirArma(id) {
+export async function excluirArma(id, user = null) {
+  await desativarPatrimonioPorReferencia({
+    tipo: 'arma',
+    referencia_id: id,
+    user,
+    motivo: 'Arma excluída ou baixada no cadastro específico.'
+  })
+
   const { error } = await supabase
     .from(TABLE)
     .delete()
     .eq('id', id)
 
   if (error) throw error
+}
+
+export async function sincronizarArmasComPatrimonios(user = null) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+
+  if (error) throw error
+
+  const armasNormalizadas = (data || []).map(normalizarArma)
+
+  for (const arma of armasNormalizadas) {
+    await criarOuAtualizarPatrimonio({
+      tipo: 'arma',
+      referencia_id: arma.id,
+      dados: arma,
+      user,
+      local_atual: arma.local_atual || 'Guarda do Quartel',
+      companhia_atual: arma.unidade || ''
+    })
+  }
+
+  return armasNormalizadas.length
 }

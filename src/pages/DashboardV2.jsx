@@ -4,16 +4,17 @@ import painelOperacional from '../assets/painel-operacional.png'
 import painelOperacionalMobile from '../assets/painel-operacional-mobile.png'
 
 import AppShell from '../components/AppShell/AppShell'
+import Locais from './Locais/Locais'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
 import Policiais from './Policiais'
 
 import './DashboardV2.css'
-
 export default function DashboardV2({ user, onLogout }) {
   const [route, setRoute] = useState('dashboard')
 
   function renderPage() {
+    if (route === 'locais') return <Locais user={user} />
     if (route === 'materiais') return <Materiais user={user} />
     if (route === 'armas') return <Armas user={user} />
     if (route === 'policiais') return <Policiais user={user} />

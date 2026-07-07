@@ -142,7 +142,7 @@ export default function ArmaViewModal({
 
                 <div>
                   <strong>Status</strong>
-                  <span>{arma.status || '-'}</span>
+                  <span>{arma.status_operacional || '-'}</span>
                 </div>
 
                 <div>

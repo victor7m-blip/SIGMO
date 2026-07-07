@@ -1,0 +1,53 @@
+.sigmo-input-wrapper{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
+.sigmo-input-wrapper.full{
+    width:100%;
+}
+
+.sigmo-label{
+    font-size:14px;
+    font-weight:600;
+    color:#334155;
+}
+
+.sigmo-input{
+
+    width:100%;
+
+    padding:11px 14px;
+
+    border:1px solid #d1d5db;
+
+    border-radius:10px;
+
+    font-size:14px;
+
+    transition:.2s;
+
+    background:white;
+}
+
+.sigmo-input:focus{
+
+    outline:none;
+
+    border-color:#2563eb;
+
+    box-shadow:0 0 0 3px rgba(37,99,235,.15);
+}
+
+.sigmo-input.error{
+
+    border-color:#dc2626;
+}
+
+.sigmo-error{
+
+    color:#dc2626;
+
+    font-size:12px;
+}

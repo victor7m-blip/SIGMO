@@ -1,278 +1,262 @@
 import { useEffect, useState } from 'react'
-import { cadastrarArma, atualizarArma } from '../../../services/armasService'
-import { registerAudit } from '../../../services/auditoriaService'
-import { gerarQrCodeArma } from '../../../services/qrCodeService'
+
+import CadastroPatrimonioWizard from '../../../components/CadastroPatrimonioWizard/CadastroPatrimonioWizard'
+import ArmaDados from './ArmaDados'
 import ArmaFotos from './ArmaFotos'
+
+import { cadastrarArma, atualizarArma } from '../../../services/armasService'
+import {
+  uploadFotoArma,
+  listarFotosArma,
+  excluirFotoArma
+} from '../../../services/armasFotosService'
+import { registerAudit } from '../../../services/auditoriaService'
 
 const initialForm = {
   patrimonio: '',
   numero_serie: '',
-  qr_code: '',
   especie: '',
   marca: '',
   modelo: '',
   calibre: '',
   acabamento: '',
   unidade: '',
-  status: 'Disponível',
+  local_atual: 'COFRE DA RESERVA',
+  local_atual_id: null,
+  responsavel_atual: '',
+  responsavel_atual_id: null,
+  status_operacional: 'RESERVA',
   observacoes: '',
-  foto_url: ''
+  qr_code: ''
+}
+
+function normalizarStatusOperacional(status) {
+  if (!status) return 'RESERVA'
+
+  const valor = String(status).trim().toUpperCase()
+
+  if (valor === 'DISPONÍVEL' || valor === 'DISPONIVEL') {
+    return 'RESERVA'
+  }
+
+  return valor
 }
 
 export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
   const [form, setForm] = useState(initialForm)
+  const [armaSalva, setArmaSalva] = useState(null)
+  const [fotos, setFotos] = useState([])
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [erro, setErro] = useState('')
 
   const isEditing = Boolean(armaEditando?.id)
 
   useEffect(() => {
-    if (armaEditando) {
+    if (armaEditando?.id) {
       setForm({
         patrimonio: armaEditando.patrimonio || '',
         numero_serie: armaEditando.numero_serie || '',
-        qr_code: armaEditando.qr_code || '',
         especie: armaEditando.especie || '',
         marca: armaEditando.marca || '',
         modelo: armaEditando.modelo || '',
         calibre: armaEditando.calibre || '',
         acabamento: armaEditando.acabamento || '',
         unidade: armaEditando.unidade || '',
-        status: armaEditando.status || 'Disponível',
+        local_atual: armaEditando.local_atual || 'COFRE DA RESERVA',
+        local_atual_id: armaEditando.local_atual_id || null,
+        responsavel_atual: armaEditando.responsavel_atual || '',
+        responsavel_atual_id: armaEditando.responsavel_atual_id || null,
+        status_operacional: normalizarStatusOperacional(
+          armaEditando.status_operacional || armaEditando.status
+        ),
         observacoes: armaEditando.observacoes || '',
-        foto_url: armaEditando.foto_url || ''
+        qr_code: armaEditando.qr_code || ''
       })
-    } else {
-      setForm({
-        ...initialForm,
-        qr_code: gerarQrCodeArma()
-      })
+
+      setArmaSalva(armaEditando)
+      carregarFotos(armaEditando.id)
+      return
     }
 
+    setForm(initialForm)
+    setArmaSalva(null)
+    setFotos([])
     setErro('')
   }, [armaEditando])
 
-  function handleChange(event) {
-    const { name, value } = event.target
-
-    const camposMaiusculos = [
-      'patrimonio',
-      'numero_serie',
-      'qr_code',
-      'especie',
-      'marca',
-      'modelo',
-      'calibre',
-      'acabamento',
-      'unidade',
-      'observacoes'
-    ]
+  function handleChange(e) {
+    const { name, value } = e.target
 
     setForm((prev) => ({
       ...prev,
-      [name]: camposMaiusculos.includes(name) ? value.toUpperCase() : value
+      [name]: value.toUpperCase()
     }))
   }
 
-  function handleFotosChange(fotos) {
-    const principal = fotos.find((foto) => foto.principal)
-
-    setForm((prev) => ({
-      ...prev,
-      foto_url: principal?.url || fotos[0]?.url || ''
-    }))
+  function gerarQrCodeAutomatico() {
+    const base = form.patrimonio || form.numero_serie || Date.now()
+    return `SIGMO-ARMA-${base}`.toUpperCase()
   }
 
-  function gerarNovoQrCode() {
-    setForm((prev) => ({
-      ...prev,
-      qr_code: gerarQrCodeArma()
-    }))
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault()
+  async function carregarFotos(armaId) {
+    if (!armaId) return
 
     try {
-      setSaving(true)
-      setErro('')
+      const lista = await listarFotosArma(armaId)
+      setFotos(lista || [])
+    } catch (error) {
+      console.error(error)
+    }
+  }
 
+  async function handleSalvarDados() {
+    if (saving) return null
+
+    setErro('')
+    setSaving(true)
+
+    try {
       const payload = {
-        ...form,
-        qr_code: form.qr_code.trim() || gerarQrCodeArma()
-      }
+  patrimonio: form.patrimonio.trim(),
+  numero_serie: form.numero_serie.trim(),
+  especie: form.especie.trim(),
+  marca: form.marca.trim(),
+  modelo: form.modelo.trim(),
+  calibre: form.calibre.trim(),
+  acabamento: form.acabamento.trim(),
+  unidade: form.unidade.trim(),
+  local_atual: form.local_atual.trim(),
+  status: normalizarStatusOperacional(form.status_operacional),
+  observacoes: form.observacoes.trim(),
+  qr_code: form.qr_code?.trim() || gerarQrCodeAutomatico()
+}
 
       let arma
 
       if (isEditing) {
-        arma = await atualizarArma(armaEditando.id, payload)
+        arma = await atualizarArma(armaEditando.id, payload, user)
 
-        await registerAudit(
-          'ARMA_UPDATE',
-          `Arma editada: ${arma.patrimonio} - ${arma.marca} ${arma.modelo}`,
+        await registerAudit({
           user,
-          'Armas',
-          'Informativo'
-        )
+          action: 'ATUALIZAR',
+          table_name: 'armas',
+          record_id: armaEditando.id,
+          description: `Arma atualizada: ${payload.patrimonio || payload.numero_serie}`
+        })
       } else {
-        arma = await cadastrarArma(payload)
+        arma = await cadastrarArma(payload, user)
 
-        await registerAudit(
-          'ARMA_CREATE',
-          `Arma cadastrada: ${arma.patrimonio} - ${arma.marca} ${arma.modelo}`,
+        await registerAudit({
           user,
-          'Armas',
-          'Informativo'
-        )
+          action: 'CADASTRAR',
+          table_name: 'armas',
+          record_id: arma?.id,
+          description: `Arma cadastrada: ${payload.patrimonio || payload.numero_serie}`
+        })
       }
 
-      setForm({
-        ...initialForm,
-        qr_code: gerarQrCodeArma()
-      })
+      setArmaSalva(arma)
+      await carregarFotos(arma.id)
 
-      onSaved()
+      return arma
     } catch (error) {
       console.error(error)
-      setErro(
-        isEditing
-          ? 'Erro ao editar arma.'
-          : 'Erro ao cadastrar arma. Verifique patrimônio, série e QR Code.'
-      )
+      setErro(error.message || 'Erro ao salvar arma.')
+      return null
     } finally {
       setSaving(false)
     }
   }
 
-  return (
-    <section className="armas-form-card">
-      <div className="armas-form-header">
-        <div>
-          <h2>{isEditing ? 'Editar Arma' : 'Nova Arma'}</h2>
-          <p>
-            {isEditing
-              ? 'Atualize os dados, fotos e informações do armamento.'
-              : 'Cadastre o armamento institucional. Após salvar, será possível adicionar fotos.'}
-          </p>
-        </div>
+  async function handleUploadFoto(file) {
+    const armaAtual = armaSalva || armaEditando
 
-        <button type="button" onClick={onCancel}>
-          Fechar
-        </button>
-      </div>
+    if (!file || !armaAtual?.id) return
 
-      {erro && <p className="armas-feedback armas-feedback-error">{erro}</p>}
+    setUploading(true)
+    setErro('')
 
-      <form className="armas-form" onSubmit={handleSubmit}>
-        <input
-          name="patrimonio"
-          placeholder="Patrimônio"
-          value={form.patrimonio}
-          onChange={handleChange}
-          required
-        />
+    try {
+      await uploadFotoArma(file, armaAtual.id, user)
+      await carregarFotos(armaAtual.id)
+    } catch (error) {
+      console.error(error)
+      setErro(error.message || 'Erro ao enviar foto.')
+    } finally {
+      setUploading(false)
+    }
+  }
 
-        <input
-          name="numero_serie"
-          placeholder="Número de série"
-          value={form.numero_serie}
-          onChange={handleChange}
-          required
-        />
+  async function handleExcluirFoto(foto) {
+    const armaAtual = armaSalva || armaEditando
 
-        <div className="armas-qr-field">
-          <input
-            name="qr_code"
-            placeholder="QR Code"
-            value={form.qr_code}
-            onChange={handleChange}
-          />
+    if (!foto || !armaAtual?.id) return
 
-          <button type="button" onClick={gerarNovoQrCode}>
-            Gerar QR
-          </button>
-        </div>
+    const confirmar = window.confirm('Deseja excluir esta foto?')
+    if (!confirmar) return
 
-        <input
-          name="especie"
-          placeholder="Espécie"
-          value={form.especie}
-          onChange={handleChange}
-          required
-        />
+    try {
+      await excluirFotoArma(foto)
+      await carregarFotos(armaAtual.id)
+    } catch (error) {
+      console.error(error)
+      setErro(error.message || 'Erro ao excluir foto.')
+    }
+  }
 
-        <input
-          name="marca"
-          placeholder="Marca"
-          value={form.marca}
-          onChange={handleChange}
-          required
-        />
+  function handleConcluir() {
+    if (onSaved) onSaved()
+  }
 
-        <input
-          name="modelo"
-          placeholder="Modelo"
-          value={form.modelo}
-          onChange={handleChange}
-          required
-        />
+  const etapaDados = (
+    <ArmaDados
+      form={form}
+      erro={erro}
+      onChange={handleChange}
+      onCancel={onCancel}
+    />
+  )
 
-        <input
-          name="calibre"
-          placeholder="Calibre"
-          value={form.calibre}
-          onChange={handleChange}
-          required
-        />
+  function renderEtapaFotos(armaWizard) {
+    const armaAtual = armaWizard || armaSalva
 
-        <input
-          name="acabamento"
-          placeholder="Acabamento"
-          value={form.acabamento}
-          onChange={handleChange}
-        />
+    return (
+      <div>
+        {erro && <div className="form-error">{erro}</div>}
 
-        <input
-          name="unidade"
-          placeholder="Unidade atual"
-          value={form.unidade}
-          onChange={handleChange}
-        />
-
-        <select name="status" value={form.status} onChange={handleChange}>
-          <option>Disponível</option>
-          <option>Em uso</option>
-          <option>Reserva</option>
-          <option>Manutenção</option>
-          <option>Extraviada</option>
-          <option>Baixada</option>
-        </select>
-
-        <textarea
-          name="observacoes"
-          placeholder="Observações"
-          value={form.observacoes}
-          onChange={handleChange}
-        />
-
-        {isEditing && (
-          <ArmaFotos
-            armaId={armaEditando.id}
-            user={user}
-            onFotosChange={handleFotosChange}
-          />
+        {armaAtual?.id && (
+          <div className="form-info">
+            Arma salva com sucesso. Agora você pode adicionar as fotos.
+          </div>
         )}
 
-        <div className="armas-form-actions">
-          <button type="button" onClick={onCancel}>
-            Cancelar
-          </button>
+        {armaAtual?.qr_code && (
+          <div className="form-info">
+            <strong>QR Code:</strong> {armaAtual.qr_code}
+          </div>
+        )}
 
-          <button type="submit" disabled={saving}>
-            {saving ? 'Salvando...' : isEditing ? 'Salvar alterações' : 'Salvar arma'}
-          </button>
-        </div>
-      </form>
-    </section>
+        <ArmaFotos
+          arma={armaAtual}
+          fotos={fotos}
+          uploading={uploading}
+          onUpload={handleUploadFoto}
+          onExcluir={handleExcluirFoto}
+          disabled={!armaAtual?.id}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <CadastroPatrimonioWizard
+      titulo={isEditing ? 'Editar Arma' : 'Cadastrar Arma'}
+      etapaDados={etapaDados}
+      etapaFotos={renderEtapaFotos}
+      onSalvarDados={handleSalvarDados}
+      onConcluir={handleConcluir}
+      salvando={saving}
+    />
   )
 }

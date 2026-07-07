@@ -1,0 +1,57 @@
+.sigmo-card{
+
+    background:white;
+
+    border-radius:14px;
+
+    border:1px solid #e5e7eb;
+
+    box-shadow:0 2px 8px rgba(0,0,0,.05);
+
+    overflow:hidden;
+}
+
+.sigmo-card-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:18px 22px;
+
+    border-bottom:1px solid #f1f5f9;
+}
+
+.sigmo-card-title{
+
+    margin:0;
+
+    font-size:18px;
+
+    font-weight:700;
+
+    color:#0f172a;
+}
+
+.sigmo-card-subtitle{
+
+    margin-top:4px;
+
+    color:#64748b;
+
+    font-size:14px;
+}
+
+.sigmo-card-actions{
+
+    display:flex;
+
+    gap:10px;
+}
+
+.sigmo-card-body{
+
+    padding:22px;
+}

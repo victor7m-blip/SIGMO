@@ -10,7 +10,7 @@ const colunasOrdenaveis = [
   { campo: 'modelo', label: 'Modelo' },
   { campo: 'calibre', label: 'Calibre' },
   { campo: 'numero_serie', label: 'Série' },
-  { campo: 'status', label: 'Status' },
+  { campo: 'status_operacional', label: 'Status' },
   { campo: 'unidade', label: 'Unidade' }
 ]
 
@@ -143,7 +143,9 @@ export default function ArmaTable({
                   <td data-label="Série">{arma.numero_serie || '-'}</td>
 
                   <td data-label="Status">
-                    <span className="armas-status">{arma.status || '-'}</span>
+                    <span className="armas-status">
+                      {arma.status_operacional || '-'}
+                    </span>
                   </td>
 
                   <td data-label="Unidade">{arma.unidade || '-'}</td>

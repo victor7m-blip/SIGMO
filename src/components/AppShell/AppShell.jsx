@@ -12,6 +12,7 @@ export default function AppShell({
 
   const menuItems = [
     { key: 'dashboard', label: 'Painel' },
+    { key: 'locais', label: 'Locais' },
     { key: 'materiais', label: 'Materiais' },
     { key: 'armas', label: 'Armas' },
     { key: 'policiais', label: 'Policiais' },

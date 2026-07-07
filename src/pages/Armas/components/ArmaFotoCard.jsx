@@ -1,7 +1,6 @@
 export default function ArmaFotoCard({
   foto,
   onExcluir,
-  onDefinirPrincipal,
   disabled = false
 }) {
   return (
@@ -13,19 +12,10 @@ export default function ArmaFotoCard({
       />
 
       <div className="arma-foto-acoes">
-        {foto.principal ? (
+        {foto.principal && (
           <span className="foto-principal-badge">
             ⭐ Principal
           </span>
-        ) : (
-          <button
-            type="button"
-            className="btn-secondary-small"
-            onClick={() => onDefinirPrincipal?.(foto)}
-            disabled={disabled}
-          >
-            Tornar principal
-          </button>
         )}
 
         <button

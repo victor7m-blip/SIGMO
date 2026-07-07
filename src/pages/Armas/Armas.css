@@ -224,3 +224,26 @@
     max-height: 96vh;
   }
 }
+
+/* Correção temporária - fotos da arma no formulário */
+
+.arma-fotos img,
+.arma-foto-card img,
+.armas-form img {
+  max-width: 180px;
+  max-height: 180px;
+  width: 180px;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+}
+
+.arma-fotos,
+.armas-fotos,
+.armas-fotos-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}

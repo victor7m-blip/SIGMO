@@ -1,0 +1,58 @@
+.sigmo-table-wrapper{
+
+    background:white;
+
+    border:1px solid #e5e7eb;
+
+    border-radius:12px;
+
+    overflow:auto;
+}
+
+.sigmo-table{
+
+    width:100%;
+
+    border-collapse:collapse;
+}
+
+.sigmo-table thead{
+
+    background:#f8fafc;
+}
+
+.sigmo-table th{
+
+    padding:14px 18px;
+
+    text-align:left;
+
+    font-size:13px;
+
+    color:#475569;
+
+    border-bottom:1px solid #e5e7eb;
+}
+
+.sigmo-table td{
+
+    padding:14px 18px;
+
+    border-bottom:1px solid #f1f5f9;
+
+    font-size:14px;
+}
+
+.sigmo-table tbody tr:hover{
+
+    background:#f8fafc;
+}
+
+.sigmo-table-empty{
+
+    text-align:center;
+
+    color:#64748b;
+
+    padding:40px;
+}

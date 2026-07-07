@@ -1,0 +1,41 @@
+.sigmo-badge{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    padding:4px 10px;
+
+    border-radius:999px;
+
+    font-size:12px;
+
+    font-weight:700;
+}
+
+.sigmo-badge.blue{
+    background:#dbeafe;
+    color:#1d4ed8;
+}
+
+.sigmo-badge.green{
+    background:#dcfce7;
+    color:#15803d;
+}
+
+.sigmo-badge.red{
+    background:#fee2e2;
+    color:#b91c1c;
+}
+
+.sigmo-badge.orange{
+    background:#ffedd5;
+    color:#c2410c;
+}
+
+.sigmo-badge.gray{
+    background:#e5e7eb;
+    color:#374151;
+}

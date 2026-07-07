@@ -1,0 +1,232 @@
+.movimentacoes-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.movimentacoes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.movimentacoes-header h1 {
+  margin: 0;
+  color: #061a32;
+}
+
+.movimentacoes-header p {
+  margin: 4px 0 0;
+  color: #667085;
+}
+
+.btn-primary {
+  border: 0;
+  border-radius: 8px;
+  background: #075eea;
+  color: #fff;
+  font-weight: 700;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.movimentacoes-filtros,
+.movimentacao-form,
+.patrimonio-picker,
+.carrinho-movimentacao,
+.movimentacao-table-wrap {
+  background: #fff;
+  border: 1px solid #d9e2f2;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.movimentacoes-filtros label,
+.movimentacao-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 700;
+  color: #061a32;
+}
+
+.movimentacoes-filtros select,
+.movimentacao-form input,
+.movimentacao-form select,
+.movimentacao-form textarea,
+.patrimonio-picker input,
+.patrimonio-picker select {
+  border: 1px solid #c8d4e8;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+}
+
+.movimentacoes-erro {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px;
+  font-weight: 700;
+}
+
+.movimentacao-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.movimentacao-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.movimentacao-form-header h2,
+.patrimonio-picker h3,
+.carrinho-movimentacao h3 {
+  margin: 0;
+  color: #061a32;
+}
+
+.movimentacao-form-header p {
+  margin: 4px 0 0;
+  color: #667085;
+}
+
+.movimentacao-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.movimentacao-observacoes textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.patrimonio-picker-filtros {
+  display: grid;
+  grid-template-columns: 1fr 220px 120px;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.patrimonio-picker-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #edf2f7;
+  padding: 10px 0;
+}
+
+.patrimonio-picker-item span {
+  display: block;
+  color: #667085;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.carrinho-movimentacao table,
+.movimentacao-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.carrinho-movimentacao th,
+.carrinho-movimentacao td,
+.movimentacao-table th,
+.movimentacao-table td {
+  border-bottom: 1px solid #edf2f7;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.carrinho-movimentacao th,
+.movimentacao-table th {
+  background: #f8fafc;
+  color: #061a32;
+}
+
+.movimentacao-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.movimentacao-table-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.movimentacao-table-actions button,
+.patrimonio-picker button,
+.movimentacao-actions button,
+.movimentacao-form-header button,
+.carrinho-movimentacao button {
+  border: 1px solid #c8d4e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #061a32;
+  font-weight: 700;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.status-pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.status-aguardando_aprovacao {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-aguardando_recebimento {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-finalizada {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-recusada,
+.status-cancelada {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-alteracao_solicitada {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+@media (max-width: 900px) {
+  .movimentacoes-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .movimentacao-grid,
+  .patrimonio-picker-filtros {
+    grid-template-columns: 1fr;
+  }
+
+  .movimentacao-table-wrap,
+  .carrinho-movimentacao {
+    overflow-x: auto;
+  }
+}

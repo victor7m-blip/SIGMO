@@ -84,8 +84,7 @@ export default function Armas({ user }) {
         sortBy,
         sortDirection
       })
-
-      setArmas(resultado.data || [])
+            setArmas(resultado.data || [])
       setTotal(resultado.total || 0)
     } catch (error) {
       console.error(error)

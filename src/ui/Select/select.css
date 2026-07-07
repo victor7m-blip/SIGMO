@@ -1,0 +1,40 @@
+.sigmo-select-wrapper{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
+.sigmo-select-wrapper.full{
+    width:100%;
+}
+
+.sigmo-select{
+
+    width:100%;
+
+    padding:11px 14px;
+
+    border:1px solid #d1d5db;
+
+    border-radius:10px;
+
+    font-size:14px;
+
+    background:white;
+
+    transition:.2s;
+}
+
+.sigmo-select:focus{
+
+    outline:none;
+
+    border-color:#2563eb;
+
+    box-shadow:0 0 0 3px rgba(37,99,235,.15);
+}
+
+.sigmo-select.error{
+
+    border-color:#dc2626;
+}
