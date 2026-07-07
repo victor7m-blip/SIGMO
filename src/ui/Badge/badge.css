@@ -1,17 +1,10 @@
 .sigmo-badge{
-
     display:inline-flex;
-
     align-items:center;
-
     justify-content:center;
-
     padding:4px 10px;
-
-    border-radius:999px;
-
-    font-size:12px;
-
+    border-radius:var(--radius-pill);
+    font-size:var(--text-xs);
     font-weight:700;
 }
 

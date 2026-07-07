@@ -9,32 +9,22 @@
 }
 
 .sigmo-select{
-
     width:100%;
-
     padding:11px 14px;
-
-    border:1px solid #d1d5db;
-
-    border-radius:10px;
-
-    font-size:14px;
-
-    background:white;
-
+    border:1px solid var(--color-border);
+    border-radius:var(--radius-md);
+    font-size:var(--text-sm);
+    background:var(--color-surface);
+    color:var(--color-text);
     transition:.2s;
 }
 
 .sigmo-select:focus{
-
     outline:none;
-
-    border-color:#2563eb;
-
+    border-color:var(--color-primary);
     box-shadow:0 0 0 3px rgba(37,99,235,.15);
 }
 
 .sigmo-select.error{
-
-    border-color:#dc2626;
+    border-color:var(--color-danger);
 }

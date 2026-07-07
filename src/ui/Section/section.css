@@ -1,40 +1,27 @@
 .sigmo-section{
-
     margin-bottom:28px;
 }
 
 .sigmo-section-header{
-
     display:flex;
-
     justify-content:space-between;
-
     align-items:center;
-
     margin-bottom:18px;
 }
 
 .sigmo-section-header h2{
-
     margin:0;
-
-    font-size:24px;
-
-    color:#0f172a;
+    font-size:var(--text-xl);
+    color:var(--color-text);
 }
 
 .sigmo-section-header p{
-
     margin-top:6px;
-
-    color:#64748b;
-
-    font-size:14px;
+    color:var(--color-text-secondary);
+    font-size:var(--text-sm);
 }
 
 .sigmo-section-actions{
-
     display:flex;
-
     gap:10px;
 }
