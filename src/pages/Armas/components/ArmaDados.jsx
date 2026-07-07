@@ -1,118 +1,119 @@
-const STATUS_OPERACIONAIS = [
-  'RESERVA',
-  'PAGO',
-  'CAUTELADO',
-  'RECOLHIDO',
-  'APREENDIDO',
-  'MANUTENÇÃO',
-  'BAIXADO',
-  'BAIXADO DEFINITIVAMENTE',
-  'PROCESSO DE DESCARGA',
-  'DESCARREGADO'
+import SigmoInput from '../../../ui/components/SigmoInput'
+import SigmoSelect from '../../../ui/components/SigmoSelect'
+import SigmoTextarea from '../../../ui/components/SigmoTextarea'
+import PatrimonioFormGrid from '../../../components/Patrimonio/PatrimonioFormGrid'
+
+const statusOptions = [
+  'Disponível',
+  'Cautelado',
+  'Recolhido',
+  'Baixado',
+  'Apreendido'
 ]
 
-export default function ArmaDados({
-  form,
-  erro,
-  onChange,
-  onCancel
-}) {
+const especieOptions = [
+  'Pistola',
+  'Revólver',
+  'Espingarda',
+  'Carabina',
+  'Fuzil',
+  'Metralhadora',
+  'Submetralhadora',
+  'Outro'
+]
+
+export default function ArmaDados({ form, onChange, disabled = false }) {
   return (
-    <div className="arma-form">
-      {erro && <div className="form-error">{erro}</div>}
+    <>
+      <PatrimonioFormGrid>
+        <SigmoInput
+          label="Patrimônio"
+          name="patrimonio"
+          value={form.patrimonio}
+          onChange={onChange}
+          required
+          disabled={disabled}
+        />
 
-      <div className="form-grid">
-        <label>
-          Patrimônio
-          <input name="patrimonio" value={form.patrimonio} onChange={onChange} required />
-        </label>
+        <SigmoInput
+          label="Número de série"
+          name="numero_serie"
+          value={form.numero_serie}
+          onChange={onChange}
+          required
+          disabled={disabled}
+        />
 
-        <label>
-          Nº de série
-          <input name="numero_serie" value={form.numero_serie} onChange={onChange} />
-        </label>
+        <SigmoSelect
+          label="Espécie"
+          name="especie"
+          value={form.especie}
+          onChange={onChange}
+          options={especieOptions}
+          required
+          disabled={disabled}
+        />
 
-        <label>
-          Espécie
-          <input name="especie" value={form.especie} onChange={onChange} />
-        </label>
+        <SigmoInput
+          label="Marca"
+          name="marca"
+          value={form.marca}
+          onChange={onChange}
+          disabled={disabled}
+        />
 
-        <label>
-          Marca
-          <input name="marca" value={form.marca} onChange={onChange} />
-        </label>
+        <SigmoInput
+          label="Modelo"
+          name="modelo"
+          value={form.modelo}
+          onChange={onChange}
+          disabled={disabled}
+        />
 
-        <label>
-          Modelo
-          <input name="modelo" value={form.modelo} onChange={onChange} />
-        </label>
+        <SigmoInput
+          label="Calibre"
+          name="calibre"
+          value={form.calibre}
+          onChange={onChange}
+          disabled={disabled}
+        />
 
-        <label>
-          Calibre
-          <input name="calibre" value={form.calibre} onChange={onChange} />
-        </label>
+        <SigmoInput
+          label="Acabamento"
+          name="acabamento"
+          value={form.acabamento}
+          onChange={onChange}
+          disabled={disabled}
+        />
 
-        <label>
-          Acabamento
-          <input name="acabamento" value={form.acabamento} onChange={onChange} />
-        </label>
+        <SigmoInput
+          label="Unidade"
+          name="unidade"
+          value={form.unidade}
+          onChange={onChange}
+          disabled={disabled}
+        />
 
-        <label>
-          Unidade
-          <input name="unidade" value={form.unidade} onChange={onChange} />
-        </label>
+        <SigmoSelect
+          label="Status"
+          name="status"
+          value={form.status}
+          onChange={onChange}
+          options={statusOptions}
+          required
+          disabled={disabled}
+        />
+      </PatrimonioFormGrid>
 
-        <label>
-          Local atual
-          <input
-            name="local_atual"
-            value={form.local_atual}
-            onChange={onChange}
-            placeholder="Ex.: COFRE DA RESERVA"
-          />
-        </label>
-
-        <label>
-          Responsável atual
-          <input
-            name="responsavel_atual"
-            value={form.responsavel_atual}
-            onChange={onChange}
-            placeholder="Será automático no Motor de Movimentação"
-          />
-        </label>
-
-        <label>
-          Status operacional
-          <select
-            name="status_operacional"
-            value={form.status_operacional}
-            onChange={onChange}
-          >
-            {STATUS_OPERACIONAIS.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <label>
-        Observações
-        <textarea
+      <div style={{ marginTop: 14 }}>
+        <SigmoTextarea
+          label="Observações"
           name="observacoes"
           value={form.observacoes}
           onChange={onChange}
-          rows={4}
+          disabled={disabled}
         />
-      </label>
-
-      <div className="form-actions">
-        <button type="button" className="btn-secondary" onClick={onCancel}>
-          Cancelar
-        </button>
       </div>
-    </div>
+    </>
   )
 }

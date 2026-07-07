@@ -1,0 +1,19 @@
+.sigmo-empty {
+  background: #f9fafb;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 24px;
+  text-align: center;
+  color: #475569;
+}
+
+.sigmo-empty strong {
+  display: block;
+  font-size: 16px;
+  color: #111827;
+}
+
+.sigmo-empty p {
+  margin: 8px 0 0;
+  font-size: 14px;
+}

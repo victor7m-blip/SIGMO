@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { gerarImagemQrCode } from '../../../services/qrCodeService'
+import './ArmaViewModal.css'
 
 export default function ArmaViewModal({
   arma,
   fotos = [],
   onClose,
+  onEdit,
+  onDelete,
   onPrintFicha,
   onPrintEtiqueta
 }) {
@@ -37,10 +40,12 @@ export default function ArmaViewModal({
 
   if (!arma) return null
 
+  const fotoPrincipal = fotoSelecionada?.url || arma.foto_url || ''
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-card modal-large">
-        <div className="modal-header">
+    <div className="arma-view-overlay">
+      <div className="arma-view-card">
+        <header className="arma-view-header">
           <div>
             <h2>Detalhes da Arma</h2>
             <p>
@@ -48,144 +53,105 @@ export default function ArmaViewModal({
             </p>
           </div>
 
-          <button type="button" className="modal-close" onClick={onClose}>
+          <button type="button" className="arma-view-close" onClick={onClose}>
             ×
           </button>
-        </div>
+        </header>
 
-        <div className="modal-body">
-          <div className="arma-modal-layout">
-            <aside className="arma-modal-media">
-              <div className="arma-modal-foto-principal">
-                {fotoSelecionada?.url || arma.foto_url ? (
-                  <img
-                    src={fotoSelecionada?.url || arma.foto_url}
-                    alt="Foto principal da arma"
-                  />
-                ) : (
-                  <div className="arma-modal-sem-foto">
-                    🔫
-                    <span>Sem foto</span>
-                  </div>
-                )}
-              </div>
-
-              {fotos.length > 0 && (
-                <div className="arma-modal-miniaturas">
-                  {fotos.map((foto) => (
-                    <button
-                      key={foto.id}
-                      type="button"
-                      className={
-                        fotoSelecionada?.id === foto.id
-                          ? 'arma-modal-miniatura active'
-                          : 'arma-modal-miniatura'
-                      }
-                      onClick={() => setFotoSelecionada(foto)}
-                    >
-                      <img src={foto.url} alt="Miniatura da arma" />
-                    </button>
-                  ))}
+        <div className="arma-view-body">
+          <aside className="arma-view-media">
+            <div className="arma-view-foto-principal">
+              {fotoPrincipal ? (
+                <img
+                  src={fotoPrincipal}
+                  alt="Foto principal da arma"
+                />
+              ) : (
+                <div className="arma-view-sem-foto">
+                  🔫
+                  <span>Sem foto</span>
                 </div>
               )}
+            </div>
 
-              {qrImagem && (
-                <div className="arma-modal-qr">
-                  <strong>QR Code</strong>
-                  <img src={qrImagem} alt="QR Code da arma" />
-                  <span>{arma.qr_code}</span>
-                </div>
-              )}
-            </aside>
-
-            <section className="arma-modal-info">
-              <div className="details-grid">
-                <div>
-                  <strong>Patrimônio</strong>
-                  <span>{arma.patrimonio || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Número de Série</strong>
-                  <span>{arma.numero_serie || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Espécie</strong>
-                  <span>{arma.especie || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Marca</strong>
-                  <span>{arma.marca || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Modelo</strong>
-                  <span>{arma.modelo || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Calibre</strong>
-                  <span>{arma.calibre || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Acabamento</strong>
-                  <span>{arma.acabamento || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Unidade</strong>
-                  <span>{arma.unidade || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>Status</strong>
-                  <span>{arma.status_operacional || '-'}</span>
-                </div>
-
-                <div>
-                  <strong>QR Code</strong>
-                  <span className="arma-modal-code">
-                    {arma.qr_code || '-'}
-                  </span>
-                </div>
-
-                <div className="details-full">
-                  <strong>Observações</strong>
-                  <span>{arma.observacoes || '-'}</span>
-                </div>
+            {fotos.length > 0 && (
+              <div className="arma-view-miniaturas">
+                {fotos.map((foto) => (
+                  <button
+                    key={foto.id}
+                    type="button"
+                    className={
+                      fotoSelecionada?.id === foto.id
+                        ? 'arma-view-miniatura active'
+                        : 'arma-view-miniatura'
+                    }
+                    onClick={() => setFotoSelecionada(foto)}
+                  >
+                    <img src={foto.url} alt="Miniatura da arma" />
+                  </button>
+                ))}
               </div>
-            </section>
-          </div>
+            )}
+
+            {qrImagem && (
+              <div className="arma-view-qr">
+                <strong>QR Code</strong>
+                <img src={qrImagem} alt="QR Code da arma" />
+                <span>{arma.qr_code}</span>
+              </div>
+            )}
+          </aside>
+
+          <section className="arma-view-info">
+            <div className="arma-view-grid">
+              <div><strong>Patrimônio</strong><span>{arma.patrimonio || '-'}</span></div>
+              <div><strong>Número de Série</strong><span>{arma.numero_serie || '-'}</span></div>
+              <div><strong>Espécie</strong><span>{arma.especie || '-'}</span></div>
+              <div><strong>Marca</strong><span>{arma.marca || '-'}</span></div>
+              <div><strong>Modelo</strong><span>{arma.modelo || '-'}</span></div>
+              <div><strong>Calibre</strong><span>{arma.calibre || '-'}</span></div>
+              <div><strong>Acabamento</strong><span>{arma.acabamento || '-'}</span></div>
+              <div><strong>Unidade</strong><span>{arma.unidade || '-'}</span></div>
+              <div><strong>Status</strong><span>{arma.status_operacional || arma.status || '-'}</span></div>
+              <div><strong>QR Code</strong><span>{arma.qr_code || '-'}</span></div>
+
+              <div className="arma-view-full">
+                <strong>Observações</strong>
+                <span>{arma.observacoes || '-'}</span>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <div className="modal-actions">
+        <footer className="arma-view-actions">
           {onPrintFicha && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => onPrintFicha(arma)}
-            >
+            <button type="button" className="btn-secondary" onClick={() => onPrintFicha(arma)}>
               Imprimir ficha
             </button>
           )}
 
           {onPrintEtiqueta && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => onPrintEtiqueta(arma)}
-            >
+            <button type="button" className="btn-secondary" onClick={() => onPrintEtiqueta(arma)}>
               Imprimir etiqueta
+            </button>
+          )}
+
+          {onEdit && (
+            <button type="button" className="btn-secondary" onClick={() => onEdit(arma)}>
+              Editar
+            </button>
+          )}
+
+          {onDelete && (
+            <button type="button" className="btn-danger-small" onClick={() => onDelete(arma)}>
+              Excluir
             </button>
           )}
 
           <button type="button" className="btn-secondary" onClick={onClose}>
             Fechar
           </button>
-        </div>
+        </footer>
       </div>
     </div>
   )

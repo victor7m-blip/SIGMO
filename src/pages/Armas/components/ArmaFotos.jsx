@@ -1,4 +1,5 @@
 import ArmaFotoCard from './ArmaFotoCard'
+import './ArmaFotos.css'
 
 const MAX_FOTOS = 5
 

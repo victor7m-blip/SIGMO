@@ -1,0 +1,25 @@
+.patrimonio-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.patrimonio-toolbar input {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-size: 14px;
+}
+
+.patrimonio-toolbar input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+@media (max-width: 768px) {
+  .patrimonio-toolbar {
+    flex-direction: column;
+  }
+}

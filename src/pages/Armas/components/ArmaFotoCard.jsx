@@ -1,3 +1,5 @@
+import './ArmaFotoCard.css'
+
 export default function ArmaFotoCard({
   foto,
   onExcluir,
@@ -6,10 +8,15 @@ export default function ArmaFotoCard({
   return (
     <div className={`arma-foto-card ${foto.principal ? 'principal' : ''}`}>
       <img
-        src={foto.url}
-        alt="Foto da arma"
-        loading="lazy"
-      />
+  src={foto.url}
+  alt="Foto da arma"
+  loading="lazy"
+  style={{
+    width: '100%',
+    height: '180px',
+    objectFit: 'cover'
+  }}
+/>
 
       <div className="arma-foto-acoes">
         {foto.principal && (

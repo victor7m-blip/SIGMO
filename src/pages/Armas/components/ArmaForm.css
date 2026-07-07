@@ -1,0 +1,71 @@
+.arma-form-card {
+  margin-bottom: 18px;
+}
+
+.arma-form-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.arma-form-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+}
+
+.arma-form-header p {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.arma-form-steps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.arma-form-steps span {
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #374151;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.arma-form-steps span.active {
+  background: #1d4ed8;
+  color: white;
+}
+
+.arma-form-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.arma-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+@media (max-width: 768px) {
+  .arma-form-header {
+    flex-direction: column;
+  }
+
+  .arma-form-actions {
+    flex-direction: column-reverse;
+  }
+}

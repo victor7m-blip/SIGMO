@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react'
-
-import CadastroPatrimonioWizard from '../../../components/CadastroPatrimonioWizard/CadastroPatrimonioWizard'
+import SigmoButton from '../../../ui/components/SigmoButton'
+import SigmoCard from '../../../ui/components/SigmoCard'
 import ArmaDados from './ArmaDados'
 import ArmaFotos from './ArmaFotos'
-
 import { cadastrarArma, atualizarArma } from '../../../services/armasService'
-import {
-  uploadFotoArma,
-  listarFotosArma,
-  excluirFotoArma
-} from '../../../services/armasFotosService'
 import { registerAudit } from '../../../services/auditoriaService'
+import './ArmaForm.css'
 
 const initialForm = {
   patrimonio: '',
@@ -21,39 +16,22 @@ const initialForm = {
   calibre: '',
   acabamento: '',
   unidade: '',
-  local_atual: 'COFRE DA RESERVA',
-  local_atual_id: null,
-  responsavel_atual: '',
-  responsavel_atual_id: null,
-  status_operacional: 'RESERVA',
-  observacoes: '',
-  qr_code: ''
-}
-
-function normalizarStatusOperacional(status) {
-  if (!status) return 'RESERVA'
-
-  const valor = String(status).trim().toUpperCase()
-
-  if (valor === 'DISPONÍVEL' || valor === 'DISPONIVEL') {
-    return 'RESERVA'
-  }
-
-  return valor
+  status: 'Disponível',
+  observacoes: ''
 }
 
 export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
   const [form, setForm] = useState(initialForm)
   const [armaSalva, setArmaSalva] = useState(null)
-  const [fotos, setFotos] = useState([])
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [erro, setErro] = useState('')
+  const [etapa, setEtapa] = useState('dados')
 
   const isEditing = Boolean(armaEditando?.id)
+  const armaAtual = armaSalva || armaEditando
 
   useEffect(() => {
-    if (armaEditando?.id) {
+    if (armaEditando) {
       setForm({
         patrimonio: armaEditando.patrimonio || '',
         numero_serie: armaEditando.numero_serie || '',
@@ -63,26 +41,18 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
         calibre: armaEditando.calibre || '',
         acabamento: armaEditando.acabamento || '',
         unidade: armaEditando.unidade || '',
-        local_atual: armaEditando.local_atual || 'COFRE DA RESERVA',
-        local_atual_id: armaEditando.local_atual_id || null,
-        responsavel_atual: armaEditando.responsavel_atual || '',
-        responsavel_atual_id: armaEditando.responsavel_atual_id || null,
-        status_operacional: normalizarStatusOperacional(
-          armaEditando.status_operacional || armaEditando.status
-        ),
-        observacoes: armaEditando.observacoes || '',
-        qr_code: armaEditando.qr_code || ''
+        status: armaEditando.status || 'Disponível',
+        observacoes: armaEditando.observacoes || ''
       })
 
       setArmaSalva(armaEditando)
-      carregarFotos(armaEditando.id)
-      return
+    } else {
+      setForm(initialForm)
+      setArmaSalva(null)
     }
 
-    setForm(initialForm)
-    setArmaSalva(null)
-    setFotos([])
     setErro('')
+    setEtapa('dados')
   }, [armaEditando])
 
   function handleChange(e) {
@@ -94,169 +64,129 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
     }))
   }
 
-  function gerarQrCodeAutomatico() {
-    const base = form.patrimonio || form.numero_serie || Date.now()
-    return `SIGMO-ARMA-${base}`.toUpperCase()
-  }
-
-  async function carregarFotos(armaId) {
-    if (!armaId) return
-
-    try {
-      const lista = await listarFotosArma(armaId)
-      setFotos(lista || [])
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
-  async function handleSalvarDados() {
-    if (saving) return null
-
-    setErro('')
+  async function handleSalvarDados(e) {
+    e?.preventDefault()
     setSaving(true)
+    setErro('')
 
     try {
-      const payload = {
-  patrimonio: form.patrimonio.trim(),
-  numero_serie: form.numero_serie.trim(),
-  especie: form.especie.trim(),
-  marca: form.marca.trim(),
-  modelo: form.modelo.trim(),
-  calibre: form.calibre.trim(),
-  acabamento: form.acabamento.trim(),
-  unidade: form.unidade.trim(),
-  local_atual: form.local_atual.trim(),
-  status: normalizarStatusOperacional(form.status_operacional),
-  observacoes: form.observacoes.trim(),
-  qr_code: form.qr_code?.trim() || gerarQrCodeAutomatico()
-}
+      let data
 
-      let arma
-
-      if (isEditing) {
-        arma = await atualizarArma(armaEditando.id, payload, user)
+      if (isEditing || armaSalva?.id) {
+        data = await atualizarArma(armaAtual.id, form, user)
 
         await registerAudit({
           user,
-          action: 'ATUALIZAR',
-          table_name: 'armas',
-          record_id: armaEditando.id,
-          description: `Arma atualizada: ${payload.patrimonio || payload.numero_serie}`
+          action: 'ATUALIZAR_ARMA',
+          tableName: 'armas',
+          recordId: armaAtual.id,
+          description: `Atualizou arma ${form.patrimonio || form.numero_serie}`
         })
       } else {
-        arma = await cadastrarArma(payload, user)
+        data = await cadastrarArma(form, user)
 
         await registerAudit({
           user,
-          action: 'CADASTRAR',
-          table_name: 'armas',
-          record_id: arma?.id,
-          description: `Arma cadastrada: ${payload.patrimonio || payload.numero_serie}`
+          action: 'CADASTRAR_ARMA',
+          tableName: 'armas',
+          recordId: data?.id,
+          description: `Cadastrou arma ${form.patrimonio || form.numero_serie}`
         })
       }
 
-      setArmaSalva(arma)
-      await carregarFotos(arma.id)
-
-      return arma
+      const salva = data || armaAtual
+      setArmaSalva(salva)
+      setEtapa('fotos')
     } catch (error) {
       console.error(error)
       setErro(error.message || 'Erro ao salvar arma.')
-      return null
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleUploadFoto(file) {
-    const armaAtual = armaSalva || armaEditando
-
-    if (!file || !armaAtual?.id) return
-
-    setUploading(true)
-    setErro('')
-
-    try {
-      await uploadFotoArma(file, armaAtual.id, user)
-      await carregarFotos(armaAtual.id)
-    } catch (error) {
-      console.error(error)
-      setErro(error.message || 'Erro ao enviar foto.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  async function handleExcluirFoto(foto) {
-    const armaAtual = armaSalva || armaEditando
-
-    if (!foto || !armaAtual?.id) return
-
-    const confirmar = window.confirm('Deseja excluir esta foto?')
-    if (!confirmar) return
-
-    try {
-      await excluirFotoArma(foto)
-      await carregarFotos(armaAtual.id)
-    } catch (error) {
-      console.error(error)
-      setErro(error.message || 'Erro ao excluir foto.')
-    }
-  }
-
-  function handleConcluir() {
-    if (onSaved) onSaved()
-  }
-
-  const etapaDados = (
-    <ArmaDados
-      form={form}
-      erro={erro}
-      onChange={handleChange}
-      onCancel={onCancel}
-    />
-  )
-
-  function renderEtapaFotos(armaWizard) {
-    const armaAtual = armaWizard || armaSalva
-
-    return (
-      <div>
-        {erro && <div className="form-error">{erro}</div>}
-
-        {armaAtual?.id && (
-          <div className="form-info">
-            Arma salva com sucesso. Agora você pode adicionar as fotos.
-          </div>
-        )}
-
-        {armaAtual?.qr_code && (
-          <div className="form-info">
-            <strong>QR Code:</strong> {armaAtual.qr_code}
-          </div>
-        )}
-
-        <ArmaFotos
-          arma={armaAtual}
-          fotos={fotos}
-          uploading={uploading}
-          onUpload={handleUploadFoto}
-          onExcluir={handleExcluirFoto}
-          disabled={!armaAtual?.id}
-        />
-      </div>
-    )
+  function handleFinalizar() {
+    onSaved?.()
   }
 
   return (
-    <CadastroPatrimonioWizard
-      titulo={isEditing ? 'Editar Arma' : 'Cadastrar Arma'}
-      etapaDados={etapaDados}
-      etapaFotos={renderEtapaFotos}
-      onSalvarDados={handleSalvarDados}
-      onConcluir={handleConcluir}
-      salvando={saving}
-    />
+    <SigmoCard className="arma-form-card">
+      <form onSubmit={handleSalvarDados}>
+        <div className="arma-form-header">
+          <div>
+            <h2>{isEditing ? 'Editar arma' : 'Nova arma'}</h2>
+            <p>
+              {etapa === 'dados'
+                ? 'Preencha os dados principais da arma.'
+                : 'Adicione fotos, confira os dados e finalize o cadastro.'}
+            </p>
+          </div>
+
+          <div className="arma-form-steps">
+            <span className={etapa === 'dados' ? 'active' : ''}>1 Dados</span>
+            <span className={etapa === 'fotos' ? 'active' : ''}>2 Fotos</span>
+          </div>
+        </div>
+
+        {erro && <div className="arma-form-error">{erro}</div>}
+
+        {etapa === 'dados' && (
+          <>
+            <ArmaDados
+              form={form}
+              onChange={handleChange}
+              disabled={saving}
+            />
+
+            <div className="arma-form-actions">
+              <SigmoButton
+                type="button"
+                variant="secondary"
+                onClick={onCancel}
+                disabled={saving}
+              >
+                Cancelar
+              </SigmoButton>
+
+              <SigmoButton
+                type="submit"
+                disabled={saving}
+              >
+                {saving ? 'Salvando...' : 'Seguinte'}
+              </SigmoButton>
+            </div>
+          </>
+        )}
+
+        {etapa === 'fotos' && (
+          <>
+            <ArmaFotos
+              user={user}
+              armaId={armaAtual?.id}
+            />
+
+            <div className="arma-form-actions">
+              <SigmoButton
+                type="button"
+                variant="secondary"
+                onClick={() => setEtapa('dados')}
+                disabled={saving}
+              >
+                Voltar aos dados
+              </SigmoButton>
+
+              <SigmoButton
+                type="button"
+                variant="success"
+                onClick={handleFinalizar}
+                disabled={saving}
+              >
+                Finalizar
+              </SigmoButton>
+            </div>
+          </>
+        )}
+      </form>
+    </SigmoCard>
   )
 }

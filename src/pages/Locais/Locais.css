@@ -1,289 +1,144 @@
 .locais-page {
-  padding: 24px;
-}
-
-.locais-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.locais-header h1 {
-  margin: 0;
-  font-size: 28px;
-  color: #111827;
-}
-
-.locais-header p {
-  margin: 4px 0 0;
-  color: #6b7280;
-}
-
-.btn-primary {
-  background: #111827;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  padding: 11px 18px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-}
-
-.locais-alerta {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 16px;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .locais-filtros {
   display: grid;
-  grid-template-columns: 1fr 220px;
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: 1fr 240px;
+  gap: 16px;
+  align-items: end;
 }
 
-.locais-filtros input,
-.locais-filtros select {
+.locais-select,
+.locais-textarea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.locais-select span,
+.locais-textarea span {
+  font-size: .9rem;
+  opacity: .8;
+}
+
+.locais-select select {
   height: 42px;
-  border: 1px solid #d1d5db;
+  padding: 0 14px;
   border-radius: 10px;
-  padding: 0 12px;
-  background: #fff;
+  border: 1px solid rgba(255,255,255,.08);
+  background: #181818;
+  color: white;
 }
 
-.locais-card {
-  background: #fff;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid #e5e7eb;
+.locais-textarea textarea {
+  min-height: 96px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: #181818;
+  color: white;
+  resize: vertical;
 }
 
-.locais-tabela {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.locais-tabela th {
-  background: #f9fafb;
-  text-align: left;
-  padding: 14px;
-  color: #374151;
-  font-size: 13px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.locais-tabela td {
-  padding: 14px;
-  border-bottom: 1px solid #f3f4f6;
-  color: #111827;
-  vertical-align: middle;
-}
-
-.locais-tabela td strong {
-  display: block;
-  margin-bottom: 3px;
-}
-
-.locais-tabela td span {
-  display: block;
-  color: #6b7280;
-  font-size: 12px;
-}
-
-.status-badge {
-  display: inline-flex !important;
-  width: fit-content;
-  border-radius: 999px;
+.local-badge {
+  display: inline-flex;
   padding: 5px 10px;
-  font-size: 12px !important;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  font-size: .78rem;
   font-weight: 700;
 }
 
-.status-badge.ativo {
-  background: #dcfce7;
-  color: #166534;
+.status {
+  display: inline-flex;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
 }
 
-.status-badge.inativo {
-  background: #fee2e2;
-  color: #991b1b;
+.status.ativo {
+  background: rgba(46, 204, 113, .16);
+  color: #2ecc71;
 }
 
-.acoes-tabela {
+.status.inativo {
+  background: rgba(231, 76, 60, .16);
+  color: #e74c3c;
+}
+
+.locais-acoes {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.acoes-tabela button {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 8px;
-  padding: 7px 10px;
-  cursor: pointer;
+.locais-alerta {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(231, 76, 60, .15);
+  color: #ff7675;
+  font-weight: 700;
 }
 
-.acoes-tabela button:hover {
-  background: #f9fafb;
-}
-
-.acoes-tabela .danger {
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
-.locais-vazio {
-  padding: 24px;
-  color: #6b7280;
-}
-
-.locais-modal-overlay {
+.locais-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(17, 24, 39, 0.55);
+  background: rgba(0,0,0,.62);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  z-index: 999;
+  padding: 24px;
+  z-index: 99;
 }
 
 .locais-modal {
-  width: 100%;
-  max-width: 520px;
-  background: #fff;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  width: min(720px, 100%);
 }
 
-.locais-modal header,
-.locais-modal footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 20px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.locais-modal footer {
-  border-bottom: none;
-  border-top: 1px solid #e5e7eb;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.locais-modal h2 {
+.locais-modal-header h2 {
   margin: 0;
-  font-size: 20px;
 }
 
-.locais-modal header button {
-  border: none;
-  background: transparent;
-  font-size: 26px;
-  cursor: pointer;
-}
-
-.locais-modal footer button {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 10px;
-  padding: 10px 16px;
-  cursor: pointer;
-}
-
-.locais-modal footer .btn-primary {
-  background: #111827;
-  color: #fff;
-  border-color: #111827;
+.locais-modal-header p {
+  margin-top: 6px;
+  opacity: .7;
 }
 
 .locais-form {
-  padding: 20px;
   display: grid;
-  gap: 14px;
-}
-
-.locais-form label {
-  display: grid;
-  gap: 6px;
-  color: #374151;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.locais-form input,
-.locais-form select,
-.locais-form textarea {
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  padding: 11px 12px;
-  font: inherit;
-  background: #fff;
-}
-
-.locais-form textarea {
-  min-height: 90px;
-  resize: vertical;
+  gap: 16px;
+  margin-top: 18px;
 }
 
 .locais-checks {
-  display: grid;
-  gap: 8px;
-  margin-top: 4px;
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
 }
 
 .locais-checks label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
 }
 
-.locais-checks input {
-  width: auto;
+.locais-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
 }
 
 @media (max-width: 760px) {
-  .locais-page {
-    padding: 16px;
-  }
-
-  .locais-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .locais-filtros {
     grid-template-columns: 1fr;
   }
 
-  .locais-card {
-    overflow-x: auto;
+  .locais-modal-backdrop {
+    align-items: flex-start;
   }
-
-  .locais-tabela {
-    min-width: 760px;
-  }
-}
-
-.tipo-badge {
-  display: inline-flex;
-  width: fit-content;
-  border-radius: 999px;
-  padding: 5px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  background: #eef2ff;
-  color: #3730a3;
 }

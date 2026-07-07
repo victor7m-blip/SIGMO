@@ -1,15 +1,19 @@
-.materiais-page {
-  width: 100%;
-  min-height: 100%;
-  background: #061a32;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  overflow: hidden;
+.materiais-page{
+
+display:flex;
+
+flex-direction:column;
+
+gap:24px;
+
 }
 
-.materiais-image {
-  width: 100%;
-  height: auto;
-  display: block;
+.materiais-image{
+
+width:100%;
+
+display:block;
+
+border-radius:12px;
+
 }

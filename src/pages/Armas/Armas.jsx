@@ -1,287 +1,204 @@
 import { useEffect, useMemo, useState } from 'react'
+import SigmoPage from '../../ui/layout/SigmoPage'
+import SigmoButton from '../../ui/components/SigmoButton'
+import PatrimonioToolbar from '../../components/Patrimonio/PatrimonioToolbar'
+import PatrimonioList from '../../components/Patrimonio/PatrimonioList'
+import ArmaForm from './components/ArmaForm'
+import ArmaViewModal from './components/ArmaViewModal'
+import { listarArmas, excluirArma } from '../../services/armasService'
+import { listarFotosArma } from '../../services/armasFotosService'
 import './Armas.css'
 
-import { ArmaFilters, ArmaForm, ArmaTable } from './components'
-import ArmaViewModal from './components/ArmaViewModal'
-import { listarArmas } from '../../services/armasService'
-import { listarFotosArma } from '../../services/armasFotosService'
-
-const initialFilters = {
-  patrimonio: '',
-  numero_serie: '',
-  qr_code: '',
-  especie: '',
-  calibre: '',
-  status: '',
-  unidade: ''
-}
-
-const LIMITE_POR_PAGINA = 20
-
 export default function Armas({ user }) {
+  const [armas, setArmas] = useState([])
+  const [busca, setBusca] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [armaEditando, setArmaEditando] = useState(null)
   const [armaVisualizando, setArmaVisualizando] = useState(null)
-  const [fotosModal, setFotosModal] = useState([])
-
-  const [armas, setArmas] = useState([])
-  const [filters, setFilters] = useState(initialFilters)
-  const [debouncedFilters, setDebouncedFilters] = useState(initialFilters)
-
-  const [pagina, setPagina] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState('')
+  const [fotosVisualizacao, setFotosVisualizacao] = useState([])
   const [reloadKey, setReloadKey] = useState(0)
-
-  const [sortBy, setSortBy] = useState('patrimonio')
-  const [sortDirection, setSortDirection] = useState('asc')
-
-  const totalPaginas = Math.ceil(total / LIMITE_POR_PAGINA) || 1
-
-  const registroInicial =
-    total === 0 ? 0 : (pagina - 1) * LIMITE_POR_PAGINA + 1
-
-  const registroFinal = Math.min(
-    pagina * LIMITE_POR_PAGINA,
-    total
-  )
-
-  const paginasVisiveis = useMemo(() => {
-    const paginas = []
-    const inicio = Math.max(1, pagina - 2)
-    const fim = Math.min(totalPaginas, pagina + 2)
-
-    for (let i = inicio; i <= fim; i++) {
-      paginas.push(i)
-    }
-
-    return paginas
-  }, [pagina, totalPaginas])
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedFilters(filters)
-      setPagina(1)
-    }, 400)
-
-    return () => clearTimeout(timer)
-  }, [filters])
 
   useEffect(() => {
     carregarArmas()
-  }, [debouncedFilters, pagina, reloadKey, sortBy, sortDirection])
+  }, [reloadKey])
 
   async function carregarArmas() {
-    try {
-      setLoading(true)
-      setErro('')
+    setLoading(true)
+    setErro('')
 
+    try {
       const resultado = await listarArmas({
-        filtros: debouncedFilters,
-        pagina,
-        limite: LIMITE_POR_PAGINA,
-        sortBy,
-        sortDirection
+        pagina: 1,
+        limite: 500,
+        sortBy: 'created_at',
+        sortDirection: 'desc'
       })
-            setArmas(resultado.data || [])
-      setTotal(resultado.total || 0)
+
+      setArmas(resultado?.data || [])
     } catch (error) {
       console.error(error)
-      setErro('Erro ao carregar armas.')
+      setErro(error.message || 'Erro ao carregar armas.')
     } finally {
       setLoading(false)
     }
   }
+
+  const armasFiltradas = useMemo(() => {
+    const termo = busca.trim().toUpperCase()
+
+    if (!termo) return armas
+
+    return armas.filter((arma) => {
+      const texto = [
+        arma.patrimonio,
+        arma.numero_serie,
+        arma.qr_code,
+        arma.especie,
+        arma.marca,
+        arma.modelo,
+        arma.calibre,
+        arma.status,
+        arma.status_operacional,
+        arma.unidade,
+        arma.local_atual
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toUpperCase()
+
+      return texto.includes(termo)
+    })
+  }, [armas, busca])
 
   function handleNovaArma() {
     setArmaEditando(null)
     setShowForm(true)
   }
 
-  async function handleView(arma) {
-    try {
-      setArmaVisualizando(arma)
-      setFotosModal([])
+  async function handleAbrirArma(arma) {
+    setArmaVisualizando(arma)
+    setFotosVisualizacao([])
 
+    try {
       const fotos = await listarFotosArma(arma.id)
-      setFotosModal(fotos || [])
+      setFotosVisualizacao(fotos || [])
     } catch (error) {
       console.error(error)
-      setFotosModal([])
+      setFotosVisualizacao([])
     }
-  }
-
-  function handleCloseModal() {
-    setArmaVisualizando(null)
-    setFotosModal([])
   }
 
   function handleEditar(arma) {
     setArmaEditando(arma)
+    setArmaVisualizando(null)
+    setFotosVisualizacao([])
     setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  function handleCancel() {
-    setArmaEditando(null)
-    setShowForm(false)
+  async function handleExcluir(arma) {
+    const confirmar = window.confirm(
+      `Deseja realmente excluir a arma ${arma.patrimonio || arma.numero_serie}?`
+    )
+
+    if (!confirmar) return
+
+    try {
+      await excluirArma(arma.id, user)
+      setArmaVisualizando(null)
+      setFotosVisualizacao([])
+      setReloadKey((prev) => prev + 1)
+    } catch (error) {
+      console.error(error)
+      alert(error.message || 'Erro ao excluir arma.')
+    }
   }
 
   function handleSaved() {
-    setArmaEditando(null)
     setShowForm(false)
+    setArmaEditando(null)
     setReloadKey((prev) => prev + 1)
   }
 
-  function handleFiltersChange(newFilters) {
-    setFilters(newFilters)
-  }
-
-  function handleClearFilters() {
-    setFilters(initialFilters)
-    setDebouncedFilters(initialFilters)
-    setPagina(1)
-  }
-
-  function handleDeleted(id) {
-    setArmas((listaAtual) =>
-      listaAtual.filter((arma) => arma.id !== id)
-    )
-
-    setTotal((atual) => Math.max(atual - 1, 0))
-  }
-
-  function handleSort(campo) {
-    setPagina(1)
-
-    if (sortBy === campo) {
-      setSortDirection((atual) =>
-        atual === 'asc' ? 'desc' : 'asc'
-      )
-      return
-    }
-
-    setSortBy(campo)
-    setSortDirection('asc')
-  }
-
-  function handlePrintFicha(arma) {
-    console.log('Impressão futura da ficha da arma:', arma)
-  }
-
-  function handlePrintEtiqueta(arma) {
-    console.log('Impressão futura da etiqueta da arma:', arma)
+  function handleCancelForm() {
+    setShowForm(false)
+    setArmaEditando(null)
   }
 
   return (
-    <main className="page">
-      <header className="armas-header">
-        <div>
-          <span className="armas-kicker">SIGMO</span>
-          <h1>Cadastro de Armas</h1>
-          <p>Gestão, consulta e controle de armamento institucional.</p>
-        </div>
-
-        <button type="button" className="btn-primary" onClick={handleNovaArma}>
-          + Nova Arma
-        </button>
-      </header>
-
+    <SigmoPage
+      title="Armas"
+      subtitle="Controle patrimonial, fotos, QR Code e dados operacionais."
+      actions={
+        <SigmoButton onClick={handleNovaArma}>
+          Nova arma
+        </SigmoButton>
+      }
+      className="armas-page"
+    >
       {showForm && (
         <ArmaForm
           user={user}
           armaEditando={armaEditando}
-          onCancel={handleCancel}
+          onCancel={handleCancelForm}
           onSaved={handleSaved}
         />
       )}
 
-      <section className="panel">
-        <ArmaFilters
-          filtros={filters}
-          onChange={handleFiltersChange}
-          onClear={handleClearFilters}
-        />
+      {!showForm && (
+        <>
+          <PatrimonioToolbar
+            busca={busca}
+            onBuscaChange={setBusca}
+            onNovo={handleNovaArma}
+            placeholder="Buscar por patrimônio, série, QR Code, espécie, marca, modelo, calibre..."
+          />
 
-        <div className="armas-table-toolbar">
-          <span>
-            Mostrando {registroInicial}–{registroFinal} de {total} registros
-          </span>
-        </div>
+          {erro && <div className="armas-alert error">{erro}</div>}
 
-        <ArmaTable
-          user={user}
-          armas={armas}
-          loading={loading}
-          erro={erro}
-          sortBy={sortBy}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-          onView={handleView}
-          onEdit={handleEditar}
-          onDeleted={handleDeleted}
-        />
-
-        <div className="armas-pagination">
-          <button
-            type="button"
-            disabled={pagina <= 1}
-            onClick={() => setPagina(1)}
-          >
-            Primeira
-          </button>
-
-          <button
-            type="button"
-            disabled={pagina <= 1}
-            onClick={() => setPagina((prev) => prev - 1)}
-          >
-            Anterior
-          </button>
-
-          {pagina > 3 && <span className="armas-pagination-dots">...</span>}
-
-          {paginasVisiveis.map((numero) => (
-            <button
-              key={numero}
-              type="button"
-              className={numero === pagina ? 'active' : ''}
-              onClick={() => setPagina(numero)}
-            >
-              {numero}
-            </button>
-          ))}
-
-          {pagina < totalPaginas - 2 && (
-            <span className="armas-pagination-dots">...</span>
+          {loading ? (
+            <div className="armas-alert">Carregando armas...</div>
+          ) : (
+            <PatrimonioList
+              itens={armasFiltradas}
+              getTitulo={(arma) =>
+                `${arma.patrimonio || 'SEM PATRIMÔNIO'} — ${arma.especie || 'ARMA'}`
+              }
+              getSubtitulo={(arma) =>
+                [
+                  arma.marca,
+                  arma.modelo,
+                  arma.calibre,
+                  arma.numero_serie ? `SÉRIE: ${arma.numero_serie}` : null,
+                  arma.qr_code ? `QR: ${arma.qr_code}` : null,
+                  arma.unidade,
+                  arma.local_atual
+                ]
+                  .filter(Boolean)
+                  .join(' • ')
+              }
+              getStatus={(arma) => arma.status_operacional || arma.status}
+              onAbrir={handleAbrirArma}
+              emptyTitle="Nenhuma arma encontrada"
+              emptyText="Cadastre uma nova arma ou ajuste o termo de busca."
+            />
           )}
+        </>
+      )}
 
-          <button
-            type="button"
-            disabled={pagina >= totalPaginas}
-            onClick={() => setPagina((prev) => prev + 1)}
-          >
-            Próxima
-          </button>
-
-          <button
-            type="button"
-            disabled={pagina >= totalPaginas}
-            onClick={() => setPagina(totalPaginas)}
-          >
-            Última
-          </button>
-        </div>
-      </section>
-
-      <ArmaViewModal
-        arma={armaVisualizando}
-        fotos={fotosModal}
-        onClose={handleCloseModal}
-        onPrintFicha={handlePrintFicha}
-        onPrintEtiqueta={handlePrintEtiqueta}
-      />
-    </main>
+      {armaVisualizando && (
+        <ArmaViewModal
+          arma={armaVisualizando}
+          fotos={fotosVisualizacao}
+          onClose={() => {
+            setArmaVisualizando(null)
+            setFotosVisualizacao([])
+          }}
+          onEdit={() => handleEditar(armaVisualizando)}
+          onDelete={() => handleExcluir(armaVisualizando)}
+        />
+      )}
+    </SigmoPage>
   )
 }
