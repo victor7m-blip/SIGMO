@@ -9,13 +9,27 @@ import { listarArmas, excluirArma } from '../../services/armasService'
 import { listarFotosArma } from '../../services/armasFotosService'
 import './Armas.css'
 
+const CAMPOS_BUSCA = [
+  'patrimonio',
+  'numero_serie',
+  'qr_code',
+  'especie',
+  'marca',
+  'modelo',
+  'calibre',
+  'status',
+  'status_operacional',
+  'unidade',
+  'local_atual'
+]
+
 export default function Armas({ user }) {
   const [armas, setArmas] = useState([])
   const [busca, setBusca] = useState('')
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [armaEditando, setArmaEditando] = useState(null)
+  const [modoFormulario, setModoFormulario] = useState(false)
+  const [armaSelecionada, setArmaSelecionada] = useState(null)
   const [armaVisualizando, setArmaVisualizando] = useState(null)
   const [fotosVisualizacao, setFotosVisualizacao] = useState([])
   const [reloadKey, setReloadKey] = useState(0)
@@ -51,19 +65,8 @@ export default function Armas({ user }) {
     if (!termo) return armas
 
     return armas.filter((arma) => {
-      const texto = [
-        arma.patrimonio,
-        arma.numero_serie,
-        arma.qr_code,
-        arma.especie,
-        arma.marca,
-        arma.modelo,
-        arma.calibre,
-        arma.status,
-        arma.status_operacional,
-        arma.unidade,
-        arma.local_atual
-      ]
+      const texto = CAMPOS_BUSCA
+        .map((campo) => arma?.[campo])
         .filter(Boolean)
         .join(' ')
         .toUpperCase()
@@ -72,12 +75,28 @@ export default function Armas({ user }) {
     })
   }, [armas, busca])
 
-  function handleNovaArma() {
-    setArmaEditando(null)
-    setShowForm(true)
+  function abrirNovoCadastro() {
+    setArmaSelecionada(null)
+    setArmaVisualizando(null)
+    setFotosVisualizacao([])
+    setModoFormulario(true)
   }
 
-  async function handleAbrirArma(arma) {
+  function fecharFormulario() {
+    setModoFormulario(false)
+    setArmaSelecionada(null)
+  }
+
+  function finalizarFormulario() {
+    fecharFormulario()
+    recarregar()
+  }
+
+  function recarregar() {
+    setReloadKey((prev) => prev + 1)
+  }
+
+  async function abrirVisualizacao(arma) {
     setArmaVisualizando(arma)
     setFotosVisualizacao([])
 
@@ -90,40 +109,34 @@ export default function Armas({ user }) {
     }
   }
 
-  function handleEditar(arma) {
-    setArmaEditando(arma)
+  function fecharVisualizacao() {
     setArmaVisualizando(null)
     setFotosVisualizacao([])
-    setShowForm(true)
   }
 
-  async function handleExcluir(arma) {
+  function editarArma(arma) {
+    setArmaSelecionada(arma)
+    fecharVisualizacao()
+    setModoFormulario(true)
+  }
+
+  async function excluirArmaSelecionada(arma) {
+    const identificacao = arma.patrimonio || arma.numero_serie || 'selecionada'
+
     const confirmar = window.confirm(
-      `Deseja realmente excluir a arma ${arma.patrimonio || arma.numero_serie}?`
+      `Deseja realmente excluir a arma ${identificacao}?`
     )
 
     if (!confirmar) return
 
     try {
       await excluirArma(arma.id, user)
-      setArmaVisualizando(null)
-      setFotosVisualizacao([])
-      setReloadKey((prev) => prev + 1)
+      fecharVisualizacao()
+      recarregar()
     } catch (error) {
       console.error(error)
       alert(error.message || 'Erro ao excluir arma.')
     }
-  }
-
-  function handleSaved() {
-    setShowForm(false)
-    setArmaEditando(null)
-    setReloadKey((prev) => prev + 1)
-  }
-
-  function handleCancelForm() {
-    setShowForm(false)
-    setArmaEditando(null)
   }
 
   return (
@@ -131,27 +144,27 @@ export default function Armas({ user }) {
       title="Armas"
       subtitle="Controle patrimonial, fotos, QR Code e dados operacionais."
       actions={
-        <SigmoButton onClick={handleNovaArma}>
-          Nova arma
-        </SigmoButton>
+        !modoFormulario && (
+          <SigmoButton onClick={abrirNovoCadastro}>
+            Nova arma
+          </SigmoButton>
+        )
       }
       className="armas-page"
     >
-      {showForm && (
+      {modoFormulario ? (
         <ArmaForm
           user={user}
-          armaEditando={armaEditando}
-          onCancel={handleCancelForm}
-          onSaved={handleSaved}
+          armaEditando={armaSelecionada}
+          onCancel={fecharFormulario}
+          onSaved={finalizarFormulario}
         />
-      )}
-
-      {!showForm && (
+      ) : (
         <>
           <PatrimonioToolbar
             busca={busca}
             onBuscaChange={setBusca}
-            onNovo={handleNovaArma}
+            onNovo={abrirNovoCadastro}
             placeholder="Buscar por patrimônio, série, QR Code, espécie, marca, modelo, calibre..."
           />
 
@@ -179,7 +192,7 @@ export default function Armas({ user }) {
                   .join(' • ')
               }
               getStatus={(arma) => arma.status_operacional || arma.status}
-              onAbrir={handleAbrirArma}
+              onAbrir={abrirVisualizacao}
               emptyTitle="Nenhuma arma encontrada"
               emptyText="Cadastre uma nova arma ou ajuste o termo de busca."
             />
@@ -191,12 +204,9 @@ export default function Armas({ user }) {
         <ArmaViewModal
           arma={armaVisualizando}
           fotos={fotosVisualizacao}
-          onClose={() => {
-            setArmaVisualizando(null)
-            setFotosVisualizacao([])
-          }}
-          onEdit={() => handleEditar(armaVisualizando)}
-          onDelete={() => handleExcluir(armaVisualizando)}
+          onClose={fecharVisualizacao}
+          onEdit={() => editarArma(armaVisualizando)}
+          onDelete={() => excluirArmaSelecionada(armaVisualizando)}
         />
       )}
     </SigmoPage>

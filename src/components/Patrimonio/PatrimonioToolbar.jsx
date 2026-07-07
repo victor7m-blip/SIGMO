@@ -1,23 +1,22 @@
-import SigmoButton from '../../ui/components/SigmoButton'
-import './PatrimonioToolbar.css'
+import Button from '../ui/Button/Button'
+import Input from '../ui/Input/Input'
 
 export default function PatrimonioToolbar({
-  busca,
-  onBuscaChange,
-  onNovo,
-  placeholder = 'Buscar...'
+    busca,
+    onBusca,
+    onNovo
 }) {
-  return (
-    <div className="patrimonio-toolbar">
-      <input
-        value={busca}
-        onChange={(e) => onBuscaChange(e.target.value)}
-        placeholder={placeholder}
-      />
+    return (
+        <div className="toolbar">
+            <Input
+                placeholder="Pesquisar..."
+                value={busca}
+                onChange={(e) => onBusca(e.target.value)}
+            />
 
-      <SigmoButton onClick={onNovo}>
-        Novo cadastro
-      </SigmoButton>
-    </div>
-  )
+            <Button onClick={onNovo}>
+                Novo
+            </Button>
+        </div>
+    )
 }
