@@ -8,8 +8,10 @@ import Locais from './Locais/Locais'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
 import Policiais from './Policiais'
+import Municoes from './Municoes/Municoes'
 
 import './DashboardV2.css'
+
 export default function DashboardV2({ user, onLogout }) {
   const [route, setRoute] = useState('dashboard')
 
@@ -18,6 +20,7 @@ export default function DashboardV2({ user, onLogout }) {
     if (route === 'materiais') return <Materiais user={user} />
     if (route === 'armas') return <Armas user={user} />
     if (route === 'policiais') return <Policiais user={user} />
+    if (route === 'municoes') return <Municoes user={user} />
 
     return (
       <main className="sigmo-dashboard-v2">

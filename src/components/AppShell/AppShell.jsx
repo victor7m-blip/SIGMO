@@ -6,7 +6,7 @@ export default function AppShell({
   route,
   setRoute,
   onLogout,
-  children,
+  children
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -18,7 +18,7 @@ export default function AppShell({
     { key: 'policiais', label: 'Policiais' },
     { key: 'municoes', label: 'Munições' },
     { key: 'acautelamento', label: 'Acautelamento' },
-    { key: 'relatorios', label: 'Relatórios' },
+    { key: 'relatorios', label: 'Relatórios' }
   ]
 
   useEffect(() => {
@@ -28,6 +28,7 @@ export default function AppShell({
   return (
     <div className="app-shell">
       <button
+        type="button"
         className="menu-toggle"
         onClick={() => setMobileMenuOpen(true)}
       >
@@ -41,11 +42,7 @@ export default function AppShell({
         />
       )}
 
-      <aside
-        className={`app-sidebar ${
-          mobileMenuOpen ? 'sidebar-open' : ''
-        }`}
-      >
+      <aside className={`app-sidebar ${mobileMenuOpen ? 'sidebar-open' : ''}`}>
         <div className="app-brand">
           <strong>SIGMO</strong>
           <span>Gestão Operacional</span>
@@ -54,6 +51,7 @@ export default function AppShell({
         <nav className="app-menu">
           {menuItems.map((item) => (
             <button
+              type="button"
               key={item.key}
               className={route === item.key ? 'active' : ''}
               onClick={() => setRoute(item.key)}
@@ -64,9 +62,9 @@ export default function AppShell({
         </nav>
 
         <div className="app-user">
-          <span>{user?.nome}</span>
+          <span>{user?.nome || 'Usuário'}</span>
 
-          <button onClick={onLogout}>
+          <button type="button" onClick={onLogout}>
             Sair
           </button>
         </div>

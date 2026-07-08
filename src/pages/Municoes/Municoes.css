@@ -1,0 +1,15 @@
+.municoes-step-box {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  background: var(--color-surface);
+}
+
+.municoes-step-box h2 {
+  margin: 0 0 12px;
+}
+
+.municoes-step-box p {
+  margin: 0 0 12px;
+  color: var(--color-muted);
+}

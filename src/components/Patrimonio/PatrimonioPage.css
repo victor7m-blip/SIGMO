@@ -1,0 +1,68 @@
+.patrimonio-page{
+    padding:24px;
+    background:#f3f6fb;
+    min-height:100%;
+}
+
+.patrimonio-page-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:24px;
+}
+
+.patrimonio-page-header h1{
+    margin:0;
+    font-size:42px;
+    color:#1d2433;
+}
+
+.patrimonio-page-header p{
+    margin-top:6px;
+    color:#667085;
+}
+
+.patrimonio-list-card{
+    background:#ffffff;
+    border:1px solid #dbe4f0;
+    border-radius:18px;
+    padding:20px;
+    box-shadow:0 8px 30px rgba(0,0,0,.05);
+}
+
+.patrimonio-table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+.patrimonio-table th{
+    background:#edf3ff;
+    color:#234b8e;
+    font-weight:700;
+    padding:14px;
+}
+
+.patrimonio-table td{
+    padding:14px;
+    border-bottom:1px solid #edf0f5;
+    color:#202938;
+}
+
+.patrimonio-actions{
+    display:flex;
+    gap:8px;
+}
+
+.patrimonio-actions button{
+    border:none;
+    border-radius:10px;
+    padding:8px 14px;
+    background:#2563eb;
+    color:#fff;
+    cursor:pointer;
+    font-weight:600;
+}
+
+.patrimonio-actions button:hover{
+    background:#1d4ed8;
+}

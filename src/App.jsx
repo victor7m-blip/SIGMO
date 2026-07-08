@@ -53,7 +53,7 @@ export default function App() {
   return (
     <DashboardV2
       user={user}
-      onLogout={() => logout('MANUAL')}
+      onLogout={logout}
     />
   )
 }

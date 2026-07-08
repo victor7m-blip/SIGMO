@@ -1,0 +1,29 @@
+.patrimonio-form-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+
+.patrimonio-form-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.patrimonio-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .patrimonio-form-footer {
+    flex-direction: column-reverse;
+  }
+
+  .patrimonio-form-footer button {
+    width: 100%;
+  }
+}

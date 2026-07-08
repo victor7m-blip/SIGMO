@@ -1,18 +1,18 @@
-export default function PatrimonioQRCode({
-    codigo
-}) {
+import './PatrimonioQRCode.css'
 
-    if (!codigo)
-        return null
+export default function PatrimonioQRCode({ config, item }) {
+  const valor = `${config.modulo || config.tabela}:${item.id}`
 
-    return (
-        <div className="qr-area">
+  return (
+    <section className="patrimonio-section">
+      <header>
+        <h3>QR Code</h3>
+        <p>Identificação única do patrimônio.</p>
+      </header>
 
-            <img
-                src={codigo}
-                alt="QR Code"
-            />
-
-        </div>
-    )
+      <div className="patrimonio-qrcode-box">
+        <span>{valor}</span>
+      </div>
+    </section>
+  )
 }

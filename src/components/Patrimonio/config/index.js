@@ -1,0 +1,7 @@
+export { default as armasConfig } from './armas.config'
+export { default as materiaisConfig } from './materiais.config'
+export { default as municoesConfig } from './municoes.config'
+export { default as equipamentosConfig } from './equipamentos.config'
+export { default as epiConfig } from './epi.config'
+export { default as fardamentoConfig } from './fardamento.config'
+export { default as viaturasConfig } from './viaturas.config'

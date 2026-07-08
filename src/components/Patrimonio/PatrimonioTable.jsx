@@ -1,6 +1,14 @@
 export default function PatrimonioTable({
 
-    children
+    dados,
+
+    colunas,
+
+    onEditar,
+
+    onExcluir,
+
+    onVisualizar
 
 }) {
 
@@ -8,7 +16,69 @@ export default function PatrimonioTable({
 
         <table className="table">
 
-            {children}
+            <thead>
+
+                <tr>
+
+                    {colunas.map(coluna => (
+
+                        <th key={coluna.key}>
+
+                            {coluna.label}
+
+                        </th>
+
+                    ))}
+
+                    <th>Ações</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                {dados.map(item => (
+
+                    <tr key={item.id}>
+
+                        {colunas.map(coluna => (
+
+                            <td key={coluna.key}>
+
+                                {item[coluna.key]}
+
+                            </td>
+
+                        ))}
+
+                        <td>
+
+                            <button
+                                onClick={() => onVisualizar(item)}
+                            >
+                                Ver
+                            </button>
+
+                            <button
+                                onClick={() => onEditar(item)}
+                            >
+                                Editar
+                            </button>
+
+                            <button
+                                onClick={() => onExcluir(item)}
+                            >
+                                Excluir
+                            </button>
+
+                        </td>
+
+                    </tr>
+
+                ))}
+
+            </tbody>
 
         </table>
 

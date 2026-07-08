@@ -1,136 +1,92 @@
-import { useState } from 'react'
-import './cadastroPatrimonioWizard.css'
+import { useState, useEffect } from 'react'
+import WizardHeader from './WizardHeader'
+import WizardProgress from './WizardProgress'
+import WizardFooter from './WizardFooter'
+import './CadastroPatrimonioWizard.css'
 
 export default function CadastroPatrimonioWizard({
-  titulo = 'Cadastro de Patrimônio',
-  etapaDados,
-  etapaFotos,
-  etapaDocumentos,
-  onSalvarDados,
-  onConcluir,
-  salvando = false
+  titulo,
+  subtitulo,
+  etapas = [],
+  children,
+  etapaInicial = 0,
+  onStepChange,
+  onNext,
+  onPrevious,
+  onFinish,
+  podeAvancar = () => true,
+  podeVoltar = () => true
 }) {
-  const [etapaAtual, setEtapaAtual] = useState(1)
-  const [patrimonioSalvo, setPatrimonioSalvo] = useState(null)
-  const temDocumentos = Boolean(etapaDocumentos)
+  const [etapaAtual, setEtapaAtual] = useState(etapaInicial)
 
-  async function handleSeguinte() {
-    if (salvando) return
-    if (!onSalvarDados) return
+  const total = etapas.length
 
-    const resultado = await onSalvarDados()
+  useEffect(() => {
+    onStepChange?.(etapaAtual)
+  }, [etapaAtual])
 
-    if (!resultado?.id) return
+  function voltar() {
+    if (!podeVoltar(etapaAtual)) return
 
-    setPatrimonioSalvo(resultado)
-    setEtapaAtual(2)
+    onPrevious?.(etapaAtual)
+
+    if (etapaAtual > 0) {
+      setEtapaAtual(etapaAtual - 1)
+    }
   }
 
-  function handleVoltar() {
-    setEtapaAtual((prev) => Math.max(1, prev - 1))
-  }
+  async function avancar() {
+    if (!podeAvancar(etapaAtual)) return
 
-  function handleConcluirFotos() {
-    if (!patrimonioSalvo?.id) return
+    if (onNext) {
+      const resultado = await onNext(etapaAtual)
 
-    if (temDocumentos) {
-      setEtapaAtual(3)
+      if (resultado === false) return
+    }
+
+    if (etapaAtual < total - 1) {
+      setEtapaAtual(etapaAtual + 1)
       return
     }
 
-    if (onConcluir) onConcluir(patrimonioSalvo)
-  }
-
-  function handleConcluirFinal() {
-    if (!patrimonioSalvo?.id) return
-    if (onConcluir) onConcluir(patrimonioSalvo)
+    if (onFinish) {
+      await onFinish()
+    }
   }
 
   return (
-    <div className="cadastro-wizard">
-      <div className="cadastro-wizard-header">
-        <div>
-          <h2>{titulo}</h2>
-          <p>Assistente de Cadastro de Patrimônio</p>
+    <main className="cadastro-wizard-page">
+
+      <section className="cadastro-wizard-card">
+
+        <WizardHeader
+          titulo={titulo}
+          subtitulo={subtitulo}
+          etapa={etapaAtual + 1}
+          total={total}
+        />
+
+        <WizardProgress
+          etapas={etapas}
+          etapaAtual={etapaAtual}
+          onSelect={setEtapaAtual}
+        />
+
+        <div className="cadastro-wizard-content">
+          {Array.isArray(children)
+            ? children[etapaAtual]
+            : children}
         </div>
 
-        <div className="cadastro-wizard-steps">
-          <span className={etapaAtual === 1 ? 'active' : ''}>1. Dados</span>
-          <span className={etapaAtual === 2 ? 'active' : ''}>2. Fotos</span>
+        <WizardFooter
+          etapaAtual={etapaAtual}
+          total={total}
+          onBack={voltar}
+          onNext={avancar}
+        />
 
-          {temDocumentos && (
-            <span className={etapaAtual === 3 ? 'active' : ''}>
-              3. Documentos
-            </span>
-          )}
-        </div>
-      </div>
+      </section>
 
-      <div className="cadastro-wizard-body">
-        {etapaAtual === 1 && etapaDados}
-
-        {etapaAtual === 2 && (
-          <>
-            {typeof etapaFotos === 'function'
-              ? etapaFotos(patrimonioSalvo)
-              : etapaFotos}
-          </>
-        )}
-
-        {etapaAtual === 3 && (
-          <>
-            {typeof etapaDocumentos === 'function'
-              ? etapaDocumentos(patrimonioSalvo)
-              : etapaDocumentos}
-          </>
-        )}
-      </div>
-
-      <div className="cadastro-wizard-footer">
-        {etapaAtual > 1 && (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleVoltar}
-            disabled={salvando}
-          >
-            Voltar
-          </button>
-        )}
-
-        {etapaAtual === 1 && (
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handleSeguinte}
-            disabled={salvando}
-          >
-            {salvando ? 'Salvando...' : 'Seguinte'}
-          </button>
-        )}
-
-        {etapaAtual === 2 && (
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handleConcluirFotos}
-            disabled={!patrimonioSalvo?.id}
-          >
-            {temDocumentos ? 'Seguinte' : 'Concluir Cadastro'}
-          </button>
-        )}
-
-        {etapaAtual === 3 && (
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handleConcluirFinal}
-            disabled={!patrimonioSalvo?.id}
-          >
-            Concluir Cadastro
-          </button>
-        )}
-      </div>
-    </div>
+    </main>
   )
 }

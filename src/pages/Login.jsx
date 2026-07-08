@@ -23,8 +23,16 @@ export default function Login({ onLogin }) {
     return () => window.removeEventListener('resize', updateBackground)
   }, [])
 
-  function limparRE(value) {
-    return value.replace(/\D/g, '').slice(0, 6)
+  function limparNumero(value, max = 6) {
+    return String(value || '').replace(/\D/g, '').slice(0, max)
+  }
+
+  function handleChangeRE(e) {
+    setRe(limparNumero(e.target.value, 6))
+  }
+
+  function handleChangePIN(e) {
+    setPin(limparNumero(e.target.value, 6))
   }
 
   async function handleLogin(e) {
@@ -32,8 +40,8 @@ export default function Login({ onLogin }) {
     setError('')
     setLoading(true)
 
-    const reLimpo = limparRE(re)
-    const pinLimpo = pin.trim()
+    const reLimpo = limparNumero(re, 6)
+    const pinLimpo = limparNumero(pin, 6)
 
     if (!reLimpo || !pinLimpo) {
       setError('Informe o RE e o PIN.')
@@ -49,6 +57,7 @@ export default function Login({ onLogin }) {
         .maybeSingle()
 
       if (policialError) {
+        console.error(policialError)
         setError('Erro ao consultar policial.')
         setLoading(false)
         return
@@ -69,6 +78,7 @@ export default function Login({ onLogin }) {
         .maybeSingle()
 
       if (usuarioError) {
+        console.error(usuarioError)
         setError('Erro ao validar usuário.')
         setLoading(false)
         return
@@ -126,24 +136,29 @@ export default function Login({ onLogin }) {
       }}
     >
       <section className="login-card">
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin} autoComplete="off">
           <label>RE</label>
           <input
+            name="sigmo_re"
+            type="text"
             value={re}
-            onChange={(e) => setRe(limparRE(e.target.value))}
+            onChange={handleChangeRE}
             placeholder="Digite o RE"
             maxLength={6}
             inputMode="numeric"
+            autoComplete="off"
           />
 
           <label>PIN</label>
           <input
+            name="sigmo_pin"
             type="password"
             value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onChange={handleChangePIN}
             placeholder="Digite o PIN"
             maxLength={6}
             inputMode="numeric"
+            autoComplete="new-password"
           />
 
           {error && <div className="error">{error}</div>}
