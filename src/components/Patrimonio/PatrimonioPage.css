@@ -66,3 +66,46 @@
 .patrimonio-actions button:hover{
     background:#1d4ed8;
 }
+@media (max-width: 768px) {
+  .patrimonio-page {
+    padding: 24px 16px;
+    overflow-x: hidden;
+  }
+
+  .patrimonio-page-header {
+    align-items: flex-start;
+    gap: 20px;
+  }
+
+  .patrimonio-page-header h1 {
+    font-size: 42px;
+    line-height: 1.05;
+  }
+
+  .patrimonio-list-card {
+    width: 100%;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .patrimonio-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .patrimonio-table {
+    min-width: 720px;
+  }
+
+  .patrimonio-table th,
+  .patrimonio-table td {
+    white-space: nowrap;
+    font-size: 14px;
+    padding: 14px 18px;
+  }
+
+  .patrimonio-actions {
+    white-space: nowrap;
+  }
+}

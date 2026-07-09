@@ -1,0 +1,21 @@
+.mov-lista{
+
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+
+}
+
+.mov-lista-vazia{
+
+    padding:40px;
+
+    border:2px dashed var(--color-border);
+
+    border-radius:var(--radius-md);
+
+    text-align:center;
+
+    color:var(--color-text-muted);
+
+}

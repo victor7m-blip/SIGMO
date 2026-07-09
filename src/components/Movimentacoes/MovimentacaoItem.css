@@ -1,0 +1,41 @@
+.mov-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+
+    padding:14px;
+
+    border:1px solid var(--color-border);
+    border-radius:var(--radius-md);
+
+    background:var(--color-surface);
+}
+
+.mov-item-info{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+}
+
+.mov-item-info strong{
+    font-size:15px;
+}
+
+.mov-item-info span{
+    color:var(--color-text-muted);
+    font-size:13px;
+}
+
+.mov-item-remove{
+
+    border:none;
+    border-radius:var(--radius-sm);
+
+    padding:8px 14px;
+
+    cursor:pointer;
+
+    background:#d32f2f;
+    color:white;
+}

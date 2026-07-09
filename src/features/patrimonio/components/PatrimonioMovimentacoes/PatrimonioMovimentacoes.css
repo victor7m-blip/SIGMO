@@ -1,0 +1,77 @@
+.patrimonio-mov-loading,
+.patrimonio-mov-empty{
+
+    border:1px dashed var(--color-border);
+
+    border-radius:var(--radius-md);
+
+    padding:24px;
+
+    text-align:center;
+
+    color:var(--color-text-muted);
+
+}
+
+.patrimonio-mov-list{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:16px;
+
+}
+
+.patrimonio-mov-card{
+
+    border:1px solid var(--color-border);
+
+    border-radius:var(--radius-md);
+
+    padding:16px;
+
+    background:var(--color-surface);
+
+}
+
+.patrimonio-mov-card header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    margin-bottom:16px;
+
+}
+
+.patrimonio-mov-grid{
+
+    display:grid;
+
+    grid-template-columns:
+        repeat(auto-fit,minmax(170px,1fr));
+
+    gap:14px;
+
+}
+
+.patrimonio-mov-grid small{
+
+    display:block;
+
+    margin-bottom:4px;
+
+    color:var(--color-text-muted);
+
+}
+
+.patrimonio-mov-card footer{
+
+    margin-top:16px;
+
+    border-top:1px solid var(--color-border);
+
+    padding-top:16px;
+
+}

@@ -8,7 +8,7 @@ export default function PatrimonioDetails({ config, item, onEdit }) {
     <section className="patrimonio-details">
       <div className="patrimonio-details-header">
         <div>
-          <h2>{item[config.campoTitulo] || config.titulo}</h2>
+          <h2>{item[config.campoTitulo] || item.patrimonio || config.titulo}</h2>
           <p>{config.nomeSingular || 'Patrimônio'}</p>
         </div>
 

@@ -76,19 +76,19 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
         data = await atualizarArma(armaAtual.id, form, user)
 
         await registerAudit({
-          user,
-          action: 'ATUALIZAR_ARMA',
-          tableName: 'armas',
-          recordId: armaAtual.id,
-          description: `Atualizou arma ${form.patrimonio || form.numero_serie}`
-        })
+  user,
+  action: 'ATUALIZAR_ARMA',
+  tableName: 'sigmo_armas',
+  recordId: armaAtual.id,
+  description: `Atualizou arma ${form.patrimonio || form.numero_serie}`
+})
       } else {
         data = await cadastrarArma(form, user)
 
         await registerAudit({
           user,
           action: 'CADASTRAR_ARMA',
-          tableName: 'armas',
+          tableName: 'sigmo_armas',
           recordId: data?.id,
           description: `Cadastrou arma ${form.patrimonio || form.numero_serie}`
         })

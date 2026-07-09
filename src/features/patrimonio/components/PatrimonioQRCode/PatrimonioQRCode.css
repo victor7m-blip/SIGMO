@@ -1,0 +1,47 @@
+.patrimonio-qrcode-box {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.patrimonio-qrcode-box img,
+.patrimonio-qrcode-placeholder {
+  width: 150px;
+  height: 150px;
+  border-radius: 18px;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+}
+
+.patrimonio-qrcode-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  text-align: center;
+  color: #64748b;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.patrimonio-qrcode-box strong {
+  display: block;
+  color: #0f172a;
+  font-size: 1.2rem;
+}
+
+.patrimonio-qrcode-box span {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .patrimonio-qrcode-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

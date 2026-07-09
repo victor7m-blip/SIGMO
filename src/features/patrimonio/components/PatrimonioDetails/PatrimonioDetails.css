@@ -1,0 +1,98 @@
+.patrimonio-detalhes {
+  min-height: 560px;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  box-shadow: 0 16px 45px rgba(15, 23, 42, 0.07);
+  padding: 18px;
+}
+
+.patrimonio-card {
+  padding: 22px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: white;
+}
+
+.card-label {
+  display: inline-flex;
+  margin-bottom: 8px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #93c5fd;
+}
+
+.patrimonio-card h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.patrimonio-card p {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.patrimonio-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+
+.patrimonio-tabs button {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.patrimonio-tabs button.active {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.patrimonio-panel {
+  min-height: 280px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 20px;
+  background: #f8fafc;
+  padding: 24px;
+}
+
+.panel-placeholder {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (max-width: 980px) {
+  .patrimonio-detalhes {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .patrimonio-detalhes {
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .patrimonio-tabs {
+    width: 100%;
+  }
+
+  .patrimonio-tabs button {
+    flex: 1;
+  }
+}

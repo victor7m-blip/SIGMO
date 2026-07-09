@@ -1,45 +1,43 @@
+import {
+  listarFotosArma,
+  uploadFotoArma,
+  excluirFotoArma,
+  definirFotoPrincipalArma
+} from '../../../services/armasFotosService'
+
 export default {
+  modulo: 'armas',
+  tabela: 'sigmo_armas',
 
-    modulo: 'armas',
+  titulo: 'Armas',
+  subtitulo: 'Cadastro e controle patrimonial de armas.',
+  nomeSingular: 'Arma',
+  nomePlural: 'Armas',
+  campoTitulo: 'patrimonio',
 
-    titulo: 'Armas',
+  fotos: {
+    listar: listarFotosArma,
+    upload: uploadFotoArma,
+    excluir: excluirFotoArma,
+    definirPrincipal: definirFotoPrincipalArma
+  },
 
-    subtitulo: 'Cadastro de Armas da Unidade',
+  colunas: [
+    { key: 'patrimonio', label: 'Patrimônio' },
+    { key: 'numero_serie', label: 'Nº de série' },
+    { key: 'modelo', label: 'Modelo' },
+    { key: 'status', label: 'Status' }
+  ],
 
-    patrimonioPrefixo: 'ARM',
-
-    usaFotos: true,
-
-    usaQRCode: true,
-
-    usaMovimentacao: true,
-
-    usaHistorico: true,
-
-    usaAuditoria: true,
-
-    colunas: [
-
-        {
-            key: 'patrimonio',
-            label: 'Patrimônio'
-        },
-
-        {
-            key: 'modelo',
-            label: 'Modelo'
-        },
-
-        {
-            key: 'calibre',
-            label: 'Calibre'
-        },
-
-        {
-            key: 'status',
-            label: 'Status'
-        }
-
-    ]
-
+  campos: [
+    { name: 'patrimonio', label: 'Patrimônio' },
+    { name: 'numero_serie', label: 'Nº de série' },
+    { name: 'especie', label: 'Espécie' },
+    { name: 'marca', label: 'Marca' },
+    { name: 'modelo', label: 'Modelo' },
+    { name: 'calibre', label: 'Calibre' },
+    { name: 'status', label: 'Status' },
+    { name: 'local_atual', label: 'Local atual' },
+    { name: 'observacoes', label: 'Observações' }
+  ]
 }

@@ -1,0 +1,109 @@
+.mov-dialog{
+
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+
+}
+
+.mov-bloco{
+
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+
+}
+
+.mov-bloco h3{
+
+    margin:0;
+
+}
+
+.mov-grid{
+
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+
+}
+
+.mov-dialog label{
+
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+
+    font-weight:600;
+
+}
+
+.mov-dialog input,
+.mov-dialog select,
+.mov-dialog textarea{
+
+    padding:10px 12px;
+
+    border:1px solid var(--color-border);
+
+    border-radius:var(--radius-md);
+
+    background:white;
+
+}
+
+.mov-dialog textarea{
+
+    resize:vertical;
+
+    min-height:90px;
+
+}
+
+.mov-dialog-footer{
+
+    display:flex;
+    justify-content:flex-end;
+    gap:12px;
+
+}
+
+.mov-btn-secundario{
+
+    padding:10px 18px;
+
+    border-radius:var(--radius-md);
+
+    border:1px solid var(--color-border);
+
+    background:white;
+
+    cursor:pointer;
+
+}
+
+.mov-btn-principal{
+
+    padding:10px 18px;
+
+    border:none;
+
+    border-radius:var(--radius-md);
+
+    background:var(--color-primary);
+
+    color:white;
+
+    cursor:pointer;
+
+}
+
+@media(max-width:768px){
+
+.mov-grid{
+
+grid-template-columns:1fr;
+
+}
+
+}

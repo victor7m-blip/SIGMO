@@ -1,0 +1,76 @@
+.mov-historico{
+
+    display:flex;
+    flex-direction:column;
+
+    gap:16px;
+
+}
+
+.mov-historico-card{
+
+    border:1px solid var(--color-border);
+
+    border-radius:var(--radius-md);
+
+    padding:16px;
+
+    background:var(--color-surface);
+
+}
+
+.mov-historico-card header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:14px;
+
+}
+
+.mov-historico-grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+
+    gap:12px;
+
+}
+
+.mov-historico-grid small{
+
+    display:block;
+
+    color:var(--color-text-muted);
+
+    margin-bottom:4px;
+
+}
+
+.mov-historico-observacao{
+
+    margin-top:16px;
+
+    padding-top:16px;
+
+    border-top:1px solid var(--color-border);
+
+}
+
+.mov-historico-vazio{
+
+    border:2px dashed var(--color-border);
+
+    border-radius:var(--radius-md);
+
+    padding:40px;
+
+    text-align:center;
+
+    color:var(--color-text-muted);
+
+}

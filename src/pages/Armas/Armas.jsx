@@ -1,5 +1,4 @@
-import PatrimonioPage from '../../components/Patrimonio/PatrimonioPage'
-import armasConfig from '../../config/patrimonios/armasConfig'
+import { PatrimonioPage, armasConfig } from '../../features/patrimonio'
 
 export default function Armas() {
   return <PatrimonioPage config={armasConfig} />

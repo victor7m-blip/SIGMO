@@ -1,6 +1,6 @@
 const armasConfig = {
   modulo: 'armas',
-  tabela: 'armas',
+  tabela: 'sigmo_armas',
   titulo: 'Armas',
   subtitulo: 'Cadastro e controle patrimonial de armas.',
   nomeSingular: 'Arma',
