@@ -1,29 +1,68 @@
+import { useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import './PatrimonioQRCode.css'
 
-export default function PatrimonioQRCode({ item, qrCode }) {
+export default function PatrimonioQRCode({ item }) {
+  const [aberto, setAberto] = useState(false)
+
+  if (!item) {
+    return (
+      <div className="patrimonio-qrcode">
+        <div className="patrimonio-qrcode-placeholder">
+          Selecione um patrimônio.
+        </div>
+      </div>
+    )
+  }
+
+  const valor =
+    item.qr_code ||
+    item.patrimonio ||
+    item.id?.toString() ||
+    ''
+
   return (
-    <div className="patrimonio-qrcode">
+    <section className="patrimonio-qrcode">
       <div className="patrimonio-section-header">
         <div>
           <h3>QR Code</h3>
-          <p>Identificação rápida do item patrimonial.</p>
+          <p>Identificação rápida do patrimônio.</p>
         </div>
       </div>
 
-      <div className="patrimonio-qrcode-box">
-        {qrCode ? (
-          <img src={qrCode} alt="QR Code do patrimônio" />
-        ) : (
-          <div className="patrimonio-qrcode-placeholder">
-            QR Code será gerado após selecionar ou salvar o item.
+      <button
+        type="button"
+        className="patrimonio-qrcode-box"
+        onClick={() => setAberto(true)}
+      >
+        <QRCodeSVG value={valor} size={180} includeMargin />
+
+        <div className="patrimonio-qrcode-info">
+          <strong>{item.patrimonio}</strong>
+          <span>{item.numero_serie || '-'}</span>
+          <span>{item.marca || '-'}</span>
+          <span>{item.modelo || '-'}</span>
+        </div>
+      </button>
+
+      {aberto && (
+        <div className="patrimonio-qrcode-modal" onClick={() => setAberto(false)}>
+          <div className="patrimonio-qrcode-modal-card" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="patrimonio-qrcode-modal-close"
+              onClick={() => setAberto(false)}
+            >
+              Fechar
+            </button>
+
+            <QRCodeSVG value={valor} size={320} includeMargin />
+
+            <strong>{item.patrimonio}</strong>
+            <span>{item.numero_serie || '-'}</span>
           </div>
-        )}
-
-        <div>
-          <strong>{item?.patrimonio || item?.nome || 'Item não selecionado'}</strong>
-          <span>{item?.numero_serie || item?.local || 'Sem dados complementares'}</span>
         </div>
-      </div>
-    </div>
+      )}
+    </section>
   )
 }

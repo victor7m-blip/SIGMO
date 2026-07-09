@@ -1,47 +1,95 @@
-.patrimonio-qrcode-box {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 18px;
-  border-radius: 18px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+.patrimonio-qrcode {
+  width: 100%;
 }
 
-.patrimonio-qrcode-box img,
-.patrimonio-qrcode-placeholder {
-  width: 150px;
-  height: 150px;
+.patrimonio-qrcode-box {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
   border-radius: 18px;
-  border: 1px dashed #cbd5e1;
-  background: #f8fafc;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.patrimonio-qrcode-box svg {
+  flex-shrink: 0;
+}
+
+.patrimonio-qrcode-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.patrimonio-qrcode-info strong {
+  font-size: 1.2rem;
+  color: #0f172a;
+}
+
+.patrimonio-qrcode-info span {
+  color: #64748b;
 }
 
 .patrimonio-qrcode-placeholder {
   display: grid;
   place-items: center;
-  padding: 14px;
-  text-align: center;
+  min-height: 220px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
   color: #64748b;
   font-weight: 700;
-  font-size: 0.9rem;
 }
 
-.patrimonio-qrcode-box strong {
-  display: block;
+.patrimonio-qrcode-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.patrimonio-qrcode-modal-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 24px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
+}
+
+.patrimonio-qrcode-modal-close {
+  align-self: flex-end;
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 14px;
+  background: #0f172a;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.patrimonio-qrcode-modal-card strong {
   color: #0f172a;
   font-size: 1.2rem;
 }
 
-.patrimonio-qrcode-box span {
-  display: block;
-  margin-top: 6px;
+.patrimonio-qrcode-modal-card span {
   color: #64748b;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .patrimonio-qrcode-box {
     flex-direction: column;
-    align-items: stretch;
+    text-align: center;
   }
 }
