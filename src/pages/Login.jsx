@@ -1,3 +1,4 @@
+@'
 import { useEffect, useState } from 'react'
 import { supabase } from '../services/supabaseClient'
 import { saveSession } from '../services/authService'
@@ -28,11 +29,15 @@ export default function Login({ onLogin }) {
   }
 
   function handleChangeRE(e) {
-    setRe(limparNumero(e.target.value, 6))
+    const valor = limparNumero(e.target.value, 6)
+    e.target.value = valor
+    setRe(valor)
   }
 
   function handleChangePIN(e) {
-    setPin(limparNumero(e.target.value, 6))
+    const valor = limparNumero(e.target.value, 6)
+    e.target.value = valor
+    setPin(valor)
   }
 
   async function handleLogin(e) {
@@ -145,6 +150,7 @@ export default function Login({ onLogin }) {
             onChange={handleChangeRE}
             placeholder="Digite o RE"
             maxLength={6}
+            pattern="[0-9]{1,6}"
             inputMode="numeric"
             autoComplete="off"
           />
@@ -157,6 +163,7 @@ export default function Login({ onLogin }) {
             onChange={handleChangePIN}
             placeholder="Digite o PIN"
             maxLength={6}
+            pattern="[0-9]{1,6}"
             inputMode="numeric"
             autoComplete="new-password"
           />
@@ -187,3 +194,4 @@ export default function Login({ onLogin }) {
     </div>
   )
 }
+'@ | Set-Content src\pages\Login.jsx
