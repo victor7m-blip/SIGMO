@@ -79,3 +79,53 @@ select:focus {
   color: var(--muted);
   font-size: 12px;
 }
+/* =====================================================
+   SIGMO - Patch anti-overflow login público
+===================================================== */
+
+html,
+body,
+#root {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+}
+
+body * {
+  box-sizing: border-box !important;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input:not([type]) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+[class*="login"],
+[class*="Login"],
+[class*="auth"],
+[class*="Auth"] {
+  max-width: 100vw !important;
+  min-width: 0 !important;
+}
+
+[class*="login"] input,
+[class*="Login"] input,
+[class*="auth"] input,
+[class*="Auth"] input {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  display: block !important;
+}
+
+@media (max-width: 900px) {
+  [class*="login"],
+  [class*="Login"],
+  [class*="auth"],
+  [class*="Auth"] {
+    overflow-x: hidden !important;
+  }
+}
