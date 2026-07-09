@@ -4,6 +4,8 @@ export default function PatrimonioDetails({
   item,
   abaAtiva = 'dados',
   onAbaChange,
+  onEdit,
+  onDelete,
   children,
 }) {
   const abas = [
@@ -16,13 +18,29 @@ export default function PatrimonioDetails({
   return (
     <section className="patrimonio-detalhes">
       <div className="patrimonio-card">
-        <span className="card-label">Detalhes</span>
-        <h2>{item?.nome || item?.patrimonio || 'Selecione um item'}</h2>
-        <p>
-          {item
-            ? 'Dados principais, fotos, QR Code e histórico de movimentações.'
-            : 'Aqui entrarão os detalhes do patrimônio selecionado.'}
-        </p>
+        <div className="patrimonio-card-top">
+          <div>
+            <span className="card-label">Detalhes</span>
+            <h2>{item?.nome || item?.patrimonio || 'Selecione um item'}</h2>
+            <p>
+              {item
+                ? 'Dados principais, fotos, QR Code e histórico de movimentações.'
+                : 'Aqui entrarão os detalhes do patrimônio selecionado.'}
+            </p>
+          </div>
+
+          {item && (
+            <div className="patrimonio-card-actions">
+              <button type="button" onClick={() => onEdit?.(item)}>
+                Editar
+              </button>
+
+              <button type="button" onClick={() => onDelete?.(item)}>
+                Excluir
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="patrimonio-tabs">

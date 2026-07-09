@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { listarPatrimoniosEngine } from '../../../../services/patrimonioEngineService'
+import {
+  listarPatrimoniosEngine,
+  cadastrarPatrimonioEngine,
+  atualizarPatrimonioEngine,
+  excluirPatrimonioEngine,
+} from '../../../../services/patrimonioEngineService'
 
 import PatrimonioToolbar from '../PatrimonioToolbar/PatrimonioToolbar'
 import PatrimonioLista from '../PatrimonioLista/PatrimonioLista'
@@ -20,11 +25,14 @@ export default function PatrimonioPage({ config }) {
 
   const [itens, setItens] = useState([])
   const [carregando, setCarregando] = useState(true)
+  const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [busca, setBusca] = useState('')
   const [statusAtivo, setStatusAtivo] = useState('todos')
   const [itemSelecionado, setItemSelecionado] = useState(null)
   const [abaAtiva, setAbaAtiva] = useState('dados')
+  const [modo, setModo] = useState('detalhes')
+  const [form, setForm] = useState({})
 
   useEffect(() => {
     carregarItens()
@@ -63,7 +71,158 @@ export default function PatrimonioPage({ config }) {
     })
   }, [busca, statusAtivo, itens])
 
+  function selecionarItem(item) {
+    setItemSelecionado(item)
+    setAbaAtiva('dados')
+    setModo('detalhes')
+  }
+
+  function novoItem() {
+    const inicial = {}
+
+    config?.campos?.forEach((campo) => {
+      inicial[campo.name] = campo.defaultValue || ''
+    })
+
+    setForm(inicial)
+    setItemSelecionado(null)
+    setAbaAtiva('dados')
+    setModo('form')
+  }
+
+  function editarItem(item) {
+    setForm(item || {})
+    setItemSelecionado(item)
+    setAbaAtiva('dados')
+    setModo('form')
+  }
+
+  async function excluirItem(item) {
+    if (!item?.id) return
+    if (!confirm('Deseja realmente excluir este registro?')) return
+
+    try {
+      setErro('')
+      await excluirPatrimonioEngine(config, item.id)
+      setItemSelecionado(null)
+      await carregarItens()
+    } catch (error) {
+      console.error(error)
+      setErro('Erro ao excluir registro.')
+    }
+  }
+
+  function alterarCampo(event) {
+    const { name, value } = event.target
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  async function salvarFormulario(event) {
+    event.preventDefault()
+
+    try {
+      setSalvando(true)
+      setErro('')
+
+      let salvo
+
+      if (itemSelecionado?.id) {
+        salvo = await atualizarPatrimonioEngine(config, itemSelecionado.id, form)
+      } else {
+        salvo = await cadastrarPatrimonioEngine(config, form)
+      }
+
+      await carregarItens()
+      setItemSelecionado(salvo)
+      setModo('detalhes')
+      setAbaAtiva('dados')
+    } catch (error) {
+      console.error(error)
+      setErro('Erro ao salvar registro.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  function cancelarFormulario() {
+    setModo('detalhes')
+  }
+
+  function renderFormulario() {
+    return (
+      <form className="patrimonio-form-card" onSubmit={salvarFormulario}>
+        <div className="patrimonio-form-header">
+          <div>
+            <h3>{itemSelecionado?.id ? 'Editar registro' : 'Novo registro'}</h3>
+            <p>Preencha os dados patrimoniais.</p>
+          </div>
+
+          <button type="button" onClick={cancelarFormulario}>
+            Cancelar
+          </button>
+        </div>
+
+        <div className="patrimonio-form-grid">
+          {config?.campos?.map((campo) => (
+            <label key={campo.name}>
+              <span>{campo.label}</span>
+
+              {campo.type === 'textarea' ? (
+                <textarea
+                  name={campo.name}
+                  value={form[campo.name] || ''}
+                  onChange={alterarCampo}
+                  required={campo.required}
+                />
+              ) : campo.type === 'select' ? (
+                <select
+                  name={campo.name}
+                  value={form[campo.name] || ''}
+                  onChange={alterarCampo}
+                  required={campo.required}
+                >
+                  <option value="">Selecione</option>
+                  {campo.options?.map((opcao) => (
+                    <option key={opcao} value={opcao}>
+                      {opcao}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={campo.type || 'text'}
+                  name={campo.name}
+                  value={form[campo.name] || ''}
+                  onChange={alterarCampo}
+                  required={campo.required}
+                />
+              )}
+            </label>
+          ))}
+        </div>
+
+        <div className="patrimonio-form-actions">
+          <button type="button" onClick={cancelarFormulario}>
+            Voltar
+          </button>
+
+          <button type="submit" disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </form>
+    )
+  }
+
   function renderConteudo() {
+    if (modo === 'form') {
+      return renderFormulario()
+    }
+
     if (!itemSelecionado) {
       return (
         <div className="patrimonio-dados">
@@ -131,6 +290,10 @@ export default function PatrimonioPage({ config }) {
             <h1>{titulo}</h1>
             <p>{subtitulo}</p>
           </div>
+
+          <button type="button" className="patrimonio-novo-btn" onClick={novoItem}>
+            Novo
+          </button>
         </header>
 
         {erro && <div className="patrimonio-alert">{erro}</div>}
@@ -149,13 +312,15 @@ export default function PatrimonioPage({ config }) {
             <PatrimonioLista
               itens={itensFiltrados}
               itemSelecionado={itemSelecionado}
-              onSelect={setItemSelecionado}
+              onSelect={selecionarItem}
             />
 
             <PatrimonioDetails
               item={itemSelecionado}
               abaAtiva={abaAtiva}
               onAbaChange={setAbaAtiva}
+              onEdit={editarItem}
+              onDelete={excluirItem}
             >
               {renderConteudo()}
             </PatrimonioDetails>
