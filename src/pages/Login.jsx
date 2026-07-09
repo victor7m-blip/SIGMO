@@ -1,3 +1,4 @@
+@'
 import { useEffect, useState } from 'react'
 import { supabase } from '../services/supabaseClient'
 import { saveSession } from '../services/authService'
@@ -104,12 +105,7 @@ export default function Login({ onLogin }) {
       }
 
       try {
-        await registerAudit(
-          'LOGIN',
-          'Usuário acessou o SIGMO.',
-          sessionUser,
-          'Login'
-        )
+        await registerAudit('LOGIN', 'Usuário acessou o SIGMO.', sessionUser, 'Login')
       } catch (auditError) {
         console.error('Erro ao registrar auditoria:', auditError)
       }
@@ -187,3 +183,4 @@ export default function Login({ onLogin }) {
     </div>
   )
 }
+'@ | Set-Content src\pages\Login.jsx
