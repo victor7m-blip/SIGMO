@@ -7,11 +7,16 @@ import {
 import './PatrimonioMovimentacoes.css'
 
 function TimelineIcon({ tipo }) {
-  const tipoNormalizado = String(tipo || '').toUpperCase()
+  const tipoNormalizado = String(
+    tipo || ''
+  ).toUpperCase()
 
   if (tipoNormalizado.includes('STATUS')) {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
         <path d="M9 12l2 2 4-4" />
         <circle cx="12" cy="12" r="9" />
       </svg>
@@ -21,10 +26,16 @@ function TimelineIcon({ tipo }) {
   if (
     tipoNormalizado.includes('LOCAL') ||
     tipoNormalizado.includes('TRANSFER') ||
-    tipoNormalizado.includes('MOVIMENT')
+    tipoNormalizado.includes('MOVIMENT') ||
+    tipoNormalizado.includes('CAUTELA') ||
+    tipoNormalizado.includes('DEVOLU') ||
+    tipoNormalizado.includes('BAIXA')
   ) {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
         <path d="M12 21s6-5.2 6-11a6 6 0 10-12 0c0 5.8 6 11 6 11z" />
         <circle cx="12" cy="10" r="2" />
       </svg>
@@ -33,8 +44,17 @@ function TimelineIcon({ tipo }) {
 
   if (tipoNormalizado.includes('FOTO')) {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="5" width="18" height="14" rx="2" />
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <rect
+          x="3"
+          y="5"
+          width="18"
+          height="14"
+          rx="2"
+        />
         <circle cx="9" cy="10" r="2" />
         <path d="M21 15l-5-5L5 19" />
       </svg>
@@ -43,10 +63,28 @@ function TimelineIcon({ tipo }) {
 
   if (tipoNormalizado.includes('QR')) {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="3" width="6" height="6" />
-        <rect x="15" y="3" width="6" height="6" />
-        <rect x="3" y="15" width="6" height="6" />
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <rect
+          x="3"
+          y="3"
+          width="6"
+          height="6"
+        />
+        <rect
+          x="15"
+          y="3"
+          width="6"
+          height="6"
+        />
+        <rect
+          x="3"
+          y="15"
+          width="6"
+          height="6"
+        />
         <path d="M15 15h2v2h-2zM19 15h2v2h-2zM15 19h2v2h-2zM19 19h2v2h-2z" />
       </svg>
     )
@@ -57,10 +95,18 @@ function TimelineIcon({ tipo }) {
     tipoNormalizado.includes('IMPRESS')
   ) {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
         <path d="M6 9V3h12v6" />
         <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
-        <rect x="6" y="14" width="12" height="7" />
+        <rect
+          x="6"
+          y="14"
+          width="12"
+          height="7"
+        />
       </svg>
     )
   }
@@ -70,7 +116,10 @@ function TimelineIcon({ tipo }) {
     tipoNormalizado.includes('CRIAD')
   ) {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
         <circle cx="12" cy="12" r="9" />
         <path d="M12 8v8M8 12h8" />
       </svg>
@@ -78,7 +127,10 @@ function TimelineIcon({ tipo }) {
   }
 
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
     </svg>
@@ -127,13 +179,14 @@ function obterValorNovo(mov) {
     mov.status_novo ??
     mov.novo_status ??
     mov.novo_local ??
-    mov.status ??
     null
   )
 }
 
 function formatarData(data) {
-  if (!data) return 'Data não informada'
+  if (!data) {
+    return 'Data não informada'
+  }
 
   const valor = new Date(data)
 
@@ -150,22 +203,140 @@ function formatarData(data) {
   })
 }
 
-function criarDescricao(mov) {
-  const tipo = String(obterTipo(mov)).toUpperCase()
-  const usuario = obterUsuario(mov)
-  const anterior = obterValorAnterior(mov)
-  const novo = obterValorNovo(mov)
+function extrairAlteracaoDaDescricao(
+  descricao
+) {
+  const texto = String(
+    descricao || ''
+  ).trim()
+
+  if (!texto.includes('→')) {
+    return null
+  }
+
+  const partes = texto.split('→')
+
+  if (partes.length < 2) {
+    return null
+  }
+
+  const parteAnterior =
+    partes[0].trim()
+
+  const parteNova =
+    partes.slice(1).join('→').trim()
+
+  const separador =
+    Math.max(
+      parteAnterior.lastIndexOf(':'),
+      parteAnterior.lastIndexOf('\n')
+    )
+
+  const prefixo =
+    separador >= 0
+      ? parteAnterior
+          .slice(0, separador + 1)
+          .trim()
+      : ''
+
+  const anterior =
+    separador >= 0
+      ? parteAnterior
+          .slice(separador + 1)
+          .trim()
+      : parteAnterior
+
+  const novo =
+    parteNova
+      .replace(/\.$/, '')
+      .trim()
+
+  if (!anterior || !novo) {
+    return null
+  }
+
+  return {
+    prefixo,
+    anterior,
+    novo,
+  }
+}
+
+function renderizarDescricaoBanco(
+  mov
+) {
+  const descricao = String(
+    mov.descricao || ''
+  ).trim()
+
+  if (!descricao) {
+    return null
+  }
+
+  const alteracao =
+    extrairAlteracaoDaDescricao(
+      descricao
+    )
+
+  if (!alteracao) {
+    return descricao
+  }
+
+  return (
+    <>
+      {alteracao.prefixo && (
+        <>
+          {alteracao.prefixo}{' '}
+        </>
+      )}
+
+      <span className="patrimonio-mov-value patrimonio-mov-value-old">
+        {alteracao.anterior}
+      </span>
+
+      <span className="patrimonio-mov-arrow">
+        →
+      </span>
+
+      <span className="patrimonio-mov-value patrimonio-mov-value-new">
+        {alteracao.novo}
+      </span>
+    </>
+  )
+}
+
+function criarDescricaoPadrao(mov) {
+  const tipo = String(
+    obterTipo(mov)
+  ).toUpperCase()
+
+  const usuario =
+    obterUsuario(mov)
+
+  const anterior =
+    obterValorAnterior(mov)
+
+  const novo =
+    obterValorNovo(mov)
 
   if (tipo.includes('STATUS')) {
-    if (anterior && novo && anterior !== novo) {
+    if (
+      anterior &&
+      novo &&
+      anterior !== novo
+    ) {
       return (
         <>
-          <strong>{usuario}</strong> alterou o status de{' '}
+          <strong>{usuario}</strong>{' '}
+          alterou o status de{' '}
+
           <span className="patrimonio-mov-value patrimonio-mov-value-old">
             {anterior}
           </span>
 
-          <span className="patrimonio-mov-arrow">→</span>
+          <span className="patrimonio-mov-arrow">
+            →
+          </span>
 
           <span className="patrimonio-mov-value patrimonio-mov-value-new">
             {novo}
@@ -176,10 +347,8 @@ function criarDescricao(mov) {
 
     return (
       <>
-        <strong>{usuario}</strong> alterou o status para{' '}
-        <span className="patrimonio-mov-value patrimonio-mov-value-new">
-          {novo || 'não informado'}
-        </span>
+        <strong>{usuario}</strong>{' '}
+        alterou o status
       </>
     )
   }
@@ -187,17 +356,28 @@ function criarDescricao(mov) {
   if (
     tipo.includes('LOCAL') ||
     tipo.includes('TRANSFER') ||
-    tipo.includes('MOVIMENT')
+    tipo.includes('MOVIMENT') ||
+    tipo.includes('CAUTELA') ||
+    tipo.includes('DEVOLU') ||
+    tipo.includes('BAIXA')
   ) {
-    if (anterior && novo && anterior !== novo) {
+    if (
+      anterior &&
+      novo &&
+      anterior !== novo
+    ) {
       return (
         <>
-          <strong>{usuario}</strong> alterou o local de{' '}
+          <strong>{usuario}</strong>{' '}
+          movimentou o patrimônio de{' '}
+
           <span className="patrimonio-mov-value patrimonio-mov-value-old">
             {anterior}
           </span>
 
-          <span className="patrimonio-mov-arrow">→</span>
+          <span className="patrimonio-mov-arrow">
+            →
+          </span>
 
           <span className="patrimonio-mov-value patrimonio-mov-value-new">
             {novo}
@@ -208,7 +388,41 @@ function criarDescricao(mov) {
 
     return (
       <>
-        <strong>{usuario}</strong> registrou uma movimentação patrimonial
+        <strong>{usuario}</strong>{' '}
+        registrou uma movimentação patrimonial
+      </>
+    )
+  }
+
+  if (
+    tipo.includes('FOTO_REMOVIDA')
+  ) {
+    return (
+      <>
+        <strong>{usuario}</strong>{' '}
+        removeu uma foto
+      </>
+    )
+  }
+
+  if (
+    tipo.includes('FOTO_PRINCIPAL')
+  ) {
+    return (
+      <>
+        <strong>{usuario}</strong>{' '}
+        definiu a foto principal
+      </>
+    )
+  }
+
+  if (
+    tipo.includes('FOTO_BAIXADA')
+  ) {
+    return (
+      <>
+        <strong>{usuario}</strong>{' '}
+        baixou uma foto
       </>
     )
   }
@@ -216,7 +430,8 @@ function criarDescricao(mov) {
   if (tipo.includes('FOTO')) {
     return (
       <>
-        <strong>{usuario}</strong> adicionou uma foto
+        <strong>{usuario}</strong>{' '}
+        adicionou uma foto
       </>
     )
   }
@@ -224,7 +439,8 @@ function criarDescricao(mov) {
   if (tipo.includes('QR')) {
     return (
       <>
-        <strong>{usuario}</strong> gerou o QR Code
+        <strong>{usuario}</strong>{' '}
+        gerou o QR Code
       </>
     )
   }
@@ -235,7 +451,8 @@ function criarDescricao(mov) {
   ) {
     return (
       <>
-        <strong>{usuario}</strong> imprimiu a etiqueta patrimonial
+        <strong>{usuario}</strong>{' '}
+        imprimiu a etiqueta patrimonial
       </>
     )
   }
@@ -246,24 +463,58 @@ function criarDescricao(mov) {
   ) {
     return (
       <>
-        <strong>{usuario}</strong> cadastrou o patrimônio
+        <strong>{usuario}</strong>{' '}
+        cadastrou o patrimônio
+      </>
+    )
+  }
+
+  if (
+    tipo.includes('EXCLUS')
+  ) {
+    return (
+      <>
+        <strong>{usuario}</strong>{' '}
+        excluiu o patrimônio
       </>
     )
   }
 
   return (
     <>
-      <strong>{usuario}</strong> registrou uma movimentação
+      <strong>{usuario}</strong>{' '}
+      registrou um evento patrimonial
     </>
   )
 }
 
-function obterClasseTipo(mov) {
-  const tipo = String(obterTipo(mov)).toUpperCase()
+function criarDescricao(mov) {
+  const descricaoBanco =
+    renderizarDescricaoBanco(mov)
 
-  if (tipo.includes('STATUS')) return 'status'
-  if (tipo.includes('FOTO')) return 'foto'
-  if (tipo.includes('QR')) return 'qrcode'
+  if (descricaoBanco) {
+    return descricaoBanco
+  }
+
+  return criarDescricaoPadrao(mov)
+}
+
+function obterClasseTipo(mov) {
+  const tipo = String(
+    obterTipo(mov)
+  ).toUpperCase()
+
+  if (tipo.includes('STATUS')) {
+    return 'status'
+  }
+
+  if (tipo.includes('FOTO')) {
+    return 'foto'
+  }
+
+  if (tipo.includes('QR')) {
+    return 'qrcode'
+  }
 
   if (
     tipo.includes('ETIQUETA') ||
@@ -275,7 +526,10 @@ function obterClasseTipo(mov) {
   if (
     tipo.includes('LOCAL') ||
     tipo.includes('TRANSFER') ||
-    tipo.includes('MOVIMENT')
+    tipo.includes('MOVIMENT') ||
+    tipo.includes('CAUTELA') ||
+    tipo.includes('DEVOLU') ||
+    tipo.includes('BAIXA')
   ) {
     return 'local'
   }
@@ -292,6 +546,20 @@ function obterClasseTipo(mov) {
 
 function obterDetalhes(mov) {
   const detalhes = []
+
+  if (mov.origem_local) {
+    detalhes.push({
+      label: 'Origem',
+      valor: mov.origem_local,
+    })
+  }
+
+  if (mov.destino_local) {
+    detalhes.push({
+      label: 'Destino',
+      valor: mov.destino_local,
+    })
+  }
 
   if (mov.solicitante_nome) {
     detalhes.push({
@@ -317,10 +585,17 @@ function obterDetalhes(mov) {
   return detalhes
 }
 
-export default function PatrimonioMovimentacoes({ item }) {
-  const [historico, setHistorico] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState('')
+export default function PatrimonioMovimentacoes({
+  item,
+}) {
+  const [historico, setHistorico] =
+    useState([])
+
+  const [loading, setLoading] =
+    useState(false)
+
+  const [erro, setErro] =
+    useState('')
 
   useEffect(() => {
     let ativo = true
@@ -335,16 +610,26 @@ export default function PatrimonioMovimentacoes({ item }) {
         setLoading(true)
         setErro('')
 
-        const dados = await listarHistoricoPatrimonio(item.id)
+        const dados =
+          await listarHistoricoPatrimonio(
+            item.id
+          )
 
         if (ativo) {
-          setHistorico(Array.isArray(dados) ? dados : [])
+          setHistorico(
+            Array.isArray(dados)
+              ? dados
+              : []
+          )
         }
       } catch (error) {
         console.error(error)
 
         if (ativo) {
-          setErro('Erro ao carregar movimentações.')
+          setErro(
+            'Erro ao carregar movimentações.'
+          )
+
           setHistorico([])
         }
       } finally {
@@ -366,15 +651,23 @@ export default function PatrimonioMovimentacoes({ item }) {
       <header className="patrimonio-section-header">
         <div>
           <h3>Movimentações</h3>
-          <p>Histórico completo deste patrimônio.</p>
+
+          <p>
+            Histórico completo deste
+            patrimônio.
+          </p>
         </div>
 
-        {!loading && !erro && historico.length > 0 && (
-          <span className="patrimonio-mov-count">
-            {historico.length}{' '}
-            {historico.length === 1 ? 'evento' : 'eventos'}
-          </span>
-        )}
+        {!loading &&
+          !erro &&
+          historico.length > 0 && (
+            <span className="patrimonio-mov-count">
+              {historico.length}{' '}
+              {historico.length === 1
+                ? 'evento'
+                : 'eventos'}
+            </span>
+          )}
       </header>
 
       {loading && (
@@ -390,71 +683,118 @@ export default function PatrimonioMovimentacoes({ item }) {
         </div>
       )}
 
-      {!loading && !erro && historico.length === 0 && (
-        <div className="patrimonio-mov-state patrimonio-mov-state-empty">
-          Nenhuma movimentação encontrada.
-        </div>
-      )}
+      {!loading &&
+        !erro &&
+        historico.length === 0 && (
+          <div className="patrimonio-mov-state patrimonio-mov-state-empty">
+            Nenhuma movimentação
+            encontrada.
+          </div>
+        )}
 
-      {!loading && !erro && historico.length > 0 && (
-        <div className="patrimonio-timeline">
-          {historico.map((mov, index) => {
-            const tipo = obterTipo(mov)
-            const classeTipo = obterClasseTipo(mov)
-            const detalhes = obterDetalhes(mov)
+      {!loading &&
+        !erro &&
+        historico.length > 0 && (
+          <div className="patrimonio-timeline">
+            {historico.map(
+              (mov, index) => {
+                const tipo =
+                  obterTipo(mov)
 
-            return (
-              <article
-                key={mov.id || `${tipo}-${mov.created_at}-${index}`}
-                className={`patrimonio-timeline-item patrimonio-timeline-item-${classeTipo}`}
-              >
-                <div className="patrimonio-timeline-rail">
-                  <span className="patrimonio-timeline-icon">
-                    <TimelineIcon tipo={tipo} />
-                  </span>
+                const classeTipo =
+                  obterClasseTipo(mov)
 
-                  {index < historico.length - 1 && (
-                    <span className="patrimonio-timeline-line" />
-                  )}
-                </div>
+                const detalhes =
+                  obterDetalhes(mov)
 
-                <div className="patrimonio-timeline-content">
-                  <div className="patrimonio-timeline-top">
-                    <span className="patrimonio-mov-type">
-                      {tipo}
-                    </span>
+                return (
+                  <article
+                    key={
+                      mov.id ||
+                      `${tipo}-${mov.created_at}-${index}`
+                    }
+                    className={
+                      `patrimonio-timeline-item ` +
+                      `patrimonio-timeline-item-${classeTipo}`
+                    }
+                  >
+                    <div className="patrimonio-timeline-rail">
+                      <span className="patrimonio-timeline-icon">
+                        <TimelineIcon
+                          tipo={tipo}
+                        />
+                      </span>
 
-                    <time dateTime={mov.created_at || undefined}>
-                      {formatarData(mov.created_at)}
-                    </time>
-                  </div>
+                      {index <
+                        historico.length -
+                          1 && (
+                        <span className="patrimonio-timeline-line" />
+                      )}
+                    </div>
 
-                  <div className="patrimonio-timeline-description">
-                    {criarDescricao(mov)}
-                  </div>
+                    <div className="patrimonio-timeline-content">
+                      <div className="patrimonio-timeline-top">
+                        <span className="patrimonio-mov-type">
+                          {tipo}
+                        </span>
 
-                  {detalhes.length > 0 && (
-                    <div className="patrimonio-timeline-details">
-                      {detalhes.map((detalhe) => (
-                        <div key={detalhe.label}>
-                          <small>{detalhe.label}</small>
-                          <strong>{detalhe.valor}</strong>
+                        <time
+                          dateTime={
+                            mov.created_at ||
+                            undefined
+                          }
+                        >
+                          {formatarData(
+                            mov.created_at
+                          )}
+                        </time>
+                      </div>
+
+                      <div className="patrimonio-timeline-description">
+                        {criarDescricao(mov)}
+                      </div>
+
+                      {detalhes.length >
+                        0 && (
+                        <div className="patrimonio-timeline-details">
+                          {detalhes.map(
+                            (detalhe) => (
+                              <div
+                                key={
+                                  detalhe.label
+                                }
+                              >
+                                <small>
+                                  {
+                                    detalhe.label
+                                  }
+                                </small>
+
+                                <strong>
+                                  {
+                                    detalhe.valor
+                                  }
+                                </strong>
+                              </div>
+                            )
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      )}
 
-                  {mov.observacoes && (
-                    <div className="patrimonio-timeline-note">
-                      {mov.observacoes}
+                      {(mov.observacoes ||
+                        mov.observacao) && (
+                        <div className="patrimonio-timeline-note">
+                          {mov.observacoes ||
+                            mov.observacao}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      )}
+                  </article>
+                )
+              }
+            )}
+          </div>
+        )}
     </section>
   )
 }
