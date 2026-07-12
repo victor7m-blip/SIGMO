@@ -3,29 +3,264 @@
 @import './styles/policiaisTable.css';
 @import './styles/policiaisModal.css';
 
-.qr-filter-group {
+/* =====================================================
+   PÁGINA
+===================================================== */
+
+.policiais-page {
+  width: 100%;
+  min-width: 0;
+}
+
+/* =====================================================
+   FILTROS
+===================================================== */
+
+.policiais-filters-card {
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 20px;
+  padding: 20px;
+  border: 1px solid #e4e7ec;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.policiais-filters-header {
   display: flex;
-  gap: 8px;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
 }
 
-.qr-filter-group input {
-  flex: 1;
+.policiais-filters-header > div {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.qr-filter-button {
-  white-space: nowrap;
-  border: none;
-  border-radius: 10px;
+.policiais-filters-header strong {
+  color: #101828;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.policiais-filters-header span {
+  color: #667085;
+  font-size: 14px;
+}
+
+.policiais-filters-header .btn-secondary {
+  flex: 0 0 auto;
+  min-height: 40px;
   padding: 0 14px;
-  background: #075eea;
-  color: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
 
+.policiais-filters-header .btn-secondary:hover {
+  background: #f9fafb;
+  border-color: #98a2b3;
+}
+
+/* =====================================================
+   GRID DOS FILTROS
+===================================================== */
+
+.policiais-filters-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.3fr)
+    minmax(170px, 1.2fr)
+    minmax(125px, 0.7fr)
+    minmax(260px, 1.5fr);
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.policiais-filters-grid > label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.policiais-filters-grid input,
+.policiais-filters-grid select {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  outline: none;
+  background: #ffffff;
+  color: #101828;
+  font-family: inherit;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.policiais-filters-grid input::placeholder {
+  color: #98a2b3;
+}
+
+.policiais-filters-grid input:focus,
+.policiais-filters-grid select:focus {
+  border-color: #075eea;
+  box-shadow: 0 0 0 3px rgba(7, 94, 234, 0.12);
+}
+
+/* =====================================================
+   FILTRO QR CODE
+===================================================== */
+
+.qr-filter-group {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.qr-filter-group input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.qr-filter-button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: #075eea;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qr-filter-button:hover {
+  background: #064fc6;
+}
+
+/* =====================================================
+   FOTO DA TABELA
+===================================================== */
+
+.policial-table-photo-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  background: #e5e7eb;
+  cursor: pointer;
+}
+
+.policial-table-photo-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.policial-table-photo-button span {
+  color: #0b2a4a;
+  font-weight: 800;
+}
+
+/* =====================================================
+   PAGINAÇÃO
+===================================================== */
+
+.policiais-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.policiais-pagination button {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid #d0d5dd;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #344054;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.policiais-pagination button:hover:not(:disabled) {
+  border-color: #075eea;
+  color: #075eea;
+}
+
+.policiais-pagination button.active {
+  border-color: #075eea;
+  background: #075eea;
+  color: #ffffff;
+}
+
+.policiais-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.policiais-pagination-dots {
+  padding: 0 4px;
+  color: #667085;
+  font-weight: 700;
+}
+
+/* =====================================================
+   RESPONSIVO
+===================================================== */
+
+@media (max-width: 1180px) {
+  .policiais-filters-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 720px) {
+  .policiais-filters-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .policiais-filters-header .btn-secondary {
+    width: 100%;
+  }
+
+  .policiais-filters-grid {
+    grid-template-columns: 1fr;
+  }
+
   .qr-filter-group {
     flex-direction: column;
   }
@@ -34,30 +269,8 @@
     width: 100%;
     padding: 12px;
   }
-}
 
-.policial-table-photo-button{
-  width:46px;
-  height:46px;
-  border:0;
-  border-radius:50%;
-  overflow:hidden;
-  padding:0;
-  background:#e5e7eb;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  cursor:pointer;
-}
-
-.policial-table-photo-button img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-}
-
-.policial-table-photo-button span{
-  font-weight:800;
-  color:#0b2a4a;
+  .policiais-pagination {
+    justify-content: flex-start;
+  }
 }

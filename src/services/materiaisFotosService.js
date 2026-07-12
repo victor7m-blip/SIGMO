@@ -3,7 +3,7 @@ import {
   registrarEventoPatrimonial,
   TIPOS_EVENTO_PATRIMONIAL,
   obterNomeUsuario
-} from './patrimonioEngineService'
+} from './eventoPatrimonialService'
 
 const BUCKET = 'materiais-fotos'
 const TABLE = 'sigmo_materiais_fotos'
@@ -25,8 +25,10 @@ export async function uploadFotoMaterial(
   }
 
   const extensao =
-    file.name.split('.').pop()?.toLowerCase() ||
-    'jpg'
+    file.name
+      .split('.')
+      .pop()
+      ?.toLowerCase() || 'jpg'
 
   const nomeArquivo = [
     materialId,
@@ -59,7 +61,9 @@ export async function uploadFotoMaterial(
     principal || fotosExistentes.length === 0
 
   if (deveSerPrincipal) {
-    await removerPrincipalFotosMaterial(materialId)
+    await removerPrincipalFotosMaterial(
+      materialId
+    )
   }
 
   const { data, error: bancoError } =
@@ -87,7 +91,8 @@ export async function uploadFotoMaterial(
 
   await registrarEventoPatrimonial({
     tipo:
-      TIPOS_EVENTO_PATRIMONIAL.FOTO_ADICIONADA,
+      TIPOS_EVENTO_PATRIMONIAL
+        .FOTO_ADICIONADA,
     patrimonioId: materialId,
     usuario: user,
     descricao:
@@ -104,7 +109,8 @@ export async function uploadFotoMaterial(
   if (deveSerPrincipal) {
     await registrarEventoPatrimonial({
       tipo:
-        TIPOS_EVENTO_PATRIMONIAL.FOTO_PRINCIPAL,
+        TIPOS_EVENTO_PATRIMONIAL
+          .FOTO_PRINCIPAL,
       patrimonioId: materialId,
       usuario: user,
       descricao:
@@ -124,7 +130,9 @@ export async function uploadFotoMaterial(
 export async function listarFotosMaterial(
   materialId
 ) {
-  if (!materialId) return []
+  if (!materialId) {
+    return []
+  }
 
   const { data, error } = await supabase
     .from(TABLE)
@@ -154,6 +162,10 @@ export async function definirFotoPrincipalMaterial(
     )
   }
 
+  if (foto.principal) {
+    return foto
+  }
+
   await removerPrincipalFotosMaterial(
     foto.material_id
   )
@@ -173,7 +185,8 @@ export async function definirFotoPrincipalMaterial(
 
   await registrarEventoPatrimonial({
     tipo:
-      TIPOS_EVENTO_PATRIMONIAL.FOTO_PRINCIPAL,
+      TIPOS_EVENTO_PATRIMONIAL
+        .FOTO_PRINCIPAL,
     patrimonioId: foto.material_id,
     usuario: user,
     descricao:
@@ -210,18 +223,20 @@ export async function excluirFotoMaterial(
     }
   }
 
-  const { error } = await supabase
-    .from(TABLE)
-    .delete()
-    .eq('id', foto.id)
+  const { error: deleteError } =
+    await supabase
+      .from(TABLE)
+      .delete()
+      .eq('id', foto.id)
 
-  if (error) {
-    throw error
+  if (deleteError) {
+    throw deleteError
   }
 
   await registrarEventoPatrimonial({
     tipo:
-      TIPOS_EVENTO_PATRIMONIAL.FOTO_REMOVIDA,
+      TIPOS_EVENTO_PATRIMONIAL
+        .FOTO_REMOVIDA,
     patrimonioId: foto.material_id,
     usuario: user,
     descricao:
@@ -234,6 +249,34 @@ export async function excluirFotoMaterial(
       bucket: BUCKET
     }
   })
+
+  if (foto.principal) {
+    const novaPrincipal =
+      await definirNovaFotoPrincipalAutomatica(
+        foto.material_id
+      )
+
+    if (novaPrincipal) {
+      await registrarEventoPatrimonial({
+        tipo:
+          TIPOS_EVENTO_PATRIMONIAL
+            .FOTO_PRINCIPAL,
+        patrimonioId: foto.material_id,
+        usuario: user,
+        descricao:
+          `${obterNomeUsuario(user)} definiu automaticamente outra foto como principal.`,
+        metadata: {
+          fotoId: novaPrincipal.id,
+          caminho:
+            novaPrincipal.caminho || null,
+          motivo:
+            'EXCLUSÃO DA FOTO PRINCIPAL',
+          tabela: TABLE,
+          bucket: BUCKET
+        }
+      })
+    }
+  }
 
   return true
 }
@@ -257,6 +300,7 @@ export async function baixarFotoMaterial(
   }
 
   const blob = await resposta.blob()
+
   const urlTemporaria =
     URL.createObjectURL(blob)
 
@@ -264,6 +308,7 @@ export async function baixarFotoMaterial(
     document.createElement('a')
 
   link.href = urlTemporaria
+
   link.download =
     foto.caminho?.split('/').pop() ||
     `material-${foto.id}.jpg`
@@ -276,7 +321,8 @@ export async function baixarFotoMaterial(
 
   await registrarEventoPatrimonial({
     tipo:
-      TIPOS_EVENTO_PATRIMONIAL.FOTO_BAIXADA,
+      TIPOS_EVENTO_PATRIMONIAL
+        .FOTO_BAIXADA,
     patrimonioId: foto.material_id,
     usuario: user,
     descricao:
@@ -305,4 +351,42 @@ async function removerPrincipalFotosMaterial(
   if (error) {
     throw error
   }
+}
+
+async function definirNovaFotoPrincipalAutomatica(
+  materialId
+) {
+  const { data: proximaFoto, error: buscaError } =
+    await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('material_id', materialId)
+      .order('created_at', {
+        ascending: false
+      })
+      .limit(1)
+      .maybeSingle()
+
+  if (buscaError) {
+    throw buscaError
+  }
+
+  if (!proximaFoto) {
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({
+      principal: true
+    })
+    .eq('id', proximaFoto.id)
+    .select()
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return data
 }

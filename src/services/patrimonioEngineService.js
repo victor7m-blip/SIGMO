@@ -1,26 +1,9 @@
 import { supabase } from './supabaseClient'
 import {
-  registerPatrimonialAudit
-} from './auditoriaService'
-
-export const TIPOS_EVENTO_PATRIMONIAL = Object.freeze({
-  CADASTRO: 'CADASTRO',
-  EDICAO: 'EDIÇÃO',
-  STATUS: 'STATUS',
-  LOCAL: 'LOCAL',
-  FOTO_ADICIONADA: 'FOTO_ADICIONADA',
-  FOTO_REMOVIDA: 'FOTO_REMOVIDA',
-  FOTO_PRINCIPAL: 'FOTO_PRINCIPAL',
-  FOTO_BAIXADA: 'FOTO_BAIXADA',
-  QRCODE_GERADO: 'QRCODE_GERADO',
-  ETIQUETA_IMPRESSA: 'ETIQUETA_IMPRESSA',
-  MOVIMENTACAO: 'MOVIMENTAÇÃO',
-  CAUTELA: 'CAUTELA',
-  DEVOLUCAO: 'DEVOLUÇÃO',
-  TRANSFERENCIA: 'TRANSFERÊNCIA',
-  BAIXA: 'BAIXA',
-  EXCLUSAO: 'EXCLUSÃO'
-})
+  obterNomeUsuario,
+  registrarEventoPatrimonial,
+  TIPOS_EVENTO_PATRIMONIAL
+} from './eventoPatrimonialService'
 
 function normalizarPayload(payload = {}) {
   const novoPayload = {}
@@ -35,20 +18,10 @@ function normalizarPayload(payload = {}) {
   return novoPayload
 }
 
-export function obterNomeUsuario(user) {
-  return (
-    user?.nome ||
-    user?.nome_guerra ||
-    user?.nome_completo ||
-    user?.name ||
-    user?.email ||
-    'SIGMO'
-  )
-}
-
 function formatarNomeCampo(campo) {
   const nomes = {
     patrimonio: 'PATRIMÔNIO',
+    numero_patrimonio: 'NÚMERO DO PATRIMÔNIO',
     descricao: 'DESCRIÇÃO',
     categoria: 'CATEGORIA',
     marca: 'MARCA',
@@ -62,7 +35,10 @@ function formatarNomeCampo(campo) {
     observacoes: 'OBSERVAÇÕES'
   }
 
-  return nomes[campo] || campo.replaceAll('_', ' ').toUpperCase()
+  return (
+    nomes[campo] ||
+    campo.replaceAll('_', ' ').toUpperCase()
+  )
 }
 
 function valorParaTexto(valor) {
@@ -85,176 +61,10 @@ function valorParaTexto(valor) {
   return String(valor)
 }
 
-function normalizarTipoEvento(tipo) {
-  return String(
-    tipo || TIPOS_EVENTO_PATRIMONIAL.MOVIMENTACAO
-  ).toUpperCase()
-}
-
-function criarDescricaoPadrao({
-  tipo,
-  usuario
-}) {
-  const nomeUsuario = obterNomeUsuario(usuario)
-
-  const descricoes = {
-    CADASTRO:
-      `${nomeUsuario} cadastrou o patrimônio.`,
-
-    'EDIÇÃO':
-      `${nomeUsuario} atualizou o patrimônio.`,
-
-    STATUS:
-      `${nomeUsuario} alterou o status.`,
-
-    LOCAL:
-      `${nomeUsuario} alterou o local.`,
-
-    FOTO_ADICIONADA:
-      `${nomeUsuario} adicionou uma foto.`,
-
-    FOTO_REMOVIDA:
-      `${nomeUsuario} removeu uma foto.`,
-
-    FOTO_PRINCIPAL:
-      `${nomeUsuario} definiu a foto principal.`,
-
-    FOTO_BAIXADA:
-      `${nomeUsuario} baixou uma foto.`,
-
-    QRCODE_GERADO:
-      `${nomeUsuario} gerou o QR Code.`,
-
-    ETIQUETA_IMPRESSA:
-      `${nomeUsuario} imprimiu uma etiqueta.`,
-
-    'MOVIMENTAÇÃO':
-      `${nomeUsuario} registrou uma movimentação.`,
-
-    CAUTELA:
-      `${nomeUsuario} realizou uma cautela.`,
-
-    'DEVOLUÇÃO':
-      `${nomeUsuario} registrou uma devolução.`,
-
-    'TRANSFERÊNCIA':
-      `${nomeUsuario} realizou uma transferência.`,
-
-    BAIXA:
-      `${nomeUsuario} realizou a baixa do patrimônio.`,
-
-    'EXCLUSÃO':
-      `${nomeUsuario} excluiu o patrimônio.`
-  }
-
-  return (
-    descricoes[tipo] ||
-    `${nomeUsuario} registrou um evento patrimonial.`
-  )
-}
-
-function obterSeveridadeEvento(tipo) {
-  if (
-    tipo === TIPOS_EVENTO_PATRIMONIAL.EXCLUSAO ||
-    tipo === TIPOS_EVENTO_PATRIMONIAL.BAIXA
-  ) {
-    return 'Atenção'
-  }
-
-  return 'Informativo'
-}
-
-export async function registrarEventoPatrimonial({
-  tipo,
-  patrimonioId,
-  usuario = null,
-  descricao = null,
-  movimentacaoId = null,
-  metadata = null
-}) {
-  if (!patrimonioId) {
-    console.warn(
-      'Evento patrimonial não registrado: patrimônio não informado.'
-    )
-
-    return null
-  }
-
-  const tipoNormalizado = normalizarTipoEvento(tipo)
-
-  const descricaoEvento =
-    descricao ||
-    criarDescricaoPadrao({
-      tipo: tipoNormalizado,
-      usuario
-    })
-
-  const registro = {
-    patrimonio_id: patrimonioId,
-    movimentacao_id: movimentacaoId,
-    tipo_evento: tipoNormalizado,
-    descricao: descricaoEvento,
-    created_by: usuario?.id || null,
-    created_by_nome: obterNomeUsuario(usuario)
-  }
-
-  const { data, error } = await supabase
-    .from('sigmo_patrimonio_historico')
-    .insert([registro])
-    .select()
-    .single()
-
-  if (error) {
-    console.warn(
-      'Erro ao registrar evento patrimonial:',
-      {
-        error,
-        tipo: tipoNormalizado,
-        patrimonioId,
-        metadata
-      }
-    )
-
-    return null
-  }
-
-  try {
-    await registerPatrimonialAudit({
-      tipo: tipoNormalizado,
-      descricao: descricaoEvento,
-      usuario,
-      modulo: 'Patrimônio',
-      severidade: obterSeveridadeEvento(
-        tipoNormalizado
-      )
-    })
-  } catch (auditError) {
-    console.warn(
-      'Histórico registrado, mas houve erro na auditoria:',
-      auditError
-    )
-  }
-
-  return data
-}
-
-export async function registrarHistoricoPatrimonio({
-  patrimonio_id,
-  tipo_evento,
-  descricao,
-  user = null,
-  movimentacao_id = null
-}) {
-  return registrarEventoPatrimonial({
-    tipo: tipo_evento,
-    patrimonioId: patrimonio_id,
-    usuario: user,
-    descricao,
-    movimentacaoId: movimentacao_id
-  })
-}
-
-function listarAlteracoes(antes = {}, depois = {}) {
+function listarAlteracoes(
+  antes = {},
+  depois = {}
+) {
   const ignorar = [
     'id',
     'created_at',
@@ -262,7 +72,9 @@ function listarAlteracoes(antes = {}, depois = {}) {
   ]
 
   return Object.keys(depois)
-    .filter((chave) => !ignorar.includes(chave))
+    .filter(
+      (chave) => !ignorar.includes(chave)
+    )
     .filter(
       (chave) =>
         valorParaTexto(antes?.[chave]) !==
@@ -270,8 +82,10 @@ function listarAlteracoes(antes = {}, depois = {}) {
     )
     .map((chave) => ({
       campo: chave,
-      anterior: valorParaTexto(antes?.[chave]),
-      novo: valorParaTexto(depois?.[chave])
+      anterior:
+        valorParaTexto(antes?.[chave]),
+      novo:
+        valorParaTexto(depois?.[chave])
     }))
 }
 
@@ -281,11 +95,13 @@ async function registrarAlteracoes({
   depois,
   usuario
 }) {
-  const alteracoes = listarAlteracoes(antes, depois)
+  const alteracoes =
+    listarAlteracoes(antes, depois)
 
   if (alteracoes.length === 0) {
     await registrarEventoPatrimonial({
-      tipo: TIPOS_EVENTO_PATRIMONIAL.EDICAO,
+      tipo:
+        TIPOS_EVENTO_PATRIMONIAL.EDICAO,
       patrimonioId,
       usuario,
       descricao:
@@ -318,7 +134,9 @@ async function registrarAlteracoes({
       usuario,
       descricao:
         `${obterNomeUsuario(usuario)} alterou ` +
-        `${nomeCampo}: ${alteracao.anterior} → ${alteracao.novo}.`,
+        `${nomeCampo}: ` +
+        `${alteracao.anterior} → ` +
+        `${alteracao.novo}.`,
       metadata: {
         campo: alteracao.campo,
         valorAnterior: alteracao.anterior,
@@ -328,7 +146,9 @@ async function registrarAlteracoes({
   }
 }
 
-export async function listarPatrimoniosEngine(config) {
+export async function listarPatrimoniosEngine(
+  config
+) {
   const { data, error } = await supabase
     .from(config.tabela)
     .select('*')
@@ -336,7 +156,9 @@ export async function listarPatrimoniosEngine(config) {
       ascending: false
     })
 
-  if (error) throw error
+  if (error) {
+    throw error
+  }
 
   return data || []
 }
@@ -351,7 +173,9 @@ export async function buscarPatrimonioEnginePorId(
     .eq('id', id)
     .single()
 
-  if (error) throw error
+  if (error) {
+    throw error
+  }
 
   return data
 }
@@ -370,10 +194,13 @@ export async function cadastrarPatrimonioEngine(
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    throw error
+  }
 
   await registrarEventoPatrimonial({
-    tipo: TIPOS_EVENTO_PATRIMONIAL.CADASTRO,
+    tipo:
+      TIPOS_EVENTO_PATRIMONIAL.CADASTRO,
     patrimonioId: data.id,
     usuario: user,
     descricao:
@@ -393,7 +220,10 @@ export async function atualizarPatrimonioEngine(
   user = null
 ) {
   const antes =
-    await buscarPatrimonioEnginePorId(config, id)
+    await buscarPatrimonioEnginePorId(
+      config,
+      id
+    )
 
   const payloadNormalizado =
     normalizarPayload(payload)
@@ -405,7 +235,9 @@ export async function atualizarPatrimonioEngine(
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    throw error
+  }
 
   await registrarAlteracoes({
     patrimonioId: id,
@@ -423,15 +255,24 @@ export async function excluirPatrimonioEngine(
   user = null
 ) {
   const antes =
-    await buscarPatrimonioEnginePorId(config, id)
+    await buscarPatrimonioEnginePorId(
+      config,
+      id
+    )
 
   await registrarEventoPatrimonial({
-    tipo: TIPOS_EVENTO_PATRIMONIAL.EXCLUSAO,
+    tipo:
+      TIPOS_EVENTO_PATRIMONIAL.EXCLUSAO,
     patrimonioId: id,
     usuario: user,
     descricao:
       `${obterNomeUsuario(user)} excluiu o registro: ` +
-      `${antes?.patrimonio || antes?.descricao || id}.`,
+      `${
+        antes?.patrimonio ||
+        antes?.numero_patrimonio ||
+        antes?.descricao ||
+        id
+      }.`,
     metadata: {
       tabela: config.tabela,
       registro: antes
@@ -443,7 +284,9 @@ export async function excluirPatrimonioEngine(
     .delete()
     .eq('id', id)
 
-  if (error) throw error
+  if (error) {
+    throw error
+  }
 
   return true
 }

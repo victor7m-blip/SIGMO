@@ -3,7 +3,7 @@ import {
   obterNomeUsuario,
   registrarEventoPatrimonial,
   TIPOS_EVENTO_PATRIMONIAL
-} from './patrimonioEngineService'
+} from './eventoPatrimonialService'
 
 // =====================================================
 // SIGMO — MOTOR DE MOVIMENTAÇÃO
@@ -16,8 +16,11 @@ function normalizarTexto(valor) {
     .toUpperCase()
 }
 
-function obterTipoEventoMovimentacao(tipoMovimentacao) {
-  const tipo = normalizarTexto(tipoMovimentacao)
+function obterTipoEventoMovimentacao(
+  tipoMovimentacao
+) {
+  const tipo =
+    normalizarTexto(tipoMovimentacao)
 
   const tiposCautela = [
     'CAUTELA',
@@ -66,7 +69,8 @@ function criarDescricaoMovimentacao({
   usuario,
   acao = 'registrou uma movimentação'
 }) {
-  const nomeUsuario = obterNomeUsuario(usuario)
+  const nomeUsuario =
+    obterNomeUsuario(usuario)
 
   const tipo =
     movimentacao?.tipo_movimentacao ||
@@ -89,12 +93,17 @@ function criarDescricaoMovimentacao({
 async function listarItensMovimentacao(
   movimentacaoId
 ) {
-  if (!movimentacaoId) return []
+  if (!movimentacaoId) {
+    return []
+  }
 
   const { data, error } = await supabase
     .from('sigmo_movimentacao_itens')
     .select('*')
-    .eq('movimentacao_id', movimentacaoId)
+    .eq(
+      'movimentacao_id',
+      movimentacaoId
+    )
 
   if (error) {
     throw error
@@ -150,21 +159,29 @@ async function registrarEventoNosItens({
     const resultado =
       await registrarEventoPatrimonial({
         tipo: evento,
-        patrimonioId: item.patrimonio_id,
+        patrimonioId:
+          item.patrimonio_id,
         usuario,
-        descricao: descricaoEvento,
-        movimentacaoId: movimentacao.id,
+        descricao:
+          descricaoEvento,
+        movimentacaoId:
+          movimentacao.id,
         metadata: {
-          movimentacaoId: movimentacao.id,
-          itemId: item.id || null,
+          movimentacaoId:
+            movimentacao.id,
+          itemId:
+            item.id || null,
           tipoMovimentacao:
-            movimentacao.tipo_movimentacao ||
+            movimentacao
+              .tipo_movimentacao ||
             null,
           origemLocal:
-            movimentacao.origem_local ||
+            movimentacao
+              .origem_local ||
             null,
           destinoLocal:
-            movimentacao.destino_local ||
+            movimentacao
+              .destino_local ||
             null,
           quantidade:
             item.quantidade || 1,
@@ -189,9 +206,12 @@ export async function criarMovimentacao({
   const { data, error } = await supabase.rpc(
     'sigmo_criar_movimentacao',
     {
-      p_tipo_movimentacao: tipo_movimentacao,
-      p_origem_local: origem_local,
-      p_destino_local: destino_local,
+      p_tipo_movimentacao:
+        tipo_movimentacao,
+      p_origem_local:
+        origem_local,
+      p_destino_local:
+        destino_local,
       p_solicitante_id:
         solicitante?.id || null,
       p_solicitante_nome:
@@ -202,7 +222,8 @@ export async function criarMovimentacao({
         recebedor?.id || null,
       p_recebedor_nome:
         obterNomeUsuario(recebedor),
-      p_observacoes: observacoes
+      p_observacoes:
+        observacoes
     }
   )
 
@@ -223,10 +244,14 @@ export async function adicionarItemMovimentacao({
   const { data, error } = await supabase.rpc(
     'sigmo_adicionar_item_movimentacao',
     {
-      p_movimentacao_id: movimentacao_id,
-      p_patrimonio_id: patrimonio_id,
-      p_quantidade: quantidade,
-      p_observacao: observacao
+      p_movimentacao_id:
+        movimentacao_id,
+      p_patrimonio_id:
+        patrimonio_id,
+      p_quantidade:
+        quantidade,
+      p_observacao:
+        observacao
     }
   )
 
@@ -240,49 +265,59 @@ export async function adicionarItemMovimentacao({
         movimentacao_id
       )
 
+    const usuarioEvento =
+      usuario ||
+      {
+        id:
+          movimentacao
+            ?.solicitante_id ||
+          null,
+        nome:
+          movimentacao
+            ?.solicitante_nome ||
+          null,
+        perfil:
+          movimentacao
+            ?.solicitante_perfil ||
+          null
+      }
+
     await registrarEventoPatrimonial({
-      tipo: obterTipoEventoMovimentacao(
-        movimentacao?.tipo_movimentacao
-      ),
-      patrimonioId: patrimonio_id,
+      tipo:
+        obterTipoEventoMovimentacao(
+          movimentacao
+            ?.tipo_movimentacao
+        ),
+      patrimonioId:
+        patrimonio_id,
       usuario:
-        usuario ||
-        {
-          id:
-            movimentacao?.solicitante_id ||
-            null,
-          nome:
-            movimentacao?.solicitante_nome ||
-            null,
-          perfil:
-            movimentacao?.solicitante_perfil ||
-            null
-        },
-      descricao: criarDescricaoMovimentacao({
-        movimentacao,
-        usuario:
-          usuario ||
-          {
-            nome:
-              movimentacao
-                ?.solicitante_nome
-          },
-        acao:
-          'incluiu o patrimônio na movimentação'
-      }),
-      movimentacaoId: movimentacao_id,
+        usuarioEvento,
+      descricao:
+        criarDescricaoMovimentacao({
+          movimentacao,
+          usuario:
+            usuarioEvento,
+          acao:
+            'incluiu o patrimônio na movimentação'
+        }),
+      movimentacaoId:
+        movimentacao_id,
       metadata: {
-        movimentacaoId: movimentacao_id,
+        movimentacaoId:
+          movimentacao_id,
         quantidade,
         observacao,
         tipoMovimentacao:
-          movimentacao?.tipo_movimentacao ||
+          movimentacao
+            ?.tipo_movimentacao ||
           null,
         origemLocal:
-          movimentacao?.origem_local ||
+          movimentacao
+            ?.origem_local ||
           null,
         destinoLocal:
-          movimentacao?.destino_local ||
+          movimentacao
+            ?.destino_local ||
           null
       }
     })
@@ -336,7 +371,8 @@ export async function listarPatrimoniosDisponiveis(
     )
   }
 
-  const { data, error } = await query
+  const { data, error } =
+    await query
 
   if (error) {
     throw error
@@ -388,7 +424,8 @@ export async function listarMovimentacoes(
     )
   }
 
-  const { data, error } = await query
+  const { data, error } =
+    await query
 
   if (error) {
     throw error
@@ -451,11 +488,13 @@ export async function aprovarMovimentacao({
 
     await registrarEventoNosItens({
       movimentacao,
-      usuario: aprovador,
+      usuario:
+        aprovador,
       acao:
         'aprovou a movimentação',
       metadata: {
-        etapa: 'APROVAÇÃO',
+        etapa:
+          'APROVAÇÃO',
         observacao
       }
     })
@@ -502,14 +541,16 @@ export async function recusarMovimentacao({
 
     await registrarEventoNosItens({
       movimentacao,
-      usuario: aprovador,
+      usuario:
+        aprovador,
       tipoEvento:
         TIPOS_EVENTO_PATRIMONIAL
           .MOVIMENTACAO,
       acao:
         'recusou a movimentação',
       metadata: {
-        etapa: 'RECUSA',
+        etapa:
+          'RECUSA',
         observacao
       }
     })
@@ -554,11 +595,13 @@ export async function confirmarRecebimentoMovimentacao({
 
     await registrarEventoNosItens({
       movimentacao,
-      usuario: recebedor,
+      usuario:
+        recebedor,
       acao:
         'confirmou o recebimento da movimentação',
       metadata: {
-        etapa: 'RECEBIMENTO',
+        etapa:
+          'RECEBIMENTO',
         observacao
       }
     })
@@ -603,7 +646,8 @@ export async function solicitarAlteracaoMovimentacao({
 
     await registrarEventoNosItens({
       movimentacao,
-      usuario: recebedor,
+      usuario:
+        recebedor,
       tipoEvento:
         TIPOS_EVENTO_PATRIMONIAL
           .MOVIMENTACAO,
@@ -663,7 +707,8 @@ export async function cancelarMovimentacao({
       acao:
         'cancelou a movimentação',
       metadata: {
-        etapa: 'CANCELAMENTO',
+        etapa:
+          'CANCELAMENTO',
         observacao
       }
     })

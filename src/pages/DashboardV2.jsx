@@ -9,18 +9,41 @@ import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
 import Policiais from './Policiais'
 import Municoes from './Municoes/Municoes'
+import PagarMaterial from './PagarMaterial/PagarMaterial'
 
 import './DashboardV2.css'
 
-export default function DashboardV2({ user, onLogout }) {
-  const [route, setRoute] = useState('dashboard')
+export default function DashboardV2({
+  user,
+  onLogout
+}) {
+  const [route, setRoute] =
+    useState('dashboard')
 
   function renderPage() {
-    if (route === 'locais') return <Locais user={user} />
-    if (route === 'materiais') return <Materiais user={user} />
-    if (route === 'armas') return <Armas user={user} />
-    if (route === 'policiais') return <Policiais user={user} />
-    if (route === 'municoes') return <Municoes user={user} />
+    if (route === 'pagar-material') {
+      return <PagarMaterial user={user} />
+    }
+
+    if (route === 'locais') {
+      return <Locais user={user} />
+    }
+
+    if (route === 'materiais') {
+      return <Materiais user={user} />
+    }
+
+    if (route === 'armas') {
+      return <Armas user={user} />
+    }
+
+    if (route === 'policiais') {
+      return <Policiais user={user} />
+    }
+
+    if (route === 'municoes') {
+      return <Municoes user={user} />
+    }
 
     return (
       <main className="sigmo-dashboard-v2">
