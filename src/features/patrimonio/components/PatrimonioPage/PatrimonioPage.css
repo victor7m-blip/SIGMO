@@ -1,14 +1,34 @@
 .patrimonio-page {
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
+  box-sizing: border-box;
+  overflow-x: hidden;
   padding: 24px;
   background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 32%),
-    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    radial-gradient(
+      circle at top left,
+      rgba(37, 99, 235, 0.12),
+      transparent 32%
+    ),
+    linear-gradient(
+      180deg,
+      #f8fafc 0%,
+      #eef2f7 100%
+    );
   color: #0f172a;
 }
 
+.patrimonio-page *,
+.patrimonio-page *::before,
+.patrimonio-page *::after {
+  box-sizing: border-box;
+}
+
 .patrimonio-shell {
+  width: 100%;
   max-width: 1440px;
+  min-width: 0;
   margin: 0 auto;
 }
 
@@ -16,110 +36,171 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  width: 100%;
+  min-width: 0;
   gap: 24px;
   margin-bottom: 18px;
   padding: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  border: 1px solid
+    rgba(148, 163, 184, 0.35);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+  background:
+    rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 20px 60px
+    rgba(15, 23, 42, 0.08);
+}
+
+.patrimonio-header > div {
+  min-width: 0;
 }
 
 .patrimonio-eyebrow {
   display: inline-flex;
   margin-bottom: 8px;
-  font-size: .78rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #2563eb;
 }
 
 .patrimonio-header h1 {
   margin: 0;
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  font-size:
+    clamp(
+      1.7rem,
+      3vw,
+      2.5rem
+    );
+  overflow-wrap: anywhere;
 }
 
 .patrimonio-header p {
   max-width: 720px;
   margin: 10px 0 0;
   color: #64748b;
+  overflow-wrap: anywhere;
 }
 
 .patrimonio-novo-btn {
+  flex-shrink: 0;
+  min-height: 44px;
   border: 0;
   border-radius: 14px;
   padding: 12px 18px;
   font-weight: 800;
   cursor: pointer;
   background: #2563eb;
-  color: white;
+  color: #ffffff;
+}
+
+.patrimonio-novo-btn:hover {
+  background: #1d4ed8;
 }
 
 .patrimonio-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(300px, 430px)
+    minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
   gap: 18px;
 }
 
+.patrimonio-grid > * {
+  min-width: 0;
+}
+
 .patrimonio-alert {
+  width: 100%;
   margin-bottom: 18px;
   padding: 14px 16px;
   border-radius: 14px;
   background: #fee2e2;
   color: #991b1b;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .patrimonio-loading {
+  width: 100%;
   padding: 24px;
-  border-radius: 18px;
-  background: white;
   border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
   font-weight: 700;
   color: #64748b;
+}
+
+.patrimonio-dados {
+  width: 100%;
+  min-width: 0;
 }
 
 .patrimonio-dados h3 {
   margin-top: 0;
 }
 
+.patrimonio-dados p {
+  overflow-wrap: anywhere;
+}
+
 .patrimonio-dados-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(160px, 1fr)
+    );
+  width: 100%;
+  min-width: 0;
   gap: 12px;
 }
 
 .patrimonio-dado-item {
+  min-width: 0;
   padding: 14px;
-  border-radius: 14px;
-  background: #fff;
   border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
 }
 
 .patrimonio-dado-item span {
   display: block;
   margin-bottom: 6px;
   color: #64748b;
-  font-size: .78rem;
+  font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .patrimonio-dado-item strong {
+  display: block;
   color: #0f172a;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 .patrimonio-form-card {
   width: 100%;
+  min-width: 0;
 }
 
 .patrimonio-form-header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.patrimonio-form-header > div {
+  min-width: 0;
 }
 
 .patrimonio-form-header h3 {
@@ -129,10 +210,12 @@
 .patrimonio-form-header p {
   margin: 6px 0 0;
   color: #64748b;
+  overflow-wrap: anywhere;
 }
 
 .patrimonio-form-header button,
 .patrimonio-form-actions button {
+  min-height: 42px;
   border: 0;
   border-radius: 12px;
   padding: 10px 14px;
@@ -141,25 +224,40 @@
 }
 
 .patrimonio-form-header button,
-.patrimonio-form-actions button:first-child {
+.patrimonio-form-actions
+  button:first-child {
   background: #e2e8f0;
   color: #0f172a;
 }
 
-.patrimonio-form-actions button:last-child {
+.patrimonio-form-actions
+  button:last-child {
   background: #2563eb;
-  color: white;
+  color: #ffffff;
+}
+
+.patrimonio-form-actions
+  button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .patrimonio-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(210px, 1fr)
+    );
+  width: 100%;
+  min-width: 0;
   gap: 14px;
 }
 
 .patrimonio-form-grid label {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 7px;
   font-weight: 800;
   color: #334155;
@@ -168,11 +266,14 @@
 .patrimonio-form-grid input,
 .patrimonio-form-grid select,
 .patrimonio-form-grid textarea {
+  display: block;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 11px 12px;
-  background: #fff;
+  background: #ffffff;
   color: #0f172a;
   font: inherit;
 }
@@ -185,11 +286,16 @@
 .patrimonio-form-actions {
   display: flex;
   justify-content: flex-end;
+  width: 100%;
   gap: 10px;
   margin-top: 18px;
 }
 
 @media (max-width: 980px) {
+  .patrimonio-page {
+    padding: 16px;
+  }
+
   .patrimonio-header {
     flex-direction: column;
   }
@@ -205,16 +311,57 @@
 
 @media (max-width: 640px) {
   .patrimonio-page {
-    padding: 12px;
+    min-height: 100%;
+    padding: 10px;
+    overflow-x: clip;
+  }
+
+  .patrimonio-shell {
+    max-width: 100%;
   }
 
   .patrimonio-header {
+    gap: 16px;
+    padding: 16px;
     border-radius: 18px;
-    padding: 14px;
+  }
+
+  .patrimonio-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .patrimonio-header p {
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .patrimonio-grid {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 14px;
+  }
+
+  .patrimonio-grid > * {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .patrimonio-dados-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .patrimonio-form-grid {
+    grid-template-columns: 1fr;
   }
 
   .patrimonio-form-header,
   .patrimonio-form-actions {
     flex-direction: column;
+  }
+
+  .patrimonio-form-header button,
+  .patrimonio-form-actions button {
+    width: 100%;
   }
 }

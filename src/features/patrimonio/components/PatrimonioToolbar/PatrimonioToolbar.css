@@ -1,19 +1,26 @@
 .patrimonio-toolbar {
   display: flex;
-  align-items: end;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 16px;
   margin-bottom: 18px;
   padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
   border-radius: 22px;
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.32);
   box-shadow: 0 12px 35px rgba(15, 23, 42, 0.06);
 }
 
+.patrimonio-toolbar-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 18px;
+}
+
 .patrimonio-search {
-  flex: 1;
-  min-width: 260px;
+  display: block;
+  width: 100%;
+  min-width: 0;
 }
 
 .patrimonio-search span {
@@ -28,13 +35,24 @@
 
 .patrimonio-search input {
   width: 100%;
-  height: 46px;
+  min-width: 0;
+  height: 48px;
+  box-sizing: border-box;
   border: 1px solid #cbd5e1;
   border-radius: 14px;
-  padding: 0 14px;
+  padding: 0 16px;
   font-size: 0.95rem;
+  color: #0f172a;
   outline: none;
   background: #f8fafc;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.patrimonio-search input::placeholder {
+  color: #94a3b8;
 }
 
 .patrimonio-search input:focus {
@@ -43,57 +61,147 @@
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
-.patrimonio-toolbar-actions {
+.patrimonio-search input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.patrimonio-toolbar-main-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.patrimonio-toolbar-main-actions button,
+.patrimonio-status-filters button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 14px;
+  padding: 11px 17px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.patrimonio-toolbar-main-actions button:hover,
+.patrimonio-status-filters button:hover {
+  transform: translateY(-1px);
+}
+
+.patrimonio-toolbar-main-actions .btn-primary {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.25);
+}
+
+.patrimonio-toolbar-main-actions .btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.patrimonio-toolbar-main-actions .btn-secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.patrimonio-toolbar-main-actions .btn-secondary:hover {
+  background: #cbd5e1;
+}
+
+.patrimonio-toolbar-bottom {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.patrimonio-filter-label {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.patrimonio-status-filters {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.patrimonio-toolbar-actions button {
-  border: 0;
-  border-radius: 14px;
-  padding: 11px 16px;
-  font-weight: 800;
-  cursor: pointer;
+.patrimonio-status-filters button {
+  min-height: 40px;
+  padding: 9px 16px;
   background: #e2e8f0;
   color: #0f172a;
 }
 
-.patrimonio-toolbar-actions button.active {
+.patrimonio-status-filters button:hover {
+  background: #cbd5e1;
+}
+
+.patrimonio-status-filters button.active {
   background: #dbeafe;
   color: #1d4ed8;
-}
-
-.patrimonio-toolbar-actions .btn-primary {
-  background: #2563eb;
-  color: white;
-  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.25);
-}
-
-.patrimonio-toolbar-actions .btn-secondary {
-  background: #e2e8f0;
-  color: #0f172a;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
 }
 
 @media (max-width: 980px) {
-  .patrimonio-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+  .patrimonio-toolbar-top {
+    grid-template-columns: 1fr;
+  }
+
+  .patrimonio-toolbar-main-actions {
+    justify-content: flex-start;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .patrimonio-toolbar {
+    padding: 15px;
     border-radius: 18px;
-    padding: 14px;
   }
 
-  .patrimonio-toolbar-actions {
+  .patrimonio-toolbar-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .patrimonio-status-filters {
     width: 100%;
   }
 
-  .patrimonio-toolbar-actions button {
-    flex: 1;
+  .patrimonio-status-filters button {
+    flex: 1 1 calc(50% - 5px);
+  }
+}
+
+@media (max-width: 480px) {
+  .patrimonio-toolbar-main-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .patrimonio-toolbar-main-actions button {
+    width: 100%;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .patrimonio-status-filters button {
+    flex-basis: 100%;
+  }
+
+  .patrimonio-search input {
+    font-size: 0.9rem;
   }
 }
