@@ -1,278 +1,294 @@
-import { useEffect, useMemo, useState } from 'react'
-import { listarPoliciais } from '../../services/policiaisService'
+import { useState } from 'react'
+
+import QrScanner from '../../components/QrScanner/QrScanner'
+
+import {
+  criarMovimentacaoCompleta
+} from '../../services/movimentacaoEngine'
+
+import {
+  buscarPatrimonioPorQrCode
+} from '../../services/pagarMaterialService'
+
+import {
+  LOCAL_DESTINO_PADRAO,
+  LOCAIS_DESTINO,
+  TIPOS_MOVIMENTACAO
+} from '../../config/movimentacoesConfig'
+
+import RecebedorCard from './components/RecebedorCard'
+import PesquisaMaterial from './components/PesquisaMaterial'
+import ResumoEntrega from './components/ResumoEntrega'
+
 import './PagarMaterial.css'
 
-const materiaisSimulados = [
-  {
-    id: 1,
-    patrimonio: 'MAT-000124',
-    descricao: 'COLETE BALÍSTICO NÍVEL III-A',
-    categoria: 'EPI',
-    local: 'RESERVA DE MATERIAL',
-    status: 'DISPONÍVEL'
-  },
-  {
-    id: 2,
-    patrimonio: 'MAT-000287',
-    descricao: 'RÁDIO COMUNICADOR DIGITAL',
-    categoria: 'COMUNICAÇÃO',
-    local: 'P4',
-    status: 'DISPONÍVEL'
-  },
-  {
-    id: 3,
-    patrimonio: 'ARM-000041',
-    descricao: 'PISTOLA INSTITUCIONAL',
-    categoria: 'ARMAMENTO',
-    local: 'ARMARIA',
-    status: 'DISPONÍVEL'
-  },
-  {
-    id: 4,
-    patrimonio: 'MAT-000389',
-    descricao: 'ALGEMA DE AÇO',
-    categoria: 'EQUIPAMENTO',
-    local: 'RESERVA DE MATERIAL',
-    status: 'DISPONÍVEL'
-  },
-  {
-    id: 5,
-    patrimonio: 'MAT-000472',
-    descricao: 'CAPACETE BALÍSTICO',
-    categoria: 'EPI',
-    local: 'RESERVA DE MATERIAL',
-    status: 'MANUTENÇÃO'
-  }
-]
+const LOCAL_ORIGEM =
+  'RESERVA DE MATERIAL'
 
-const LOCAL_DESTINO_INICIAL = 'CAUTELA INDIVIDUAL'
-
-function normalizarTexto(valor) {
-  return String(valor || '')
-    .trim()
-    .toUpperCase()
-}
-
-function maskRE(value) {
-  const limpo = String(value || '')
-    .toUpperCase()
-    .replace(/[^0-9A-Z]/g, '')
-    .slice(0, 7)
-
-  const numeros = limpo
-    .slice(0, 6)
-    .replace(/\D/g, '')
-
-  const digito = limpo.slice(6, 7)
-
-  if (numeros.length < 6) {
-    return numeros
-  }
-
-  return digito
-    ? `${numeros}-${digito}`
-    : `${numeros}-`
-}
-
-function obterNomePolicial(policial) {
+function obterNomeUsuario(user) {
   return (
-    policial?.nome_guerra ||
-    policial?.nome ||
-    policial?.nome_completo ||
-    '-'
+    user?.nome ||
+    user?.nome_guerra ||
+    user?.nome_completo ||
+    user?.email ||
+    'USUÁRIO SIGMO'
   )
 }
 
-export default function PagarMaterial({ user }) {
-  const [busca, setBusca] = useState('')
-  const [recebedor, setRecebedor] = useState('')
-  const [reRecebedor, setReRecebedor] = useState('')
-  const [localDestino, setLocalDestino] = useState(
-    LOCAL_DESTINO_INICIAL
-  )
-  const [observacoes, setObservacoes] = useState('')
-  const [itensSelecionados, setItensSelecionados] =
-    useState([])
-  const [mensagem, setMensagem] = useState('')
+function criarChaveMaterial(material) {
+  return [
+    material?.tabela_origem ||
+      'patrimonio',
+    material?.id
+  ].join(':')
+}
 
-  const [policialRecebedor, setPolicialRecebedor] =
-    useState(null)
-
-  const [buscandoRecebedor, setBuscandoRecebedor] =
-    useState(false)
-
-  const [erroRecebedor, setErroRecebedor] =
+export default function PagarMaterial({
+  user
+}) {
+  const [reRecebedor, setReRecebedor] =
     useState('')
 
-  const materiaisFiltrados = useMemo(() => {
-    const termo = normalizarTexto(busca)
+  const [
+    policialRecebedor,
+    setPolicialRecebedor
+  ] = useState(null)
 
-    if (!termo) {
-      return materiaisSimulados
-    }
+  const [
+    tipoMovimentacao,
+    setTipoMovimentacao
+  ] = useState(
+    TIPOS_MOVIMENTACAO.CAUTELA
+  )
 
-    return materiaisSimulados.filter((material) => {
-      return [
-        material.patrimonio,
-        material.descricao,
-        material.categoria,
-        material.local,
-        material.status
-      ].some((valor) =>
-        normalizarTexto(valor).includes(termo)
-      )
-    })
-  }, [busca])
+  const [
+    localDestino,
+    setLocalDestino
+  ] = useState(
+    LOCAL_DESTINO_PADRAO
+  )
 
-  useEffect(() => {
-    const somenteCaracteres = reRecebedor.replace(
-      /[^0-9A-Z]/g,
-      ''
-    )
+  const [
+    observacoes,
+    setObservacoes
+  ] = useState('')
 
-    if (somenteCaracteres.length < 7) {
-      setPolicialRecebedor(null)
-      setRecebedor('')
-      setErroRecebedor('')
-      return
-    }
+  const [
+    itensSelecionados,
+    setItensSelecionados
+  ] = useState([])
 
-    const timer = setTimeout(() => {
-      pesquisarPolicialPorRE(reRecebedor)
-    }, 450)
+  const [mensagem, setMensagem] =
+    useState('')
 
-    return () => clearTimeout(timer)
-  }, [reRecebedor])
+  const [erro, setErro] =
+    useState('')
 
-  async function pesquisarPolicialPorRE(reInformado) {
-    try {
-      setBuscandoRecebedor(true)
-      setErroRecebedor('')
-      setPolicialRecebedor(null)
-      setRecebedor('')
+  const [salvando, setSalvando] =
+    useState(false)
 
-      const resultado = await listarPoliciais({
-        filtros: {
-          nome: '',
-          nome_guerra: '',
-          re: reInformado,
-          qr_code: '',
-          posto_graduacao: '',
-          companhia: '',
-          pelotao: '',
-          situacao: ''
-        },
-        pagina: 1,
-        limite: 10,
-        sortBy: 'nome_guerra',
-        sortDirection: 'asc'
-      })
+  const [
+    scannerAberto,
+    setScannerAberto
+  ] = useState(false)
 
-      const policiais = resultado?.data || []
+  const [
+    buscandoQrCode,
+    setBuscandoQrCode
+  ] = useState(false)
 
-      const reNormalizado =
-        normalizarTexto(reInformado)
-
-      const policialEncontrado =
-        policiais.find(
-          (policial) =>
-            normalizarTexto(policial.re) ===
-            reNormalizado
-        ) || policiais[0]
-
-      if (!policialEncontrado) {
-        setErroRecebedor(
-          'Nenhum policial encontrado com este RE.'
-        )
-        return
-      }
-
-      setPolicialRecebedor(policialEncontrado)
-      setRecebedor(
-        obterNomePolicial(policialEncontrado)
-      )
-    } catch (error) {
-      console.error(error)
-
-      setErroRecebedor(
-        'Não foi possível consultar o policial.'
-      )
-    } finally {
-      setBuscandoRecebedor(false)
-    }
-  }
-
-  function materialSelecionado(materialId) {
-    return itensSelecionados.some(
-      (item) => item.id === materialId
-    )
-  }
+  const [
+    atualizarPesquisaEm,
+    setAtualizarPesquisaEm
+  ] = useState(0)
 
   function adicionarMaterial(material) {
-    if (material.status !== 'DISPONÍVEL') {
-      setMensagem(
-        'Este material não está disponível para entrega.'
+    if (!material?.disponivel) {
+      setErro(
+        'Este patrimônio não está disponível.'
       )
       return
     }
 
-    if (materialSelecionado(material.id)) {
-      setMensagem(
-        'Este material já foi adicionado à movimentação.'
+    const chave =
+      criarChaveMaterial(material)
+
+    const jaSelecionado =
+      itensSelecionados.some(
+        (item) =>
+          criarChaveMaterial(item) ===
+          chave
+      )
+
+    if (jaSelecionado) {
+      setErro(
+        'Este patrimônio já foi adicionado.'
       )
       return
     }
 
-    setItensSelecionados((listaAtual) => [
-      ...listaAtual,
-      material
-    ])
+    setItensSelecionados(
+      (listaAtual) => [
+        ...listaAtual,
+        {
+          ...material,
+          patrimonio_id:
+            material.patrimonio_id ||
+            material.id,
+          quantidade: 1
+        }
+      ]
+    )
 
+    setErro('')
     setMensagem('')
   }
 
   function removerMaterial(materialId) {
-    setItensSelecionados((listaAtual) =>
-      listaAtual.filter(
-        (material) => material.id !== materialId
-      )
+    setItensSelecionados(
+      (listaAtual) =>
+        listaAtual.filter(
+          (item) =>
+            item.id !== materialId
+        )
     )
   }
 
   function limparMovimentacao() {
-    setRecebedor('')
     setReRecebedor('')
     setPolicialRecebedor(null)
-    setErroRecebedor('')
-    setLocalDestino(LOCAL_DESTINO_INICIAL)
+
+    setTipoMovimentacao(
+      TIPOS_MOVIMENTACAO.CAUTELA
+    )
+
+    setLocalDestino(
+      LOCAL_DESTINO_PADRAO
+    )
+
     setObservacoes('')
     setItensSelecionados([])
     setMensagem('')
+    setErro('')
   }
 
-  function confirmarEntrega() {
-    if (!policialRecebedor) {
+  async function handleQrRead(valor) {
+    try {
+      setScannerAberto(false)
+      setBuscandoQrCode(true)
+      setErro('')
+      setMensagem('')
+
+      const material =
+        await buscarPatrimonioPorQrCode(
+          valor
+        )
+
+      if (!material) {
+        setErro(
+          `Nenhum patrimônio encontrado para o QR Code: ${valor}`
+        )
+        return
+      }
+
+      if (!material.disponivel) {
+        setErro(
+          `${material.patrimonio} foi localizado, mas não está disponível.`
+        )
+        return
+      }
+
+      adicionarMaterial(material)
+
       setMensagem(
-        'Informe um RE válido e aguarde a localização do policial.'
+        `${material.patrimonio} adicionado pelo QR Code.`
+      )
+    } catch (error) {
+      console.error(error)
+
+      setErro(
+        'Não foi possível consultar o QR Code.'
+      )
+    } finally {
+      setBuscandoQrCode(false)
+    }
+  }
+
+  async function confirmarEntrega() {
+    if (!policialRecebedor) {
+      setErro(
+        'Informe um RE válido.'
       )
       return
     }
 
     if (!localDestino) {
-      setMensagem('Informe o local de destino.')
-      return
-    }
-
-    if (itensSelecionados.length === 0) {
-      setMensagem(
-        'Adicione pelo menos um material à movimentação.'
+      setErro(
+        'Informe o local de destino.'
       )
       return
     }
 
-    setMensagem(
-      'Simulação concluída. A movimentação ainda não foi gravada no banco.'
-    )
+    if (
+      itensSelecionados.length === 0
+    ) {
+      setErro(
+        'Adicione pelo menos um patrimônio.'
+      )
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErro('')
+      setMensagem('')
+
+      const resultado =
+        await criarMovimentacaoCompleta({
+          tipo:
+            tipoMovimentacao,
+
+          origemLocal:
+            LOCAL_ORIGEM,
+
+          destinoLocal:
+            localDestino,
+
+          solicitante:
+            user,
+
+          recebedor:
+            policialRecebedor,
+
+          observacoes,
+
+          itens:
+            itensSelecionados,
+
+          aprovarAutomaticamente:
+            false
+        })
+
+      setMensagem(
+        `Movimentação registrada com sucesso. Protocolo: ${resultado.movimentacaoId}`
+      )
+
+      setItensSelecionados([])
+      setObservacoes('')
+
+      setAtualizarPesquisaEm(
+        Date.now()
+      )
+    } catch (error) {
+      console.error(error)
+
+      setErro(
+        error?.message ||
+        'Não foi possível registrar a movimentação.'
+      )
+    } finally {
+      setSalvando(false)
+    }
   }
 
   return (
@@ -286,8 +302,9 @@ export default function PagarMaterial({ user }) {
           <h1>Pagar Material</h1>
 
           <p>
-            Registre a entrega de materiais, equipamentos
-            ou armamentos ao policial responsável.
+            Registre a entrega de materiais,
+            equipamentos ou armamentos ao
+            policial responsável.
           </p>
         </div>
 
@@ -295,16 +312,25 @@ export default function PagarMaterial({ user }) {
           <span>Operador</span>
 
           <strong>
-            {user?.nome ||
-              user?.nome_guerra ||
-              user?.email ||
-              'USUÁRIO SIGMO'}
+            {obterNomeUsuario(user)}
           </strong>
         </div>
       </header>
 
-      {mensagem && (
+      {buscandoQrCode && (
         <div className="pagar-material-feedback">
+          Consultando QR Code...
+        </div>
+      )}
+
+      {erro && (
+        <div className="pagar-material-feedback pagar-material-feedback-error">
+          {erro}
+        </div>
+      )}
+
+      {mensagem && (
+        <div className="pagar-material-feedback pagar-material-feedback-success">
           {mensagem}
         </div>
       )}
@@ -315,7 +341,10 @@ export default function PagarMaterial({ user }) {
             <div className="pagar-material-card-header">
               <div>
                 <span>ETAPA 1</span>
-                <h2>Dados da entrega</h2>
+
+                <h2>
+                  Identificar recebedor
+                </h2>
               </div>
 
               <span className="pagar-material-status">
@@ -323,70 +352,64 @@ export default function PagarMaterial({ user }) {
               </span>
             </div>
 
-            <div className="pagar-material-form-grid">
+            <RecebedorCard
+              re={reRecebedor}
+              onChangeRE={
+                setReRecebedor
+              }
+              onSelecionado={
+                setPolicialRecebedor
+              }
+            />
+
+            <div className="pagar-material-form-grid pagar-material-form-grid-spaced">
               <label>
                 Tipo de movimentação
 
-                <select defaultValue="CAUTELA">
-                  <option value="CAUTELA">
+                <select
+                  value={
+                    tipoMovimentacao
+                  }
+                  onChange={(event) =>
+                    setTipoMovimentacao(
+                      event.target.value
+                    )
+                  }
+                >
+                  <option
+                    value={
+                      TIPOS_MOVIMENTACAO
+                        .CAUTELA
+                    }
+                  >
                     CAUTELA
                   </option>
 
-                  <option value="TRANSFERÊNCIA">
+                  <option
+                    value={
+                      TIPOS_MOVIMENTACAO
+                        .TRANSFERENCIA
+                    }
+                  >
                     TRANSFERÊNCIA
                   </option>
 
-                  <option value="ENTREGA">
+                  <option
+                    value={
+                      TIPOS_MOVIMENTACAO
+                        .ENTREGA
+                    }
+                  >
                     ENTREGA
                   </option>
                 </select>
               </label>
 
               <label>
-                RE do recebedor
-
-                <div className="pagar-material-re-field">
-                  <input
-                    value={reRecebedor}
-                    maxLength={8}
-                    onChange={(event) =>
-                      setReRecebedor(
-                        maskRE(event.target.value)
-                      )
-                    }
-                    placeholder="000000-A"
-                    autoComplete="off"
-                  />
-
-                  {buscandoRecebedor && (
-                    <span className="pagar-material-re-loading">
-                      Pesquisando...
-                    </span>
-                  )}
-                </div>
-
-                {erroRecebedor && (
-                  <small className="pagar-material-re-error">
-                    {erroRecebedor}
-                  </small>
-                )}
-              </label>
-
-              <label>
-                Recebedor
-
-                <input
-                  value={recebedor}
-                  placeholder="Preenchido pelo RE"
-                  readOnly
-                />
-              </label>
-
-              <label>
                 Local de origem
 
                 <input
-                  value="RESERVA DE MATERIAL"
+                  value={LOCAL_ORIGEM}
                   readOnly
                 />
               </label>
@@ -397,83 +420,23 @@ export default function PagarMaterial({ user }) {
                 <select
                   value={localDestino}
                   onChange={(event) =>
-                    setLocalDestino(event.target.value)
+                    setLocalDestino(
+                      event.target.value
+                    )
                   }
                 >
-                  <option value="CAUTELA INDIVIDUAL">
-                    CAUTELA INDIVIDUAL
-                  </option>
-
-                  <option value="P4">
-                    P4
-                  </option>
-
-                  <option value="1ª CIA">
-                    1ª CIA
-                  </option>
-
-                  <option value="2ª CIA">
-                    2ª CIA
-                  </option>
-
-                  <option value="3ª CIA">
-                    3ª CIA
-                  </option>
+                  {LOCAIS_DESTINO.map(
+                    (local) => (
+                      <option
+                        key={local}
+                        value={local}
+                      >
+                        {local}
+                      </option>
+                    )
+                  )}
                 </select>
               </label>
-
-              {policialRecebedor && (
-                <div className="pagar-material-policial-card">
-                  <div className="pagar-material-policial-avatar">
-                    {policialRecebedor.foto_url ? (
-                      <img
-                        src={policialRecebedor.foto_url}
-                        alt={obterNomePolicial(
-                          policialRecebedor
-                        )}
-                      />
-                    ) : (
-                      <span>
-                        {obterNomePolicial(
-                          policialRecebedor
-                        )
-                          .charAt(0)
-                          .toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="pagar-material-policial-info">
-                    <span>Policial localizado</span>
-
-                    <strong>
-                      {obterNomePolicial(
-                        policialRecebedor
-                      )}
-                    </strong>
-
-                    <p>
-                      {policialRecebedor.posto_graduacao ||
-                        'POSTO NÃO INFORMADO'}
-
-                      {' • '}
-
-                      {policialRecebedor.companhia ||
-                        'COMPANHIA NÃO INFORMADA'}
-
-                      {policialRecebedor.pelotao
-                        ? ` • ${policialRecebedor.pelotao}`
-                        : ''}
-                    </p>
-
-                    <small>
-                      Situação:{' '}
-                      {policialRecebedor.situacao ||
-                        'NÃO INFORMADA'}
-                    </small>
-                  </div>
-                </div>
-              )}
 
               <label className="pagar-material-field-full">
                 Observações
@@ -482,7 +445,8 @@ export default function PagarMaterial({ user }) {
                   value={observacoes}
                   onChange={(event) =>
                     setObservacoes(
-                      event.target.value.toUpperCase()
+                      event.target.value
+                        .toUpperCase()
                     )
                   }
                   placeholder="Informações adicionais sobre a entrega"
@@ -491,202 +455,49 @@ export default function PagarMaterial({ user }) {
             </div>
           </section>
 
-          <section className="pagar-material-card">
-            <div className="pagar-material-card-header">
-              <div>
-                <span>ETAPA 2</span>
-                <h2>Selecionar materiais</h2>
-              </div>
-
-              <strong className="pagar-material-count">
-                {materiaisFiltrados.length} encontrados
-              </strong>
-            </div>
-
-            <div className="pagar-material-search">
-              <input
-                value={busca}
-                onChange={(event) =>
-                  setBusca(event.target.value)
-                }
-                placeholder="Pesquisar por patrimônio, descrição, categoria ou local"
-              />
-
-              <button type="button">
-                Ler QR Code
-              </button>
-            </div>
-
-            <div className="pagar-material-table-wrap">
-              <table className="pagar-material-table">
-                <thead>
-                  <tr>
-                    <th>Patrimônio</th>
-                    <th>Descrição</th>
-                    <th>Categoria</th>
-                    <th>Local</th>
-                    <th>Status</th>
-                    <th aria-label="Ações" />
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {materiaisFiltrados.map((material) => {
-                    const selecionado =
-                      materialSelecionado(material.id)
-
-                    return (
-                      <tr key={material.id}>
-                        <td>
-                          <strong>
-                            {material.patrimonio}
-                          </strong>
-                        </td>
-
-                        <td>{material.descricao}</td>
-                        <td>{material.categoria}</td>
-                        <td>{material.local}</td>
-
-                        <td>
-                          <span
-                            className={[
-                              'pagar-material-badge',
-                              material.status ===
-                              'DISPONÍVEL'
-                                ? 'is-success'
-                                : 'is-warning'
-                            ].join(' ')}
-                          >
-                            {material.status}
-                          </span>
-                        </td>
-
-                        <td>
-                          <button
-                            type="button"
-                            className="pagar-material-add"
-                            disabled={
-                              selecionado ||
-                              material.status !==
-                                'DISPONÍVEL'
-                            }
-                            onClick={() =>
-                              adicionarMaterial(material)
-                            }
-                          >
-                            {selecionado
-                              ? 'Adicionado'
-                              : 'Adicionar'}
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <PesquisaMaterial
+            itensSelecionados={
+              itensSelecionados
+            }
+            onAdicionar={
+              adicionarMaterial
+            }
+            onAbrirQrCode={() =>
+              setScannerAberto(true)
+            }
+            atualizarEm={
+              atualizarPesquisaEm
+            }
+          />
         </div>
 
-        <aside className="pagar-material-summary">
-          <section className="pagar-material-card pagar-material-summary-card">
-            <div className="pagar-material-card-header">
-              <div>
-                <span>ETAPA 3</span>
-                <h2>Resumo da entrega</h2>
-              </div>
-            </div>
-
-            <div className="pagar-material-summary-data">
-              <div>
-                <span>Recebedor</span>
-
-                <strong>
-                  {recebedor || 'NÃO INFORMADO'}
-                </strong>
-              </div>
-
-              <div>
-                <span>RE</span>
-
-                <strong>
-                  {reRecebedor || 'NÃO INFORMADO'}
-                </strong>
-              </div>
-
-              <div>
-                <span>Destino</span>
-
-                <strong>
-                  {localDestino}
-                </strong>
-              </div>
-
-              <div>
-                <span>Total de itens</span>
-
-                <strong>
-                  {itensSelecionados.length}
-                </strong>
-              </div>
-            </div>
-
-            <div className="pagar-material-selected">
-              <h3>Materiais selecionados</h3>
-
-              {itensSelecionados.length === 0 ? (
-                <div className="pagar-material-empty">
-                  Nenhum material adicionado.
-                </div>
-              ) : (
-                itensSelecionados.map((material) => (
-                  <article
-                    key={material.id}
-                    className="pagar-material-selected-item"
-                  >
-                    <div>
-                      <strong>
-                        {material.patrimonio}
-                      </strong>
-
-                      <span>
-                        {material.descricao}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        removerMaterial(material.id)
-                      }
-                    >
-                      ×
-                    </button>
-                  </article>
-                ))
-              )}
-            </div>
-
-            <div className="pagar-material-actions">
-              <button
-                type="button"
-                className="pagar-material-cancel"
-                onClick={limparMovimentacao}
-              >
-                Limpar
-              </button>
-
-              <button
-                type="button"
-                className="pagar-material-confirm"
-                onClick={confirmarEntrega}
-              >
-                Confirmar entrega
-              </button>
-            </div>
-          </section>
-        </aside>
+        <ResumoEntrega
+          policial={
+            policialRecebedor
+          }
+          re={reRecebedor}
+          destino={localDestino}
+          itens={itensSelecionados}
+          salvando={salvando}
+          onRemover={
+            removerMaterial
+          }
+          onLimpar={
+            limparMovimentacao
+          }
+          onConfirmar={
+            confirmarEntrega
+          }
+        />
       </section>
+
+      <QrScanner
+        open={scannerAberto}
+        onRead={handleQrRead}
+        onClose={() =>
+          setScannerAberto(false)
+        }
+      />
     </main>
   )
 }
