@@ -8,6 +8,11 @@ const menuItems = [
     icon: '⌂'
   },
   {
+    key: 'central-operacional',
+    label: 'Central Operacional',
+    icon: '▦'
+  },
+  {
     key: 'pagar-material',
     label: 'Pagar Material',
     icon: '⬇'

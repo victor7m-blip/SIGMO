@@ -16,6 +16,7 @@ import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
 import TransferirMaterial from './TransferirMaterial/TransferirMaterial'
 import BaixarMaterial from './BaixarMaterial/BaixarMaterial'
+import CentralOperacional from './CentralOperacional'
 
 import './DashboardV2.css'
 
@@ -659,6 +660,15 @@ export default function DashboardV2({
   }
 
   function renderPage() {
+    if (route === 'central-operacional') {
+  return (
+    <CentralOperacional
+      user={user}
+      onVoltar={voltarDashboard}
+    />
+  )
+}
+    
     if (route === 'pagar-material') {
       return (
         <PagarMaterial
