@@ -183,3 +183,77 @@ export async function carregarDashboardPatrimonial() {
     atualizadoEm: new Date().toISOString()
   }
 }
+
+export async function listarCategoriasOperacionais() {
+  const { data, error } = await supabase
+    .from(PATRIMONIOS_TABLE)
+    .select(`
+      id,
+      tipo,
+      status,
+      local_atual,
+      companhia_atual,
+      dados
+    `)
+
+  if (error) throw error
+
+  const mapa = {}
+
+  for (const item of data ?? []) {
+    const tipo = String(item.tipo || 'OUTROS').toUpperCase()
+
+    if (!mapa[tipo]) {
+      mapa[tipo] = {
+        tipo,
+        total: 0,
+        ativos: 0,
+        cautelados: 0,
+        baixados: 0,
+        recolhidos: 0
+      }
+    }
+
+    mapa[tipo].total++
+
+    switch (String(item.status).toUpperCase()) {
+      case 'ATIVO':
+      case 'DISPONIVEL':
+        mapa[tipo].ativos++
+        break
+
+      case 'CAUTELADO':
+        mapa[tipo].cautelados++
+        break
+
+      case 'BAIXADO':
+        mapa[tipo].baixados++
+        break
+
+      case 'RECOLHIDO':
+        mapa[tipo].recolhidos++
+        break
+
+      default:
+        break
+    }
+  }
+
+  return Object.values(mapa).sort((a, b) =>
+    a.tipo.localeCompare(b.tipo)
+  )
+}
+
+export async function listarPatrimoniosCategoria(tipo) {
+  const { data, error } = await supabase
+    .from(PATRIMONIOS_TABLE)
+    .select('*')
+    .eq('tipo', tipo.toLowerCase())
+    .order('created_at', {
+      ascending: false
+    })
+
+  if (error) throw error
+
+  return data ?? []
+}

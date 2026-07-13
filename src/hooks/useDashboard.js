@@ -5,7 +5,8 @@ import {
 } from 'react'
 
 import {
-  carregarDashboardPatrimonial
+  carregarDashboardPatrimonial,
+  listarCategoriasOperacionais
 } from '../services/dashboardService'
 
 const ESTADO_INICIAL = {
@@ -31,7 +32,11 @@ const ESTADO_INICIAL = {
   },
 
   totaisPorModulo: [],
+
+  categoriasOperacionais: [],
+
   timeline: [],
+
   atualizadoEm: null
 }
 
@@ -50,12 +55,19 @@ export default function useDashboard() {
       setLoading(true)
       setErro('')
 
-      const resultado =
-        await carregarDashboardPatrimonial()
+      const [
+        resultado,
+        categoriasOperacionais
+      ] = await Promise.all([
+        carregarDashboardPatrimonial(),
+        listarCategoriasOperacionais()
+      ])
 
       setDados({
         ...ESTADO_INICIAL,
         ...resultado,
+
+        categoriasOperacionais,
 
         cards: {
           ...ESTADO_INICIAL.cards,
@@ -76,7 +88,11 @@ export default function useDashboard() {
           resultado?.totaisPorModulo ?? [],
 
         timeline:
-          resultado?.timeline ?? []
+          resultado?.timeline ?? [],
+
+        atualizadoEm:
+          resultado?.atualizadoEm ??
+          new Date().toISOString()
       })
     } catch (error) {
       console.error(
@@ -85,8 +101,8 @@ export default function useDashboard() {
       )
 
       setErro(
-        error?.message ||
-        'Não foi possível carregar o painel operacional.'
+        error?.message ??
+          'Não foi possível carregar o painel operacional.'
       )
     } finally {
       setLoading(false)
