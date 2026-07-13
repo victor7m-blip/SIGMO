@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
 
 import {
   listarMateriais
 } from '../../services/materiaisService'
+
+import {
+  listarPoliciais
+} from '../../services/policiaisService'
 
 import {
   receberMaterial
@@ -30,6 +38,15 @@ function somenteNumeros(valor) {
 
 function maiusculo(valor) {
   return String(valor ?? '').toUpperCase()
+}
+
+function obterNomePolicial(policial) {
+  return (
+    policial?.nome_guerra ||
+    policial?.nome ||
+    policial?.nome_completo ||
+    ''
+  )
 }
 
 function obterTituloMaterial(material) {
@@ -84,6 +101,16 @@ function obterConfiguracao(modo) {
   }
 }
 
+const FORM_INICIAL = {
+  recebedorRE: '',
+  recebedorNome: '',
+  localDestino: '',
+  unidadeDestino: '',
+  documento: '',
+  motivo: '',
+  observacao: ''
+}
+
 export default function MovimentarMaterial({
   user,
   modo = MODOS.RECEBER,
@@ -95,10 +122,16 @@ export default function MovimentarMaterial({
     [modo]
   )
 
-  const [busca, setBusca] = useState('')
-  const [materiais, setMateriais] = useState([])
-  const [materialSelecionado, setMaterialSelecionado] =
-    useState(null)
+  const [busca, setBusca] =
+    useState('')
+
+  const [materiais, setMateriais] =
+    useState([])
+
+  const [
+    materialSelecionado,
+    setMaterialSelecionado
+  ] = useState(null)
 
   const [carregando, setCarregando] =
     useState(false)
@@ -112,15 +145,23 @@ export default function MovimentarMaterial({
   const [sucesso, setSucesso] =
     useState('')
 
-  const [form, setForm] = useState({
-    recebedorRE: '',
-    recebedorNome: '',
-    localDestino: '',
-    unidadeDestino: '',
-    documento: '',
-    motivo: '',
-    observacao: ''
-  })
+  const [form, setForm] =
+    useState(FORM_INICIAL)
+
+  const [
+    pesquisandoRecebedor,
+    setPesquisandoRecebedor
+  ] = useState(false)
+
+  const [
+    erroRecebedor,
+    setErroRecebedor
+  ] = useState('')
+
+  const [
+    policialRecebedor,
+    setPolicialRecebedor
+  ] = useState(null)
 
   const precisaRecebedor =
     modo === MODOS.RECEBER ||
@@ -152,17 +193,19 @@ export default function MovimentarMaterial({
         setCarregando(true)
         setErro('')
 
-        const resposta = await listarMateriais({
-          filtros: {
-            patrimonio: termo
-          },
-          pagina: 1,
-          limite: 10,
-          sortBy: 'created_at',
-          sortDirection: 'desc'
-        })
+        const resposta =
+          await listarMateriais({
+            filtros: {
+              patrimonio: termo
+            },
+            pagina: 1,
+            limite: 10,
+            sortBy: 'created_at',
+            sortDirection: 'desc'
+          })
 
-        let encontrados = resposta.data ?? []
+        let encontrados =
+          resposta?.data ?? []
 
         if (encontrados.length === 0) {
           const porDescricao =
@@ -177,7 +220,7 @@ export default function MovimentarMaterial({
             })
 
           encontrados =
-            porDescricao.data ?? []
+            porDescricao?.data ?? []
         }
 
         if (ativo) {
@@ -189,6 +232,7 @@ export default function MovimentarMaterial({
             error?.message ||
             'Não foi possível pesquisar os materiais.'
           )
+
           setMateriais([])
         }
       } finally {
@@ -204,18 +248,137 @@ export default function MovimentarMaterial({
     }
   }, [busca])
 
+  useEffect(() => {
+    if (!precisaRecebedor) {
+      return
+    }
+
+    const re = somenteNumeros(
+      form.recebedorRE
+    )
+
+    if (re.length !== 6) {
+      setPesquisandoRecebedor(false)
+      setErroRecebedor('')
+      setPolicialRecebedor(null)
+
+      setForm((anterior) => ({
+        ...anterior,
+        recebedorNome: ''
+      }))
+
+      return
+    }
+
+    let ativo = true
+
+    const timer = setTimeout(async () => {
+      try {
+        setPesquisandoRecebedor(true)
+        setErroRecebedor('')
+        setPolicialRecebedor(null)
+
+        const resultado =
+          await listarPoliciais({
+            filtros: {
+              re
+            },
+            pagina: 1,
+            limite: 20
+          })
+
+        const lista =
+          resultado?.data ?? []
+
+        const encontrado =
+          lista.find((policial) => {
+            const rePolicial =
+              somenteNumeros(policial?.re)
+
+            return rePolicial === re
+          }) ?? null
+
+        if (!ativo) {
+          return
+        }
+
+        if (!encontrado) {
+          setForm((anterior) => ({
+            ...anterior,
+            recebedorNome: ''
+          }))
+
+          setErroRecebedor(
+            'Policial não encontrado para este RE.'
+          )
+
+          return
+        }
+
+        const nome =
+          obterNomePolicial(encontrado)
+
+        setPolicialRecebedor(encontrado)
+
+        setForm((anterior) => ({
+          ...anterior,
+          recebedorNome:
+            maiusculo(nome)
+        }))
+      } catch (error) {
+        if (!ativo) {
+          return
+        }
+
+        console.error(
+          'Erro ao pesquisar recebedor:',
+          error
+        )
+
+        setPolicialRecebedor(null)
+
+        setForm((anterior) => ({
+          ...anterior,
+          recebedorNome: ''
+        }))
+
+        setErroRecebedor(
+          error?.message ||
+          'Não foi possível pesquisar o policial.'
+        )
+      } finally {
+        if (ativo) {
+          setPesquisandoRecebedor(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      ativo = false
+      clearTimeout(timer)
+    }
+  }, [
+    form.recebedorRE,
+    precisaRecebedor
+  ])
+
   function atualizarCampo(event) {
-    const { name, value } = event.target
+    const {
+      name,
+      value
+    } = event.target
 
     let novoValor = value
 
     if (name === 'recebedorRE') {
       novoValor =
         somenteNumeros(value).slice(0, 6)
+
+      setErroRecebedor('')
+      setPolicialRecebedor(null)
     }
 
     if (
-      name === 'recebedorNome' ||
       name === 'localDestino' ||
       name === 'unidadeDestino' ||
       name === 'motivo'
@@ -225,7 +388,13 @@ export default function MovimentarMaterial({
 
     setForm((anterior) => ({
       ...anterior,
-      [name]: novoValor
+      [name]: novoValor,
+
+      ...(name === 'recebedorRE'
+        ? {
+            recebedorNome: ''
+          }
+        : {})
     }))
 
     setErro('')
@@ -234,13 +403,16 @@ export default function MovimentarMaterial({
 
   function selecionarMaterial(material) {
     setMaterialSelecionado(material)
-    setBusca(obterTituloMaterial(material))
+    setBusca(
+      obterTituloMaterial(material)
+    )
     setMateriais([])
     setErro('')
     setSucesso('')
 
     setForm((anterior) => ({
       ...anterior,
+
       localDestino:
         modo === MODOS.RECEBER
           ? material.local_atual ||
@@ -262,6 +434,14 @@ export default function MovimentarMaterial({
     setSucesso('')
   }
 
+  function limparFormulario() {
+    limparMaterial()
+    setForm(FORM_INICIAL)
+    setPolicialRecebedor(null)
+    setPesquisandoRecebedor(false)
+    setErroRecebedor('')
+  }
+
   function validar() {
     if (!materialSelecionado?.id) {
       throw new Error(
@@ -270,15 +450,31 @@ export default function MovimentarMaterial({
     }
 
     if (precisaRecebedor) {
-      if (form.recebedorRE.length !== 6) {
+      if (
+        form.recebedorRE.length !== 6
+      ) {
         throw new Error(
           'O RE do recebedor deve possuir 6 dígitos.'
         )
       }
 
-      if (!form.recebedorNome.trim()) {
+      if (pesquisandoRecebedor) {
         throw new Error(
-          'Informe o nome do recebedor.'
+          'Aguarde a pesquisa do recebedor.'
+        )
+      }
+
+      if (!policialRecebedor) {
+        throw new Error(
+          'Informe um RE válido e cadastrado.'
+        )
+      }
+
+      if (
+        !form.recebedorNome.trim()
+      ) {
+        throw new Error(
+          'O nome do recebedor não foi localizado.'
         )
       }
     }
@@ -323,7 +519,9 @@ export default function MovimentarMaterial({
 
       let resultado
 
-      if (modo === MODOS.TRANSFERIR) {
+      if (
+        modo === MODOS.TRANSFERIR
+      ) {
         resultado =
           await transferirMaterial({
             materialId:
@@ -353,7 +551,9 @@ export default function MovimentarMaterial({
 
             user
           })
-      } else if (modo === MODOS.BAIXAR) {
+      } else if (
+        modo === MODOS.BAIXAR
+      ) {
         resultado =
           await baixarMaterial({
             materialId:
@@ -406,20 +606,16 @@ export default function MovimentarMaterial({
             : 'Recebimento registrado com sucesso.'
       )
 
-      if (typeof onConcluido === 'function') {
+      if (
+        typeof onConcluido ===
+        'function'
+      ) {
         onConcluido(resultado)
       }
 
-      setForm({
-        recebedorRE: '',
-        recebedorNome: '',
-        localDestino: '',
-        unidadeDestino: '',
-        documento: '',
-        motivo: '',
-        observacao: ''
-      })
-
+      setForm(FORM_INICIAL)
+      setPolicialRecebedor(null)
+      setErroRecebedor('')
       setMaterialSelecionado(null)
       setBusca('')
       setMateriais([])
@@ -449,7 +645,8 @@ export default function MovimentarMaterial({
             <p>{config.subtitulo}</p>
           </div>
 
-          {typeof onVoltar === 'function' && (
+          {typeof onVoltar ===
+            'function' && (
             <button
               type="button"
               className="mov-material-btn mov-material-btn-secondary"
@@ -470,9 +667,13 @@ export default function MovimentarMaterial({
               <span>1</span>
 
               <div>
-                <h2>Selecionar material</h2>
+                <h2>
+                  Selecionar material
+                </h2>
+
                 <p>
-                  Pesquise pelo patrimônio ou descrição.
+                  Pesquise pelo patrimônio ou
+                  descrição.
                 </p>
               </div>
             </div>
@@ -489,9 +690,15 @@ export default function MovimentarMaterial({
                   value={busca}
                   onChange={(event) => {
                     setBusca(
-                      maiusculo(event.target.value)
+                      maiusculo(
+                        event.target.value
+                      )
                     )
-                    setMaterialSelecionado(null)
+
+                    setMaterialSelecionado(
+                      null
+                    )
+
                     setErro('')
                     setSucesso('')
                   }}
@@ -516,40 +723,48 @@ export default function MovimentarMaterial({
 
                 {materiais.length > 0 && (
                   <div className="mov-material-results">
-                    {materiais.map((material) => (
-                      <button
-                        key={material.id}
-                        type="button"
-                        className="mov-material-result"
-                        onClick={() =>
-                          selecionarMaterial(material)
-                        }
-                      >
-                        <strong>
-                          {obterTituloMaterial(material)}
-                        </strong>
+                    {materiais.map(
+                      (material) => (
+                        <button
+                          key={material.id}
+                          type="button"
+                          className="mov-material-result"
+                          onClick={() =>
+                            selecionarMaterial(
+                              material
+                            )
+                          }
+                        >
+                          <strong>
+                            {obterTituloMaterial(
+                              material
+                            )}
+                          </strong>
 
-                        <span>
-                          {obterSubtituloMaterial(
-                            material
-                          ) ||
-                            'SEM INFORMAÇÕES COMPLEMENTARES'}
-                        </span>
+                          <span>
+                            {obterSubtituloMaterial(
+                              material
+                            ) ||
+                              'SEM INFORMAÇÕES COMPLEMENTARES'}
+                          </span>
 
-                        <small>
-                          STATUS:{' '}
-                          {material.status ||
-                            'SEM STATUS'}
-                        </small>
-                      </button>
-                    ))}
+                          <small>
+                            STATUS:{' '}
+                            {material.status ||
+                              'SEM STATUS'}
+                          </small>
+                        </button>
+                      )
+                    )}
                   </div>
                 )}
               </div>
             ) : (
               <article className="mov-material-selected">
                 <div>
-                  <span>Material selecionado</span>
+                  <span>
+                    Material selecionado
+                  </span>
 
                   <strong>
                     {obterTituloMaterial(
@@ -568,6 +783,7 @@ export default function MovimentarMaterial({
                 <div className="mov-material-selected-meta">
                   <span>
                     Status
+
                     <strong>
                       {materialSelecionado.status ||
                         'SEM STATUS'}
@@ -576,6 +792,7 @@ export default function MovimentarMaterial({
 
                   <span>
                     Unidade
+
                     <strong>
                       {materialSelecionado.unidade ||
                         'NÃO INFORMADA'}
@@ -600,7 +817,9 @@ export default function MovimentarMaterial({
               <span>2</span>
 
               <div>
-                <h2>Dados da operação</h2>
+                <h2>
+                  Dados da operação
+                </h2>
 
                 <p>
                   Preencha os dados obrigatórios.
@@ -622,10 +841,27 @@ export default function MovimentarMaterial({
                       type="text"
                       inputMode="numeric"
                       maxLength={6}
-                      value={form.recebedorRE}
-                      onChange={atualizarCampo}
+                      value={
+                        form.recebedorRE
+                      }
+                      onChange={
+                        atualizarCampo
+                      }
                       placeholder="000000"
+                      autoComplete="off"
                     />
+
+                    {pesquisandoRecebedor && (
+                      <div className="mov-material-search-state">
+                        Pesquisando policial...
+                      </div>
+                    )}
+
+                    {erroRecebedor && (
+                      <div className="mov-material-message mov-material-message-error">
+                        {erroRecebedor}
+                      </div>
+                    )}
                   </div>
 
                   <div className="mov-material-field mov-material-field-wide">
@@ -637,10 +873,31 @@ export default function MovimentarMaterial({
                       id="recebedorNome"
                       name="recebedorNome"
                       type="text"
-                      value={form.recebedorNome}
-                      onChange={atualizarCampo}
-                      placeholder="NOME COMPLETO"
+                      value={
+                        form.recebedorNome
+                      }
+                      placeholder={
+                        pesquisandoRecebedor
+                          ? 'PESQUISANDO...'
+                          : 'NOME PREENCHIDO AUTOMATICAMENTE'
+                      }
+                      readOnly
                     />
+
+                    {policialRecebedor && (
+                      <div className="mov-material-search-state">
+                        {[
+                          policialRecebedor
+                            .posto_graduacao,
+                          policialRecebedor
+                            .companhia,
+                          policialRecebedor
+                            .pelotao
+                        ]
+                          .filter(Boolean)
+                          .join(' • ')}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -655,15 +912,20 @@ export default function MovimentarMaterial({
                     id="localDestino"
                     name="localDestino"
                     type="text"
-                    value={form.localDestino}
-                    onChange={atualizarCampo}
+                    value={
+                      form.localDestino
+                    }
+                    onChange={
+                      atualizarCampo
+                    }
                     placeholder="LOCAL DE DESTINO"
                   />
                 </div>
               )}
 
               {(precisaUnidade ||
-                modo === MODOS.RECEBER) && (
+                modo ===
+                  MODOS.RECEBER) && (
                 <div className="mov-material-field">
                   <label htmlFor="unidadeDestino">
                     Unidade de destino
@@ -673,8 +935,12 @@ export default function MovimentarMaterial({
                     id="unidadeDestino"
                     name="unidadeDestino"
                     type="text"
-                    value={form.unidadeDestino}
-                    onChange={atualizarCampo}
+                    value={
+                      form.unidadeDestino
+                    }
+                    onChange={
+                      atualizarCampo
+                    }
                     placeholder="UNIDADE"
                   />
                 </div>
@@ -691,7 +957,9 @@ export default function MovimentarMaterial({
                     name="motivo"
                     type="text"
                     value={form.motivo}
-                    onChange={atualizarCampo}
+                    onChange={
+                      atualizarCampo
+                    }
                     placeholder="INFORME O MOTIVO DA BAIXA"
                   />
                 </div>
@@ -745,19 +1013,7 @@ export default function MovimentarMaterial({
             <button
               type="button"
               className="mov-material-btn mov-material-btn-secondary"
-              onClick={() => {
-                limparMaterial()
-
-                setForm({
-                  recebedorRE: '',
-                  recebedorNome: '',
-                  localDestino: '',
-                  unidadeDestino: '',
-                  documento: '',
-                  motivo: '',
-                  observacao: ''
-                })
-              }}
+              onClick={limparFormulario}
               disabled={salvando}
             >
               Limpar
@@ -768,6 +1024,7 @@ export default function MovimentarMaterial({
               className="mov-material-btn mov-material-btn-primary"
               disabled={
                 salvando ||
+                pesquisandoRecebedor ||
                 !materialSelecionado
               }
             >

@@ -1,37 +1,106 @@
 import {
+  useCallback,
   useEffect,
   useState
 } from 'react'
 
 import {
-  carregarDashboard
-} from '../services/dashboardEngine'
+  carregarDashboardPatrimonial
+} from '../services/dashboardService'
+
+const ESTADO_INICIAL = {
+  cards: {
+    total: 0,
+    ativos: 0,
+    disponiveis: 0,
+    cautelados: 0,
+    recolhidos: 0,
+    baixados: 0,
+    movimentacoesHoje: 0
+  },
+
+  movimentacoes: {
+    recebimentos: 0,
+    transferencias: 0,
+    baixas: 0
+  },
+
+  indicadores: {
+    operacionais: 0,
+    percentualOperacional: 0
+  },
+
+  totaisPorModulo: [],
+  timeline: [],
+  atualizadoEm: null
+}
 
 export default function useDashboard() {
-  const [cards, setCards] =
-    useState([])
+  const [dados, setDados] =
+    useState(ESTADO_INICIAL)
 
   const [loading, setLoading] =
     useState(true)
 
-  async function atualizar() {
-    setLoading(true)
+  const [erro, setErro] =
+    useState('')
 
-    const dados =
-      await carregarDashboard()
+  const atualizar = useCallback(async () => {
+    try {
+      setLoading(true)
+      setErro('')
 
-    setCards(dados.cards)
+      const resultado =
+        await carregarDashboardPatrimonial()
 
-    setLoading(false)
-  }
+      setDados({
+        ...ESTADO_INICIAL,
+        ...resultado,
+
+        cards: {
+          ...ESTADO_INICIAL.cards,
+          ...(resultado?.cards ?? {})
+        },
+
+        movimentacoes: {
+          ...ESTADO_INICIAL.movimentacoes,
+          ...(resultado?.movimentacoes ?? {})
+        },
+
+        indicadores: {
+          ...ESTADO_INICIAL.indicadores,
+          ...(resultado?.indicadores ?? {})
+        },
+
+        totaisPorModulo:
+          resultado?.totaisPorModulo ?? [],
+
+        timeline:
+          resultado?.timeline ?? []
+      })
+    } catch (error) {
+      console.error(
+        'Erro ao carregar dashboard:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível carregar o painel operacional.'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     atualizar()
-  }, [])
+  }, [atualizar])
 
   return {
-    cards,
+    ...dados,
     loading,
+    erro,
     atualizar
   }
 }
