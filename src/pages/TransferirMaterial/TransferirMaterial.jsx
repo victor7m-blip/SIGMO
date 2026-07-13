@@ -2,17 +2,17 @@ import MovimentarMaterial, {
   MODOS
 } from '../MovimentarMaterial/MovimentarMaterial'
 
-export default function ReceberMaterial({
+export default function TransferirMaterial({
   user,
   onVoltar,
   onConcluido
 }) {
   return (
     <MovimentarMaterial
-  user={user}
-  modo={MODOS.RECEBER}
-  onVoltar={onVoltar}
-  onConcluido={onConcluido}
-/>
+      user={user}
+      modo={MODOS.TRANSFERIR}
+      onVoltar={onVoltar}
+      onConcluido={onConcluido}
+    />
   )
 }

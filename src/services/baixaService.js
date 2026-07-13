@@ -10,23 +10,54 @@ import {
 const MATERIAIS_TABLE = 'sigmo_materiais'
 
 function maiusculo(valor) {
-  if (valor === null || valor === undefined) return null
+  if (
+    valor === null ||
+    valor === undefined
+  ) {
+    return null
+  }
 
   const texto = String(valor).trim()
 
-  return texto ? texto.toUpperCase() : null
+  return texto
+    ? texto.toUpperCase()
+    : null
+}
+
+function texto(valor) {
+  const valorNormalizado =
+    String(valor ?? '').trim()
+
+  return valorNormalizado || null
+}
+
+function erroDeColunaAusente(error) {
+  const mensagem = String(
+    error?.message ?? ''
+  ).toLowerCase()
+
+  return (
+    mensagem.includes('motivo_baixa') ||
+    mensagem.includes('documento_baixa') ||
+    mensagem.includes('data_baixa') ||
+    mensagem.includes('local_atual') ||
+    mensagem.includes('schema cache') ||
+    mensagem.includes('could not find')
+  )
 }
 
 async function atualizarMaterialBaixado({
   materialId,
   motivo,
-  documento
+  documento,
+  dataBaixa
 }) {
   const payloadCompleto = {
     status: STATUS_PATRIMONIO.BAIXADO,
+    local_atual: 'BAIXADO',
     motivo_baixa: maiusculo(motivo),
-    documento_baixa: String(documento ?? '').trim() || null,
-    data_baixa: new Date().toISOString()
+    documento_baixa: texto(documento),
+    data_baixa: dataBaixa
   }
 
   let resultado = await supabase
@@ -40,15 +71,7 @@ async function atualizarMaterialBaixado({
     return resultado.data
   }
 
-  const mensagem = String(resultado.error.message ?? '')
-
-  const colunaNaoExiste =
-    mensagem.includes('motivo_baixa') ||
-    mensagem.includes('documento_baixa') ||
-    mensagem.includes('data_baixa') ||
-    mensagem.includes('schema cache')
-
-  if (!colunaNaoExiste) {
+  if (!erroDeColunaAusente(resultado.error)) {
     throw resultado.error
   }
 
@@ -61,7 +84,9 @@ async function atualizarMaterialBaixado({
     .select()
     .single()
 
-  if (resultado.error) throw resultado.error
+  if (resultado.error) {
+    throw resultado.error
+  }
 
   return resultado.data
 }
@@ -78,55 +103,85 @@ export async function baixarMaterial({
   user = null
 }) {
   if (!materialId) {
-    throw new Error('Selecione o material que serÃ¡ baixado.')
+    throw new Error(
+      'Selecione o material que será baixado.'
+    )
   }
 
-  if (!String(motivo ?? '').trim()) {
-    throw new Error('Informe o motivo da baixa.')
+  if (!texto(motivo)) {
+    throw new Error(
+      'Informe o motivo da baixa.'
+    )
   }
 
-  const patrimonio = await buscarPatrimonioPorReferencia({
-    tipo: 'material',
-    referenciaId: materialId
-  })
+  const patrimonio =
+    await buscarPatrimonioPorReferencia({
+      tipo: 'material',
+      referenciaId: materialId
+    })
 
   if (
-    patrimonio.status === STATUS_PATRIMONIO.BAIXADO ||
-    patrimonio.status === STATUS_PATRIMONIO.INATIVO
+    patrimonio.status ===
+      STATUS_PATRIMONIO.BAIXADO ||
+    patrimonio.status ===
+      STATUS_PATRIMONIO.INATIVO
   ) {
-    throw new Error('Este patrimÃ´nio jÃ¡ estÃ¡ baixado ou inativo.')
+    throw new Error(
+      'Este patrimônio já está baixado ou inativo.'
+    )
   }
 
-  const movimentacao = await registrarMovimentacao({
-    patrimonioId: patrimonio.id,
+  const dataBaixa =
+    new Date().toISOString()
 
-    tipo: TIPOS_MOVIMENTACAO.BAIXA,
-    statusNovo: STATUS_PATRIMONIO.BAIXADO,
+  const movimentacao =
+    await registrarMovimentacao({
+      patrimonioId: patrimonio.id,
 
-    localDestino,
-    companhiaDestino: patrimonio.companhia_atual,
+      tipo:
+        TIPOS_MOVIMENTACAO.BAIXA,
 
-    motivo,
-    observacao,
+      statusNovo:
+        STATUS_PATRIMONIO.BAIXADO,
 
-    dados: {
-      modulo: 'MATERIAIS',
-      material_id: materialId,
-      documento: String(documento ?? '').trim() || null,
-      data_baixa: new Date().toISOString()
-    },
+      localDestino:
+        texto(localDestino) ||
+        'BAIXADO',
 
-    user
-  })
+      companhiaDestino:
+        patrimonio.companhia_atual,
 
-  const material = await atualizarMaterialBaixado({
-    materialId,
-    motivo,
-    documento
-  })
+      motivo,
+      observacao,
+
+      dados: {
+        modulo: 'MATERIAIS',
+        material_id: materialId,
+        documento: texto(documento),
+        data_baixa: dataBaixa
+      },
+
+      user
+    })
+
+  const material =
+    await atualizarMaterialBaixado({
+      materialId,
+      motivo,
+      documento,
+      dataBaixa
+    })
 
   return {
     material,
+
+    patrimonio: {
+      ...patrimonio,
+      status:
+        STATUS_PATRIMONIO.BAIXADO,
+      local_atual: 'BAIXADO'
+    },
+
     movimentacao
   }
 }

@@ -1,7 +1,8 @@
 import { supabase } from './supabaseClient'
 
 const PATRIMONIOS_TABLE = 'sigmo_patrimonios'
-const MOVIMENTACOES_TABLE = 'sigmo_patrimonio_movimentacoes'
+const MOVIMENTACOES_TABLE =
+  'sigmo_patrimonio_movimentacoes'
 
 export const TIPOS_MOVIMENTACAO = Object.freeze({
   CADASTRO: 'CADASTRO',
@@ -29,17 +30,25 @@ export const STATUS_PATRIMONIO = Object.freeze({
 })
 
 function textoMaiusculo(valor) {
-  if (valor === null || valor === undefined) {
+  if (
+    valor === null ||
+    valor === undefined
+  ) {
     return null
   }
 
   const texto = String(valor).trim()
 
-  return texto ? texto.toUpperCase() : null
+  return texto
+    ? texto.toUpperCase()
+    : null
 }
 
 function textoNormal(valor) {
-  if (valor === null || valor === undefined) {
+  if (
+    valor === null ||
+    valor === undefined
+  ) {
     return null
   }
 
@@ -66,7 +75,9 @@ export function normalizarRE(
   }
 
   if (!re && obrigatorio) {
-    throw new Error(`${campo} é obrigatório.`)
+    throw new Error(
+      `${campo} é obrigatório.`
+    )
   }
 
   if (re.length !== 6) {
@@ -78,7 +89,9 @@ export function normalizarRE(
   return re
 }
 
-export function normalizarUsuarioMovimentacao(user = null) {
+export function normalizarUsuarioMovimentacao(
+  user = null
+) {
   const reBruto =
     user?.re ??
     user?.RE ??
@@ -104,7 +117,8 @@ export function normalizarUsuarioMovimentacao(user = null) {
     ),
 
     email:
-      textoNormal(user?.email)?.toLowerCase() ??
+      textoNormal(user?.email)
+        ?.toLowerCase() ??
       null
   }
 }
@@ -169,7 +183,9 @@ export async function buscarPatrimonioPorReferencia({
     .select('*')
     .eq(
       'tipo',
-      String(tipo).trim().toLowerCase()
+      String(tipo)
+        .trim()
+        .toLowerCase()
     )
     .eq('referencia_id', referenciaId)
     .maybeSingle()
@@ -233,7 +249,9 @@ export async function registrarMovimentacao({
     'sigmo_registrar_movimentacao',
     {
       p_patrimonio_id: patrimonioId,
-      p_tipo: textoMaiusculo(tipo),
+
+      p_tipo:
+        textoMaiusculo(tipo),
 
       p_status_novo:
         textoMaiusculo(statusNovo),
@@ -282,13 +300,21 @@ export async function listarMovimentacoesPatrimoniais({
   tipo = null,
   limite = 50
 } = {}) {
+  const limiteSeguro = Math.max(
+    1,
+    Math.min(
+      Number(limite) || 50,
+      500
+    )
+  )
+
   let query = supabase
     .from(MOVIMENTACOES_TABLE)
     .select('*')
     .order('created_at', {
       ascending: false
     })
-    .limit(limite)
+    .limit(limiteSeguro)
 
   if (patrimonioId) {
     query = query.eq(

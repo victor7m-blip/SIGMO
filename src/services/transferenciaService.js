@@ -4,17 +4,46 @@ import {
   buscarPatrimonioPorReferencia,
   normalizarRE,
   registrarMovimentacao,
+  STATUS_PATRIMONIO,
   TIPOS_MOVIMENTACAO
 } from './patrimonioMovimentacaoService'
 
 const MATERIAIS_TABLE = 'sigmo_materiais'
 
 function maiusculo(valor) {
-  if (valor === null || valor === undefined) return null
+  if (
+    valor === null ||
+    valor === undefined
+  ) {
+    return null
+  }
 
   const texto = String(valor).trim()
 
-  return texto ? texto.toUpperCase() : null
+  return texto
+    ? texto.toUpperCase()
+    : null
+}
+
+function texto(valor) {
+  const valorNormalizado =
+    String(valor ?? '').trim()
+
+  return valorNormalizado || null
+}
+
+function erroDeColunaAusente(error) {
+  const mensagem = String(
+    error?.message ?? ''
+  ).toLowerCase()
+
+  return (
+    mensagem.includes('local_atual') ||
+    mensagem.includes('recebedor_re') ||
+    mensagem.includes('recebedor_nome') ||
+    mensagem.includes('schema cache') ||
+    mensagem.includes('could not find')
+  )
 }
 
 async function atualizarDestinoDoMaterial({
@@ -28,7 +57,8 @@ async function atualizarDestinoDoMaterial({
     local_atual: maiusculo(localDestino),
     unidade: maiusculo(unidadeDestino),
     recebedor_re: recebedorRE,
-    recebedor_nome: maiusculo(recebedorNome)
+    recebedor_nome:
+      maiusculo(recebedorNome)
   }
 
   let resultado = await supabase
@@ -42,15 +72,7 @@ async function atualizarDestinoDoMaterial({
     return resultado.data
   }
 
-  const mensagem = String(resultado.error.message ?? '')
-
-  const colunaNaoExiste =
-    mensagem.includes('local_atual') ||
-    mensagem.includes('recebedor_re') ||
-    mensagem.includes('recebedor_nome') ||
-    mensagem.includes('schema cache')
-
-  if (!colunaNaoExiste) {
+  if (!erroDeColunaAusente(resultado.error)) {
     throw resultado.error
   }
 
@@ -63,7 +85,9 @@ async function atualizarDestinoDoMaterial({
     .select()
     .single()
 
-  if (resultado.error) throw resultado.error
+  if (resultado.error) {
+    throw resultado.error
+  }
 
   return resultado.data
 }
@@ -78,21 +102,27 @@ export async function transferirMaterial({
   recebedorNome,
 
   documento = '',
-  motivo = 'TRANSFERÃŠNCIA DE MATERIAL',
+  motivo = 'TRANSFERÊNCIA DE MATERIAL',
   observacao = '',
 
   user = null
 }) {
   if (!materialId) {
-    throw new Error('Selecione o material que serÃ¡ transferido.')
+    throw new Error(
+      'Selecione o material que será transferido.'
+    )
   }
 
-  if (!String(localDestino ?? '').trim()) {
-    throw new Error('Informe o local de destino.')
+  if (!texto(localDestino)) {
+    throw new Error(
+      'Informe o local de destino.'
+    )
   }
 
-  if (!String(unidadeDestino ?? '').trim()) {
-    throw new Error('Informe a unidade de destino.')
+  if (!texto(unidadeDestino)) {
+    throw new Error(
+      'Informe a unidade de destino.'
+    )
   }
 
   const re = normalizarRE(recebedorRE, {
@@ -100,49 +130,81 @@ export async function transferirMaterial({
     campo: 'RE do recebedor'
   })
 
-  if (!String(recebedorNome ?? '').trim()) {
-    throw new Error('Informe o nome do recebedor.')
+  if (!texto(recebedorNome)) {
+    throw new Error(
+      'Informe o nome do recebedor.'
+    )
   }
 
-  const patrimonio = await buscarPatrimonioPorReferencia({
-    tipo: 'material',
-    referenciaId: materialId
-  })
+  const patrimonio =
+    await buscarPatrimonioPorReferencia({
+      tipo: 'material',
+      referenciaId: materialId
+    })
 
-  const movimentacao = await registrarMovimentacao({
-    patrimonioId: patrimonio.id,
+  if (
+    patrimonio.status ===
+      STATUS_PATRIMONIO.BAIXADO ||
+    patrimonio.status ===
+      STATUS_PATRIMONIO.INATIVO
+  ) {
+    throw new Error(
+      'Este patrimônio está baixado ou inativo e não pode ser transferido.'
+    )
+  }
 
-    tipo: TIPOS_MOVIMENTACAO.TRANSFERENCIA,
-    statusNovo: patrimonio.status,
+  const movimentacao =
+    await registrarMovimentacao({
+      patrimonioId: patrimonio.id,
 
-    localDestino,
-    companhiaDestino: unidadeDestino,
+      tipo:
+        TIPOS_MOVIMENTACAO.TRANSFERENCIA,
 
-    recebedorRE: re,
-    recebedorNome,
+      statusNovo:
+        patrimonio.status ||
+        STATUS_PATRIMONIO.ATIVO,
 
-    motivo,
-    observacao,
+      localDestino,
+      companhiaDestino: unidadeDestino,
 
-    dados: {
-      modulo: 'MATERIAIS',
-      material_id: materialId,
-      documento: String(documento ?? '').trim() || null
-    },
+      recebedorRE: re,
+      recebedorNome,
 
-    user
-  })
+      motivo:
+        texto(motivo) ||
+        'TRANSFERÊNCIA DE MATERIAL',
 
-  const material = await atualizarDestinoDoMaterial({
-    materialId,
-    localDestino,
-    unidadeDestino,
-    recebedorRE: re,
-    recebedorNome
-  })
+      observacao,
+
+      dados: {
+        modulo: 'MATERIAIS',
+        material_id: materialId,
+        documento: texto(documento)
+      },
+
+      user
+    })
+
+  const material =
+    await atualizarDestinoDoMaterial({
+      materialId,
+      localDestino,
+      unidadeDestino,
+      recebedorRE: re,
+      recebedorNome
+    })
 
   return {
     material,
+
+    patrimonio: {
+      ...patrimonio,
+      local_atual:
+        maiusculo(localDestino),
+      companhia_atual:
+        maiusculo(unidadeDestino)
+    },
+
     movimentacao
   }
 }

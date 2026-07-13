@@ -11,13 +11,39 @@ import {
 const MATERIAIS_TABLE = 'sigmo_materiais'
 
 function maiusculo(valor) {
-  if (valor === null || valor === undefined) {
+  if (
+    valor === null ||
+    valor === undefined
+  ) {
     return null
   }
 
   const texto = String(valor).trim()
 
-  return texto ? texto.toUpperCase() : null
+  return texto
+    ? texto.toUpperCase()
+    : null
+}
+
+function texto(valor) {
+  const valorNormalizado =
+    String(valor ?? '').trim()
+
+  return valorNormalizado || null
+}
+
+function erroDeColunaAusente(error) {
+  const mensagem = String(
+    error?.message ?? ''
+  ).toLowerCase()
+
+  return (
+    mensagem.includes('local_atual') ||
+    mensagem.includes('recebedor_re') ||
+    mensagem.includes('recebedor_nome') ||
+    mensagem.includes('schema cache') ||
+    mensagem.includes('could not find')
+  )
 }
 
 async function atualizarMaterialRecebido({
@@ -32,7 +58,8 @@ async function atualizarMaterialRecebido({
     local_atual: maiusculo(localDestino),
     unidade: maiusculo(unidadeDestino),
     recebedor_re: recebedorRE,
-    recebedor_nome: maiusculo(recebedorNome)
+    recebedor_nome:
+      maiusculo(recebedorNome)
   }
 
   let resultado = await supabase
@@ -46,17 +73,7 @@ async function atualizarMaterialRecebido({
     return resultado.data
   }
 
-  const mensagem = String(
-    resultado.error.message ?? ''
-  )
-
-  const colunaNaoExiste =
-    mensagem.includes('local_atual') ||
-    mensagem.includes('recebedor_re') ||
-    mensagem.includes('recebedor_nome') ||
-    mensagem.includes('schema cache')
-
-  if (!colunaNaoExiste) {
+  if (!erroDeColunaAusente(resultado.error)) {
     throw resultado.error
   }
 
@@ -102,13 +119,13 @@ export async function receberMaterial({
     campo: 'RE do recebedor'
   })
 
-  if (!String(recebedorNome ?? '').trim()) {
+  if (!texto(recebedorNome)) {
     throw new Error(
       'Informe o nome do recebedor.'
     )
   }
 
-  if (!String(localDestino ?? '').trim()) {
+  if (!texto(localDestino)) {
     throw new Error(
       'Informe o local de destino.'
     )
@@ -120,12 +137,26 @@ export async function receberMaterial({
       referenciaId: materialId
     })
 
+  if (
+    patrimonio.status ===
+      STATUS_PATRIMONIO.BAIXADO ||
+    patrimonio.status ===
+      STATUS_PATRIMONIO.INATIVO
+  ) {
+    throw new Error(
+      'Este patrimônio está baixado ou inativo e não pode ser recebido.'
+    )
+  }
+
   const movimentacao =
     await registrarMovimentacao({
       patrimonioId: patrimonio.id,
 
-      tipo: TIPOS_MOVIMENTACAO.RECEBIMENTO,
-      statusNovo: STATUS_PATRIMONIO.ATIVO,
+      tipo:
+        TIPOS_MOVIMENTACAO.RECEBIMENTO,
+
+      statusNovo:
+        STATUS_PATRIMONIO.ATIVO,
 
       localDestino,
       companhiaDestino: unidadeDestino,
@@ -133,15 +164,15 @@ export async function receberMaterial({
       recebedorRE: re,
       recebedorNome,
 
-      motivo: 'RECEBIMENTO DE MATERIAL',
+      motivo:
+        'RECEBIMENTO DE MATERIAL',
+
       observacao,
 
       dados: {
         modulo: 'MATERIAIS',
         material_id: materialId,
-        documento:
-          String(documento ?? '').trim() ||
-          null
+        documento: texto(documento)
       },
 
       user
@@ -158,13 +189,19 @@ export async function receberMaterial({
 
   return {
     material,
+
     patrimonio: {
       ...patrimonio,
-      status: STATUS_PATRIMONIO.ATIVO,
-      local_atual: maiusculo(localDestino),
+      status:
+        STATUS_PATRIMONIO.ATIVO,
+
+      local_atual:
+        maiusculo(localDestino),
+
       companhia_atual:
         maiusculo(unidadeDestino)
     },
+
     movimentacao
   }
 }
