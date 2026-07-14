@@ -1,6 +1,31 @@
 import StatusOperacionalBadge from './StatusOperacionalBadge'
 import ResponsabilidadeTable from './ResponsabilidadeTable'
 
+function normalizarTexto(valor) {
+  return String(valor ?? '')
+    .trim()
+    .toUpperCase()
+}
+
+function localEhValido(local) {
+  const valor =
+    normalizarTexto(local)
+
+  if (!valor) {
+    return false
+  }
+
+  return ![
+    '-',
+    'SEM LOCAL',
+    'SEM LOCALIZAÇÃO',
+    'SEM LOCALIZACAO',
+    'NÃO INFORMADO',
+    'NAO INFORMADO',
+    'INDEFINIDO'
+  ].includes(valor)
+}
+
 function obterStatusOperacional(item) {
   if (item.com_policial) {
     return 'COM POLICIAL'
@@ -8,6 +33,13 @@ function obterStatusOperacional(item) {
 
   if (item.no_cofre) {
     return 'NO COFRE'
+  }
+
+  if (
+    item.localizado ||
+    localEhValido(item.local_atual)
+  ) {
+    return 'LOCALIZADO'
   }
 
   return 'SEM LOCALIZAÇÃO'
@@ -68,17 +100,38 @@ export default function CategoriaDetalhes({
 
         <div>
           <span>Com policial</span>
-          <strong>{categoria.com_policial ?? 0}</strong>
+          <strong>
+            {categoria.com_policial ??
+              categoria.comPolicial ??
+              0}
+          </strong>
         </div>
 
         <div>
           <span>No cofre</span>
-          <strong>{categoria.no_cofre ?? 0}</strong>
+          <strong>
+            {categoria.no_cofre ??
+              categoria.noCofre ??
+              0}
+          </strong>
+        </div>
+
+        <div>
+          <span>Localizados</span>
+          <strong>
+            {categoria.localizados ??
+              categoria.localizado ??
+              0}
+          </strong>
         </div>
 
         <div>
           <span>Sem localização</span>
-          <strong>{categoria.sem_localizacao ?? 0}</strong>
+          <strong>
+            {categoria.sem_localizacao ??
+              categoria.semLocalizacao ??
+              0}
+          </strong>
         </div>
 
         <div>
@@ -88,7 +141,9 @@ export default function CategoriaDetalhes({
       </div>
 
       {carregando ? (
-        <div className="central-loading">Carregando categoria...</div>
+        <div className="central-loading">
+          Carregando categoria...
+        </div>
       ) : (
         <>
           <section className="central-panel">
@@ -102,7 +157,10 @@ export default function CategoriaDetalhes({
               </div>
 
               <span className="central-count">
-                {responsaveis.length} responsáveis
+                {responsaveis.length}{' '}
+                {responsaveis.length === 1
+                  ? 'responsável'
+                  : 'responsáveis'}
               </span>
             </div>
 
@@ -115,12 +173,18 @@ export default function CategoriaDetalhes({
           <section className="central-panel">
             <div className="central-panel-header">
               <div>
-                <span className="central-section-eyebrow">Patrimônios</span>
+                <span className="central-section-eyebrow">
+                  Patrimônios
+                </span>
+
                 <h3>Relação completa</h3>
               </div>
 
               <span className="central-count">
-                {patrimonios.length} itens
+                {patrimonios.length}{' '}
+                {patrimonios.length === 1
+                  ? 'item'
+                  : 'itens'}
               </span>
             </div>
 
@@ -144,17 +208,33 @@ export default function CategoriaDetalhes({
                   <tbody>
                     {patrimonios.map((item) => (
                       <tr
-                        key={item.id}
+                        key={
+                          item.id ||
+                          item.referencia_id
+                        }
                         className="central-table-row-clickable"
-                        onClick={() => onSelecionarPatrimonio?.(item)}
+                        onClick={() =>
+                          onSelecionarPatrimonio?.(
+                            item
+                          )
+                        }
                       >
                         <td data-label="Patrimônio">
-                          <strong>{item.identificador}</strong>
+                          <strong>
+                            {item.identificador ||
+                              item.patrimonio ||
+                              item.numero_patrimonio ||
+                              item.numero_serie ||
+                              item.serie ||
+                              'SEM IDENTIFICAÇÃO'}
+                          </strong>
                         </td>
 
                         <td data-label="Status">
                           <StatusOperacionalBadge
-                            status={obterStatusOperacional(item)}
+                            status={obterStatusOperacional(
+                              item
+                            )}
                           />
                         </td>
 

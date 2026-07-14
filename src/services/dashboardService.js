@@ -20,14 +20,24 @@ const TABELAS_REFERENCIA = {
   policial: 'policiais',
   policiais: 'policiais',
 
-  municao: 'sigmo_municoes',
-  municoes: 'sigmo_municoes'
+  municao: null,
+  municoes: null
 }
 
 function normalizarTipo(tipo) {
   return String(tipo ?? '')
     .trim()
     .toLowerCase()
+}
+
+function normalizarTexto(valor) {
+  return String(valor ?? '')
+    .trim()
+}
+
+function normalizarMaiusculo(valor) {
+  return normalizarTexto(valor)
+    .toUpperCase()
 }
 
 function objeto(valor) {
@@ -46,6 +56,84 @@ function objeto(valor) {
   }
 }
 
+function obterResponsavel(item) {
+  const dados = objeto(item?.dados)
+
+  return {
+    re:
+      item?.responsavel_re ||
+      item?.re_responsavel ||
+      dados.responsavel_re ||
+      dados.re_responsavel ||
+      dados.recebedor_re ||
+      dados.policial_re ||
+      '',
+
+    nome:
+      item?.responsavel_nome ||
+      item?.nome_responsavel ||
+      dados.responsavel_nome ||
+      dados.nome_responsavel ||
+      dados.recebedor_nome ||
+      dados.policial_nome ||
+      ''
+  }
+}
+
+function obterLocalAtual(item) {
+  const dados = objeto(item?.dados)
+
+  return normalizarTexto(
+    item?.local_atual ||
+    item?.local ||
+    dados.local_atual ||
+    dados.local ||
+    dados.unidade ||
+    dados.setor ||
+    ''
+  )
+}
+
+function localEhCofre(local) {
+  return normalizarMaiusculo(local)
+    .includes('COFRE')
+}
+
+function localEhValido(local) {
+  const valor =
+    normalizarMaiusculo(local)
+
+  if (!valor) {
+    return false
+  }
+
+  return ![
+    '-',
+    'SEM LOCAL',
+    'SEM LOCALIZAÇÃO',
+    'SEM LOCALIZACAO',
+    'NÃO INFORMADO',
+    'NAO INFORMADO',
+    'INDEFINIDO'
+  ].includes(valor)
+}
+
+function possuiDivergencia(item) {
+  const dados = objeto(item?.dados)
+
+  const status =
+    normalizarMaiusculo(
+      item?.status
+    )
+
+  return Boolean(
+    dados.divergencia === true ||
+    dados.possui_divergencia === true ||
+    dados.conferencia_divergente === true ||
+    status.includes('DIVERG')
+  )
+}
+
 async function contarPatrimonios({
   status = null,
   tipo = null
@@ -58,7 +146,10 @@ async function contarPatrimonios({
     })
 
   if (status) {
-    query = query.eq('status', status)
+    query = query.eq(
+      'status',
+      status
+    )
   }
 
   if (tipo) {
@@ -83,7 +174,12 @@ async function contarPatrimonios({
 async function contarMovimentacoesDoDia() {
   const inicio = new Date()
 
-  inicio.setHours(0, 0, 0, 0)
+  inicio.setHours(
+    0,
+    0,
+    0,
+    0
+  )
 
   const {
     count,
@@ -118,7 +214,10 @@ async function contarMovimentacoesPorTipo(
       count: 'exact',
       head: true
     })
-    .eq('tipo', tipo)
+    .eq(
+      'tipo',
+      tipo
+    )
 
   if (error) {
     throw error
@@ -134,7 +233,10 @@ async function listarTotaisPorModulo() {
   } = await supabase
     .from(PATRIMONIOS_TABLE)
     .select('tipo')
-    .neq('status', 'INATIVO')
+    .neq(
+      'status',
+      'INATIVO'
+    )
 
   if (error) {
     throw error
@@ -143,9 +245,11 @@ async function listarTotaisPorModulo() {
   const totais = {}
 
   for (const item of data ?? []) {
-    const tipo = normalizarTipo(
-      item.tipo || 'sem_tipo'
-    )
+    const tipo =
+      normalizarTipo(
+        item.tipo ||
+        'sem_tipo'
+      )
 
     totais[tipo] =
       (totais[tipo] ?? 0) + 1
@@ -153,10 +257,12 @@ async function listarTotaisPorModulo() {
 
   return Object
     .entries(totais)
-    .map(([tipo, total]) => ({
-      tipo,
-      total
-    }))
+    .map(
+      ([tipo, total]) => ({
+        tipo,
+        total
+      })
+    )
     .sort(
       (a, b) =>
         b.total - a.total
@@ -181,7 +287,10 @@ async function buscarRegistrosReferencia(
   } = await supabase
     .from(tabela)
     .select('*')
-    .in('id', ids)
+    .in(
+      'id',
+      ids
+    )
 
   if (error) {
     console.warn(
@@ -202,16 +311,73 @@ function mesclarPatrimonio(
   const dadosPatrimonio =
     objeto(patrimonio?.dados)
 
-  return {
+  const dadosMesclados = {
+    ...registroReferencia,
+    ...dadosPatrimonio
+  }
+
+  const patrimonioMesclado = {
+    ...registroReferencia,
+    ...dadosPatrimonio,
     ...patrimonio,
 
-    dados: {
-      ...registroReferencia,
-      ...dadosPatrimonio
-    },
+    dados:
+      dadosMesclados,
 
     registro_referencia:
       registroReferencia ?? null
+  }
+
+  const responsavel =
+    obterResponsavel(
+      patrimonioMesclado
+    )
+
+  const localAtual =
+    obterLocalAtual(
+      patrimonioMesclado
+    )
+
+  const comPolicial =
+    Boolean(
+      responsavel.re ||
+      responsavel.nome
+    )
+
+  const noCofre =
+    !comPolicial &&
+    localEhCofre(localAtual)
+
+  const localizado =
+    !comPolicial &&
+    !noCofre &&
+    localEhValido(localAtual)
+
+  return {
+    ...patrimonioMesclado,
+
+    responsavel_re:
+      responsavel.re,
+
+    responsavel_nome:
+      responsavel.nome,
+
+    local_atual:
+      localAtual ||
+      'NÃO INFORMADO',
+
+    com_policial:
+      comPolicial,
+
+    no_cofre:
+      noCofre,
+
+    localizado,
+
+    sem_localizacao:
+      !comPolicial &&
+      !noCofre &&
+      !localizado
   }
 }
 
@@ -229,7 +395,10 @@ export async function listarCategoriasOperacionais() {
       companhia_atual,
       dados
     `)
-    .neq('status', 'INATIVO')
+    .neq(
+      'status',
+      'INATIVO'
+    )
 
   if (error) {
     throw error
@@ -240,51 +409,73 @@ export async function listarCategoriasOperacionais() {
   for (const item of data ?? []) {
     const tipo =
       normalizarTipo(
-        item.tipo || 'outros'
+        item.tipo ||
+        'outros'
       )
 
     if (!mapa[tipo]) {
       mapa[tipo] = {
         tipo,
+
         total: 0,
+
         ativos: 0,
         disponiveis: 0,
         cautelados: 0,
         baixados: 0,
         recolhidos: 0,
+
         comPolicial: 0,
+        com_policial: 0,
+
+        noCofre: 0,
+        no_cofre: 0,
+
+        localizados: 0,
+        localizado: 0,
+
+        semLocalizacao: 0,
+        sem_localizacao: 0,
+
         reserva: 0,
+
         divergencias: 0
       }
     }
 
-    const categoria = mapa[tipo]
+    const categoria =
+      mapa[tipo]
 
-    const status = String(
-      item.status ?? ''
-    )
-      .trim()
-      .toUpperCase()
+    const status =
+      normalizarMaiusculo(
+        item.status
+      )
 
-    const dados = objeto(item.dados)
+    const responsavel =
+      obterResponsavel(item)
 
-    const possuiResponsavel = Boolean(
-      dados.responsavel_re ||
-      dados.re_responsavel ||
-      dados.recebedor_re ||
-      dados.policial_re ||
-      dados.responsavel_nome ||
-      dados.nome_responsavel ||
-      dados.recebedor_nome ||
-      dados.policial_nome
-    )
+    const localAtual =
+      obterLocalAtual(item)
 
-    const possuiDivergencia = Boolean(
-      dados.divergencia === true ||
-      dados.possui_divergencia === true ||
-      dados.conferencia_divergente === true ||
-      status.includes('DIVERG')
-    )
+    const comPolicial =
+      Boolean(
+        responsavel.re ||
+        responsavel.nome
+      )
+
+    const noCofre =
+      !comPolicial &&
+      localEhCofre(localAtual)
+
+    const localizado =
+      !comPolicial &&
+      !noCofre &&
+      localEhValido(localAtual)
+
+    const semLocalizacao =
+      !comPolicial &&
+      !noCofre &&
+      !localizado
 
     categoria.total += 1
 
@@ -292,7 +483,10 @@ export async function listarCategoriasOperacionais() {
       categoria.ativos += 1
     }
 
-    if (status === 'DISPONIVEL') {
+    if (
+      status === 'DISPONIVEL' ||
+      status === 'DISPONÍVEL'
+    ) {
       categoria.disponiveis += 1
     }
 
@@ -308,27 +502,43 @@ export async function listarCategoriasOperacionais() {
       categoria.recolhidos += 1
     }
 
-    if (possuiResponsavel) {
+    if (comPolicial) {
       categoria.comPolicial += 1
-    } else if (
-      status !== 'BAIXADO' &&
-      status !== 'INATIVO'
-    ) {
+      categoria.com_policial += 1
+    }
+
+    if (noCofre) {
+      categoria.noCofre += 1
+      categoria.no_cofre += 1
       categoria.reserva += 1
     }
 
-    if (possuiDivergencia) {
+    if (localizado) {
+      categoria.localizados += 1
+      categoria.localizado += 1
+    }
+
+    if (semLocalizacao) {
+      categoria.semLocalizacao += 1
+      categoria.sem_localizacao += 1
+    }
+
+    if (
+      possuiDivergencia(item)
+    ) {
       categoria.divergencias += 1
     }
   }
 
   return Object
     .values(mapa)
-    .sort((a, b) =>
-      String(a.tipo).localeCompare(
-        String(b.tipo),
-        'pt-BR'
-      )
+    .sort(
+      (a, b) =>
+        String(a.tipo)
+          .localeCompare(
+            String(b.tipo),
+            'pt-BR'
+          )
     )
 }
 
@@ -344,16 +554,23 @@ export async function listarPatrimoniosCategoria(
   } = await supabase
     .from(PATRIMONIOS_TABLE)
     .select('*')
-    .eq('tipo', tipoNormalizado)
-    .order('created_at', {
-      ascending: false
-    })
+    .eq(
+      'tipo',
+      tipoNormalizado
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
 
   if (error) {
     throw error
   }
 
-  const lista = patrimonios ?? []
+  const lista =
+    patrimonios ?? []
 
   if (lista.length === 0) {
     return []

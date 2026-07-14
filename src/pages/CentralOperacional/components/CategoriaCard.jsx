@@ -52,7 +52,7 @@ export default function CategoriaCard({
 
         <div className={divergencias > 0 ? 'central-metrica-alerta' : ''}>
           <strong>{divergencias}</strong>
-          <span>Divergências</span>
+<span>Divergências</span>
         </div>
       </div>
     </button>

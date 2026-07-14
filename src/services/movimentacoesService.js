@@ -385,16 +385,16 @@ export async function listarMovimentacoes(
   filtros = {}
 ) {
   let query = supabase
-    .from('sigmo_movimentacoes')
-    .select(`
-      *,
-      itens:sigmo_movimentacao_itens(*),
-      aprovacoes:sigmo_movimentacao_aprovacoes(*),
-      recebimentos:sigmo_movimentacao_recebimentos(*)
-    `)
-    .order('created_at', {
-      ascending: false
-    })
+    .from(
+      'sigmo_patrimonio_movimentacoes'
+    )
+    .select('*')
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
 
   if (filtros.status) {
     query = query.eq(
@@ -424,35 +424,71 @@ export async function listarMovimentacoes(
     )
   }
 
-  const { data, error } =
-    await query
+  const {
+    data,
+    error
+  } = await query
 
   if (error) {
     throw error
   }
 
-  return data || []
+  return data ?? []
 }
 
 export async function buscarMovimentacaoPorId(
   id
 ) {
-  const { data, error } = await supabase
-    .from('sigmo_movimentacoes')
-    .select(`
-      *,
-      itens:sigmo_movimentacao_itens(*),
-      aprovacoes:sigmo_movimentacao_aprovacoes(*),
-      recebimentos:sigmo_movimentacao_recebimentos(*)
-    `)
-    .eq('id', id)
-    .single()
-
-  if (error) {
-    throw error
+  if (!id) {
+    return null
   }
 
-  return data
+  const {
+    data: movimentacao,
+    error: movimentacaoError
+  } = await supabase
+    .from(
+      'sigmo_patrimonio_movimentacoes'
+    )
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (movimentacaoError) {
+    throw movimentacaoError
+  }
+
+  if (!movimentacao) {
+    return null
+  }
+
+  const {
+    data: itens,
+    error: itensError
+  } = await supabase
+    .from(
+      'sigmo_movimentacao_itens'
+    )
+    .select('*')
+    .eq(
+      'movimentacao_id',
+      id
+    )
+
+  if (itensError) {
+    console.warn(
+      'Não foi possível carregar os itens da movimentação:',
+      itensError
+    )
+  }
+
+  return {
+    ...movimentacao,
+    itens:
+      itens ?? [],
+    aprovacoes: [],
+    recebimentos: []
+  }
 }
 
 export async function aprovarMovimentacao({

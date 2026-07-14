@@ -266,7 +266,7 @@ export default function PagarMaterial({
             itensSelecionados,
 
           aprovarAutomaticamente:
-            false
+            true
         })
 
       setMensagem(
