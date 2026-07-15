@@ -1,0 +1,272 @@
+/* =====================================================
+   ÚLTIMAS ALTERAÇÕES — POLICIAIS
+===================================================== */
+
+.policiais-ultimas-alteracoes {
+  width: 100%;
+  min-width: 0;
+  margin-top: 26px;
+  padding: 22px;
+  border: 1px solid #e4e7ec;
+  border-radius: 16px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.policiais-ultimas-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.policiais-ultimas-header > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.policiais-ultimas-header span {
+  color: #075eea;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.policiais-ultimas-header h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.policiais-ultimas-header p {
+  margin: 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.policiais-ultimas-header button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #344054;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.policiais-ultimas-header button:hover:not(:disabled) {
+  border-color: #075eea;
+  color: #075eea;
+}
+
+.policiais-ultimas-header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.policiais-ultimas-lista {
+  display: flex;
+  flex-direction: column;
+}
+
+.policiais-ultima-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  padding: 15px 0;
+  border-top: 1px solid #eaecf0;
+}
+
+.policiais-ultima-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.policiais-ultima-item:last-child {
+  padding-bottom: 0;
+}
+
+.policiais-ultima-icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.policiais-ultima-icone-success {
+  background: #dcfae6;
+  color: #067647;
+}
+
+.policiais-ultima-icone-update {
+  background: #eaf2ff;
+  color: #175cd3;
+}
+
+.policiais-ultima-icone-photo {
+  background: #f4ebff;
+  color: #6941c6;
+}
+
+.policiais-ultima-icone-security {
+  background: #fff4e5;
+  color: #b54708;
+}
+
+.policiais-ultima-icone-danger {
+  background: #fee4e2;
+  color: #b42318;
+}
+
+.policiais-ultima-conteudo {
+  min-width: 0;
+}
+
+.policiais-ultima-linha {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.policiais-ultima-linha > strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.policiais-ultima-linha time {
+  flex: 0 0 auto;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.policiais-ultima-conteudo p {
+  margin: 5px 0 0;
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.policiais-ultima-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.policiais-ultima-meta > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.policiais-ultima-meta > span:first-child {
+  padding-left: 0;
+  background: transparent;
+}
+
+.policiais-ultima-meta strong {
+  margin-left: 4px;
+  color: #101828;
+}
+
+.policiais-ultimas-feedback {
+  padding: 22px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #667085;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.policiais-ultimas-feedback-error {
+  border-color: #fda29b;
+  background: #fff5f4;
+  color: #b42318;
+}
+
+/* =====================================================
+   MOBILE
+===================================================== */
+
+@media screen and (max-width: 720px) {
+  .policiais-ultimas-alteracoes {
+    margin-top: 22px;
+    padding: 17px;
+    border-radius: 16px;
+  }
+
+  .policiais-ultimas-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .policiais-ultimas-header h2 {
+    font-size: 19px;
+  }
+
+  .policiais-ultimas-header button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .policiais-ultima-item {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 11px;
+    padding: 14px 0;
+  }
+
+  .policiais-ultima-icone {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+
+  .policiais-ultima-linha {
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .policiais-ultima-linha time {
+    white-space: normal;
+  }
+
+  .policiais-ultima-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .policiais-ultima-meta > span {
+    max-width: 100%;
+  }
+}

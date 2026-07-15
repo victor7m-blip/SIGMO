@@ -1,5 +1,17 @@
-import { useEffect, useState } from 'react'
+import {
+  useEffect,
+  useState
+} from 'react'
+
+import brasaoUnidade from '../../assets/unidade/brasao-27-bpmm.jpg'
+
 import './AppShell.css'
+
+const UNIDADE = {
+  nome: '27º BPM/M',
+  companhia: '5ª CIA',
+  brasao: brasaoUnidade
+}
 
 const menuItems = [
   {
@@ -64,7 +76,9 @@ const menuItems = [
   }
 ]
 
-function obterNomeUsuario(user) {
+function obterNomeUsuario(
+  user
+) {
   return (
     user?.nome ||
     user?.nome_guerra ||
@@ -74,7 +88,9 @@ function obterNomeUsuario(user) {
   )
 }
 
-function obterPerfilUsuario(user) {
+function obterPerfilUsuario(
+  user
+) {
   return (
     user?.perfil ||
     user?.funcao ||
@@ -89,21 +105,35 @@ export default function AppShell({
   onLogout,
   children
 }) {
-  const [mobileMenuOpen, setMobileMenuOpen] =
-    useState(false)
+  const [
+    mobileMenuOpen,
+    setMobileMenuOpen
+  ] = useState(false)
 
   useEffect(() => {
     setMobileMenuOpen(false)
-  }, [route])
+  }, [
+    route
+  ])
 
   useEffect(() => {
-    function handleEscape(event) {
-      if (event.key === 'Escape') {
-        setMobileMenuOpen(false)
+    function handleEscape(
+      event
+    ) {
+      if (
+        event.key ===
+        'Escape'
+      ) {
+        setMobileMenuOpen(
+          false
+        )
       }
     }
 
-    window.addEventListener('keydown', handleEscape)
+    window.addEventListener(
+      'keydown',
+      handleEscape
+    )
 
     return () => {
       window.removeEventListener(
@@ -113,9 +143,16 @@ export default function AppShell({
     }
   }, [])
 
-  function navegar(itemKey) {
-    setRoute(itemKey)
-    setMobileMenuOpen(false)
+  function navegar(
+    itemKey
+  ) {
+    setRoute(
+      itemKey
+    )
+
+    setMobileMenuOpen(
+      false
+    )
   }
 
   return (
@@ -124,8 +161,14 @@ export default function AppShell({
         type="button"
         className="menu-toggle"
         aria-label="Abrir menu principal"
-        aria-expanded={mobileMenuOpen}
-        onClick={() => setMobileMenuOpen(true)}
+        aria-expanded={
+          mobileMenuOpen
+        }
+        onClick={() =>
+          setMobileMenuOpen(
+            true
+          )
+        }
       >
         <span />
         <span />
@@ -137,14 +180,21 @@ export default function AppShell({
           type="button"
           className="sidebar-overlay"
           aria-label="Fechar menu"
-          onClick={() => setMobileMenuOpen(false)}
+          onClick={() =>
+            setMobileMenuOpen(
+              false
+            )
+          }
         />
       )}
 
       <aside
         className={[
           'app-sidebar',
-          mobileMenuOpen ? 'sidebar-open' : ''
+
+          mobileMenuOpen
+            ? 'sidebar-open'
+            : ''
         ].join(' ')}
       >
         <div className="app-sidebar-top">
@@ -152,21 +202,46 @@ export default function AppShell({
             type="button"
             className="sidebar-close"
             aria-label="Fechar menu"
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={() =>
+              setMobileMenuOpen(
+                false
+              )
+            }
           >
             ×
           </button>
 
           <div className="app-brand">
             <div className="app-brand-emblem">
-              <div className="app-brand-emblem-ring">
-                <span>★</span>
-              </div>
+              <img
+                src={
+                  UNIDADE.brasao
+                }
+                alt={
+                  `Brasão do ${UNIDADE.nome}`
+                }
+                className="app-brand-emblem-image"
+              />
             </div>
 
             <div className="app-brand-name">
-              <strong>SIGMO</strong>
-              <span>Gestão Operacional</span>
+              <strong>
+                SIGMO
+              </strong>
+
+              <span>
+                Gestão Operacional
+              </span>
+            </div>
+
+            <div className="app-brand-unit">
+              <strong>
+                {UNIDADE.nome}
+              </strong>
+
+              <span>
+                {UNIDADE.companhia}
+              </span>
             </div>
           </div>
         </div>
@@ -175,53 +250,71 @@ export default function AppShell({
           className="app-menu"
           aria-label="Navegação principal"
         >
-          {menuItems.map((item) => {
-            const ativo = route === item.key
+          {menuItems.map(
+            (item) => {
+              const ativo =
+                route ===
+                item.key
 
-            return (
-              <button
-                type="button"
-                key={item.key}
-                className={
-                  ativo
-                    ? 'app-menu-item active'
-                    : 'app-menu-item'
-                }
-                aria-current={
-                  ativo ? 'page' : undefined
-                }
-                onClick={() => navegar(item.key)}
-              >
-                <span
-                  className="app-menu-icon"
-                  aria-hidden="true"
+              return (
+                <button
+                  type="button"
+                  key={
+                    item.key
+                  }
+                  className={
+                    ativo
+                      ? 'app-menu-item active'
+                      : 'app-menu-item'
+                  }
+                  aria-current={
+                    ativo
+                      ? 'page'
+                      : undefined
+                  }
+                  onClick={() =>
+                    navegar(
+                      item.key
+                    )
+                  }
                 >
-                  {item.icon}
-                </span>
+                  <span
+                    className="app-menu-icon"
+                    aria-hidden="true"
+                  >
+                    {item.icon}
+                  </span>
 
-                <span className="app-menu-label">
-                  {item.label}
-                </span>
-              </button>
-            )
-          })}
+                  <span className="app-menu-label">
+                    {item.label}
+                  </span>
+                </button>
+              )
+            }
+          )}
         </nav>
 
         <div className="app-sidebar-footer">
           <div className="app-user">
             <div className="app-user-avatar">
-              {obterNomeUsuario(user)
+              {obterNomeUsuario(
+                user
+              )
                 .charAt(0)
                 .toUpperCase()}
             </div>
 
             <div className="app-user-info">
               <strong>
-                {obterNomeUsuario(user)}
+                {obterNomeUsuario(
+                  user
+                )}
               </strong>
 
               <span>
-                {obterPerfilUsuario(user)}
+                {obterPerfilUsuario(
+                  user
+                )}
               </span>
             </div>
           </div>
@@ -229,7 +322,9 @@ export default function AppShell({
           <button
             type="button"
             className="app-logout"
-            onClick={onLogout}
+            onClick={
+              onLogout
+            }
           >
             <span
               className="app-logout-icon"
@@ -238,11 +333,13 @@ export default function AppShell({
               ⇥
             </span>
 
-            <span>Sair do sistema</span>
+            <span>
+              Sair do sistema
+            </span>
           </button>
 
           <div className="app-version">
-            SIGMO • Gestão Operacional
+            SIGMO • {UNIDADE.nome} • {UNIDADE.companhia}
           </div>
         </div>
       </aside>

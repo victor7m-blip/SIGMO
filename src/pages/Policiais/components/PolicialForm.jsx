@@ -89,6 +89,74 @@ const situacoes = [
   'INATIVO'
 ]
 
+const CAMPOS_AUDITAVEIS = [
+  {
+    campo: 'nome',
+    label: 'Nome completo'
+  },
+  {
+    campo: 'nome_guerra',
+    label: 'Nome de guerra'
+  },
+  {
+    campo: 're',
+    label: 'RE'
+  },
+  {
+    campo: 'posto_graduacao',
+    label: 'Posto/Graduação'
+  },
+  {
+    campo: 'companhia',
+    label: 'Companhia'
+  },
+  {
+    campo: 'pelotao',
+    label: 'Pelotão'
+  },
+  {
+    campo: 'equipe',
+    label: 'Equipe'
+  },
+  {
+    campo: 'funcao',
+    label: 'Função'
+  },
+  {
+    campo: 'perfil',
+    label: 'Perfil'
+  },
+  {
+    campo: 'situacao',
+    label: 'Situação'
+  },
+  {
+    campo: 'rg',
+    label: 'RG',
+    ocultarValores: true
+  },
+  {
+    campo: 'cpf',
+    label: 'CPF',
+    ocultarValores: true
+  },
+  {
+    campo: 'telefone',
+    label: 'Telefone',
+    ocultarValores: true
+  },
+  {
+    campo: 'email',
+    label: 'E-mail',
+    ocultarValores: true
+  },
+  {
+    campo: 'observacoes',
+    label: 'Observações',
+    ocultarValores: true
+  }
+]
+
 function upper(value) {
   return String(value || '')
     .toUpperCase()
@@ -195,7 +263,10 @@ function gerarQrCodePolicial() {
     typeof crypto !== 'undefined' &&
     typeof crypto.randomUUID === 'function'
   ) {
-    return `SIGMO-POLICIAL-${crypto.randomUUID()}`
+    return (
+      `SIGMO-POLICIAL-` +
+      `${crypto.randomUUID()}`
+    )
   }
 
   return (
@@ -289,14 +360,13 @@ function montarPayload(form) {
       )
   }
 
- if (!payload.qr_code) {
-  payload.qr_code =
-    gerarQrCodePolicial()
-}
+  if (!payload.qr_code) {
+    payload.qr_code =
+      gerarQrCodePolicial()
+  }
 
   return payload
 }
-
 function transformarPolicialEmForm(
   policial
 ) {
@@ -385,6 +455,218 @@ function transformarPolicialEmForm(
     qr_code:
       policial.qr_code || ''
   }
+}
+
+function normalizarValorComparacao(
+  valor
+) {
+  return String(
+    valor ?? ''
+  ).trim()
+}
+
+function valorExibicao(
+  valor
+) {
+  const texto =
+    normalizarValorComparacao(
+      valor
+    )
+
+  return texto || 'NÃO INFORMADO'
+}
+
+function montarIdentificacaoPolicial(
+  dados
+) {
+  const posto =
+    normalizarValorComparacao(
+      dados?.posto_graduacao
+    )
+
+  const nome =
+    normalizarValorComparacao(
+      dados?.nome_guerra ||
+      dados?.nome
+    ) ||
+    'POLICIAL'
+
+  const re =
+    normalizarValorComparacao(
+      dados?.re
+    )
+
+  const identificacao =
+    [
+      posto,
+      nome
+    ]
+      .filter(Boolean)
+      .join(' ')
+
+  if (re) {
+    return (
+      `${identificacao} — RE ${re}`
+    )
+  }
+
+  return identificacao
+}
+
+function compararAlteracoes(
+  anterior,
+  atual
+) {
+  const alteracoes = []
+
+  for (
+    const configuracao
+    of CAMPOS_AUDITAVEIS
+  ) {
+    const valorAnterior =
+      normalizarValorComparacao(
+        anterior?.[
+          configuracao.campo
+        ]
+      )
+
+    const valorAtual =
+      normalizarValorComparacao(
+        atual?.[
+          configuracao.campo
+        ]
+      )
+
+    if (
+      valorAnterior ===
+      valorAtual
+    ) {
+      continue
+    }
+
+    alteracoes.push({
+      campo:
+        configuracao.campo,
+
+      label:
+        configuracao.label,
+
+      valorAnterior,
+
+      valorAtual,
+
+      ocultarValores:
+        Boolean(
+          configuracao
+            .ocultarValores
+        )
+    })
+  }
+
+  return alteracoes
+}
+
+function montarResumoAlteracoes(
+  alteracoes
+) {
+  if (
+    !Array.isArray(
+      alteracoes
+    ) ||
+    alteracoes.length === 0
+  ) {
+    return (
+      'Nenhuma alteração de campo identificada.'
+    )
+  }
+
+  return alteracoes
+    .map(
+      (alteracao) => {
+        if (
+          alteracao
+            .ocultarValores
+        ) {
+          return (
+            `${alteracao.label}: ` +
+            `informação atualizada`
+          )
+        }
+
+        return (
+          `${alteracao.label}: ` +
+          `${valorExibicao(
+            alteracao.valorAnterior
+          )} → ` +
+          `${valorExibicao(
+            alteracao.valorAtual
+          )}`
+        )
+      }
+    )
+    .join(' | ')
+}
+
+function obterNomeUsuario(
+  user
+) {
+  return (
+    user?.nome ||
+    user?.nome_guerra ||
+    user?.nome_completo ||
+    user?.name ||
+    user?.email ||
+    'SIGMO'
+  )
+}
+
+function montarDescricaoAtualizacao({
+  user,
+  anterior,
+  atual,
+  alteracoes
+}) {
+  const ator =
+    obterNomeUsuario(
+      user
+    )
+
+  const identificacao =
+    montarIdentificacaoPolicial(
+      atual ||
+      anterior
+    )
+
+  const resumo =
+    montarResumoAlteracoes(
+      alteracoes
+    )
+
+  return (
+    `${ator} alterou o cadastro de ` +
+    `${identificacao}. ` +
+    `Alterações: ${resumo}.`
+  )
+}
+
+function montarDescricaoCadastro({
+  user,
+  policial
+}) {
+  const ator =
+    obterNomeUsuario(
+      user
+    )
+
+  const identificacao =
+    montarIdentificacaoPolicial(
+      policial
+    )
+
+  return (
+    `${ator} cadastrou ` +
+    `${identificacao}.`
+  )
 }
 
 function PinTemporarioModal({
@@ -498,7 +780,6 @@ function PinTemporarioModal({
     </div>
   )
 }
-
 export default function PolicialForm({
   user,
   policialEditando,
@@ -545,7 +826,9 @@ export default function PolicialForm({
       () =>
         policialEditando?.id ||
         null,
-      [policialEditando]
+      [
+        policialEditando
+      ]
     )
 
   useEffect(() => {
@@ -575,8 +858,11 @@ export default function PolicialForm({
       setForm(
         (prev) => ({
           ...prev,
+
           re:
-            maskRE(value)
+            maskRE(
+              value
+            )
         })
       )
 
@@ -584,13 +870,17 @@ export default function PolicialForm({
     }
 
     if (
-      name === 'telefone'
+      name ===
+      'telefone'
     ) {
       setForm(
         (prev) => ({
           ...prev,
+
           telefone:
-            maskTelefone(value)
+            maskTelefone(
+              value
+            )
         })
       )
 
@@ -601,18 +891,25 @@ export default function PolicialForm({
       setForm(
         (prev) => ({
           ...prev,
+
           cpf:
-            maskCPF(value)
+            maskCPF(
+              value
+            )
         })
       )
 
       return
     }
 
-    if (name === 'email') {
+    if (
+      name ===
+      'email'
+    ) {
       setForm(
         (prev) => ({
           ...prev,
+
           email:
             value
         })
@@ -624,19 +921,28 @@ export default function PolicialForm({
     setForm(
       (prev) => ({
         ...prev,
+
         [name]:
-          upper(value)
+          upper(
+            value
+          )
       })
     )
   }
 
-  
-  async function registrarAuditoriaSegura(
-    dados
-  ) {
+  async function registrarAuditoriaSegura({
+    acao,
+    descricao,
+    modulo = 'Policiais',
+    severidade = 'Informativo'
+  }) {
     try {
       await registerAudit(
-        dados
+        acao,
+        descricao,
+        user,
+        modulo,
+        severidade
       )
     } catch (error) {
       console.error(
@@ -716,34 +1022,53 @@ export default function PolicialForm({
       )
 
       if (isEditing) {
+        const dadosAnteriores =
+          montarPayload(
+            transformarPolicialEmForm(
+              policialEditando
+            )
+          )
+
+        const alteracoes =
+          compararAlteracoes(
+            dadosAnteriores,
+            payload
+          )
+
         const policialAtualizado =
           await atualizarPolicial(
             policialEditando.id,
             payload
           )
 
-        await registrarAuditoriaSegura({
-          acao:
-            'ATUALIZAR',
+        if (
+          alteracoes.length >
+          0
+        ) {
+          await registrarAuditoriaSegura({
+            acao:
+              'ATUALIZAR',
 
-          descricao:
-            `Policial atualizado: ${payload.nome_guerra} - RE ${payload.re}`,
+            descricao:
+              montarDescricaoAtualizacao({
+                user,
 
-          ator_id:
-            user?.id,
+                anterior:
+                  dadosAnteriores,
 
-          ator_nome:
-            user?.nome,
+                atual:
+                  payload,
 
-          perfil:
-            user?.perfil,
+                alteracoes
+              }),
 
-          modulo:
-            'POLICIAIS',
+            modulo:
+              'Policiais',
 
-          severidade:
-            'INFO'
-        })
+            severidade:
+              'Informativo'
+          })
+        }
 
         setForm(
           transformarPolicialEmForm(
@@ -752,7 +1077,9 @@ export default function PolicialForm({
         )
 
         setSucesso(
-          'Dados do policial atualizados com sucesso.'
+          alteracoes.length > 0
+            ? 'Dados do policial atualizados com sucesso.'
+            : 'Nenhuma alteração foi identificada.'
         )
 
         onSaved?.(
@@ -775,22 +1102,19 @@ export default function PolicialForm({
           'CADASTRAR',
 
         descricao:
-          `Policial cadastrado: ${payload.nome_guerra} - RE ${payload.re}`,
+          montarDescricaoCadastro({
+            user,
 
-        ator_id:
-          user?.id,
-
-        ator_nome:
-          user?.nome,
-
-        perfil:
-          user?.perfil,
+            policial:
+              novoPolicial ||
+              payload
+          }),
 
         modulo:
-          'POLICIAIS',
+          'Policiais',
 
         severidade:
-          'INFO'
+          'Informativo'
       })
 
       setPolicialCriado(
@@ -972,8 +1296,7 @@ export default function PolicialForm({
               )}
             </select>
           </label>
-
-          <label>
+                  <label>
             Companhia
 
             <select
@@ -1192,7 +1515,6 @@ export default function PolicialForm({
           />
         </label>
 
-        
         {isEditing && (
           <PolicialFotos
             policialId={
@@ -1255,4 +1577,4 @@ export default function PolicialForm({
       )}
     </>
   )
-}
+}  

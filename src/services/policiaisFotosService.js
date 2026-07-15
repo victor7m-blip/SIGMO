@@ -16,6 +16,79 @@ function obterNomeUsuario(user) {
   )
 }
 
+function montarIdentificacaoPolicial(
+  policial
+) {
+  if (!policial) {
+    return 'policial não identificado'
+  }
+
+  const posto =
+    String(
+      policial.posto_graduacao || ''
+    ).trim()
+
+  const nome =
+    String(
+      policial.nome_guerra ||
+      policial.nome ||
+      'POLICIAL'
+    ).trim()
+
+  const re =
+    String(
+      policial.re || ''
+    ).trim()
+
+  const identificacao =
+    [posto, nome]
+      .filter(Boolean)
+      .join(' ')
+
+  if (re) {
+    return `${identificacao} — RE ${re}`
+  }
+
+  return identificacao
+}
+
+async function buscarPolicial(
+  policialId
+) {
+  if (!policialId) {
+    return null
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(POLICIAIS_TABLE)
+    .select(`
+      id,
+      nome,
+      nome_guerra,
+      re,
+      posto_graduacao
+    `)
+    .eq(
+      'id',
+      policialId
+    )
+    .maybeSingle()
+
+  if (error) {
+    console.warn(
+      'Não foi possível carregar a identificação do policial:',
+      error
+    )
+
+    return null
+  }
+
+  return data || null
+}
+
 async function registrarAuditoriaFoto({
   tipo,
   descricao,
@@ -43,7 +116,9 @@ export async function uploadFotoPolicial(
   user = null
 ) {
   if (!file) {
-    throw new Error('Nenhuma foto selecionada.')
+    throw new Error(
+      'Nenhuma foto selecionada.'
+    )
   }
 
   if (!policialId) {
@@ -52,35 +127,57 @@ export async function uploadFotoPolicial(
     )
   }
 
+  const policial =
+    await buscarPolicial(
+      policialId
+    )
+
+  const identificacao =
+    montarIdentificacaoPolicial(
+      policial
+    )
+
   const extensao =
     file.name
       .split('.')
       .pop()
-      ?.toLowerCase() || 'jpg'
+      ?.toLowerCase() ||
+    'jpg'
 
   const nomeArquivo =
-    `${policialId}/${Date.now()}-${Math.random()
+    `${policialId}/` +
+    `${Date.now()}-` +
+    `${Math.random()
       .toString(36)
       .slice(2)}.${extensao}`
 
-  const { error: uploadError } =
-    await supabase.storage
-      .from(BUCKET)
-      .upload(nomeArquivo, file, {
+  const {
+    error: uploadError
+  } = await supabase.storage
+    .from(BUCKET)
+    .upload(
+      nomeArquivo,
+      file,
+      {
         cacheControl: '3600',
         upsert: false
-      })
+      }
+    )
 
   if (uploadError) {
     throw uploadError
   }
 
-  const { data: publicData } =
-    supabase.storage
-      .from(BUCKET)
-      .getPublicUrl(nomeArquivo)
+  const {
+    data: publicData
+  } = supabase.storage
+    .from(BUCKET)
+    .getPublicUrl(
+      nomeArquivo
+    )
 
-  const url = publicData.publicUrl
+  const url =
+    publicData.publicUrl
 
   const {
     data: fotosExistentes,
@@ -88,13 +185,18 @@ export async function uploadFotoPolicial(
   } = await supabase
     .from(TABLE)
     .select('id')
-    .eq('policial_id', policialId)
+    .eq(
+      'policial_id',
+      policialId
+    )
     .limit(1)
 
   if (countError) {
     await supabase.storage
       .from(BUCKET)
-      .remove([nomeArquivo])
+      .remove([
+        nomeArquivo
+      ])
 
     throw countError
   }
@@ -103,33 +205,52 @@ export async function uploadFotoPolicial(
     !fotosExistentes ||
     fotosExistentes.length === 0
 
-  const { data, error: bancoError } =
-    await supabase
-      .from(TABLE)
-      .insert({
-        policial_id: policialId,
-        url,
-        caminho: nomeArquivo,
-        principal: primeiraFoto,
-        created_by: user?.id || null,
-        created_by_nome:
-          obterNomeUsuario(user)
-      })
-      .select()
-      .single()
+  const {
+    data,
+    error: bancoError
+  } = await supabase
+    .from(TABLE)
+    .insert({
+      policial_id:
+        policialId,
+
+      url,
+
+      caminho:
+        nomeArquivo,
+
+      principal:
+        primeiraFoto,
+
+      created_by:
+        user?.id ||
+        null,
+
+      created_by_nome:
+        obterNomeUsuario(
+          user
+        )
+    })
+    .select()
+    .single()
 
   if (bancoError) {
     await supabase.storage
       .from(BUCKET)
-      .remove([nomeArquivo])
+      .remove([
+        nomeArquivo
+      ])
 
     throw bancoError
   }
 
   await registrarAuditoriaFoto({
-    tipo: 'FOTO_ADICIONADA',
+    tipo:
+      'FOTO_ADICIONADA',
+
     descricao:
-      `${obterNomeUsuario(user)} adicionou uma foto ao cadastro do policial.`,
+      `${obterNomeUsuario(user)} adicionou uma foto ao cadastro de ${identificacao}.`,
+
     user
   })
 
@@ -153,16 +274,28 @@ export async function listarFotosPolicial(
     return []
   }
 
-  const { data, error } = await supabase
+  const {
+    data,
+    error
+  } = await supabase
     .from(TABLE)
     .select('*')
-    .eq('policial_id', policialId)
-    .order('principal', {
-      ascending: false
-    })
-    .order('created_at', {
-      ascending: false
-    })
+    .eq(
+      'policial_id',
+      policialId
+    )
+    .order(
+      'principal',
+      {
+        ascending: false
+      }
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
 
   if (error) {
     throw error
@@ -179,50 +312,82 @@ export async function definirFotoPrincipal(
   registrarAuditoria = true
 ) {
   if (!policialId) {
-    throw new Error('Policial não informado.')
+    throw new Error(
+      'Policial não informado.'
+    )
   }
 
   if (!fotoId) {
-    throw new Error('Foto não informada.')
+    throw new Error(
+      'Foto não informada.'
+    )
   }
 
-  const { error: limparError } =
-    await supabase
-      .from(TABLE)
-      .update({
-        principal: false
-      })
-      .eq('policial_id', policialId)
+  const policial =
+    await buscarPolicial(
+      policialId
+    )
+
+  const identificacao =
+    montarIdentificacaoPolicial(
+      policial
+    )
+
+  const {
+    error: limparError
+  } = await supabase
+    .from(TABLE)
+    .update({
+      principal: false
+    })
+    .eq(
+      'policial_id',
+      policialId
+    )
 
   if (limparError) {
     throw limparError
   }
 
-  const { data: foto, error: fotoError } =
-    await supabase
-      .from(TABLE)
-      .update({
-        principal: true
-      })
-      .eq('id', fotoId)
-      .eq('policial_id', policialId)
-      .select()
-      .single()
+  const {
+    data: foto,
+    error: fotoError
+  } = await supabase
+    .from(TABLE)
+    .update({
+      principal: true
+    })
+    .eq(
+      'id',
+      fotoId
+    )
+    .eq(
+      'policial_id',
+      policialId
+    )
+    .select()
+    .single()
 
   if (fotoError) {
     throw fotoError
   }
 
   const urlPrincipal =
-    fotoUrl || foto.url
+    fotoUrl ||
+    foto.url
 
-  const { error: policialError } =
-    await supabase
-      .from(POLICIAIS_TABLE)
-      .update({
-        foto_url: urlPrincipal
-      })
-      .eq('id', policialId)
+  const {
+    error: policialError
+  } = await supabase
+    .from(POLICIAIS_TABLE)
+    .update({
+      foto_url:
+        urlPrincipal
+    })
+    .eq(
+      'id',
+      policialId
+    )
 
   if (policialError) {
     throw policialError
@@ -230,9 +395,12 @@ export async function definirFotoPrincipal(
 
   if (registrarAuditoria) {
     await registrarAuditoriaFoto({
-      tipo: 'FOTO_PRINCIPAL',
+      tipo:
+        'FOTO_PRINCIPAL',
+
       descricao:
-        `${obterNomeUsuario(user)} definiu a foto principal do policial.`,
+        `${obterNomeUsuario(user)} definiu a foto principal de ${identificacao}.`,
+
       user
     })
   }
@@ -246,50 +414,79 @@ export async function excluirFotoPolicial(
   user = null
 ) {
   const idPolicial =
-    policialId || foto?.policial_id
+    policialId ||
+    foto?.policial_id
 
   if (!foto?.id) {
-    throw new Error('Foto não informada.')
+    throw new Error(
+      'Foto não informada.'
+    )
   }
 
   if (!idPolicial) {
-    throw new Error('Policial não informado.')
+    throw new Error(
+      'Policial não informado.'
+    )
   }
 
+  const policial =
+    await buscarPolicial(
+      idPolicial
+    )
+
+  const identificacao =
+    montarIdentificacaoPolicial(
+      policial
+    )
+
   const eraPrincipal =
-    Boolean(foto.principal)
+    Boolean(
+      foto.principal
+    )
 
   if (foto.caminho) {
-    const { error: storageError } =
-      await supabase.storage
-        .from(BUCKET)
-        .remove([foto.caminho])
+    const {
+      error: storageError
+    } = await supabase.storage
+      .from(BUCKET)
+      .remove([
+        foto.caminho
+      ])
 
     if (storageError) {
       throw storageError
     }
   }
 
-  const { error: deleteError } =
-    await supabase
-      .from(TABLE)
-      .delete()
-      .eq('id', foto.id)
+  const {
+    error: deleteError
+  } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq(
+      'id',
+      foto.id
+    )
 
   if (deleteError) {
     throw deleteError
   }
 
   await registrarAuditoriaFoto({
-    tipo: 'FOTO_REMOVIDA',
+    tipo:
+      'FOTO_REMOVIDA',
+
     descricao:
-      `${obterNomeUsuario(user)} removeu uma foto do cadastro do policial.`,
+      `${obterNomeUsuario(user)} removeu uma foto do cadastro de ${identificacao}.`,
+
     user
   })
 
   if (eraPrincipal) {
     const fotosRestantes =
-      await listarFotosPolicial(idPolicial)
+      await listarFotosPolicial(
+        idPolicial
+      )
 
     const novaPrincipal =
       fotosRestantes?.[0]
@@ -304,19 +501,26 @@ export async function excluirFotoPolicial(
       )
 
       await registrarAuditoriaFoto({
-        tipo: 'FOTO_PRINCIPAL',
+        tipo:
+          'FOTO_PRINCIPAL',
+
         descricao:
-          `${obterNomeUsuario(user)} definiu automaticamente outra foto como principal.`,
+          `${obterNomeUsuario(user)} definiu automaticamente outra foto como principal de ${identificacao}.`,
+
         user
       })
     } else {
-      const { error: limparPolicialError } =
-        await supabase
-          .from(POLICIAIS_TABLE)
-          .update({
-            foto_url: null
-          })
-          .eq('id', idPolicial)
+      const {
+        error: limparPolicialError
+      } = await supabase
+        .from(POLICIAIS_TABLE)
+        .update({
+          foto_url: null
+        })
+        .eq(
+          'id',
+          idPolicial
+        )
 
       if (limparPolicialError) {
         throw limparPolicialError
@@ -337,8 +541,20 @@ export async function baixarFotoPolicial(
     )
   }
 
+  const policial =
+    await buscarPolicial(
+      foto?.policial_id
+    )
+
+  const identificacao =
+    montarIdentificacaoPolicial(
+      policial
+    )
+
   const resposta =
-    await fetch(foto.url)
+    await fetch(
+      foto.url
+    )
 
   if (!resposta.ok) {
     throw new Error(
@@ -350,27 +566,42 @@ export async function baixarFotoPolicial(
     await resposta.blob()
 
   const urlTemporaria =
-    URL.createObjectURL(blob)
+    URL.createObjectURL(
+      blob
+    )
 
   const link =
-    document.createElement('a')
+    document.createElement(
+      'a'
+    )
 
-  link.href = urlTemporaria
+  link.href =
+    urlTemporaria
 
   link.download =
-    foto.caminho?.split('/').pop() ||
+    foto.caminho
+      ?.split('/')
+      .pop() ||
     `policial-${foto.id}.jpg`
 
-  document.body.appendChild(link)
+  document.body.appendChild(
+    link
+  )
+
   link.click()
   link.remove()
 
-  URL.revokeObjectURL(urlTemporaria)
+  URL.revokeObjectURL(
+    urlTemporaria
+  )
 
   await registrarAuditoriaFoto({
-    tipo: 'FOTO_BAIXADA',
+    tipo:
+      'FOTO_BAIXADA',
+
     descricao:
-      `${obterNomeUsuario(user)} baixou uma foto do cadastro do policial.`,
+      `${obterNomeUsuario(user)} baixou uma foto do cadastro de ${identificacao}.`,
+
     user
   })
 

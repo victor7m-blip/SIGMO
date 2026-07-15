@@ -14,6 +14,7 @@ import './components/policialViewModal.css'
 import PolicialForm from './components/PolicialForm'
 import PolicialTable from './components/PolicialTable'
 import PolicialViewModal from './components/PolicialViewModal'
+import UltimasAlteracoes from './components/UltimasAlteracoes'
 import QrScanner from '../../components/QrScanner/QrScanner'
 
 import {
@@ -866,6 +867,9 @@ export default function Policiais({
             Última
           </button>
         </div>
+        <UltimasAlteracoes
+  reloadKey={reloadKey}
+/>
       </section>
 
       <PolicialViewModal
