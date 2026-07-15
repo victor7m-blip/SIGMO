@@ -10,7 +10,7 @@
 }
 
 .policial-modal {
-  width: min(1180px, 100%);
+  width: min(980px, 100%);
   max-height: 92vh;
   overflow: hidden;
   background: #fff;
@@ -205,8 +205,42 @@
 }
 
 @media (max-width: 850px) {
+  .policial-modal {
+    width: min(760px, 100%);
+  }
+
   .policial-modal-body {
     grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .policial-modal-photo-area {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
+  .policial-main-photo {
+    width: 100%;
+    max-height: 360px;
+    aspect-ratio: 3 / 4;
+  }
+
+  .policial-main-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+  }
+
+  .policial-modal-qrcode {
+    min-height: 130px;
+  }
+
+  .policial-modal-qrcode img {
+    width: 120px;
+    height: 120px;
   }
 
   .policial-info-grid {
@@ -215,5 +249,9 @@
 
   .policial-modal-footer {
     flex-direction: column;
+  }
+
+  .policial-modal-footer button {
+    width: 100%;
   }
 }

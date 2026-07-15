@@ -69,8 +69,7 @@ export default function PolicialFotos({
       const novaFoto = await uploadFotoPolicial(arquivo, policialId, user)
 
       setArquivo(null)
-      event.target.reset()
-
+      
       await carregarFotos()
 
       if (novaFoto?.principal) {
@@ -176,7 +175,7 @@ export default function PolicialFotos({
       )}
 
       {!somenteLeitura && (
-        <form className="policial-fotos-upload" onSubmit={handleUpload}>
+        <div className="policial-fotos-upload">
           <input
             type="file"
             accept="image/*"
@@ -184,10 +183,14 @@ export default function PolicialFotos({
             disabled={loading}
           />
 
-          <button type="submit" disabled={loading || !arquivo}>
+          <button
+  type="button"
+  disabled={loading || !arquivo}
+  onClick={(e) => handleUpload(e)}
+>
             {loading ? 'Enviando...' : 'Enviar foto'}
           </button>
-        </form>
+        </div>
       )}
 
       {loading && fotos.length === 0 && (

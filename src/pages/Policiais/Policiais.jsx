@@ -1,12 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
+
 import './Policiais.css'
+import './styles/policiaisForm.css'
+import './styles/policiaisHeader.css'
+import './styles/policiaisModal.css'
+import './styles/policiaisTable.css'
+import './components/policialViewModal.css'
 
 import PolicialForm from './components/PolicialForm'
 import PolicialTable from './components/PolicialTable'
 import PolicialViewModal from './components/PolicialViewModal'
 import QrScanner from '../../components/QrScanner/QrScanner'
-import { listarFotosPolicial } from '../../services/policiaisFotosService'
-import { listarPoliciais } from '../../services/policiaisService'
+
+import {
+  listarFotosPolicial
+} from '../../services/policiaisFotosService'
+
+import {
+  listarPoliciais
+} from '../../services/policiaisService'
 
 const initialFilters = {
   nome: '',
@@ -52,114 +68,259 @@ function maskRE(value) {
     .replace(/[^0-9A-Z]/g, '')
     .slice(0, 7)
 
-  const numeros = limpo.slice(0, 6).replace(/\D/g, '')
-  const digito = limpo.slice(6, 7)
+  const numeros = limpo
+    .slice(0, 6)
+    .replace(/\D/g, '')
 
-  if (numeros.length < 6) return numeros
-  return digito ? `${numeros}-${digito}` : `${numeros}-`
+  const digito =
+    limpo.slice(6, 7)
+
+  if (numeros.length < 6) {
+    return numeros
+  }
+
+  return digito
+    ? `${numeros}-${digito}`
+    : `${numeros}-`
 }
 
-export default function Policiais({ user }) {
-  const [showForm, setShowForm] = useState(false)
-  const [policialEditando, setPolicialEditando] = useState(null)
-  const [policialVisualizando, setPolicialVisualizando] = useState(null)
+export default function Policiais({
+  user
+}) {
+  const [
+    showForm,
+    setShowForm
+  ] = useState(false)
 
-  const [fotosModal, setFotosModal] = useState([])
-  const [policiais, setPoliciais] = useState([])
-  const [filters, setFilters] = useState(initialFilters)
-  const [debouncedFilters, setDebouncedFilters] = useState(initialFilters)
+  const [
+    policialEditando,
+    setPolicialEditando
+  ] = useState(null)
 
-  const [pagina, setPagina] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState('')
-  const [reloadKey, setReloadKey] = useState(0)
+  const [
+    policialVisualizando,
+    setPolicialVisualizando
+  ] = useState(null)
 
-  const [sortBy, setSortBy] = useState('nome_guerra')
-  const [sortDirection, setSortDirection] = useState('asc')
-  const [scannerAberto, setScannerAberto] = useState(false)
+  const [
+    fotosModal,
+    setFotosModal
+  ] = useState([])
 
-  const totalPaginas = Math.ceil(total / LIMITE_POR_PAGINA) || 1
+  const [
+    policiais,
+    setPoliciais
+  ] = useState([])
+
+  const [
+    filters,
+    setFilters
+  ] = useState(initialFilters)
+
+  const [
+    debouncedFilters,
+    setDebouncedFilters
+  ] = useState(initialFilters)
+
+  const [
+    pagina,
+    setPagina
+  ] = useState(1)
+
+  const [
+    total,
+    setTotal
+  ] = useState(0)
+
+  const [
+    loading,
+    setLoading
+  ] = useState(false)
+
+  const [
+    erro,
+    setErro
+  ] = useState('')
+
+  const [
+    reloadKey,
+    setReloadKey
+  ] = useState(0)
+
+  const [
+    sortBy,
+    setSortBy
+  ] = useState('nome_guerra')
+
+  const [
+    sortDirection,
+    setSortDirection
+  ] = useState('asc')
+
+  const [
+    scannerAberto,
+    setScannerAberto
+  ] = useState(false)
+
+  const totalPaginas =
+    Math.ceil(
+      total /
+      LIMITE_POR_PAGINA
+    ) || 1
 
   const registroInicial =
-    total === 0 ? 0 : (pagina - 1) * LIMITE_POR_PAGINA + 1
+    total === 0
+      ? 0
+      : (
+          pagina - 1
+        ) *
+          LIMITE_POR_PAGINA +
+        1
 
-  const registroFinal = Math.min(pagina * LIMITE_POR_PAGINA, total)
+  const registroFinal =
+    Math.min(
+      pagina *
+        LIMITE_POR_PAGINA,
+      total
+    )
 
-    const paginasVisiveis = useMemo(() => {
-    const paginas = []
-    const inicio = Math.max(1, pagina - 2)
-    const fim = Math.min(totalPaginas, pagina + 2)
+  const paginasVisiveis =
+    useMemo(() => {
+      const paginas = []
 
-    for (let i = inicio; i <= fim; i++) {
-      paginas.push(i)
-    }
+      const inicio =
+        Math.max(
+          1,
+          pagina - 2
+        )
 
-    return paginas
-  }, [pagina, totalPaginas])
+      const fim =
+        Math.min(
+          totalPaginas,
+          pagina + 2
+        )
+
+      for (
+        let numero = inicio;
+        numero <= fim;
+        numero += 1
+      ) {
+        paginas.push(numero)
+      }
+
+      return paginas
+    }, [
+      pagina,
+      totalPaginas
+    ])
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedFilters(filters)
-      setPagina(1)
-    }, 400)
+    const timer =
+      setTimeout(() => {
+        setDebouncedFilters(
+          filters
+        )
 
-    return () => clearTimeout(timer)
+        setPagina(1)
+      }, 400)
+
+    return () =>
+      clearTimeout(timer)
   }, [filters])
 
   useEffect(() => {
     carregarPoliciais()
-  }, [debouncedFilters, pagina, reloadKey, sortBy, sortDirection])
+  }, [
+    debouncedFilters,
+    pagina,
+    reloadKey,
+    sortBy,
+    sortDirection
+  ])
 
   async function carregarPoliciais() {
     try {
       setLoading(true)
       setErro('')
 
-      const resultado = await listarPoliciais({
-        filtros: debouncedFilters,
-        pagina,
-        limite: LIMITE_POR_PAGINA,
-        sortBy,
-        sortDirection
-      })
+      const resultado =
+        await listarPoliciais({
+          filtros:
+            debouncedFilters,
 
-      setPoliciais(resultado.data || [])
-      setTotal(resultado.total || 0)
+          pagina,
+
+          limite:
+            LIMITE_POR_PAGINA,
+
+          sortBy,
+
+          sortDirection
+        })
+
+      setPoliciais(
+        resultado.data || []
+      )
+
+      setTotal(
+        resultado.total || 0
+      )
     } catch (error) {
       console.error(error)
-      setErro('Erro ao carregar policiais.')
+
+      setErro(
+        'Erro ao carregar policiais.'
+      )
     } finally {
       setLoading(false)
     }
   }
-
   function handleNovoPolicial() {
     setPolicialEditando(null)
     setShowForm(true)
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
   }
 
-  async function handleView(policial) {
-  console.log('POLICIAL', policial)
+  async function handleView(
+    policial
+  ) {
+    setPolicialVisualizando(
+      policial
+    )
 
-  setPolicialVisualizando(policial)
+    try {
+      const fotos =
+        await listarFotosPolicial(
+          policial.id
+        )
 
-  try {
-    const fotos = await listarFotosPolicial(policial.id)
+      setFotosModal(
+        fotos || []
+      )
+    } catch (error) {
+      console.error(error)
 
-    console.log('FOTOS', fotos)
-
-    setFotosModal(fotos)
-  } catch (error) {
-    console.error(error)
-    setFotosModal([])
+      setFotosModal([])
+    }
   }
-}
 
-  function handleEditar(policial) {
-    setPolicialEditando(policial)
+  function handleEditar(
+    policial
+  ) {
+    setPolicialEditando(
+      policial
+    )
+
     setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
   }
 
   function handleCancel() {
@@ -167,35 +328,71 @@ export default function Policiais({ user }) {
     setShowForm(false)
   }
 
-  function handleSaved() {
-    setPolicialEditando(null)
-    setShowForm(false)
-    setReloadKey((prev) => prev + 1)
+  function handleSaved(
+  policialAtualizado,
+  opcoes = {}
+) {
+  setReloadKey(
+    (prev) => prev + 1
+  )
+
+  if (opcoes.manterAberto) {
+    setPolicialEditando(
+      policialAtualizado
+    )
+
+    return
   }
 
-  function handleFiltersChange(newFilters) {
+  setPolicialEditando(null)
+  setShowForm(false)
+}
+
+  function handleFiltersChange(
+    newFilters
+  ) {
     setFilters(newFilters)
   }
 
   function handleClearFilters() {
     setFilters(initialFilters)
-    setDebouncedFilters(initialFilters)
+
+    setDebouncedFilters(
+      initialFilters
+    )
+
     setPagina(1)
   }
 
   function handleDeleted(id) {
-    setPoliciais((listaAtual) =>
-      listaAtual.filter((policial) => policial.id !== id)
+    setPoliciais(
+      (listaAtual) =>
+        listaAtual.filter(
+          (policial) =>
+            policial.id !== id
+        )
     )
 
-    setTotal((atual) => Math.max(atual - 1, 0))
+    setTotal(
+      (atual) =>
+        Math.max(
+          atual - 1,
+          0
+        )
+    )
   }
 
   function handleSort(campo) {
     setPagina(1)
 
     if (sortBy === campo) {
-      setSortDirection((atual) => (atual === 'asc' ? 'desc' : 'asc'))
+      setSortDirection(
+        (atual) =>
+          atual === 'asc'
+            ? 'desc'
+            : 'asc'
+      )
+
       return
     }
 
@@ -204,15 +401,16 @@ export default function Policiais({ user }) {
   }
 
   function handleQrRead(valor) {
-    setFilters({
+    const novosFiltros = {
       ...initialFilters,
       qr_code: valor
-    })
+    }
 
-    setDebouncedFilters({
-      ...initialFilters,
-      qr_code: valor
-    })
+    setFilters(novosFiltros)
+
+    setDebouncedFilters(
+      novosFiltros
+    )
 
     setPagina(1)
     setScannerAberto(false)
@@ -230,12 +428,26 @@ export default function Policiais({ user }) {
     <main className="page policiais-page">
       <header className="policiais-header">
         <div>
-          <span className="policiais-kicker">SIGMO</span>
-          <h1>Cadastro de Policiais</h1>
-          <p>Gestão, consulta e controle do efetivo institucional.</p>
+          <span className="policiais-kicker">
+            SIGMO
+          </span>
+
+          <h1>
+            Cadastro de Policiais
+          </h1>
+
+          <p>
+            Gestão, consulta e controle do efetivo institucional.
+          </p>
         </div>
 
-        <button type="button" className="btn-primary" onClick={handleNovoPolicial}>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={
+            handleNovoPolicial
+          }
+        >
           + Novo Policial
         </button>
       </header>
@@ -243,9 +455,15 @@ export default function Policiais({ user }) {
       {showForm && (
         <PolicialForm
           user={user}
-          policialEditando={policialEditando}
-          onCancel={handleCancel}
-          onSaved={handleSaved}
+          policialEditando={
+            policialEditando
+          }
+          onCancel={
+            handleCancel
+          }
+          onSaved={
+            handleSaved
+          }
         />
       )}
 
@@ -253,11 +471,22 @@ export default function Policiais({ user }) {
         <div className="policiais-filters-card">
           <div className="policiais-filters-header">
             <div>
-              <strong>Filtros</strong>
-              <span>Pesquise por nome, RE, QR Code ou dados funcionais.</span>
+              <strong>
+                Filtros
+              </strong>
+
+              <span>
+                Pesquise por nome, RE, QR Code ou dados funcionais.
+              </span>
             </div>
 
-            <button type="button" className="btn-secondary" onClick={handleClearFilters}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={
+                handleClearFilters
+              }
+            >
               Limpar filtros
             </button>
           </div>
@@ -265,12 +494,18 @@ export default function Policiais({ user }) {
           <div className="policiais-filters-grid">
             <label>
               Nome
+
               <input
-                value={filters.nome}
-                onChange={(e) =>
+                value={
+                  filters.nome
+                }
+                onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-                    nome: e.target.value.toUpperCase()
+
+                    nome:
+                      event.target.value
+                        .toUpperCase()
                   })
                 }
                 placeholder="Nome completo"
@@ -279,12 +514,18 @@ export default function Policiais({ user }) {
 
             <label>
               Nome de guerra
+
               <input
-                value={filters.nome_guerra}
-                onChange={(e) =>
+                value={
+                  filters.nome_guerra
+                }
+                onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-                    nome_guerra: e.target.value.toUpperCase()
+
+                    nome_guerra:
+                      event.target.value
+                        .toUpperCase()
                   })
                 }
                 placeholder="Ex: SILVA"
@@ -293,14 +534,19 @@ export default function Policiais({ user }) {
 
             <label>
               RE
+
               <input
                 value={filters.re}
                 maxLength={8}
                 placeholder="123456-A"
-                onChange={(e) =>
+                onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-                    re: maskRE(e.target.value)
+
+                    re:
+                      maskRE(
+                        event.target.value
+                      )
                   })
                 }
               />
@@ -308,13 +554,18 @@ export default function Policiais({ user }) {
 
             <label>
               QR Code
+
               <div className="qr-filter-group">
                 <input
-                  value={filters.qr_code}
-                  onChange={(e) =>
+                  value={
+                    filters.qr_code
+                  }
+                  onChange={(event) =>
                     handleFiltersChange({
                       ...filters,
-                      qr_code: e.target.value
+
+                      qr_code:
+                        event.target.value
                     })
                   }
                   placeholder="Pesquisar por QR Code"
@@ -323,42 +574,60 @@ export default function Policiais({ user }) {
                 <button
                   type="button"
                   className="qr-filter-button"
-                  onClick={() => setScannerAberto(true)}
+                  onClick={() =>
+                    setScannerAberto(
+                      true
+                    )
+                  }
                 >
                   📷 Ler QR
                 </button>
               </div>
             </label>
-
             <label>
               Posto / Graduação
+
               <select
-                value={filters.posto_graduacao}
-                onChange={(e) =>
+                value={
+                  filters.posto_graduacao
+                }
+                onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-                    posto_graduacao: e.target.value
+                    posto_graduacao:
+                      event.target.value
                   })
                 }
               >
-                <option value="">Todos</option>
+                <option value="">
+                  Todos
+                </option>
 
-                {postosGraduacoes.map((posto) => (
-                  <option key={posto} value={posto}>
-                    {posto}
-                  </option>
-                ))}
+                {postosGraduacoes.map(
+                  (posto) => (
+                    <option
+                      key={posto}
+                      value={posto}
+                    >
+                      {posto}
+                    </option>
+                  )
+                )}
               </select>
             </label>
 
             <label>
               Companhia
+
               <input
-                value={filters.companhia}
-                onChange={(e) =>
+                value={
+                  filters.companhia
+                }
+                onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-                    companhia: e.target.value.toUpperCase()
+                    companhia:
+                      event.target.value.toUpperCase()
                   })
                 }
                 placeholder="Companhia"
@@ -367,12 +636,16 @@ export default function Policiais({ user }) {
 
             <label>
               Pelotão
+
               <input
-                value={filters.pelotao}
-                onChange={(e) =>
+                value={
+                  filters.pelotao
+                }
+                onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-                    pelotao: e.target.value.toUpperCase()
+                    pelotao:
+                      event.target.value.toUpperCase()
                   })
                 }
                 placeholder="Pelotão"
@@ -381,22 +654,33 @@ export default function Policiais({ user }) {
 
             <label>
               Situação
+
               <select
-                value={filters.situacao}
-                onChange={(e) =>
+                value={
+                  filters.situacao
+                }
+                onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-                    situacao: e.target.value
+                    situacao:
+                      event.target.value
                   })
                 }
               >
-                <option value="">Todas</option>
+                <option value="">
+                  Todas
+                </option>
 
-                {situacoes.map((situacao) => (
-                  <option key={situacao} value={situacao}>
-                    {situacao}
-                  </option>
-                ))}
+                {situacoes.map(
+                  (situacao) => (
+                    <option
+                      key={situacao}
+                      value={situacao}
+                    >
+                      {situacao}
+                    </option>
+                  )
+                )}
               </select>
             </label>
           </div>
@@ -404,7 +688,11 @@ export default function Policiais({ user }) {
 
         <div className="policiais-table-toolbar">
           <span>
-            Mostrando {registroInicial}–{registroFinal} de {total} registros
+            Mostrando {registroInicial}
+            –
+            {registroFinal}
+            {' '}de{' '}
+            {total} registros
           </span>
         </div>
 
@@ -422,39 +710,64 @@ export default function Policiais({ user }) {
         />
 
         <div className="policiais-pagination">
-          <button type="button" disabled={pagina <= 1} onClick={() => setPagina(1)}>
+          <button
+            type="button"
+            disabled={pagina <= 1}
+            onClick={() =>
+              setPagina(1)
+            }
+          >
             Primeira
           </button>
 
           <button
             type="button"
             disabled={pagina <= 1}
-            onClick={() => setPagina((prev) => prev - 1)}
+            onClick={() =>
+              setPagina(
+                (prev) => prev - 1
+              )
+            }
           >
             Anterior
           </button>
 
-          {pagina > 3 && <span className="policiais-pagination-dots">...</span>}
+          {pagina > 3 && (
+            <span className="policiais-pagination-dots">
+              ...
+            </span>
+          )}
 
-          {paginasVisiveis.map((numero) => (
-            <button
-              key={numero}
-              type="button"
-              className={numero === pagina ? 'active' : ''}
-              onClick={() => setPagina(numero)}
-            >
-              {numero}
-            </button>
-          ))}
-
+          {paginasVisiveis.map(
+            (numero) => (
+              <button
+                key={numero}
+                type="button"
+                className={
+                  numero === pagina
+                    ? 'active'
+                    : ''
+                }
+                onClick={() =>
+                  setPagina(numero)
+                }
+              >
+                {numero}
+              </button>
+            )
+          )}
           {pagina < totalPaginas - 2 && (
-            <span className="policiais-pagination-dots">...</span>
+            <span className="policiais-pagination-dots">
+              ...
+            </span>
           )}
 
           <button
             type="button"
             disabled={pagina >= totalPaginas}
-            onClick={() => setPagina((prev) => prev + 1)}
+            onClick={() =>
+              setPagina((prev) => prev + 1)
+            }
           >
             Próxima
           </button>
@@ -462,7 +775,9 @@ export default function Policiais({ user }) {
           <button
             type="button"
             disabled={pagina >= totalPaginas}
-            onClick={() => setPagina(totalPaginas)}
+            onClick={() =>
+              setPagina(totalPaginas)
+            }
           >
             Última
           </button>
@@ -470,20 +785,22 @@ export default function Policiais({ user }) {
       </section>
 
       <PolicialViewModal
-  policial={policialVisualizando}
-  fotos={fotosModal}
-  onClose={() => {
-    setPolicialVisualizando(null)
-    setFotosModal([])
-  }}
-  onPrintFicha={handlePrintFicha}
-  onPrintCredencial={handlePrintCredencial}
-/>
+        policial={policialVisualizando}
+        fotos={fotosModal}
+        onClose={() => {
+          setPolicialVisualizando(null)
+          setFotosModal([])
+        }}
+        onPrintFicha={handlePrintFicha}
+        onPrintCredencial={handlePrintCredencial}
+      />
 
       <QrScanner
         open={scannerAberto}
         onRead={handleQrRead}
-        onClose={() => setScannerAberto(false)}
+        onClose={() =>
+          setScannerAberto(false)
+        }
       />
     </main>
   )

@@ -20,6 +20,9 @@ import CentralOperacional from './CentralOperacional'
 
 import './DashboardV2.css'
 
+const ROUTE_STORAGE_KEY =
+  'sigmo_route_ativa'
+
 const NOMES_MODULOS = {
   material: 'Materiais',
   materiais: 'Materiais',
@@ -135,6 +138,30 @@ function classeTipo(tipo) {
   }
 
   return classes[tipo] || 'padrao'
+}
+
+function carregarRotaInicial() {
+  try {
+    return (
+      sessionStorage.getItem(
+        ROUTE_STORAGE_KEY
+      ) || 'dashboard'
+    )
+  } catch {
+    return 'dashboard'
+  }
+}
+
+function salvarRota(rota) {
+  try {
+    sessionStorage.setItem(
+      ROUTE_STORAGE_KEY,
+      rota
+    )
+  } catch {
+    // Mantém a navegação funcionando
+    // mesmo se o storage estiver indisponível.
+  }
 }
 
 function CardResumo({
@@ -649,10 +676,22 @@ export default function DashboardV2({
   user,
   onLogout
 }) {
-  const [route, setRoute] =
-    useState('dashboard')
+  const [
+    route,
+    setRouteState
+  ] = useState(
+    carregarRotaInicial
+  )
 
   const dashboard = useDashboard()
+
+  function setRoute(novaRota) {
+    const rota =
+      novaRota || 'dashboard'
+
+    salvarRota(rota)
+    setRouteState(rota)
+  }
 
   function voltarDashboard() {
     setRoute('dashboard')
@@ -661,14 +700,14 @@ export default function DashboardV2({
 
   function renderPage() {
     if (route === 'central-operacional') {
-  return (
-    <CentralOperacional
-      user={user}
-      onVoltar={voltarDashboard}
-    />
-  )
-}
-    
+      return (
+        <CentralOperacional
+          user={user}
+          onVoltar={voltarDashboard}
+        />
+      )
+    }
+
     if (route === 'pagar-material') {
       return (
         <PagarMaterial
