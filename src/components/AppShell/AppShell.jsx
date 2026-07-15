@@ -52,6 +52,11 @@ const menuItems = [
     icon: '●'
   },
   {
+  key: 'solicitacoes-cadastrais',
+  label: 'Solicitações Cadastrais',
+  icon: '✓'
+},
+  {
     key: 'viaturas',
     label: 'Viaturas',
     icon: '▱'
@@ -71,6 +76,11 @@ const menuItems = [
     label: 'Auditoria',
     icon: '▤'
   },
+ {
+  key: 'diagnostico',
+  label: 'Diagnóstico',
+  icon: '◇'
+},
   {
     key: 'exportacao-backup',
     label: 'Exportação / Backup',

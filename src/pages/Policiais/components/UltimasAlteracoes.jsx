@@ -286,7 +286,8 @@ function obterSigla(
 }
 
 export default function UltimasAlteracoes({
-  reloadKey = 0
+  reloadKey = 0,
+  somenteProprio = false
 }) {
   const [
     alteracoes,
@@ -296,7 +297,9 @@ export default function UltimasAlteracoes({
   const [
     loading,
     setLoading
-  ] = useState(true)
+  ] = useState(
+    !somenteProprio
+  )
 
   const [
     erro,
@@ -304,12 +307,37 @@ export default function UltimasAlteracoes({
   ] = useState('')
 
   useEffect(() => {
+    /*
+     * USUÁRIO não pode carregar nem
+     * visualizar a auditoria global.
+     *
+     * O histórico próprio será criado
+     * posteriormente com consulta
+     * específica e segura.
+     */
+    if (somenteProprio) {
+      setAlteracoes([])
+      setLoading(false)
+      setErro('')
+
+      return
+    }
+
     carregarAlteracoes()
   }, [
-    reloadKey
+    reloadKey,
+    somenteProprio
   ])
 
   async function carregarAlteracoes() {
+    /*
+     * Proteção adicional para impedir
+     * chamadas manuais pelo componente.
+     */
+    if (somenteProprio) {
+      return
+    }
+
     try {
       setLoading(true)
       setErro('')
@@ -328,12 +356,22 @@ export default function UltimasAlteracoes({
         error
       )
 
+      setAlteracoes([])
+
       setErro(
         'Não foi possível carregar as últimas alterações.'
       )
     } finally {
       setLoading(false)
     }
+  }
+
+  /*
+   * Não renderiza o histórico global
+   * para o perfil USUÁRIO.
+   */
+  if (somenteProprio) {
+    return null
   }
 
   return (

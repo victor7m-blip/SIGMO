@@ -824,50 +824,23 @@ export default function PolicialForm({
     Boolean(
       policialEditando?.id
     )
+const perfilUsuario =
+  String(user?.perfil || '')
+    .trim()
+    .toUpperCase()
 
-  const perfilUsuario =
-    String(user?.perfil || '')
-      .trim()
-      .toUpperCase()
-
-  const usuarioPolicialId =
-    user?.policial_id ||
-    user?.id_policial ||
-    user?.id ||
-    null
-
-  const reUsuario =
-    String(
-      user?.re ||
-      user?.policial?.re ||
-      ''
+const editandoProprioCadastro =
+  Boolean(
+    isEditing &&
+    (
+      policialEditando?.id === user?.id ||
+      policialEditando?.re === user?.re
     )
-      .trim()
-      .toUpperCase()
+  )
 
-  const editandoProprioCadastro =
-    Boolean(
-      isEditing &&
-      (
-        (
-          usuarioPolicialId &&
-          String(policialEditando?.id) ===
-            String(usuarioPolicialId)
-        ) ||
-        (
-          reUsuario &&
-          String(policialEditando?.re || '')
-            .trim()
-            .toUpperCase() ===
-            reUsuario
-        )
-      )
-    )
-
-  const usarFluxoSolicitacao =
-    perfilUsuario === 'USUÁRIO' &&
-    editandoProprioCadastro
-
+const usarFluxoSolicitacao =
+  perfilUsuario === 'USUÁRIO' &&
+  editandoProprioCadastro  
   const policialId =
     useMemo(
       () =>
@@ -1084,54 +1057,82 @@ export default function PolicialForm({
 
         let policialAtualizado
 
-        if (usarFluxoSolicitacao) {
-          await criarSolicitacao({
-            policialId:
-              policialEditando.id,
+if (usarFluxoSolicitacao) {
+  await criarSolicitacao({
+    policialId:
+      policialEditando.id,
 
-            solicitadoPor:
-              policialEditando.id,
+    solicitadoPor:
+      user.id,
 
-            dadosAtuais:
-              policialEditando,
+    dadosAtuais:
+      policialEditando,
 
-            dadosNovos:
-              payload
-          })
+    dadosNovos:
+      payload
+  })
 
-          await registrarAuditoriaSegura({
-            acao:
-              'SOLICITACAO_CADASTRAL',
+  setSucesso(
+    'Solicitação enviada para aprovação.'
+  )
 
-            descricao:
-              `${obterNomeUsuario(user)} solicitou alteração cadastral.`,
+  onSaved?.(
+    policialEditando,
+    {
+      manterAberto: true
+    }
+  )
 
-            modulo:
-              'Policiais',
+  return
+}
 
-            severidade:
-              'Informativo'
-          })
+let policialAtualizado
 
-          setSucesso(
-            'Solicitação enviada para aprovação.'
-          )
+if (usarFluxoSolicitacao) {
+  await criarSolicitacao({
+    policialId:
+      policialEditando.id,
 
-          onSaved?.(
-            policialEditando,
-            {
-              manterAberto: true
-            }
-          )
+    solicitadoPor:
+      user.id,
 
-          return
-        }
+    dadosAtuais:
+      policialEditando,
 
-        policialAtualizado =
-          await atualizarPolicial(
-            policialEditando.id,
-            payload
-          )
+    dadosNovos:
+      payload
+  })
+
+  await registrarAuditoriaSegura({
+    acao:
+      'SOLICITACAO_CADASTRAL',
+
+    descricao:
+      `${obterNomeUsuario(user)} solicitou alteração cadastral.`,
+
+    modulo:
+      'Policiais'
+  })
+
+  setSucesso(
+    'Solicitação enviada para aprovação.'
+  )
+
+  onSaved?.(
+    policialEditando,
+    {
+      manterAberto: true
+    }
+  )
+
+  return
+}
+
+policialAtualizado =
+  await atualizarPolicial(
+    policialEditando.id,
+    payload
+  )
 
         if (
           alteracoes.length >

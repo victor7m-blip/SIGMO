@@ -22,8 +22,11 @@ export const ROTAS = {
   RELATORIOS: 'relatorios',
   ALERTAS: 'alertas',
   AUDITORIA: 'auditoria',
+  DIAGNOSTICO: 'diagnostico',
+  SOLICITACOES_CADASTRAIS:'solicitacoes-cadastrais',
   EXPORTACAO_BACKUP: 'exportacao-backup',
   CONFIGURACOES: 'configuracoes'
+  
 }
 
 function removerAcentos(valor) {
@@ -223,7 +226,9 @@ const ROTAS_ENCARREGADO = [
   ...ROTAS_AUXILIAR,
   ROTAS.BAIXAR_MATERIAL,
   ROTAS.RELATORIOS,
-  ROTAS.AUDITORIA
+  ROTAS.AUDITORIA,
+  ROTAS.DIAGNOSTICO,
+  ROTAS.SOLICITACOES_CADASTRAIS
 ]
 
 const ROTAS_COMANDANTE = [

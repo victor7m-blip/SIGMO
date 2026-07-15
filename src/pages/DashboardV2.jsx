@@ -1,3 +1,7 @@
+import Diagnostico
+  from './Diagnostico/Diagnostico'
+import SolicitacoesCadastro
+  from './SolicitacoesCadastro/SolicitacoesCadastro'
 import {
   useEffect,
   useMemo,
@@ -767,6 +771,16 @@ useEffect(() => {
         />
       )
     }
+    if (
+  route ===
+  'diagnostico'
+) {
+  return (
+    <Diagnostico
+      user={user}
+    />
+  )
+}
 
     if (route === 'pagar-material') {
       return (
@@ -823,6 +837,37 @@ useEffect(() => {
     if (route === 'policiais') {
       return <Policiais user={user} />
     }
+    if (
+  route ===
+  'solicitacoes-cadastrais'
+) {
+  return (
+    <SolicitacoesCadastro
+      user={user}
+    />
+  )
+}
+if (
+  route ===
+  'solicitacoes-cadastrais'
+) {
+  return (
+    <SolicitacoesCadastro
+      user={user}
+    />
+  )
+}
+
+if (
+  route ===
+  'diagnostico'
+) {
+  return (
+    <Diagnostico
+      user={user}
+    />
+  )
+}
 
     if (route === 'municoes') {
       return <Municoes user={user} />
