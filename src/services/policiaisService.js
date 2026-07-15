@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 
 const TABLE = 'policiais'
+const FOTOS_TABLE = 'sigmo_policiais_fotos'
 
 function gerarPinTemporario() {
   const numero =
@@ -51,6 +52,125 @@ async function gerarPinUnico() {
 
   throw new Error(
     'Não foi possível gerar um PIN temporário. Tente novamente.'
+  )
+}
+
+async function anexarFotosPrincipais(
+  policiais = []
+) {
+  if (
+    !Array.isArray(policiais) ||
+    policiais.length === 0
+  ) {
+    return []
+  }
+
+  const ids = policiais
+    .map(
+      (policial) =>
+        policial.id
+    )
+    .filter(Boolean)
+
+  if (ids.length === 0) {
+    return policiais
+  }
+
+  const {
+    data: fotos,
+    error
+  } = await supabase
+    .from(FOTOS_TABLE)
+    .select(`
+      id,
+      policial_id,
+      url,
+      principal,
+      created_at
+    `)
+    .in(
+      'policial_id',
+      ids
+    )
+    .order(
+      'principal',
+      {
+        ascending: false
+      }
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
+
+  if (error) {
+    console.warn(
+      'Não foi possível carregar as fotos dos policiais:',
+      error
+    )
+
+    return policiais
+  }
+
+  const fotoPorPolicial =
+    new Map()
+
+  for (
+    const foto of fotos ?? []
+  ) {
+    if (
+      !foto?.policial_id ||
+      !foto?.url
+    ) {
+      continue
+    }
+
+    /*
+     * A consulta já vem ordenada com:
+     * 1. foto principal primeiro;
+     * 2. foto mais recente depois.
+     *
+     * Por isso mantemos a primeira foto
+     * encontrada de cada policial.
+     */
+    if (
+      !fotoPorPolicial.has(
+        foto.policial_id
+      )
+    ) {
+      fotoPorPolicial.set(
+        foto.policial_id,
+        foto
+      )
+    }
+  }
+
+  return policiais.map(
+    (policial) => {
+      const foto =
+        fotoPorPolicial.get(
+          policial.id
+        )
+
+      return {
+        ...policial,
+
+        /*
+         * Preferimos a foto cadastrada
+         * na galeria. Caso não exista,
+         * mantemos foto_url do policial.
+         */
+        foto_url:
+          foto?.url ||
+          policial.foto_url ||
+          null,
+
+        foto_principal:
+          foto || null
+      }
+    }
   )
 }
 
@@ -107,6 +227,15 @@ export async function listarPoliciais({
   }
 
   if (
+  filtros.perfil?.trim()
+) {
+  query = query.eq(
+    'perfil',
+    filtros.perfil
+  )
+}
+
+  if (
     filtros.qr_code?.trim()
   ) {
     query = query.ilike(
@@ -161,9 +290,14 @@ export async function listarPoliciais({
     throw error
   }
 
+  const policiaisComFotos =
+    await anexarFotosPrincipais(
+      data ?? []
+    )
+
   return {
     data:
-      data ?? [],
+      policiaisComFotos,
 
     total:
       count ?? 0
@@ -269,6 +403,7 @@ export async function atualizarPolicial(
 
   delete dadosAtualizacao.pin
   delete dadosAtualizacao.pinTemporario
+  delete dadosAtualizacao.foto_principal
 
   const {
     data,

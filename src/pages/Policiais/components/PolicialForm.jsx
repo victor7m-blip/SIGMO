@@ -51,14 +51,6 @@ const postosGraduacoes = [
   'CEL PM'
 ]
 
-const situacoes = [
-  'ATIVO',
-  'AFASTADO',
-  'FÉRIAS',
-  'LICENÇA',
-  'INATIVO'
-]
-
 const companhias = [
   '1ª CIA',
   '2ª CIA',
@@ -70,11 +62,31 @@ const companhias = [
   'BTL'
 ]
 
+const pelotoes = [
+  'A',
+  'B',
+  'C',
+  'D',
+  'POP',
+  'ESCOLAR',
+  'ADM'
+]
+
 const perfis = [
+  'ADMINISTRADOR',
   'COMANDANTE DE CIA',
   'ENCARREGADO DO SVDD',
   'AUXILIAR DO SVDD',
   'USUÁRIO'
+]
+
+const situacoes = [
+  'ATIVO',
+  'AFASTADO',
+  'FÉRIAS',
+  'LICENÇA',
+  'TRANSFERIDO',
+  'INATIVO'
 ]
 
 function upper(value) {
@@ -98,7 +110,7 @@ function maskRE(value) {
     .replace(/[^0-9A-Z]/g, '')
 
   const numeros = raw
-    .replace(/[^0-9]/g, '')
+    .replace(/\D/g, '')
     .slice(0, 6)
 
   const digito = raw
@@ -133,10 +145,10 @@ function maskTelefone(value) {
   }
 
   if (numeros.length <= 7) {
-    return `${numeros.slice(
-      0,
-      2
-    )}-${numeros.slice(2)}`
+    return (
+      `${numeros.slice(0, 2)}-` +
+      `${numeros.slice(2)}`
+    )
   }
 
   return (
@@ -178,19 +190,22 @@ function maskCPF(value) {
   )
 }
 
-function gerarTextoQrCode(form) {
-  return JSON.stringify({
-    modulo: 'POLICIAIS',
-    nome: form.nome,
-    nome_guerra: form.nome_guerra,
-    re: form.re,
-    posto_graduacao:
-      form.posto_graduacao,
-    companhia: form.companhia,
-    pelotao: form.pelotao,
-    equipe: form.equipe,
-    situacao: form.situacao
-  })
+function gerarQrCodePolicial() {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return `SIGMO-POLICIAL-${crypto.randomUUID()}`
+  }
+
+  return (
+    `SIGMO-POLICIAL-` +
+    `${Date.now()}-` +
+    `${Math.random()
+      .toString(36)
+      .slice(2, 12)
+      .toUpperCase()}`
+  )
 }
 
 function montarPayload(form) {
@@ -199,7 +214,9 @@ function montarPayload(form) {
       upper(form.nome).trim(),
 
     nome_guerra:
-      upper(form.nome_guerra).trim(),
+      upper(
+        form.nome_guerra
+      ).trim(),
 
     re:
       maskRE(form.re),
@@ -210,19 +227,29 @@ function montarPayload(form) {
       ).trim(),
 
     companhia:
-      upper(form.companhia).trim(),
+      upper(
+        form.companhia
+      ).trim(),
 
     pelotao:
-      upper(form.pelotao).trim(),
+      upper(
+        form.pelotao
+      ).trim(),
 
     equipe:
-      upper(form.equipe).trim(),
+      upper(
+        form.equipe
+      ).trim(),
 
     funcao:
-      upper(form.funcao).trim(),
+      upper(
+        form.funcao
+      ).trim(),
 
     telefone:
-      maskTelefone(form.telefone),
+      maskTelefone(
+        form.telefone
+      ),
 
     email:
       clean(form.email),
@@ -231,10 +258,14 @@ function montarPayload(form) {
       maskCPF(form.cpf),
 
     rg:
-      upper(form.rg).trim(),
+      upper(
+        form.rg
+      ).trim(),
 
     perfil:
-      upper(form.perfil).trim(),
+      upper(
+        form.perfil
+      ).trim(),
 
     situacao:
       upper(
@@ -248,18 +279,112 @@ function montarPayload(form) {
       ).trim(),
 
     foto_url:
-      clean(form.foto_url),
+      clean(
+        form.foto_url
+      ),
 
     qr_code:
-      clean(form.qr_code)
+      clean(
+        form.qr_code
+      )
   }
 
-  if (!payload.qr_code) {
-    payload.qr_code =
-      gerarTextoQrCode(payload)
-  }
+ if (!payload.qr_code) {
+  payload.qr_code =
+    gerarQrCodePolicial()
+}
 
   return payload
+}
+
+function transformarPolicialEmForm(
+  policial
+) {
+  if (!policial) {
+    return initialForm
+  }
+
+  return {
+    nome:
+      upper(
+        policial.nome
+      ),
+
+    nome_guerra:
+      upper(
+        policial.nome_guerra
+      ),
+
+    re:
+      maskRE(
+        policial.re
+      ),
+
+    posto_graduacao:
+      upper(
+        policial.posto_graduacao
+      ),
+
+    companhia:
+      upper(
+        policial.companhia
+      ),
+
+    pelotao:
+      upper(
+        policial.pelotao
+      ),
+
+    equipe:
+      upper(
+        policial.equipe
+      ),
+
+    funcao:
+      upper(
+        policial.funcao
+      ),
+
+    telefone:
+      maskTelefone(
+        policial.telefone
+      ),
+
+    email:
+      policial.email || '',
+
+    cpf:
+      maskCPF(
+        policial.cpf
+      ),
+
+    rg:
+      upper(
+        policial.rg
+      ),
+
+    perfil:
+      upper(
+        policial.perfil
+      ),
+
+    situacao:
+      upper(
+        policial.situacao ||
+        'ATIVO'
+      ),
+
+    observacoes:
+      upper(
+        policial.observacoes
+      ),
+
+    foto_url:
+      policial.foto_url || '',
+
+    qr_code:
+      policial.qr_code || ''
+  }
 }
 
 function PinTemporarioModal({
@@ -350,7 +475,9 @@ function PinTemporarioModal({
           <button
             type="button"
             className="btn-secondary"
-            onClick={copiarPin}
+            onClick={
+              copiarPin
+            }
           >
             {copiado
               ? 'PIN copiado'
@@ -360,7 +487,9 @@ function PinTemporarioModal({
           <button
             type="button"
             className="btn-primary"
-            onClick={onConcluir}
+            onClick={
+              onConcluir
+            }
           >
             Concluir cadastro
           </button>
@@ -422,169 +551,93 @@ export default function PolicialForm({
   useEffect(() => {
     setPinTemporario('')
     setPolicialCriado(null)
+    setErro('')
+    setSucesso('')
 
-    if (policialEditando) {
-      setForm({
-        nome:
-          upper(
-            policialEditando.nome
-          ),
+    setForm(
+      transformarPolicialEmForm(
+        policialEditando
+      )
+    )
+  }, [
+    policialEditando
+  ])
 
-        nome_guerra:
-          upper(
-            policialEditando.nome_guerra
-          ),
-
-        re:
-          maskRE(
-            policialEditando.re
-          ),
-
-        posto_graduacao:
-          upper(
-            policialEditando
-              .posto_graduacao
-          ),
-
-        companhia:
-          upper(
-            policialEditando.companhia
-          ),
-
-        pelotao:
-          upper(
-            policialEditando.pelotao
-          ),
-
-        equipe:
-          upper(
-            policialEditando.equipe
-          ),
-
-        funcao:
-          upper(
-            policialEditando.funcao
-          ),
-
-        telefone:
-          maskTelefone(
-            policialEditando.telefone
-          ),
-
-        email:
-          policialEditando.email ||
-          '',
-
-        cpf:
-          maskCPF(
-            policialEditando.cpf
-          ),
-
-        rg:
-          upper(
-            policialEditando.rg
-          ),
-
-        perfil:
-          upper(
-            policialEditando.perfil
-          ),
-
-        situacao:
-          upper(
-            policialEditando
-              .situacao ||
-            'ATIVO'
-          ),
-
-        observacoes:
-          upper(
-            policialEditando
-              .observacoes
-          ),
-
-        foto_url:
-          policialEditando
-            .foto_url ||
-          '',
-
-        qr_code:
-          policialEditando
-            .qr_code ||
-          ''
-      })
-    } else {
-      setForm(initialForm)
-    }
-  }, [policialEditando])
-
-  function handleChange(event) {
+  function handleChange(
+    event
+  ) {
     const {
       name,
       value
     } = event.target
 
     if (name === 're') {
-      setForm((prev) => ({
-        ...prev,
-        re: maskRE(value)
-      }))
+      setForm(
+        (prev) => ({
+          ...prev,
+          re:
+            maskRE(value)
+        })
+      )
 
       return
     }
 
-    if (name === 'telefone') {
-      setForm((prev) => ({
-        ...prev,
-        telefone:
-          maskTelefone(value)
-      }))
+    if (
+      name === 'telefone'
+    ) {
+      setForm(
+        (prev) => ({
+          ...prev,
+          telefone:
+            maskTelefone(value)
+        })
+      )
 
       return
     }
 
     if (name === 'cpf') {
-      setForm((prev) => ({
-        ...prev,
-        cpf:
-          maskCPF(value)
-      }))
+      setForm(
+        (prev) => ({
+          ...prev,
+          cpf:
+            maskCPF(value)
+        })
+      )
 
       return
     }
 
     if (name === 'email') {
-      setForm((prev) => ({
-        ...prev,
-        email: value
-      }))
+      setForm(
+        (prev) => ({
+          ...prev,
+          email:
+            value
+        })
+      )
 
       return
     }
 
-    setForm((prev) => ({
-      ...prev,
-      [name]:
-        upper(value)
-    }))
+    setForm(
+      (prev) => ({
+        ...prev,
+        [name]:
+          upper(value)
+      })
+    )
   }
 
-  function gerarQrCode() {
-    setForm((prev) => ({
-      ...prev,
-
-      qr_code:
-        gerarTextoQrCode(
-          montarPayload(prev)
-        )
-    }))
-  }
-
+  
   async function registrarAuditoriaSegura(
     dados
   ) {
     try {
-      await registerAudit(dados)
+      await registerAudit(
+        dados
+      )
     } catch (error) {
       console.error(
         'Erro ao registrar auditoria:',
@@ -593,14 +646,18 @@ export default function PolicialForm({
     }
   }
 
-  function validarPayload(payload) {
+  function validarPayload(
+    payload
+  ) {
     if (!payload.nome) {
       throw new Error(
         'Informe o nome do policial.'
       )
     }
 
-    if (!payload.nome_guerra) {
+    if (
+      !payload.nome_guerra
+    ) {
       throw new Error(
         'Informe o nome de guerra.'
       )
@@ -650,132 +707,63 @@ export default function PolicialForm({
 
     try {
       const payload =
-        montarPayload(form)
+        montarPayload(
+          form
+        )
 
-      validarPayload(payload)
+      validarPayload(
+        payload
+      )
 
       if (isEditing) {
-  const policialAtualizado =
-    await atualizarPolicial(
-      policialEditando.id,
-      payload
-    )
+        const policialAtualizado =
+          await atualizarPolicial(
+            policialEditando.id,
+            payload
+          )
 
-  await registrarAuditoriaSegura({
-    acao:
-      'ATUALIZAR',
+        await registrarAuditoriaSegura({
+          acao:
+            'ATUALIZAR',
 
-    descricao:
-      `Policial atualizado: ${payload.nome_guerra} - RE ${payload.re}`,
+          descricao:
+            `Policial atualizado: ${payload.nome_guerra} - RE ${payload.re}`,
 
-    ator_id:
-      user?.id,
+          ator_id:
+            user?.id,
 
-    ator_nome:
-      user?.nome,
+          ator_nome:
+            user?.nome,
 
-    perfil:
-      user?.perfil,
+          perfil:
+            user?.perfil,
 
-    modulo:
-      'POLICIAIS',
+          modulo:
+            'POLICIAIS',
 
-    severidade:
-      'INFO'
-  })
+          severidade:
+            'INFO'
+        })
 
-  setForm({
-    nome:
-      upper(policialAtualizado.nome),
+        setForm(
+          transformarPolicialEmForm(
+            policialAtualizado
+          )
+        )
 
-    nome_guerra:
-      upper(
-        policialAtualizado.nome_guerra
-      ),
+        setSucesso(
+          'Dados do policial atualizados com sucesso.'
+        )
 
-    re:
-      maskRE(
-        policialAtualizado.re
-      ),
+        onSaved?.(
+          policialAtualizado,
+          {
+            manterAberto: true
+          }
+        )
 
-    posto_graduacao:
-      upper(
-        policialAtualizado.posto_graduacao
-      ),
-
-    companhia:
-      upper(
-        policialAtualizado.companhia
-      ),
-
-    pelotao:
-      upper(
-        policialAtualizado.pelotao
-      ),
-
-    equipe:
-      upper(
-        policialAtualizado.equipe
-      ),
-
-    funcao:
-      upper(
-        policialAtualizado.funcao
-      ),
-
-    telefone:
-      maskTelefone(
-        policialAtualizado.telefone
-      ),
-
-    email:
-      policialAtualizado.email || '',
-
-    cpf:
-      maskCPF(
-        policialAtualizado.cpf
-      ),
-
-    rg:
-      upper(
-        policialAtualizado.rg
-      ),
-
-    perfil:
-      upper(
-        policialAtualizado.perfil
-      ),
-
-    situacao:
-      upper(
-        policialAtualizado.situacao ||
-        'ATIVO'
-      ),
-
-    observacoes:
-      upper(
-        policialAtualizado.observacoes
-      ),
-
-    foto_url:
-      policialAtualizado.foto_url || '',
-
-    qr_code:
-      policialAtualizado.qr_code || ''
-  })
-
-  setSucesso(
-    'Dados do policial atualizados com sucesso.'
-  )
-  onSaved?.(
-  policialAtualizado,
-  {
-    manterAberto: true
-  }
-)
-
-  return
-}
+        return
+      }
 
       const novoPolicial =
         await cadastrarPolicial(
@@ -849,7 +837,9 @@ export default function PolicialForm({
     <>
       <form
         className="policial-form"
-        onSubmit={handleSubmit}
+        onSubmit={
+          handleSubmit
+        }
       >
         <div className="form-header">
           <div>
@@ -860,8 +850,7 @@ export default function PolicialForm({
             </h3>
 
             <p>
-              Preencha os dados funcionais e
-              administrativos do policial.
+              Preencha os dados funcionais e administrativos do policial.
             </p>
           </div>
 
@@ -869,8 +858,12 @@ export default function PolicialForm({
             <button
               type="button"
               className="btn-secondary"
-              onClick={onCancel}
-              disabled={saving}
+              onClick={
+                onCancel
+              }
+              disabled={
+                saving
+              }
             >
               Cancelar
             </button>
@@ -878,7 +871,9 @@ export default function PolicialForm({
             <button
               type="submit"
               className="btn-primary"
-              disabled={saving}
+              disabled={
+                saving
+              }
             >
               {saving
                 ? 'Salvando...'
@@ -907,8 +902,12 @@ export default function PolicialForm({
 
             <input
               name="nome"
-              value={form.nome}
-              onChange={handleChange}
+              value={
+                form.nome
+              }
+              onChange={
+                handleChange
+              }
               required
             />
           </label>
@@ -921,7 +920,9 @@ export default function PolicialForm({
               value={
                 form.nome_guerra
               }
-              onChange={handleChange}
+              onChange={
+                handleChange
+              }
               required
             />
           </label>
@@ -931,8 +932,12 @@ export default function PolicialForm({
 
             <input
               name="re"
-              value={form.re}
-              onChange={handleChange}
+              value={
+                form.re
+              }
+              onChange={
+                handleChange
+              }
               placeholder="123456-A"
               maxLength={8}
               required
@@ -947,7 +952,9 @@ export default function PolicialForm({
               value={
                 form.posto_graduacao
               }
-              onChange={handleChange}
+              onChange={
+                handleChange
+              }
             >
               <option value="">
                 SELECIONE
@@ -971,20 +978,24 @@ export default function PolicialForm({
 
             <select
               name="companhia"
-              value={form.companhia}
-              onChange={handleChange}
+              value={
+                form.companhia
+              }
+              onChange={
+                handleChange
+              }
             >
               <option value="">
                 SELECIONE
               </option>
 
               {companhias.map(
-                (companhia) => (
+                (item) => (
                   <option
-                    key={companhia}
-                    value={companhia}
+                    key={item}
+                    value={item}
                   >
-                    {companhia}
+                    {item}
                   </option>
                 )
               )}
@@ -994,11 +1005,30 @@ export default function PolicialForm({
           <label>
             Pelotão
 
-            <input
+            <select
               name="pelotao"
-              value={form.pelotao}
-              onChange={handleChange}
-            />
+              value={
+                form.pelotao
+              }
+              onChange={
+                handleChange
+              }
+            >
+              <option value="">
+                SELECIONE
+              </option>
+
+              {pelotoes.map(
+                (item) => (
+                  <option
+                    key={item}
+                    value={item}
+                  >
+                    {item}
+                  </option>
+                )
+              )}
+            </select>
           </label>
 
           <label>
@@ -1006,8 +1036,12 @@ export default function PolicialForm({
 
             <input
               name="equipe"
-              value={form.equipe}
-              onChange={handleChange}
+              value={
+                form.equipe
+              }
+              onChange={
+                handleChange
+              }
             />
           </label>
 
@@ -1016,8 +1050,12 @@ export default function PolicialForm({
 
             <input
               name="funcao"
-              value={form.funcao}
-              onChange={handleChange}
+              value={
+                form.funcao
+              }
+              onChange={
+                handleChange
+              }
             />
           </label>
 
@@ -1026,8 +1064,12 @@ export default function PolicialForm({
 
             <input
               name="telefone"
-              value={form.telefone}
-              onChange={handleChange}
+              value={
+                form.telefone
+              }
+              onChange={
+                handleChange
+              }
               inputMode="numeric"
               placeholder="11-11111-1111"
               maxLength={13}
@@ -1040,8 +1082,12 @@ export default function PolicialForm({
             <input
               name="email"
               type="email"
-              value={form.email}
-              onChange={handleChange}
+              value={
+                form.email
+              }
+              onChange={
+                handleChange
+              }
             />
           </label>
 
@@ -1050,8 +1096,12 @@ export default function PolicialForm({
 
             <input
               name="cpf"
-              value={form.cpf}
-              onChange={handleChange}
+              value={
+                form.cpf
+              }
+              onChange={
+                handleChange
+              }
               inputMode="numeric"
               placeholder="111.111.111-11"
               maxLength={14}
@@ -1063,8 +1113,12 @@ export default function PolicialForm({
 
             <input
               name="rg"
-              value={form.rg}
-              onChange={handleChange}
+              value={
+                form.rg
+              }
+              onChange={
+                handleChange
+              }
             />
           </label>
 
@@ -1073,20 +1127,24 @@ export default function PolicialForm({
 
             <select
               name="perfil"
-              value={form.perfil}
-              onChange={handleChange}
+              value={
+                form.perfil
+              }
+              onChange={
+                handleChange
+              }
             >
               <option value="">
                 SELECIONE
               </option>
 
               {perfis.map(
-                (perfil) => (
+                (item) => (
                   <option
-                    key={perfil}
-                    value={perfil}
+                    key={item}
+                    value={item}
                   >
-                    {perfil}
+                    {item}
                   </option>
                 )
               )}
@@ -1098,8 +1156,12 @@ export default function PolicialForm({
 
             <select
               name="situacao"
-              value={form.situacao}
-              onChange={handleChange}
+              value={
+                form.situacao
+              }
+              onChange={
+                handleChange
+              }
             >
               {situacoes.map(
                 (item) => (
@@ -1120,54 +1182,31 @@ export default function PolicialForm({
 
           <textarea
             name="observacoes"
-            value={form.observacoes}
-            onChange={handleChange}
+            value={
+              form.observacoes
+            }
+            onChange={
+              handleChange
+            }
             rows={4}
           />
         </label>
 
-        <div className="qr-card">
-          <div>
-            <strong>
-              QR Code
-            </strong>
-
-            <p>
-              Gere o conteúdo do QR Code para
-              identificação do policial.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={gerarQrCode}
-          >
-            Gerar QR
-          </button>
-        </div>
-
-        {form.qr_code && (
-          <div className="qr-preview">
-            <textarea
-              value={form.qr_code}
-              readOnly
-              rows={4}
-            />
-          </div>
-        )}
-
+        
         {isEditing && (
           <PolicialFotos
-            policialId={policialId}
-            user={user}
+            policialId={
+              policialId
+            }
+            user={
+              user
+            }
           />
         )}
 
         {!isEditing && (
           <div className="form-info">
-            Salve o cadastro primeiro para
-            liberar o envio de fotos.
+            Salve o cadastro primeiro para liberar o envio de fotos.
           </div>
         )}
 
@@ -1175,8 +1214,12 @@ export default function PolicialForm({
           <button
             type="button"
             className="btn-secondary"
-            onClick={onCancel}
-            disabled={saving}
+            onClick={
+              onCancel
+            }
+            disabled={
+              saving
+            }
           >
             Cancelar
           </button>
@@ -1184,7 +1227,9 @@ export default function PolicialForm({
           <button
             type="submit"
             className="btn-primary"
-            disabled={saving}
+            disabled={
+              saving
+            }
           >
             {saving
               ? 'Salvando...'

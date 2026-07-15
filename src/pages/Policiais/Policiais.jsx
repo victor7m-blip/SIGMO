@@ -28,11 +28,12 @@ const initialFilters = {
   nome: '',
   nome_guerra: '',
   re: '',
-  qr_code: '',
+  perfil: '',
   posto_graduacao: '',
   companhia: '',
   pelotao: '',
-  situacao: ''
+  situacao: '',
+  qr_code: ''
 }
 
 const postosGraduacoes = [
@@ -49,6 +50,35 @@ const postosGraduacoes = [
   'MAJ PM',
   'TEN CEL PM',
   'CEL PM'
+]
+
+const perfis = [
+  'ADMINISTRADOR',
+  'COMANDANTE DE CIA',
+  'ENCARREGADO DO SVDD',
+  'AUXILIAR DO SVDD',
+  'USUÁRIO'
+]
+
+const companhias = [
+  '1ª CIA',
+  '2ª CIA',
+  '3ª CIA',
+  '4ª CIA',
+  '5ª CIA',
+  '6ª CIA',
+  'FT',
+  'BTL'
+]
+
+const pelotoes = [
+  'A',
+  'B',
+  'C',
+  'D',
+  'POP',
+  'ESCOLAR',
+  'ADM'
 ]
 
 const situacoes = [
@@ -275,6 +305,7 @@ export default function Policiais({
       setLoading(false)
     }
   }
+
   function handleNovoPolicial() {
     setPolicialEditando(null)
     setShowForm(true)
@@ -329,24 +360,24 @@ export default function Policiais({
   }
 
   function handleSaved(
-  policialAtualizado,
-  opcoes = {}
-) {
-  setReloadKey(
-    (prev) => prev + 1
-  )
-
-  if (opcoes.manterAberto) {
-    setPolicialEditando(
-      policialAtualizado
+    policialAtualizado,
+    opcoes = {}
+  ) {
+    setReloadKey(
+      (prev) => prev + 1
     )
 
-    return
-  }
+    if (opcoes.manterAberto) {
+      setPolicialEditando(
+        policialAtualizado
+      )
 
-  setPolicialEditando(null)
-  setShowForm(false)
-}
+      return
+    }
+
+    setPolicialEditando(null)
+    setShowForm(false)
+  }
 
   function handleFiltersChange(
     newFilters
@@ -476,7 +507,7 @@ export default function Policiais({
               </strong>
 
               <span>
-                Pesquise por nome, RE, QR Code ou dados funcionais.
+                Pesquise por nome, RE ou dados funcionais.
               </span>
             </div>
 
@@ -502,7 +533,6 @@ export default function Policiais({
                 onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-
                     nome:
                       event.target.value
                         .toUpperCase()
@@ -522,7 +552,6 @@ export default function Policiais({
                 onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-
                     nome_guerra:
                       event.target.value
                         .toUpperCase()
@@ -542,7 +571,6 @@ export default function Policiais({
                 onChange={(event) =>
                   handleFiltersChange({
                     ...filters,
-
                     re:
                       maskRE(
                         event.target.value
@@ -553,37 +581,37 @@ export default function Policiais({
             </label>
 
             <label>
-              QR Code
+              Perfil
 
-              <div className="qr-filter-group">
-                <input
-                  value={
-                    filters.qr_code
-                  }
-                  onChange={(event) =>
-                    handleFiltersChange({
-                      ...filters,
+              <select
+                value={
+                  filters.perfil
+                }
+                onChange={(event) =>
+                  handleFiltersChange({
+                    ...filters,
+                    perfil:
+                      event.target.value
+                  })
+                }
+              >
+                <option value="">
+                  Todos
+                </option>
 
-                      qr_code:
-                        event.target.value
-                    })
-                  }
-                  placeholder="Pesquisar por QR Code"
-                />
-
-                <button
-                  type="button"
-                  className="qr-filter-button"
-                  onClick={() =>
-                    setScannerAberto(
-                      true
-                    )
-                  }
-                >
-                  📷 Ler QR
-                </button>
-              </div>
+                {perfis.map(
+                  (perfil) => (
+                    <option
+                      key={perfil}
+                      value={perfil}
+                    >
+                      {perfil}
+                    </option>
+                  )
+                )}
+              </select>
             </label>
+
             <label>
               Posto / Graduação
 
@@ -619,7 +647,7 @@ export default function Policiais({
             <label>
               Companhia
 
-              <input
+              <select
                 value={
                   filters.companhia
                 }
@@ -627,17 +655,31 @@ export default function Policiais({
                   handleFiltersChange({
                     ...filters,
                     companhia:
-                      event.target.value.toUpperCase()
+                      event.target.value
                   })
                 }
-                placeholder="Companhia"
-              />
+              >
+                <option value="">
+                  Todas
+                </option>
+
+                {companhias.map(
+                  (companhia) => (
+                    <option
+                      key={companhia}
+                      value={companhia}
+                    >
+                      {companhia}
+                    </option>
+                  )
+                )}
+              </select>
             </label>
 
             <label>
               Pelotão
 
-              <input
+              <select
                 value={
                   filters.pelotao
                 }
@@ -645,11 +687,25 @@ export default function Policiais({
                   handleFiltersChange({
                     ...filters,
                     pelotao:
-                      event.target.value.toUpperCase()
+                      event.target.value
                   })
                 }
-                placeholder="Pelotão"
-              />
+              >
+                <option value="">
+                  Todos
+                </option>
+
+                {pelotoes.map(
+                  (pelotao) => (
+                    <option
+                      key={pelotao}
+                      value={pelotao}
+                    >
+                      {pelotao}
+                    </option>
+                  )
+                )}
+              </select>
             </label>
 
             <label>
@@ -683,6 +739,26 @@ export default function Policiais({
                 )}
               </select>
             </label>
+          </div>
+
+          <div className="policiais-qr-toolbar">
+            <button
+              type="button"
+              className="qr-filter-button"
+              onClick={() =>
+                setScannerAberto(
+                  true
+                )
+              }
+            >
+              📷 Ler QR
+            </button>
+
+            {filters.qr_code && (
+              <span className="policiais-qr-filter-active">
+                QR Code aplicado
+              </span>
+            )}
           </div>
         </div>
 
@@ -756,7 +832,9 @@ export default function Policiais({
               </button>
             )
           )}
-          {pagina < totalPaginas - 2 && (
+
+          {pagina <
+            totalPaginas - 2 && (
             <span className="policiais-pagination-dots">
               ...
             </span>
@@ -764,9 +842,13 @@ export default function Policiais({
 
           <button
             type="button"
-            disabled={pagina >= totalPaginas}
+            disabled={
+              pagina >= totalPaginas
+            }
             onClick={() =>
-              setPagina((prev) => prev + 1)
+              setPagina(
+                (prev) => prev + 1
+              )
             }
           >
             Próxima
@@ -774,7 +856,9 @@ export default function Policiais({
 
           <button
             type="button"
-            disabled={pagina >= totalPaginas}
+            disabled={
+              pagina >= totalPaginas
+            }
             onClick={() =>
               setPagina(totalPaginas)
             }
@@ -785,14 +869,20 @@ export default function Policiais({
       </section>
 
       <PolicialViewModal
-        policial={policialVisualizando}
+        policial={
+          policialVisualizando
+        }
         fotos={fotosModal}
         onClose={() => {
           setPolicialVisualizando(null)
           setFotosModal([])
         }}
-        onPrintFicha={handlePrintFicha}
-        onPrintCredencial={handlePrintCredencial}
+        onPrintFicha={
+          handlePrintFicha
+        }
+        onPrintCredencial={
+          handlePrintCredencial
+        }
       />
 
       <QrScanner

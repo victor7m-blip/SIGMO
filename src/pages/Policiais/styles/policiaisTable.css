@@ -1,11 +1,25 @@
+/* =========================================================
+   POLICIAIS TABLE
+   Desktop totalmente preservado
+========================================================= */
+
 .policiais-table-toolbar{
   display:flex;
-  justify-content:space-between;
   align-items:center;
-  margin:10px 0 12px;
+  justify-content:space-between;
+  gap:16px;
+  margin:12px 0 14px;
   color:#667085;
   font-size:14px;
   font-weight:600;
+}
+
+.policiais-table-toggle{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  cursor:pointer;
+  user-select:none;
 }
 
 .policiais-table-wrap{
@@ -15,68 +29,383 @@
 
 .policiais-table{
   width:100%;
+  min-width:1180px;
   border-collapse:collapse;
   table-layout:fixed;
+  background:#fff;
 }
 
 .policiais-table thead{
-  background:#061a32;
-  color:#fff;
+  background:#071d39;
 }
 
-.policiais-table th,
+.policiais-table th{
+  padding:14px 10px;
+  color:#fff;
+  font-size:13px;
+  font-weight:700;
+  text-align:left;
+  border:0;
+}
+
 .policiais-table td{
   padding:12px 10px;
-  text-align:left;
+  border-bottom:1px solid #e9edf3;
+  color:#101828;
   font-size:14px;
   vertical-align:middle;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  border-bottom:1px solid #e5e7eb;
+}
+
+.policiais-table tbody tr{
+  transition:.18s;
+}
+
+.policiais-table tbody tr:hover{
+  background:#f8fafc;
+}
+
+.policiais-table th:nth-child(1),
+.policiais-table td:nth-child(1){
+  width:74px;
+}
+
+.policiais-table th:nth-child(2),
+.policiais-table td:nth-child(2){
+  width:170px;
+}
+
+.policiais-table th:nth-child(3),
+.policiais-table td:nth-child(3){
+  width:100px;
+}
+
+.policiais-table th:nth-child(4),
+.policiais-table td:nth-child(4){
+  width:120px;
+}
+
+.policiais-table th:nth-child(5),
+.policiais-table td:nth-child(5){
+  width:90px;
+}
+
+.policiais-table th:nth-child(6),
+.policiais-table td:nth-child(6){
+  width:80px;
+}
+
+.policiais-table th:nth-child(7),
+.policiais-table td:nth-child(7){
+  width:80px;
+}
+
+.policiais-table th:nth-child(8),
+.policiais-table td:nth-child(8){
+  width:140px;
+}
+
+.policiais-table th:nth-child(9),
+.policiais-table td:nth-child(9){
+  width:105px;
+}
+
+.policiais-table th:last-child,
+.policiais-table td:last-child{
+  width:190px;
 }
 
 .policiais-sort-button{
   width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
   background:none;
   border:0;
   color:inherit;
-  display:flex;
-  justify-content:space-between;
-  gap:6px;
   cursor:pointer;
   font-weight:700;
 }
 
+.policiais-sort-button small{
+  font-size:12px;
+  opacity:.9;
+}
+
+.policial-table-photo-button{
+  width:48px;
+  height:48px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  border-radius:50%;
+  overflow:hidden;
+  background:#e8edf3;
+  cursor:pointer;
+  padding:0;
+}
+
+.policial-table-photo-button img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.policial-table-photo-button span{
+  font-size:18px;
+  font-weight:700;
+  color:#0b2a4a;
+}
+
 .policiais-status{
-  display:inline-block;
-  padding:5px 9px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:5px 12px;
   border-radius:999px;
   background:#e7f8ef;
   color:#067647;
-  font-weight:700;
   font-size:12px;
+  font-weight:700;
 }
 
 .policiais-actions{
   display:flex;
-  gap:6px;
+  gap:8px;
 }
 
 .policiais-actions button{
-  border:0;
-  border-radius:8px;
-  padding:7px 9px;
-  cursor:pointer;
+  border:none;
+  border-radius:10px;
+  padding:8px 12px;
+  background:#f2f4f7;
   font-weight:700;
+  cursor:pointer;
+  transition:.18s;
+}
+
+.policiais-actions button:hover{
+  background:#e4e7ec;
 }
 
 .policiais-delete-button{
-  background:#fee4e2;
+  background:#fee4e2 !important;
   color:#b42318;
 }
 
+.policiais-delete-button:hover{
+  background:#fecdca !important;
+}
+
 .policiais-qr-code-text{
+  color:#667085;
   font-size:12px;
-  color:#475467;
+}
+
+.policiais-table td::before{
+  display:none;
+}
+
+.policiais-table tbody tr td:first-child{
+  text-align:center;
+}
+
+.policiais-table tbody tr td:last-child{
+  overflow:visible;
+}
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media screen and (max-width:900px){
+
+.policiais-table{
+    min-width:0;
+}
+
+.policiais-table-wrap{
+    overflow:visible;
+}
+
+.policiais-table thead{
+    display:none;
+}
+
+.policiais-table,
+.policiais-table tbody,
+.policiais-table tr,
+.policiais-table td{
+    display:block;
+    width:100%;
+}
+
+.policiais-table tbody{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+}
+
+.policiais-table tr{
+    border:1px solid #e4e7ec;
+    border-radius:18px;
+    background:#fff;
+    padding:18px;
+    box-shadow:0 2px 10px rgba(16,24,40,.05);
+}
+
+.policiais-table td{
+    width:100% !important;
+    min-width:0 !important;
+    padding:8px 0;
+    border:none;
+    white-space:normal;
+    overflow:visible;
+    text-overflow:unset;
+}
+
+.policiais-table td::before{
+    display:block;
+    margin-bottom:3px;
+    color:#98a2b3;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    content:attr(data-label);
+}
+
+/* FOTO */
+
+.policiais-table td:first-child{
+    padding-bottom:14px;
+    text-align:center;
+}
+
+.policiais-table td:first-child::before{
+    display:none;
+}
+
+.policial-table-photo-button{
+    width:86px;
+    height:86px;
+    margin:auto;
+}
+
+/* NOME */
+
+.policiais-table td:nth-child(2){
+    padding-top:4px;
+    text-align:center;
+    font-size:20px;
+    font-weight:800;
+    color:#101828;
+}
+
+.policiais-table td:nth-child(2)::before{
+    display:none;
+}
+
+/* RE */
+
+.policiais-table td:nth-child(3){
+    text-align:center;
+    color:#475467;
+    font-weight:700;
+    font-size:15px;
+}
+
+.policiais-table td:nth-child(3)::before{
+    display:none;
+}
+
+/* POSTO */
+
+.policiais-table td:nth-child(4){
+    text-align:center;
+    color:#344054;
+    font-weight:600;
+    padding-bottom:18px;
+}
+
+.policiais-table td:nth-child(4)::before{
+    display:none;
+}
+
+/* STATUS */
+
+.policiais-table td:nth-child(9){
+    padding-top:14px;
+}
+
+.policiais-status{
+    margin-top:4px;
+}
+
+/* BOTÕES */
+
+.policiais-table td:last-child{
+    padding-top:20px;
+}
+
+.policiais-table td:last-child::before{
+    display:none;
+}
+
+.policiais-actions{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+}
+
+.policiais-actions button{
+    width:100%;
+    min-height:42px;
+    border-radius:12px;
+}
+
+}
+
+/* =========================================================
+   CELULARES PEQUENOS
+========================================================= */
+
+@media screen and (max-width:480px){
+
+.policiais-table tr{
+    padding:16px;
+}
+
+.policial-table-photo-button{
+    width:74px;
+    height:74px;
+}
+
+.policiais-table td:nth-child(2){
+    font-size:18px;
+}
+
+.policiais-actions{
+    grid-template-columns:1fr;
+}
+
+.policiais-actions button{
+    min-height:46px;
+    font-size:15px;
+}
+
+.policiais-table-toolbar{
+    flex-direction:column;
+    align-items:flex-start;
+    gap:10px;
+}
+
+.policiais-table-toggle{
+    width:100%;
+    justify-content:flex-end;
+}
+
 }
