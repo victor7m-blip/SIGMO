@@ -25,6 +25,14 @@ import {
   listarPoliciais
 } from '../../services/policiaisService'
 
+import {
+  ehUsuario,
+  podeCadastrarPolicial,
+  podeEditarPolicial,
+  podePesquisarOutrosPoliciais,
+  podeVisualizarPolicial
+} from '../../services/permissionService'
+
 const initialFilters = {
   nome: '',
   nome_guerra: '',
@@ -115,9 +123,33 @@ function maskRE(value) {
     : `${numeros}-`
 }
 
+function obterReUsuario(user) {
+  return String(
+    user?.re ||
+    user?.policial?.re ||
+    ''
+  )
+    .trim()
+    .toUpperCase()
+}
+
 export default function Policiais({
   user
 }) {
+  const usuarioRestrito =
+    ehUsuario(user)
+
+  const podePesquisar =
+    podePesquisarOutrosPoliciais(
+      user
+    )
+
+  const podeCadastrar =
+    podeCadastrarPolicial(user)
+
+  const reUsuario =
+    obterReUsuario(user)
+
   const [
     showForm,
     setShowForm
@@ -244,8 +276,39 @@ export default function Policiais({
       pagina,
       totalPaginas
     ])
+      useEffect(() => {
+    if (
+      !usuarioRestrito
+    ) {
+      return
+    }
+
+    const filtrosUsuario = {
+      ...initialFilters,
+      re: reUsuario
+    }
+
+    setFilters(
+      filtrosUsuario
+    )
+
+    setDebouncedFilters(
+      filtrosUsuario
+    )
+
+    setPagina(1)
+  }, [
+    usuarioRestrito,
+    reUsuario
+  ])
 
   useEffect(() => {
+    if (
+      usuarioRestrito
+    ) {
+      return
+    }
+
     const timer =
       setTimeout(() => {
         setDebouncedFilters(
@@ -257,7 +320,10 @@ export default function Policiais({
 
     return () =>
       clearTimeout(timer)
-  }, [filters])
+  }, [
+    filters,
+    usuarioRestrito
+  ])
 
   useEffect(() => {
     carregarPoliciais()
@@ -266,7 +332,9 @@ export default function Policiais({
     pagina,
     reloadKey,
     sortBy,
-    sortDirection
+    sortDirection,
+    usuarioRestrito,
+    reUsuario
   ])
 
   async function carregarPoliciais() {
@@ -274,30 +342,76 @@ export default function Policiais({
       setLoading(true)
       setErro('')
 
+      if (
+        usuarioRestrito &&
+        !reUsuario
+      ) {
+        setPoliciais([])
+        setTotal(0)
+
+        setErro(
+          'Não foi possível identificar o RE do usuário autenticado.'
+        )
+
+        return
+      }
+
+      const filtrosConsulta =
+        usuarioRestrito
+          ? {
+              ...initialFilters,
+              re: reUsuario
+            }
+          : debouncedFilters
+
       const resultado =
         await listarPoliciais({
           filtros:
-            debouncedFilters,
+            filtrosConsulta,
 
-          pagina,
+          pagina:
+            usuarioRestrito
+              ? 1
+              : pagina,
 
           limite:
-            LIMITE_POR_PAGINA,
+            usuarioRestrito
+              ? 1
+              : LIMITE_POR_PAGINA,
 
           sortBy,
 
           sortDirection
         })
 
-      setPoliciais(
+      const listaRecebida =
         resultado.data || []
+
+      const listaPermitida =
+        usuarioRestrito
+          ? listaRecebida.filter(
+              (policial) =>
+                podeVisualizarPolicial(
+                  user,
+                  policial
+                )
+            )
+          : listaRecebida
+
+      setPoliciais(
+        listaPermitida
       )
 
       setTotal(
-        resultado.total || 0
+        usuarioRestrito
+          ? listaPermitida.length
+          : resultado.total || 0
       )
     } catch (error) {
       console.error(error)
+
+      setPoliciais([])
+      setTotal(0)
 
       setErro(
         'Erro ao carregar policiais.'
@@ -308,6 +422,12 @@ export default function Policiais({
   }
 
   function handleNovoPolicial() {
+    if (
+      !podeCadastrar
+    ) {
+      return
+    }
+
     setPolicialEditando(null)
     setShowForm(true)
 
@@ -320,6 +440,15 @@ export default function Policiais({
   async function handleView(
     policial
   ) {
+    if (
+      !podeVisualizarPolicial(
+        user,
+        policial
+      )
+    ) {
+      return
+    }
+
     setPolicialVisualizando(
       policial
     )
@@ -343,6 +472,15 @@ export default function Policiais({
   function handleEditar(
     policial
   ) {
+    if (
+      !podeEditarPolicial(
+        user,
+        policial
+      )
+    ) {
+      return
+    }
+
     setPolicialEditando(
       policial
     )
@@ -368,7 +506,9 @@ export default function Policiais({
       (prev) => prev + 1
     )
 
-    if (opcoes.manterAberto) {
+    if (
+      opcoes.manterAberto
+    ) {
       setPolicialEditando(
         policialAtualizado
       )
@@ -383,11 +523,27 @@ export default function Policiais({
   function handleFiltersChange(
     newFilters
   ) {
-    setFilters(newFilters)
+    if (
+      !podePesquisar
+    ) {
+      return
+    }
+
+    setFilters(
+      newFilters
+    )
   }
 
   function handleClearFilters() {
-    setFilters(initialFilters)
+    if (
+      !podePesquisar
+    ) {
+      return
+    }
+
+    setFilters(
+      initialFilters
+    )
 
     setDebouncedFilters(
       initialFilters
@@ -397,6 +553,12 @@ export default function Policiais({
   }
 
   function handleDeleted(id) {
+    if (
+      usuarioRestrito
+    ) {
+      return
+    }
+
     setPoliciais(
       (listaAtual) =>
         listaAtual.filter(
@@ -415,9 +577,17 @@ export default function Policiais({
   }
 
   function handleSort(campo) {
+    if (
+      usuarioRestrito
+    ) {
+      return
+    }
+
     setPagina(1)
 
-    if (sortBy === campo) {
+    if (
+      sortBy === campo
+    ) {
       setSortDirection(
         (atual) =>
           atual === 'asc'
@@ -433,12 +603,21 @@ export default function Policiais({
   }
 
   function handleQrRead(valor) {
+    if (
+      !podePesquisar
+    ) {
+      setScannerAberto(false)
+      return
+    }
+
     const novosFiltros = {
       ...initialFilters,
       qr_code: valor
     }
 
-    setFilters(novosFiltros)
+    setFilters(
+      novosFiltros
+    )
 
     setDebouncedFilters(
       novosFiltros
@@ -465,23 +644,29 @@ export default function Policiais({
           </span>
 
           <h1>
-            Cadastro de Policiais
+            {usuarioRestrito
+              ? 'Meu Cadastro'
+              : 'Cadastro de Policiais'}
           </h1>
 
           <p>
-            Gestão, consulta e controle do efetivo institucional.
+            {usuarioRestrito
+              ? 'Consulte e mantenha seus dados pessoais atualizados.'
+              : 'Gestão, consulta e controle do efetivo institucional.'}
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={
-            handleNovoPolicial
-          }
-        >
-          + Novo Policial
-        </button>
+        {podeCadastrar && (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={
+              handleNovoPolicial
+            }
+          >
+            + Novo Policial
+          </button>
+        )}
       </header>
 
       {showForm && (
@@ -498,388 +683,475 @@ export default function Policiais({
           }
         />
       )}
+            <section className="panel">
+        {podePesquisar ? (
+          <div className="policiais-filters-card">
+            <div className="policiais-filters-header">
+              <div>
+                <strong>
+                  Filtros
+                </strong>
 
-      <section className="panel">
-        <div className="policiais-filters-card">
-          <div className="policiais-filters-header">
-            <div>
-              <strong>
-                Filtros
-              </strong>
+                <span>
+                  Pesquise por nome, RE ou dados funcionais.
+                </span>
+              </div>
 
-              <span>
-                Pesquise por nome, RE ou dados funcionais.
-              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={
+                  handleClearFilters
+                }
+              >
+                Limpar filtros
+              </button>
             </div>
 
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={
-                handleClearFilters
-              }
-            >
-              Limpar filtros
-            </button>
-          </div>
+            <div className="policiais-filters-grid">
+              <label>
+                Nome
 
-          <div className="policiais-filters-grid">
-            <label>
-              Nome
+                <input
+                  value={
+                    filters.nome
+                  }
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
 
-              <input
-                value={
-                  filters.nome
-                }
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    nome:
-                      event.target.value
-                        .toUpperCase()
-                  })
-                }
-                placeholder="Nome completo"
-              />
-            </label>
-
-            <label>
-              Nome de guerra
-
-              <input
-                value={
-                  filters.nome_guerra
-                }
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    nome_guerra:
-                      event.target.value
-                        .toUpperCase()
-                  })
-                }
-                placeholder="Ex: SILVA"
-              />
-            </label>
-
-            <label>
-              RE
-
-              <input
-                value={filters.re}
-                maxLength={8}
-                placeholder="123456-A"
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    re:
-                      maskRE(
+                      nome:
                         event.target.value
-                      )
-                  })
-                }
-              />
-            </label>
+                          .toUpperCase()
+                    })
+                  }
+                  placeholder="Nome completo"
+                />
+              </label>
 
-            <label>
-              Perfil
+              <label>
+                Nome de guerra
 
-              <select
-                value={
-                  filters.perfil
-                }
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    perfil:
-                      event.target.value
-                  })
+                <input
+                  value={
+                    filters.nome_guerra
+                  }
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
+
+                      nome_guerra:
+                        event.target.value
+                          .toUpperCase()
+                    })
+                  }
+                  placeholder="Ex: SILVA"
+                />
+              </label>
+
+              <label>
+                RE
+
+                <input
+                  value={
+                    filters.re
+                  }
+                  maxLength={8}
+                  placeholder="123456-A"
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
+
+                      re:
+                        maskRE(
+                          event.target.value
+                        )
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Perfil
+
+                <select
+                  value={
+                    filters.perfil
+                  }
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
+
+                      perfil:
+                        event.target.value
+                    })
+                  }
+                >
+                  <option value="">
+                    Todos
+                  </option>
+
+                  {perfis.map(
+                    (perfil) => (
+                      <option
+                        key={perfil}
+                        value={perfil}
+                      >
+                        {perfil}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <label>
+                Posto / Graduação
+
+                <select
+                  value={
+                    filters.posto_graduacao
+                  }
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
+
+                      posto_graduacao:
+                        event.target.value
+                    })
+                  }
+                >
+                  <option value="">
+                    Todos
+                  </option>
+
+                  {postosGraduacoes.map(
+                    (posto) => (
+                      <option
+                        key={posto}
+                        value={posto}
+                      >
+                        {posto}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <label>
+                Companhia
+
+                <select
+                  value={
+                    filters.companhia
+                  }
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
+
+                      companhia:
+                        event.target.value
+                    })
+                  }
+                >
+                  <option value="">
+                    Todas
+                  </option>
+
+                  {companhias.map(
+                    (companhia) => (
+                      <option
+                        key={companhia}
+                        value={companhia}
+                      >
+                        {companhia}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <label>
+                Pelotão
+
+                <select
+                  value={
+                    filters.pelotao
+                  }
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
+
+                      pelotao:
+                        event.target.value
+                    })
+                  }
+                >
+                  <option value="">
+                    Todos
+                  </option>
+
+                  {pelotoes.map(
+                    (pelotao) => (
+                      <option
+                        key={pelotao}
+                        value={pelotao}
+                      >
+                        {pelotao}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <label>
+                Situação
+
+                <select
+                  value={
+                    filters.situacao
+                  }
+                  onChange={(event) =>
+                    handleFiltersChange({
+                      ...filters,
+
+                      situacao:
+                        event.target.value
+                    })
+                  }
+                >
+                  <option value="">
+                    Todas
+                  </option>
+
+                  {situacoes.map(
+                    (situacao) => (
+                      <option
+                        key={situacao}
+                        value={situacao}
+                      >
+                        {situacao}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+            </div>
+
+            <div className="policiais-qr-toolbar">
+              <button
+                type="button"
+                className="qr-filter-button"
+                onClick={() =>
+                  setScannerAberto(
+                    true
+                  )
                 }
               >
-                <option value="">
-                  Todos
-                </option>
+                📷 Ler QR
+              </button>
 
-                {perfis.map(
-                  (perfil) => (
-                    <option
-                      key={perfil}
-                      value={perfil}
-                    >
-                      {perfil}
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
-            <label>
-              Posto / Graduação
-
-              <select
-                value={
-                  filters.posto_graduacao
-                }
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    posto_graduacao:
-                      event.target.value
-                  })
-                }
-              >
-                <option value="">
-                  Todos
-                </option>
-
-                {postosGraduacoes.map(
-                  (posto) => (
-                    <option
-                      key={posto}
-                      value={posto}
-                    >
-                      {posto}
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
-            <label>
-              Companhia
-
-              <select
-                value={
-                  filters.companhia
-                }
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    companhia:
-                      event.target.value
-                  })
-                }
-              >
-                <option value="">
-                  Todas
-                </option>
-
-                {companhias.map(
-                  (companhia) => (
-                    <option
-                      key={companhia}
-                      value={companhia}
-                    >
-                      {companhia}
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
-            <label>
-              Pelotão
-
-              <select
-                value={
-                  filters.pelotao
-                }
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    pelotao:
-                      event.target.value
-                  })
-                }
-              >
-                <option value="">
-                  Todos
-                </option>
-
-                {pelotoes.map(
-                  (pelotao) => (
-                    <option
-                      key={pelotao}
-                      value={pelotao}
-                    >
-                      {pelotao}
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-
-            <label>
-              Situação
-
-              <select
-                value={
-                  filters.situacao
-                }
-                onChange={(event) =>
-                  handleFiltersChange({
-                    ...filters,
-                    situacao:
-                      event.target.value
-                  })
-                }
-              >
-                <option value="">
-                  Todas
-                </option>
-
-                {situacoes.map(
-                  (situacao) => (
-                    <option
-                      key={situacao}
-                      value={situacao}
-                    >
-                      {situacao}
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
+              {filters.qr_code && (
+                <span className="policiais-qr-filter-active">
+                  QR Code aplicado
+                </span>
+              )}
+            </div>
           </div>
+        ) : (
+          <div className="policiais-filters-card">
+            <div className="policiais-filters-header">
+              <div>
+                <strong>
+                  Acesso ao próprio cadastro
+                </strong>
 
-          <div className="policiais-qr-toolbar">
-            <button
-              type="button"
-              className="qr-filter-button"
-              onClick={() =>
-                setScannerAberto(
-                  true
-                )
-              }
-            >
-              📷 Ler QR
-            </button>
-
-            {filters.qr_code && (
-              <span className="policiais-qr-filter-active">
-                QR Code aplicado
-              </span>
-            )}
+                <span>
+                  Você pode consultar e solicitar alterações somente nos seus próprios dados.
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="policiais-table-toolbar">
           <span>
-            Mostrando {registroInicial}
-            –
-            {registroFinal}
-            {' '}de{' '}
-            {total} registros
+            {usuarioRestrito
+              ? total === 1
+                ? 'Seu cadastro foi localizado.'
+                : 'Nenhum cadastro vinculado ao usuário foi localizado.'
+              : (
+                  <>
+                    Mostrando{' '}
+                    {registroInicial}
+                    –
+                    {registroFinal}
+                    {' '}de{' '}
+                    {total} registros
+                  </>
+                )}
           </span>
         </div>
 
         <PolicialTable
           user={user}
-          policiais={policiais}
-          loading={loading}
-          erro={erro}
-          sortBy={sortBy}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-          onView={handleView}
-          onEdit={handleEditar}
-          onDeleted={handleDeleted}
+          policiais={
+            policiais
+          }
+          loading={
+            loading
+          }
+          erro={
+            erro
+          }
+          sortBy={
+            sortBy
+          }
+          sortDirection={
+            sortDirection
+          }
+          onSort={
+            handleSort
+          }
+          onView={
+            handleView
+          }
+          onEdit={
+            handleEditar
+          }
+          onDeleted={
+            handleDeleted
+          }
         />
 
-        <div className="policiais-pagination">
-          <button
-            type="button"
-            disabled={pagina <= 1}
-            onClick={() =>
-              setPagina(1)
-            }
-          >
-            Primeira
-          </button>
+        {!usuarioRestrito && (
+          <div className="policiais-pagination">
+            <button
+              type="button"
+              disabled={
+                pagina <= 1
+              }
+              onClick={() =>
+                setPagina(1)
+              }
+            >
+              Primeira
+            </button>
 
-          <button
-            type="button"
-            disabled={pagina <= 1}
-            onClick={() =>
-              setPagina(
-                (prev) => prev - 1
+            <button
+              type="button"
+              disabled={
+                pagina <= 1
+              }
+              onClick={() =>
+                setPagina(
+                  (prev) =>
+                    prev - 1
+                )
+              }
+            >
+              Anterior
+            </button>
+
+            {pagina > 3 && (
+              <span className="policiais-pagination-dots">
+                ...
+              </span>
+            )}
+
+            {paginasVisiveis.map(
+              (numero) => (
+                <button
+                  key={numero}
+                  type="button"
+                  className={
+                    numero === pagina
+                      ? 'active'
+                      : ''
+                  }
+                  onClick={() =>
+                    setPagina(
+                      numero
+                    )
+                  }
+                >
+                  {numero}
+                </button>
               )
-            }
-          >
-            Anterior
-          </button>
+            )}
+                        {pagina <
+              totalPaginas - 2 && (
+              <span className="policiais-pagination-dots">
+                ...
+              </span>
+            )}
 
-          {pagina > 3 && (
-            <span className="policiais-pagination-dots">
-              ...
-            </span>
-          )}
+            <button
+              type="button"
+              disabled={
+                pagina >=
+                totalPaginas
+              }
+              onClick={() =>
+                setPagina(
+                  (prev) =>
+                    prev + 1
+                )
+              }
+            >
+              Próxima
+            </button>
 
-          {paginasVisiveis.map(
-            (numero) => (
-              <button
-                key={numero}
-                type="button"
-                className={
-                  numero === pagina
-                    ? 'active'
-                    : ''
-                }
-                onClick={() =>
-                  setPagina(numero)
-                }
-              >
-                {numero}
-              </button>
-            )
-          )}
+            <button
+              type="button"
+              disabled={
+                pagina >=
+                totalPaginas
+              }
+              onClick={() =>
+                setPagina(
+                  totalPaginas
+                )
+              }
+            >
+              Última
+            </button>
+          </div>
+        )}
 
-          {pagina <
-            totalPaginas - 2 && (
-            <span className="policiais-pagination-dots">
-              ...
-            </span>
-          )}
-
-          <button
-            type="button"
-            disabled={
-              pagina >= totalPaginas
-            }
-            onClick={() =>
-              setPagina(
-                (prev) => prev + 1
-              )
-            }
-          >
-            Próxima
-          </button>
-
-          <button
-            type="button"
-            disabled={
-              pagina >= totalPaginas
-            }
-            onClick={() =>
-              setPagina(totalPaginas)
-            }
-          >
-            Última
-          </button>
-        </div>
         <UltimasAlteracoes
-  reloadKey={reloadKey}
-/>
+          reloadKey={
+            reloadKey
+          }
+          user={
+            user
+          }
+          somenteProprio={
+            usuarioRestrito
+          }
+        />
       </section>
 
       <PolicialViewModal
         policial={
           policialVisualizando
         }
-        fotos={fotosModal}
+        fotos={
+          fotosModal
+        }
+        user={
+          user
+        }
+        somenteProprio={
+          usuarioRestrito
+        }
         onClose={() => {
-          setPolicialVisualizando(null)
-          setFotosModal([])
+          setPolicialVisualizando(
+            null
+          )
+
+          setFotosModal(
+            []
+          )
         }}
         onPrintFicha={
           handlePrintFicha
@@ -889,13 +1161,21 @@ export default function Policiais({
         }
       />
 
-      <QrScanner
-        open={scannerAberto}
-        onRead={handleQrRead}
-        onClose={() =>
-          setScannerAberto(false)
-        }
-      />
+      {podePesquisar && (
+        <QrScanner
+          open={
+            scannerAberto
+          }
+          onRead={
+            handleQrRead
+          }
+          onClose={() =>
+            setScannerAberto(
+              false
+            )
+          }
+        />
+      )}
     </main>
   )
 }

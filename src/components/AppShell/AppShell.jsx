@@ -1,9 +1,16 @@
 import {
   useEffect,
+  useMemo,
   useState
 } from 'react'
 
 import brasaoUnidade from '../../assets/unidade/brasao-27-bpmm.jpg'
+
+import {
+  obterPerfilEfetivo,
+  podeAcessarRota,
+  possuiPerfilTemporarioAtivo
+} from '../../services/permissionService'
 
 import './AppShell.css'
 
@@ -76,25 +83,14 @@ const menuItems = [
   }
 ]
 
-function obterNomeUsuario(
-  user
-) {
+function obterNomeUsuario(user) {
   return (
     user?.nome ||
     user?.nome_guerra ||
     user?.nome_completo ||
     user?.email ||
+    user?.re ||
     'Usuário SIGMO'
-  )
-}
-
-function obterPerfilUsuario(
-  user
-) {
-  return (
-    user?.perfil ||
-    user?.funcao ||
-    'Operador'
   )
 }
 
@@ -110,16 +106,32 @@ export default function AppShell({
     setMobileMenuOpen
   ] = useState(false)
 
-  useEffect(() => {
-    setMobileMenuOpen(false)
-  }, [
-    route
-  ])
+  const menuPermitido = useMemo(
+    () =>
+      menuItems.filter(
+        (item) =>
+          podeAcessarRota(
+            user,
+            item.key
+          )
+      ),
+    [user]
+  )
+
+  const perfilEfetivo =
+    obterPerfilEfetivo(user)
+
+  const perfilTemporario =
+    possuiPerfilTemporarioAtivo(
+      user
+    )
 
   useEffect(() => {
-    function handleEscape(
-      event
-    ) {
+    setMobileMenuOpen(false)
+  }, [route])
+
+  useEffect(() => {
+    function handleEscape(event) {
       if (
         event.key ===
         'Escape'
@@ -143,16 +155,19 @@ export default function AppShell({
     }
   }, [])
 
-  function navegar(
-    itemKey
-  ) {
-    setRoute(
-      itemKey
-    )
+  function navegar(itemKey) {
+    if (
+      !podeAcessarRota(
+        user,
+        itemKey
+      )
+    ) {
+      return
+    }
 
-    setMobileMenuOpen(
-      false
-    )
+    setRoute(itemKey)
+
+    setMobileMenuOpen(false)
   }
 
   return (
@@ -191,7 +206,6 @@ export default function AppShell({
       <aside
         className={[
           'app-sidebar',
-
           mobileMenuOpen
             ? 'sidebar-open'
             : ''
@@ -250,7 +264,7 @@ export default function AppShell({
           className="app-menu"
           aria-label="Navegação principal"
         >
-          {menuItems.map(
+          {menuPermitido.map(
             (item) => {
               const ativo =
                 route ===
@@ -259,9 +273,7 @@ export default function AppShell({
               return (
                 <button
                   type="button"
-                  key={
-                    item.key
-                  }
+                  key={item.key}
                   className={
                     ativo
                       ? 'app-menu-item active'
@@ -312,10 +324,14 @@ export default function AppShell({
               </strong>
 
               <span>
-                {obterPerfilUsuario(
-                  user
-                )}
+                {perfilEfetivo}
               </span>
+
+              {perfilTemporario && (
+                <small>
+                  Perfil temporário ativo
+                </small>
+              )}
             </div>
           </div>
 
@@ -339,7 +355,8 @@ export default function AppShell({
           </button>
 
           <div className="app-version">
-            SIGMO • {UNIDADE.nome} • {UNIDADE.companhia}
+            SIGMO • {UNIDADE.nome} •{' '}
+            {UNIDADE.companhia}
           </div>
         </div>
       </aside>

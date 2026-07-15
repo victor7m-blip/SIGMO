@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState
 } from 'react'
@@ -6,7 +7,10 @@ import {
 import AppShell from '../components/AppShell/AppShell'
 
 import useDashboard from '../hooks/useDashboard'
-
+import {
+  obterRotaInicial,
+  podeAcessarRota
+} from '../services/permissionService'
 import Locais from './Locais/Locais'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
@@ -677,26 +681,82 @@ export default function DashboardV2({
   onLogout
 }) {
   const [
-    route,
-    setRouteState
-  ] = useState(
-    carregarRotaInicial
-  )
+  route,
+  setRouteState
+] = useState(() => {
+  const rota =
+    carregarRotaInicial()
+
+  if (
+    podeAcessarRota(
+      user,
+      rota
+    )
+  ) {
+    return rota
+  }
+
+  return obterRotaInicial(user)
+})
 
   const dashboard = useDashboard()
 
   function setRoute(novaRota) {
+  const rotaSolicitada =
+    novaRota ||
+    obterRotaInicial(user)
+
+  const rotaPermitida =
+    podeAcessarRota(
+      user,
+      rotaSolicitada
+    )
+      ? rotaSolicitada
+      : obterRotaInicial(user)
+
+  salvarRota(
+    rotaPermitida
+  )
+
+  setRouteState(
+    rotaPermitida
+  )
+}
+useEffect(() => {
+  if (
+    !podeAcessarRota(
+      user,
+      route
+    )
+  ) {
     const rota =
-      novaRota || 'dashboard'
+      obterRotaInicial(user)
 
     salvarRota(rota)
+
     setRouteState(rota)
   }
-
+}, [
+  user,
+  route
+])
   function voltarDashboard() {
-    setRoute('dashboard')
+  const rotaInicial =
+    obterRotaInicial(user)
+
+  setRoute(
+    rotaInicial
+  )
+
+  if (
+    podeAcessarRota(
+      user,
+      'dashboard'
+    )
+  ) {
     dashboard.atualizar()
   }
+}
 
   function renderPage() {
     if (route === 'central-operacional') {
