@@ -1,4 +1,4 @@
-import StatusBadge from './StatusBadge'
+import StatusBadge from './components/StatusBadge'
 
 function formatarDataHora(valor) {
   if (!valor) {

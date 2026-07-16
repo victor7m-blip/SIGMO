@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-
 import {
   listarSolicitacoes,
   criarSolicitacao,
-  atualizarSolicitacao,
-  aprovarSolicitacao,
-  reprovarSolicitacao,
+  atualizarSolicitacaoPendente,
   cancelarSolicitacao
 } from '../services/solicitacoesService'
+
+import {
+  aprovarSolicitacao,
+  reprovarSolicitacao
+} from '../engine/aprovacoesEngine'
 
 const FILTROS_INICIAIS = {
   status: '',
@@ -191,7 +192,7 @@ export default function useSolicitacoes(
           limparMensagens()
 
           const resposta =
-            await atualizarSolicitacao(
+            await atualizarSolicitacaoPendente(
               id,
               dados
             )
