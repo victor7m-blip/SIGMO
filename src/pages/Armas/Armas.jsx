@@ -23,8 +23,9 @@ import './styles/Armas.css'
 const LIMITE = 20
 
 const statusOptions = [
-  'RESERVA',
   'CAUTELADO',
+  'CARGA',
+  'RESERVA',  
   'RECOLHIDO',
   'BAIXADO',
   'APREENDIDO'
@@ -70,16 +71,13 @@ export default function Armas({ user }) {
       const pesquisa = filtros.pesquisa.trim()
 
       const filtrosService = {
-        propriedade: filtros.propriedade,
-        especie: filtros.especie,
-        calibre: filtros.calibre,
-        status: filtros.status,
-        unidade: filtros.unidade
-      }
-
-      if (pesquisa) {
-        filtrosService.patrimonio = pesquisa
-      }
+  pesquisa,
+  propriedade: filtros.propriedade,
+  especie: filtros.especie,
+  calibre: filtros.calibre,
+  status: filtros.status,
+  unidade: filtros.unidade
+}
 
       const resultado = await listarArmas({
         filtros: filtrosService,
@@ -279,7 +277,7 @@ export default function Armas({ user }) {
             type="search"
             value={filtros.pesquisa}
             onChange={handleFiltroChange}
-            placeholder="Patrimônio ou número de série"
+            placeholder="Nº RE, SÉRIE, PATRIMONIO, NOME"
           />
         </div>
 

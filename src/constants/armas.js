@@ -39,8 +39,9 @@ export const ACABAMENTOS_ARMAS = [
 ]
 
 export const STATUS_ARMAS = [
-  'RESERVA',
+  'CARGA',  
   'CAUTELADO',
+  'RESERVA',
   'RECOLHIDO',
   'BAIXADO',
   'APREENDIDO'
