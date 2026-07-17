@@ -1,8 +1,29 @@
-import { useEffect, useMemo, useState } from 'react'
-import { listarUltimasAuditorias } from '../services/auditoriaService'
+import {
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
+
+import {
+  listarUltimasAuditorias
+} from '../services/auditoriaService'
+
 import './auditoria.css'
 
-const ITENS_POR_PAGINA = 20
+function formatarDataHora(dataHora) {
+  if (!dataHora) return '—'
+
+  const data = new Date(dataHora)
+
+  if (Number.isNaN(data.getTime())) {
+    return '—'
+  }
+
+  return data.toLocaleString('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'medium'
+  })
+}
 
 function normalizarBusca(valor) {
   return String(valor || '')
@@ -12,21 +33,13 @@ function normalizarBusca(valor) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function formatarDataHora(dataHora) {
-  if (!dataHora) return '—'
-  const data = new Date(dataHora)
-  if (Number.isNaN(data.getTime())) return '—'
-
-  return data.toLocaleString('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'medium'
-  })
-}
-
 function obterClasseSeveridade(severidade) {
   const valor = normalizarBusca(severidade)
 
-  if (valor.includes('critic') || valor.includes('grave')) {
+  if (
+    valor.includes('critic') ||
+    valor.includes('grave')
+  ) {
     return 'auditoria-badge--critico'
   }
 
@@ -38,7 +51,10 @@ function obterClasseSeveridade(severidade) {
     return 'auditoria-badge--alerta'
   }
 
-  if (valor.includes('sucesso') || valor.includes('concluido')) {
+  if (
+    valor.includes('sucesso') ||
+    valor.includes('concluido')
+  ) {
     return 'auditoria-badge--sucesso'
   }
 
@@ -51,8 +67,7 @@ function obterClasseAcao(acao) {
   if (
     valor.includes('reprov') ||
     valor.includes('exclu') ||
-    valor.includes('erro') ||
-    valor.includes('falha')
+    valor.includes('erro')
   ) {
     return 'auditoria-acao--negativa'
   }
@@ -60,8 +75,7 @@ function obterClasseAcao(acao) {
   if (
     valor.includes('aprov') ||
     valor.includes('criad') ||
-    valor.includes('login') ||
-    valor.includes('receb')
+    valor.includes('login')
   ) {
     return 'auditoria-acao--positiva'
   }
@@ -69,61 +83,12 @@ function obterClasseAcao(acao) {
   if (
     valor.includes('logout') ||
     valor.includes('alter') ||
-    valor.includes('solicit') ||
-    valor.includes('transfer')
+    valor.includes('solicit')
   ) {
     return 'auditoria-acao--atencao'
   }
 
   return 'auditoria-acao--neutra'
-}
-
-function escaparCsv(valor) {
-  const texto = String(valor ?? '')
-  return `"${texto.replace(/"/g, '""')}"`
-}
-
-function baixarCsv(registros) {
-  const cabecalho = [
-    'Data e hora',
-    'Ação',
-    'Ator',
-    'RE',
-    'Perfil',
-    'Módulo',
-    'Severidade',
-    'Descrição'
-  ]
-
-  const linhas = registros.map((registro) => [
-    formatarDataHora(registro.data_hora),
-    registro.acao,
-    registro.ator_nome,
-    registro.ator_re,
-    registro.ator_perfil || registro.perfil,
-    registro.modulo,
-    registro.severidade,
-    registro.descricao
-  ])
-
-  const conteudo = [cabecalho, ...linhas]
-    .map((linha) => linha.map(escaparCsv).join(';'))
-    .join('\n')
-
-  const blob = new Blob([`\uFEFF${conteudo}`], {
-    type: 'text/csv;charset=utf-8;'
-  })
-
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  const agora = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-
-  link.href = url
-  link.download = `sigmo-auditoria-${agora}.csv`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
 }
 
 export default function Auditoria() {
@@ -135,20 +100,35 @@ export default function Auditoria() {
   const [filtroModulo, setFiltroModulo] = useState('')
   const [filtroPerfil, setFiltroPerfil] = useState('')
   const [filtroSeveridade, setFiltroSeveridade] = useState('')
-  const [paginaAtual, setPaginaAtual] = useState(1)
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
 
   async function carregarAuditoria() {
     try {
       setLoading(true)
       setErro('')
 
-      const dados = await listarUltimasAuditorias({ limite: 500 })
-      setRegistros(dados || [])
+      const dados = await listarUltimasAuditorias({
+        limite: 50
+      })
+
+      const ordenados = [...(dados || [])].sort((a, b) => {
+        const dataA = new Date(a.data_hora || 0).getTime()
+        const dataB = new Date(b.data_hora || 0).getTime()
+
+        return dataB - dataA
+      })
+
+      setRegistros(ordenados)
+      setUltimaAtualizacao(new Date())
     } catch (error) {
-      console.error('Erro ao carregar auditoria:', error)
+      console.error(
+        'Erro ao carregar auditoria:',
+        error
+      )
+
       setErro(
         error?.message ||
-          'Não foi possível carregar os registros de auditoria.'
+        'Não foi possível carregar os registros de auditoria.'
       )
     } finally {
       setLoading(false)
@@ -159,57 +139,58 @@ export default function Auditoria() {
     carregarAuditoria()
   }, [])
 
-  useEffect(() => {
-    setPaginaAtual(1)
-  }, [
-    pesquisa,
-    filtroAcao,
-    filtroModulo,
-    filtroPerfil,
-    filtroSeveridade
-  ])
+  const acoes = useMemo(() => {
+    return [
+      ...new Set(
+        registros
+          .map((registro) => registro.acao)
+          .filter(Boolean)
+      )
+    ].sort()
+  }, [registros])
 
-  const acoes = useMemo(
-    () =>
-      [...new Set(registros.map((registro) => registro.acao).filter(Boolean))]
-        .sort((a, b) => a.localeCompare(b, 'pt-BR')),
-    [registros]
-  )
+  const modulos = useMemo(() => {
+    return [
+      ...new Set(
+        registros
+          .map((registro) => registro.modulo)
+          .filter(Boolean)
+      )
+    ].sort()
+  }, [registros])
 
-  const modulos = useMemo(
-    () =>
-      [...new Set(registros.map((registro) => registro.modulo).filter(Boolean))]
-        .sort((a, b) => a.localeCompare(b, 'pt-BR')),
-    [registros]
-  )
+  const perfis = useMemo(() => {
+    return [
+      ...new Set(
+        registros
+          .map(
+            (registro) =>
+              registro.ator_perfil ||
+              registro.perfil
+          )
+          .filter(Boolean)
+      )
+    ].sort()
+  }, [registros])
 
-  const perfis = useMemo(
-    () =>
-      [
-        ...new Set(
-          registros
-            .map((registro) => registro.ator_perfil || registro.perfil)
-            .filter(Boolean)
-        )
-      ].sort((a, b) => a.localeCompare(b, 'pt-BR')),
-    [registros]
-  )
-
-  const severidades = useMemo(
-    () =>
-      [
-        ...new Set(
-          registros.map((registro) => registro.severidade).filter(Boolean)
-        )
-      ].sort((a, b) => a.localeCompare(b, 'pt-BR')),
-    [registros]
-  )
+  const severidades = useMemo(() => {
+    return [
+      ...new Set(
+        registros
+          .map((registro) => registro.severidade)
+          .filter(Boolean)
+      )
+    ].sort()
+  }, [registros])
 
   const registrosFiltrados = useMemo(() => {
     const busca = normalizarBusca(pesquisa)
 
     return registros.filter((registro) => {
-      const perfil = registro.ator_perfil || registro.perfil || ''
+      const perfil =
+        registro.ator_perfil ||
+        registro.perfil ||
+        ''
 
       const correspondePesquisa =
         !busca ||
@@ -221,14 +202,32 @@ export default function Auditoria() {
           perfil,
           registro.modulo,
           registro.severidade
-        ].some((campo) => normalizarBusca(campo).includes(busca))
+        ].some((campo) =>
+          normalizarBusca(campo).includes(busca)
+        )
+
+      const correspondeAcao =
+        !filtroAcao ||
+        registro.acao === filtroAcao
+
+      const correspondeModulo =
+        !filtroModulo ||
+        registro.modulo === filtroModulo
+
+      const correspondePerfil =
+        !filtroPerfil ||
+        perfil === filtroPerfil
+
+      const correspondeSeveridade =
+        !filtroSeveridade ||
+        registro.severidade === filtroSeveridade
 
       return (
         correspondePesquisa &&
-        (!filtroAcao || registro.acao === filtroAcao) &&
-        (!filtroModulo || registro.modulo === filtroModulo) &&
-        (!filtroPerfil || perfil === filtroPerfil) &&
-        (!filtroSeveridade || registro.severidade === filtroSeveridade)
+        correspondeAcao &&
+        correspondeModulo &&
+        correspondePerfil &&
+        correspondeSeveridade
       )
     })
   }, [
@@ -242,50 +241,56 @@ export default function Auditoria() {
 
   const resumo = useMemo(() => {
     const agora = new Date()
+
     const inicioHoje = new Date(
       agora.getFullYear(),
       agora.getMonth(),
       agora.getDate()
     ).getTime()
 
-    const hoje = registros.filter((registro) => {
-      const horario = new Date(registro.data_hora).getTime()
-      return !Number.isNaN(horario) && horario >= inicioHoje
-    }).length
+    const registrosHoje = registros.filter(
+      (registro) => {
+        const horario = new Date(
+          registro.data_hora
+        ).getTime()
 
-    const criticos = registros.filter((registro) => {
-      const severidade = normalizarBusca(registro.severidade)
-      return severidade.includes('critic') || severidade.includes('grave')
-    }).length
+        return (
+          !Number.isNaN(horario) &&
+          horario >= inicioHoje
+        )
+      }
+    ).length
 
-    const logins = registros.filter((registro) =>
-      normalizarBusca(registro.acao).includes('login')
+    const registrosCriticos = registros.filter(
+      (registro) => {
+        const severidade = normalizarBusca(
+          registro.severidade
+        )
+
+        return (
+          severidade.includes('critic') ||
+          severidade.includes('grave')
+        )
+      }
     ).length
 
     const atores = new Set(
       registros
-        .map((registro) => registro.ator_id || registro.ator_re || registro.ator_nome)
+        .map(
+          (registro) =>
+            registro.ator_id ||
+            registro.ator_nome
+        )
         .filter(Boolean)
     ).size
 
     return {
       total: registros.length,
-      hoje,
-      criticos,
-      logins,
+      hoje: registrosHoje,
+      criticos: registrosCriticos,
       atores
     }
   }, [registros])
-
-  const totalPaginas = Math.max(
-    1,
-    Math.ceil(registrosFiltrados.length / ITENS_POR_PAGINA)
-  )
-
-  const registrosPagina = useMemo(() => {
-    const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA
-    return registrosFiltrados.slice(inicio, inicio + ITENS_POR_PAGINA)
-  }, [registrosFiltrados, paginaAtual])
 
   function limparFiltros() {
     setPesquisa('')
@@ -295,98 +300,162 @@ export default function Auditoria() {
     setFiltroSeveridade('')
   }
 
+  function escaparCsv(valor) {
+    const texto = String(valor ?? '')
+
+    return `"${texto.replace(/"/g, '""')}"`
+  }
+
   function exportarCsv() {
-    if (registrosFiltrados.length > 0) {
-      baixarCsv(registrosFiltrados)
-    }
+    const cabecalho = [
+      'Data e hora',
+      'Ação',
+      'Descrição',
+      'Usuário',
+      'RE',
+      'Perfil',
+      'Módulo',
+      'Severidade'
+    ]
+
+    const linhas = registrosFiltrados.map(
+      (registro) => [
+        formatarDataHora(registro.data_hora),
+        registro.acao,
+        registro.descricao,
+        registro.ator_nome,
+        registro.ator_re,
+        registro.ator_perfil || registro.perfil,
+        registro.modulo,
+        registro.severidade
+      ]
+    )
+
+    const conteudo = [
+      cabecalho,
+      ...linhas
+    ]
+      .map((linha) =>
+        linha.map(escaparCsv).join(';')
+      )
+      .join('\n')
+
+    const blob = new Blob(
+      [`\uFEFF${conteudo}`],
+      {
+        type: 'text/csv;charset=utf-8;'
+      }
+    )
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const dataArquivo = new Date()
+      .toISOString()
+      .slice(0, 10)
+
+    link.href = url
+    link.download =
+      `auditoria-sigmo-${dataArquivo}.csv`
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   return (
     <section className="auditoria-page">
       <header className="auditoria-header">
         <div>
-          <span className="auditoria-kicker">SIGMO</span>
+          <span className="auditoria-kicker">
+            SIGMO
+          </span>
+
           <h1>Auditoria</h1>
+
           <p>
-            Consulte acessos, movimentações e alterações realizadas no sistema.
+            Consulte os registros de acesso,
+            movimentações e alterações realizadas
+            no sistema.
           </p>
         </div>
 
-        <div className="auditoria-header-actions">
-          <button
-            type="button"
-            className="auditoria-button auditoria-button--secondary auditoria-button--header"
-            onClick={exportarCsv}
-            disabled={loading || registrosFiltrados.length === 0}
-          >
-            Exportar CSV
-          </button>
-
-          <button
-            type="button"
-            className="auditoria-button auditoria-button--primary"
-            onClick={carregarAuditoria}
-            disabled={loading}
-          >
-            {loading ? 'Atualizando...' : 'Atualizar registros'}
-          </button>
-        </div>
+        <button
+          type="button"
+          className="auditoria-button auditoria-button--primary"
+          onClick={carregarAuditoria}
+          disabled={loading}
+        >
+          {loading
+            ? 'Atualizando...'
+            : 'Atualizar registros'}
+        </button>
       </header>
 
       <div className="auditoria-resumo">
         <article className="auditoria-resumo-card">
           <span>Registros carregados</span>
           <strong>{resumo.total}</strong>
-          <small>Últimos eventos consultados</small>
+          <small>Últimos eventos do sistema</small>
         </article>
 
         <article className="auditoria-resumo-card">
-          <span>Registros de hoje</span>
+          <span>Eventos de hoje</span>
           <strong>{resumo.hoje}</strong>
-          <small>Eventos realizados hoje</small>
-        </article>
-
-        <article className="auditoria-resumo-card">
-          <span>Logins registrados</span>
-          <strong>{resumo.logins}</strong>
-          <small>Acessos entre os eventos carregados</small>
+          <small>Registros desde 00h</small>
         </article>
 
         <article className="auditoria-resumo-card">
           <span>Eventos críticos</span>
           <strong>{resumo.criticos}</strong>
-          <small>Ocorrências críticas ou graves</small>
+          <small>Requerem atenção</small>
         </article>
 
         <article className="auditoria-resumo-card">
-          <span>Atores identificados</span>
+          <span>Usuários envolvidos</span>
           <strong>{resumo.atores}</strong>
-          <small>Usuários distintos identificados</small>
+          <small>Atores distintos</small>
         </article>
       </div>
 
-      <div className="auditoria-filtros">
+      <section className="auditoria-filtros">
         <div className="auditoria-filtro auditoria-filtro--pesquisa">
-          <label htmlFor="auditoria-pesquisa">Pesquisar</label>
+          <label htmlFor="auditoria-pesquisa">
+            Pesquisa
+          </label>
+
           <input
             id="auditoria-pesquisa"
-            type="search"
+            type="text"
+            placeholder="Ação, usuário, RE, descrição..."
             value={pesquisa}
-            onChange={(event) => setPesquisa(event.target.value)}
-            placeholder="Ator, RE, descrição, ação..."
+            onChange={(event) =>
+              setPesquisa(event.target.value)
+            }
           />
         </div>
 
         <div className="auditoria-filtro">
-          <label htmlFor="auditoria-acao">Ação</label>
+          <label htmlFor="auditoria-acao">
+            Ação
+          </label>
+
           <select
             id="auditoria-acao"
             value={filtroAcao}
-            onChange={(event) => setFiltroAcao(event.target.value)}
+            onChange={(event) =>
+              setFiltroAcao(event.target.value)
+            }
           >
-            <option value="">Todas</option>
+            <option value="">
+              Todas as ações
+            </option>
+
             {acoes.map((acao) => (
-              <option key={acao} value={acao}>
+              <option
+                key={acao}
+                value={acao}
+              >
                 {acao}
               </option>
             ))}
@@ -394,15 +463,26 @@ export default function Auditoria() {
         </div>
 
         <div className="auditoria-filtro">
-          <label htmlFor="auditoria-modulo">Módulo</label>
+          <label htmlFor="auditoria-modulo">
+            Módulo
+          </label>
+
           <select
             id="auditoria-modulo"
             value={filtroModulo}
-            onChange={(event) => setFiltroModulo(event.target.value)}
+            onChange={(event) =>
+              setFiltroModulo(event.target.value)
+            }
           >
-            <option value="">Todos</option>
+            <option value="">
+              Todos os módulos
+            </option>
+
             {modulos.map((modulo) => (
-              <option key={modulo} value={modulo}>
+              <option
+                key={modulo}
+                value={modulo}
+              >
                 {modulo}
               </option>
             ))}
@@ -410,15 +490,26 @@ export default function Auditoria() {
         </div>
 
         <div className="auditoria-filtro">
-          <label htmlFor="auditoria-perfil">Perfil</label>
+          <label htmlFor="auditoria-perfil">
+            Perfil
+          </label>
+
           <select
             id="auditoria-perfil"
             value={filtroPerfil}
-            onChange={(event) => setFiltroPerfil(event.target.value)}
+            onChange={(event) =>
+              setFiltroPerfil(event.target.value)
+            }
           >
-            <option value="">Todos</option>
+            <option value="">
+              Todos os perfis
+            </option>
+
             {perfis.map((perfil) => (
-              <option key={perfil} value={perfil}>
+              <option
+                key={perfil}
+                value={perfil}
+              >
                 {perfil}
               </option>
             ))}
@@ -426,15 +517,28 @@ export default function Auditoria() {
         </div>
 
         <div className="auditoria-filtro">
-          <label htmlFor="auditoria-severidade">Severidade</label>
+          <label htmlFor="auditoria-severidade">
+            Severidade
+          </label>
+
           <select
             id="auditoria-severidade"
             value={filtroSeveridade}
-            onChange={(event) => setFiltroSeveridade(event.target.value)}
+            onChange={(event) =>
+              setFiltroSeveridade(
+                event.target.value
+              )
+            }
           >
-            <option value="">Todas</option>
+            <option value="">
+              Todas as severidades
+            </option>
+
             {severidades.map((severidade) => (
-              <option key={severidade} value={severidade}>
+              <option
+                key={severidade}
+                value={severidade}
+              >
                 {severidade}
               </option>
             ))}
@@ -450,75 +554,85 @@ export default function Auditoria() {
             Limpar filtros
           </button>
         </div>
-      </div>
+      </section>
 
       <div className="auditoria-resultados">
-        <div>
-          <strong>{registrosFiltrados.length}</strong>{' '}
-          <span>
-            {registrosFiltrados.length === 1
-              ? 'registro encontrado'
-              : 'registros encontrados'}
-          </span>
-        </div>
-
-        {registrosFiltrados.length > 0 && (
-          <span>
-            Página {paginaAtual} de {totalPaginas}
-          </span>
-        )}
+        <strong>{registrosFiltrados.length}</strong>
+        <span>
+          de {registros.length} registros
+        </span>
       </div>
 
       {erro && (
         <div className="auditoria-feedback auditoria-feedback--erro">
-          <strong>Erro ao carregar auditoria</strong>
+          <strong>Falha ao carregar auditoria</strong>
           <span>{erro}</span>
+
+          <button
+            type="button"
+            className="auditoria-button auditoria-button--secondary"
+            onClick={carregarAuditoria}
+          >
+            Tentar novamente
+          </button>
         </div>
       )}
 
       {!erro && loading && (
         <div className="auditoria-feedback">
           <strong>Carregando registros...</strong>
-          <span>Aguarde enquanto os eventos são consultados.</span>
+          <span>
+            Aguarde enquanto os dados são consultados.
+          </span>
         </div>
       )}
 
-      {!erro && !loading && registrosFiltrados.length === 0 && (
-        <div className="auditoria-feedback">
-          <strong>Nenhum registro encontrado</strong>
-          <span>Altere ou remova os filtros utilizados.</span>
-        </div>
-      )}
+      {!erro &&
+        !loading &&
+        registrosFiltrados.length === 0 && (
+          <div className="auditoria-feedback">
+            <strong>Nenhum registro encontrado</strong>
+            <span>
+              Ajuste os filtros ou atualize os registros.
+            </span>
+          </div>
+        )}
 
-      {!erro && !loading && registrosFiltrados.length > 0 && (
-        <>
+      {!erro &&
+        !loading &&
+        registrosFiltrados.length > 0 && (
           <div className="auditoria-table-card">
             <div className="auditoria-table-wrapper">
               <table className="auditoria-table">
                 <thead>
                   <tr>
-                    <th>Data e hora</th>
+                    <th>Data/Hora</th>
                     <th>Ação</th>
-                    <th>Ator</th>
+                    <th>Descrição</th>
+                    <th>Usuário</th>
                     <th>RE</th>
                     <th>Perfil</th>
                     <th>Módulo</th>
                     <th>Severidade</th>
-                    <th>Descrição</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {registrosPagina.map((registro) => {
-                    const perfil =
-                      registro.ator_perfil ||
-                      registro.perfil ||
-                      'Não identificado'
-
-                    return (
-                      <tr key={registro.id}>
-                        <td data-label="Data e hora" className="auditoria-data">
-                          {formatarDataHora(registro.data_hora)}
+                  {registrosFiltrados.map(
+                    (registro, index) => (
+                      <tr
+                        key={
+                          registro.id ||
+                          `${registro.data_hora}-${index}`
+                        }
+                      >
+                        <td
+                          data-label="Data/Hora"
+                          className="auditoria-data"
+                        >
+                          {formatarDataHora(
+                            registro.data_hora
+                          )}
                         </td>
 
                         <td data-label="Ação">
@@ -527,24 +641,39 @@ export default function Auditoria() {
                               registro.acao
                             )}`}
                           >
-                            {registro.acao || 'EVENTO'}
+                            {registro.acao || '—'}
                           </span>
                         </td>
 
-                        <td data-label="Ator">
-                          <strong className="auditoria-ator">
-                            {registro.ator_nome || 'Não identificado'}
-                          </strong>
+                        <td
+                          data-label="Descrição"
+                          className="auditoria-descricao"
+                        >
+                          {registro.descricao || '—'}
                         </td>
 
-                        <td data-label="RE">
-                          <span className="auditoria-re">
-                            {registro.ator_re || '—'}
+                        <td data-label="Usuário">
+                          <span className="auditoria-ator">
+                            {registro.ator_nome || '—'}
                           </span>
                         </td>
 
-                        <td data-label="Perfil">{perfil}</td>
-                        <td data-label="Módulo">{registro.modulo || 'Sistema'}</td>
+                        <td
+                          data-label="RE"
+                          className="auditoria-re"
+                        >
+                          {registro.ator_re || '—'}
+                        </td>
+
+                        <td data-label="Perfil">
+                          {registro.ator_perfil ||
+                            registro.perfil ||
+                            '—'}
+                        </td>
+
+                        <td data-label="Módulo">
+                          {registro.modulo || '—'}
+                        </td>
 
                         <td data-label="Severidade">
                           <span
@@ -552,49 +681,43 @@ export default function Auditoria() {
                               registro.severidade
                             )}`}
                           >
-                            {registro.severidade || 'Informativo'}
+                            {registro.severidade ||
+                              'Informativo'}
                           </span>
-                        </td>
-
-                        <td data-label="Descrição" className="auditoria-descricao">
-                          {registro.descricao ||
-                            'Evento registrado no sistema.'}
                         </td>
                       </tr>
                     )
-                  })}
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
+        )}
 
-          {totalPaginas > 1 && (
-            <nav className="auditoria-paginacao" aria-label="Paginação da auditoria">
-              <button
-                type="button"
-                onClick={() => setPaginaAtual((pagina) => Math.max(1, pagina - 1))}
-                disabled={paginaAtual === 1}
-              >
-                Anterior
-              </button>
+      <div className="auditoria-resultados">
+        <span>
+          Última atualização:{' '}
+          <strong>
+            {ultimaAtualizacao
+              ? formatarDataHora(
+                  ultimaAtualizacao
+                )
+              : '—'}
+          </strong>
+        </span>
 
-              <span>
-                {paginaAtual} / {totalPaginas}
-              </span>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setPaginaAtual((pagina) => Math.min(totalPaginas, pagina + 1))
-                }
-                disabled={paginaAtual === totalPaginas}
-              >
-                Próxima
-              </button>
-            </nav>
-          )}
-        </>
-      )}
+        <button
+          type="button"
+          className="auditoria-button auditoria-button--secondary"
+          onClick={exportarCsv}
+          disabled={
+            loading ||
+            registrosFiltrados.length === 0
+          }
+        >
+          Exportar CSV
+        </button>
+      </div>
     </section>
   )
 }

@@ -3,11 +3,16 @@ import SigmoButton from '../../../ui/components/SigmoButton'
 import SigmoCard from '../../../ui/components/SigmoCard'
 import ArmaDados from './ArmaDados'
 import ArmaFotos from './ArmaFotos'
-import { cadastrarArma, atualizarArma } from '../../../services/armasService'
+import {
+  cadastrarArma,
+  atualizarArma
+} from '../../../services/armasService'
 import { registerAudit } from '../../../services/auditoriaService'
 import './ArmaForm.css'
 
 const initialForm = {
+  propriedade: 'PMESP',
+
   patrimonio: '',
   numero_serie: '',
   especie: '',
@@ -16,11 +21,28 @@ const initialForm = {
   calibre: '',
   acabamento: '',
   unidade: '',
-  status: 'Disponível',
-  observacoes: ''
+  status: 'RESERVA',
+  observacoes: '',
+
+  numero_sigma: '',
+  numero_registro: '',
+  validade_registro: '',
+  comprimento_cano: '',
+  capacidade: '',
+  pais_fabricacao: '',
+  ano_fabricacao: '',
+  proprietario_policial_id: '',
+  proprietario_nome: '',
+  proprietario_re: '',
+  situacao_documental: ''
 }
 
-export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
+export default function ArmaForm({
+  user,
+  armaEditando,
+  onCancel,
+  onSaved
+}) {
   const [form, setForm] = useState(initialForm)
   const [armaSalva, setArmaSalva] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -33,16 +55,73 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
   useEffect(() => {
     if (armaEditando) {
       setForm({
-        patrimonio: armaEditando.patrimonio || '',
-        numero_serie: armaEditando.numero_serie || '',
-        especie: armaEditando.especie || '',
-        marca: armaEditando.marca || '',
-        modelo: armaEditando.modelo || '',
-        calibre: armaEditando.calibre || '',
-        acabamento: armaEditando.acabamento || '',
-        unidade: armaEditando.unidade || '',
-        status: armaEditando.status || 'Disponível',
-        observacoes: armaEditando.observacoes || ''
+        propriedade:
+          armaEditando.propriedade || 'PMESP',
+
+        patrimonio:
+          armaEditando.patrimonio || '',
+
+        numero_serie:
+          armaEditando.numero_serie || '',
+
+        especie:
+          armaEditando.especie || '',
+
+        marca:
+          armaEditando.marca || '',
+
+        modelo:
+          armaEditando.modelo || '',
+
+        calibre:
+          armaEditando.calibre || '',
+
+        acabamento:
+          armaEditando.acabamento || '',
+
+        unidade:
+          armaEditando.unidade || '',
+
+        status:
+  armaEditando.status_operacional ||
+  armaEditando.status ||
+  'RESERVA',
+
+        observacoes:
+          armaEditando.observacoes || '',
+
+        numero_sigma:
+          armaEditando.numero_sigma || '',
+
+        numero_registro:
+          armaEditando.numero_registro || '',
+
+        validade_registro:
+          armaEditando.validade_registro || '',
+
+        comprimento_cano:
+          armaEditando.comprimento_cano || '',
+
+        capacidade:
+          armaEditando.capacidade ?? '',
+
+        pais_fabricacao:
+          armaEditando.pais_fabricacao || '',
+
+        ano_fabricacao:
+          armaEditando.ano_fabricacao ?? '',
+
+        proprietario_policial_id:
+          armaEditando.proprietario_policial_id || '',
+
+        proprietario_nome:
+          armaEditando.proprietario_nome || '',
+
+        proprietario_re:
+          armaEditando.proprietario_re || '',
+
+        situacao_documental:
+          armaEditando.situacao_documental || ''
       })
 
       setArmaSalva(armaEditando)
@@ -58,48 +137,132 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
   function handleChange(e) {
     const { name, value } = e.target
 
+    if (name === 'propriedade') {
+      const propriedade =
+        String(value || 'PMESP').toUpperCase()
+
+      setForm((prev) => {
+        if (propriedade === 'PMESP') {
+          return {
+            ...prev,
+            propriedade,
+
+            numero_sigma: '',
+            numero_registro: '',
+            validade_registro: '',
+            comprimento_cano: '',
+            capacidade: '',
+            pais_fabricacao: '',
+            ano_fabricacao: '',
+            proprietario_policial_id: '',
+            proprietario_nome: '',
+            proprietario_re: '',
+            situacao_documental: ''
+          }
+        }
+
+        return {
+          ...prev,
+          propriedade
+        }
+      })
+
+      return
+    }
+
+    const camposSemMaiusculo = [
+      'validade_registro',
+      'capacidade',
+      'ano_fabricacao',
+      'proprietario_policial_id'
+    ]
+
     setForm((prev) => ({
       ...prev,
-      [name]: value.toUpperCase()
+
+      [name]: camposSemMaiusculo.includes(name)
+        ? value
+        : value.toUpperCase()
     }))
   }
 
   async function handleSalvarDados(e) {
     e?.preventDefault()
+
     setSaving(true)
     setErro('')
 
     try {
       let data
 
+      const payload = {
+        ...form,
+
+        capacidade:
+          form.capacidade === ''
+            ? null
+            : Number(form.capacidade),
+
+        ano_fabricacao:
+          form.ano_fabricacao === ''
+            ? null
+            : Number(form.ano_fabricacao),
+
+        proprietario_policial_id:
+          form.proprietario_policial_id || null,
+
+        validade_registro:
+          form.validade_registro || null
+      }
+
       if (isEditing || armaSalva?.id) {
-        data = await atualizarArma(armaAtual.id, form, user)
+        data = await atualizarArma(
+          armaAtual.id,
+          payload,
+          user
+        )
 
         await registerAudit({
-  user,
-  action: 'ATUALIZAR_ARMA',
-  tableName: 'sigmo_armas',
-  recordId: armaAtual.id,
-  description: `Atualizou arma ${form.patrimonio || form.numero_serie}`
-})
+          user,
+          action: 'ATUALIZAR_ARMA',
+          tableName: 'sigmo_armas',
+          recordId: armaAtual.id,
+          description:
+            `Atualizou arma ${
+              form.patrimonio ||
+              form.numero_serie
+            }`
+        })
       } else {
-        data = await cadastrarArma(form, user)
+        data = await cadastrarArma(
+          payload,
+          user
+        )
 
         await registerAudit({
           user,
           action: 'CADASTRAR_ARMA',
           tableName: 'sigmo_armas',
           recordId: data?.id,
-          description: `Cadastrou arma ${form.patrimonio || form.numero_serie}`
+          description:
+            `Cadastrou arma ${
+              form.patrimonio ||
+              form.numero_serie
+            }`
         })
       }
 
       const salva = data || armaAtual
+
       setArmaSalva(salva)
       setEtapa('fotos')
     } catch (error) {
       console.error(error)
-      setErro(error.message || 'Erro ao salvar arma.')
+
+      setErro(
+        error.message ||
+          'Erro ao salvar arma.'
+      )
     } finally {
       setSaving(false)
     }
@@ -114,7 +277,12 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
       <form onSubmit={handleSalvarDados}>
         <div className="arma-form-header">
           <div>
-            <h2>{isEditing ? 'Editar arma' : 'Nova arma'}</h2>
+            <h2>
+              {isEditing
+                ? 'Editar arma'
+                : 'Nova arma'}
+            </h2>
+
             <p>
               {etapa === 'dados'
                 ? 'Preencha os dados principais da arma.'
@@ -123,12 +291,33 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
           </div>
 
           <div className="arma-form-steps">
-            <span className={etapa === 'dados' ? 'active' : ''}>1 Dados</span>
-            <span className={etapa === 'fotos' ? 'active' : ''}>2 Fotos</span>
+            <span
+              className={
+                etapa === 'dados'
+                  ? 'active'
+                  : ''
+              }
+            >
+              1 Dados
+            </span>
+
+            <span
+              className={
+                etapa === 'fotos'
+                  ? 'active'
+                  : ''
+              }
+            >
+              2 Fotos
+            </span>
           </div>
         </div>
 
-        {erro && <div className="arma-form-error">{erro}</div>}
+        {erro && (
+          <div className="arma-form-error">
+            {erro}
+          </div>
+        )}
 
         {etapa === 'dados' && (
           <>
@@ -152,7 +341,9 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
                 type="submit"
                 disabled={saving}
               >
-                {saving ? 'Salvando...' : 'Seguinte'}
+                {saving
+                  ? 'Salvando...'
+                  : 'Seguinte'}
               </SigmoButton>
             </div>
           </>
@@ -169,7 +360,9 @@ export default function ArmaForm({ user, armaEditando, onCancel, onSaved }) {
               <SigmoButton
                 type="button"
                 variant="secondary"
-                onClick={() => setEtapa('dados')}
+                onClick={() =>
+                  setEtapa('dados')
+                }
                 disabled={saving}
               >
                 Voltar aos dados

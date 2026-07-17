@@ -829,8 +829,13 @@ useEffect(() => {
     }
 
     if (route === 'materiais') {
-      return <Materiais user={user} />
-    }
+  return (
+    <Materiais
+      user={user}
+      onNavegar={setRoute}
+    />
+  )
+}
 
     if (route === 'armas') {
       return <Armas user={user} />

@@ -21,6 +21,12 @@ function normalizarStatus(status) {
 function normalizarArma(arma) {
   return {
     ...arma,
+    propriedade: String(
+      arma.propriedade || 'PMESP'
+    )
+      .trim()
+      .toUpperCase(),
+
     status_operacional: normalizarStatus(
       arma.status_operacional || arma.status
     )
@@ -52,6 +58,12 @@ export async function listarArmas({
   if (filtros.patrimonio?.trim()) {
     query = query.ilike('patrimonio', `%${filtros.patrimonio.trim()}%`)
   }
+if (filtros.propriedade?.trim()) {
+  query = query.eq(
+    'propriedade',
+    filtros.propriedade.trim().toUpperCase()
+  )
+}
 
   if (filtros.numero_serie?.trim()) {
     query = query.ilike('numero_serie', `%${filtros.numero_serie.trim()}%`)

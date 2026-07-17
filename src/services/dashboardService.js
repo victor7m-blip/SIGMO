@@ -146,11 +146,16 @@ async function contarPatrimonios({
     })
 
   if (status) {
-    query = query.eq(
-      'status',
-      status
-    )
-  }
+  query = query.eq(
+    'status',
+    status
+  )
+} else {
+  query = query.neq(
+    'status',
+    'INATIVO'
+  )
+}
 
   if (tipo) {
     query = query.eq(
@@ -549,21 +554,25 @@ export async function listarPatrimoniosCategoria(
     normalizarTipo(tipo)
 
   const {
-    data: patrimonios,
-    error
-  } = await supabase
-    .from(PATRIMONIOS_TABLE)
-    .select('*')
-    .eq(
-      'tipo',
-      tipoNormalizado
-    )
-    .order(
-      'created_at',
-      {
-        ascending: false
-      }
-    )
+  data: patrimonios,
+  error
+} = await supabase
+  .from(PATRIMONIOS_TABLE)
+  .select('*')
+  .eq(
+    'tipo',
+    tipoNormalizado
+  )
+  .neq(
+    'status',
+    'INATIVO'
+  )
+  .order(
+    'created_at',
+    {
+      ascending: false
+    }
+  )
 
   if (error) {
     throw error
