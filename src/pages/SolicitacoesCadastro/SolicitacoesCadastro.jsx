@@ -80,33 +80,37 @@ export default function SolicitacoesCadastro({
     )
 
   async function handleAprovar() {
-
-    if (!selecionada) {
-      return
-    }
-
-    try {
-
-      await aprovar(
-        selecionada.id
-      )
-
-      await registerAudit(
-        'SOLICITACAO_APROVADA',
-        `${obterNomeUsuario(user)} aprovou a solicitação ${selecionada.protocolo}.`,
-        user,
-        'Solicitações'
-      )
-
-      limparSelecao()
-
-    } catch (error) {
-
-      console.error(error)
-
-    }
-
+  if (!selecionada) {
+    return
   }
+
+  try {
+    await aprovar(
+      selecionada.id,
+      {
+        responsavel: {
+          re: user?.re,
+          nome:
+            user?.nome_guerra ||
+            user?.nome ||
+            user?.nome_completo ||
+            'Usuário SIGMO'
+        }
+      }
+    )
+
+    await registerAudit(
+      'SOLICITACAO_APROVADA',
+      `${obterNomeUsuario(user)} aprovou a solicitação ${selecionada.protocolo}.`,
+      user,
+      'Solicitações'
+    )
+
+    limparSelecao()
+  } catch (error) {
+    console.error(error)
+  }
+}
 
   async function handleReprovar(
     motivo
@@ -118,12 +122,20 @@ export default function SolicitacoesCadastro({
 
     try {
 
-      await reprovar(
-        selecionada.id,
-        {
-          motivo
-        }
-      )
+     await reprovar(
+  selecionada.id,
+  {
+    motivo,
+    responsavel: {
+      re: user?.re,
+      nome:
+        user?.nome_guerra ||
+        user?.nome ||
+        user?.nome_completo ||
+        'Usuário SIGMO'
+    }
+  }
+)
 
       await registerAudit(
         'SOLICITACAO_REPROVADA',
@@ -262,14 +274,14 @@ export default function SolicitacoesCadastro({
         )}
 
         <SolicitacaoTable
-          solicitacoes={solicitacoes}
-          loading={loading}
-          pagina={paginacao.pagina}
-          totalPaginas={totalPaginas}
-          total={total}
-          onPaginaChange={alterarPagina}
-          onSelecionar={selecionar}
-        />
+  solicitacoes={solicitacoes}
+  loading={loading}
+  pagina={paginacao.pagina}
+  totalPaginas={totalPaginas}
+  total={total}
+  onPagina={alterarPagina}
+  onVisualizar={selecionar}
+/>
 
       </section>
 

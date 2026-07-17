@@ -1,4 +1,11 @@
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
+
+import {
   listarSolicitacoes,
   criarSolicitacao,
   atualizarSolicitacaoPendente,
@@ -26,29 +33,45 @@ const PAGINACAO_INICIAL = {
 export default function useSolicitacoes(
   filtrosIniciais = {}
 ) {
-  const [loading, setLoading] =
-    useState(false)
+  const [
+    loading,
+    setLoading
+  ] = useState(false)
 
-  const [erro, setErro] =
-    useState('')
+  const [
+    erro,
+    setErro
+  ] = useState('')
 
-  const [sucesso, setSucesso] =
-    useState('')
+  const [
+    sucesso,
+    setSucesso
+  ] = useState('')
 
-  const [solicitacoes, setSolicitacoes] =
-    useState([])
+  const [
+    solicitacoes,
+    setSolicitacoes
+  ] = useState([])
 
-  const [selecionada, setSelecionada] =
-    useState(null)
+  const [
+    selecionada,
+    setSelecionada
+  ] = useState(null)
 
-  const [filtros, setFiltros] =
-    useState({
-      ...FILTROS_INICIAIS,
-      ...filtrosIniciais
-    })
+  const [
+    filtros,
+    setFiltros
+  ] = useState({
+    ...FILTROS_INICIAIS,
+    ...filtrosIniciais
+  })
 
-  const [paginacao, setPaginacao] =
-    useState(PAGINACAO_INICIAL)
+  const [
+    paginacao,
+    setPaginacao
+  ] = useState(
+    PAGINACAO_INICIAL
+  )
 
   const limparMensagens =
     useCallback(() => {
@@ -76,33 +99,44 @@ export default function useSolicitacoes(
             })
 
           setSolicitacoes(
-            resposta?.data || []
+            resposta?.itens || []
           )
 
-          setPaginacao((old) => ({
-            ...old,
-            total:
-              resposta?.total || 0
-          }))
+          setPaginacao(
+            (estadoAnterior) => ({
+              ...estadoAnterior,
+              total:
+                resposta?.total || 0
+            })
+          )
         } catch (error) {
-          console.error(error)
+          console.error(
+            'Erro ao carregar solicitações:',
+            error
+          )
 
           setSolicitacoes([])
 
-          setPaginacao((old) => ({
-            ...old,
-            total: 0
-          }))
+          setPaginacao(
+            (estadoAnterior) => ({
+              ...estadoAnterior,
+              total: 0
+            })
+          )
 
           setErro(
             error?.message ||
-              'Erro ao carregar solicitações.'
+            'Não foi possível carregar as solicitações.'
           )
         } finally {
           setLoading(false)
         }
       },
-      [filtros, paginacao]
+      [
+        filtros,
+        paginacao.pagina,
+        paginacao.limite
+      ]
     )
 
   useEffect(() => {
@@ -112,38 +146,60 @@ export default function useSolicitacoes(
   ])
 
   const atualizarFiltros =
-    useCallback((novos) => {
-      limparMensagens()
+    useCallback(
+      (novosFiltros) => {
+        limparMensagens()
 
-      setFiltros((old) => ({
-        ...old,
-        ...novos
-      }))
+        setFiltros(
+          (estadoAnterior) => ({
+            ...estadoAnterior,
+            ...novosFiltros
+          })
+        )
 
-      setPaginacao((old) => ({
-        ...old,
-        pagina: 1
-      }))
-    }, [limparMensagens])
+        setPaginacao(
+          (estadoAnterior) => ({
+            ...estadoAnterior,
+            pagina: 1
+          })
+        )
+      },
+      [
+        limparMensagens
+      ]
+    )
 
   const alterarPagina =
-    useCallback((pagina) => {
-      setPaginacao((old) => ({
-        ...old,
-        pagina
-      }))
-    }, [])
+    useCallback(
+      (novaPagina) => {
+        setPaginacao(
+          (estadoAnterior) => ({
+            ...estadoAnterior,
+            pagina:
+              Math.max(
+                1,
+                Number(novaPagina) || 1
+              )
+          })
+        )
+      },
+      []
+    )
 
   const selecionar =
-    useCallback((item) => {
-      setSelecionada(item)
-    }, [])
+    useCallback(
+      (item) => {
+        setSelecionada(item)
+      },
+      []
+    )
 
   const limparSelecao =
     useCallback(() => {
       setSelecionada(null)
     }, [])
-      const criar =
+
+  const criar =
     useCallback(
       async (dados) => {
         try {
@@ -167,7 +223,7 @@ export default function useSolicitacoes(
 
           setErro(
             error?.message ||
-              'Não foi possível criar a solicitação.'
+            'Não foi possível criar a solicitação.'
           )
 
           throw error
@@ -185,17 +241,17 @@ export default function useSolicitacoes(
     useCallback(
       async (
         id,
-        dados
+        dados = {}
       ) => {
         try {
           setLoading(true)
           limparMensagens()
 
           const resposta =
-            await atualizarSolicitacaoPendente(
+            await atualizarSolicitacaoPendente({
               id,
-              dados
-            )
+              ...dados
+            })
 
           setSucesso(
             'Solicitação atualizada.'
@@ -209,7 +265,7 @@ export default function useSolicitacoes(
 
           setErro(
             error?.message ||
-              'Não foi possível atualizar a solicitação.'
+            'Não foi possível atualizar a solicitação.'
           )
 
           throw error
@@ -234,10 +290,13 @@ export default function useSolicitacoes(
           limparMensagens()
 
           const resposta =
-            await aprovarSolicitacao(
-              id,
-              dados
-            )
+            await aprovarSolicitacao({
+              solicitacaoId: id,
+              responsavel:
+                dados.responsavel,
+              observacao:
+                dados.observacao || ''
+            })
 
           setSucesso(
             'Solicitação aprovada com sucesso.'
@@ -251,7 +310,7 @@ export default function useSolicitacoes(
 
           setErro(
             error?.message ||
-              'Não foi possível aprovar a solicitação.'
+            'Não foi possível aprovar a solicitação.'
           )
 
           throw error
@@ -276,10 +335,13 @@ export default function useSolicitacoes(
           limparMensagens()
 
           const resposta =
-            await reprovarSolicitacao(
-              id,
-              dados
-            )
+            await reprovarSolicitacao({
+              solicitacaoId: id,
+              responsavel:
+                dados.responsavel,
+              motivo:
+                dados.motivo || ''
+            })
 
           setSucesso(
             'Solicitação reprovada.'
@@ -293,7 +355,7 @@ export default function useSolicitacoes(
 
           setErro(
             error?.message ||
-              'Não foi possível reprovar a solicitação.'
+            'Não foi possível reprovar a solicitação.'
           )
 
           throw error
@@ -318,10 +380,15 @@ export default function useSolicitacoes(
           limparMensagens()
 
           const resposta =
-            await cancelarSolicitacao(
+            await cancelarSolicitacao({
               id,
-              dados
-            )
+              canceladoPorRe:
+                dados.canceladoPorRe,
+              canceladoPorNome:
+                dados.canceladoPorNome,
+              motivo:
+                dados.motivo || ''
+            })
 
           setSucesso(
             'Solicitação cancelada.'
@@ -335,7 +402,7 @@ export default function useSolicitacoes(
 
           setErro(
             error?.message ||
-              'Não foi possível cancelar a solicitação.'
+            'Não foi possível cancelar a solicitação.'
           )
 
           throw error
@@ -350,56 +417,42 @@ export default function useSolicitacoes(
     )
 
   const totalPaginas =
-    useMemo(() => {
-      return Math.max(
-        Math.ceil(
-          paginacao.total /
+    useMemo(
+      () =>
+        Math.max(
+          Math.ceil(
+            paginacao.total /
             paginacao.limite
+          ),
+          1
         ),
-        1
-      )
-    }, [paginacao])
-      return {
+      [
+        paginacao.total,
+        paginacao.limite
+      ]
+    )
+
+  return {
     loading,
-
     erro,
-
     sucesso,
-
     solicitacoes,
-
     selecionada,
-
     filtros,
-
     paginacao,
-
     totalPaginas,
-
     carregarSolicitacoes,
-
     atualizarFiltros,
-
     alterarPagina,
-
     selecionar,
-
     limparSelecao,
-
     criar,
-
     atualizar,
-
     aprovar,
-
     reprovar,
-
     cancelar,
-
     limparMensagens,
-
     setSolicitacoes,
-
     setSelecionada
   }
 }

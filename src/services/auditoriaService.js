@@ -1,11 +1,12 @@
 import { supabase } from './supabaseClient'
 
 const TABLE = 'auditoria'
+const POLICIAIS_TABLE = 'policiais'
 
 function obterNomeUsuario(user) {
   return (
-    user?.nome ||
     user?.nome_guerra ||
+    user?.nome ||
     user?.nome_completo ||
     user?.name ||
     user?.email ||
@@ -31,7 +32,123 @@ function normalizarTexto(valor) {
     }
   }
 
-  return String(valor)
+  const texto = String(valor).trim()
+
+  return texto || null
+}
+
+function normalizarAcao(action) {
+  return (
+    normalizarTexto(action) ||
+    'EVENTO'
+  ).toUpperCase()
+}
+
+function normalizarModulo(module) {
+  return (
+    normalizarTexto(module) ||
+    'Sistema'
+  )
+}
+
+function normalizarSeveridade(severity) {
+  return (
+    normalizarTexto(severity) ||
+    'Informativo'
+  )
+}
+
+async function obterDadosCompletosAtor(user) {
+  if (!user) {
+    return {
+      id: null,
+      nome: null,
+      re: null,
+      perfil: null
+    }
+  }
+
+  const dadosIniciais = {
+    id:
+      user?.id ||
+      null,
+
+    nome:
+      obterNomeUsuario(user),
+
+    re:
+      normalizarTexto(
+        user?.re ||
+        user?.registro_estatistico
+      ),
+
+    perfil:
+      normalizarTexto(
+        user?.perfil ||
+        user?.role
+      )
+  }
+
+  if (
+    !dadosIniciais.id ||
+    (
+      dadosIniciais.nome &&
+      dadosIniciais.re &&
+      dadosIniciais.perfil
+    )
+  ) {
+    return dadosIniciais
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(POLICIAIS_TABLE)
+    .select(`
+      id,
+      nome,
+      nome_guerra,
+      re,
+      perfil
+    `)
+    .eq(
+      'id',
+      dadosIniciais.id
+    )
+    .maybeSingle()
+
+  if (error) {
+    console.warn(
+      'Não foi possível completar os dados do ator:',
+      error
+    )
+
+    return dadosIniciais
+  }
+
+  if (!data) {
+    return dadosIniciais
+  }
+
+  return {
+    id:
+      dadosIniciais.id,
+
+    nome:
+      dadosIniciais.nome ||
+      data.nome_guerra ||
+      data.nome ||
+      null,
+
+    re:
+      dadosIniciais.re ||
+      normalizarTexto(data.re),
+
+    perfil:
+      dadosIniciais.perfil ||
+      normalizarTexto(data.perfil)
+  }
 }
 
 export async function registerAudit(
@@ -41,30 +158,39 @@ export async function registerAudit(
   module = 'Sistema',
   severity = 'Informativo'
 ) {
+  const ator =
+    await obterDadosCompletosAtor(user)
+
   const registro = {
     acao:
-      String(
-        action || 'EVENTO'
-      ).toUpperCase(),
+      normalizarAcao(action),
 
     descricao:
       normalizarTexto(description) ||
       'Evento registrado no sistema.',
 
     ator_id:
-      user?.id || null,
+      ator.id,
 
     ator_nome:
-      obterNomeUsuario(user),
+      ator.nome,
 
+    ator_re:
+      ator.re,
+
+    ator_perfil:
+      ator.perfil,
+
+    // Mantido temporariamente para
+    // compatibilidade com registros antigos.
     perfil:
-      user?.perfil || null,
+      ator.perfil,
 
     modulo:
-      module,
+      normalizarModulo(module),
 
     severidade:
-      severity
+      normalizarSeveridade(severity)
   }
 
   const {
@@ -77,6 +203,11 @@ export async function registerAudit(
     .single()
 
   if (error) {
+    console.error(
+      'Erro ao registrar auditoria:',
+      error
+    )
+
     throw error
   }
 
@@ -108,7 +239,7 @@ export async function listarUltimasAuditorias({
       1,
       Math.min(
         Number(limite) || 10,
-        50
+        500
       )
     )
 
@@ -120,6 +251,8 @@ export async function listarUltimasAuditorias({
       descricao,
       ator_id,
       ator_nome,
+      ator_re,
+      ator_perfil,
       perfil,
       modulo,
       severidade,
@@ -154,7 +287,16 @@ export async function listarUltimasAuditorias({
     throw error
   }
 
-  return data || []
+  return (
+    data || []
+  ).map((registro) => ({
+    ...registro,
+
+    ator_perfil:
+      registro.ator_perfil ||
+      registro.perfil ||
+      null
+  }))
 }
 
 export async function listarUltimasAlteracoesPoliciais(
@@ -180,6 +322,8 @@ export async function listarUltimasAlteracoesPoliciais(
       descricao,
       ator_id,
       ator_nome,
+      ator_re,
+      ator_perfil,
       perfil,
       modulo,
       severidade,
@@ -202,5 +346,14 @@ export async function listarUltimasAlteracoesPoliciais(
     throw error
   }
 
-  return data || []
+  return (
+    data || []
+  ).map((registro) => ({
+    ...registro,
+
+    ator_perfil:
+      registro.ator_perfil ||
+      registro.perfil ||
+      null
+  }))
 }

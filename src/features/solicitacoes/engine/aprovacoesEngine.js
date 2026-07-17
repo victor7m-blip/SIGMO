@@ -97,18 +97,28 @@ async function atualizarStatusSolicitacao({
 }
 
 async function executarAlteracaoCadastral(solicitacao) {
+  const policialId =
+    solicitacao?.metadados
+      ?.policial_id ||
+    null
+
   const re = normalizarRE(
     solicitacao.policial_re ||
     solicitacao.solicitante_re
   )
 
-  if (!re) {
+  if (
+    !policialId &&
+    !re
+  ) {
     throw new Error(
       'A solicitação não possui um policial vinculado.'
     )
   }
 
-  const dados = solicitacao.dados_solicitados || {}
+  const dados =
+    solicitacao.dados_solicitados ||
+    {}
 
   const camposPermitidos = [
     'nome',
@@ -127,31 +137,78 @@ async function executarAlteracaoCadastral(solicitacao) {
 
   const alteracoes = {}
 
-  camposPermitidos.forEach(campo => {
-    if (Object.prototype.hasOwnProperty.call(dados, campo)) {
-      alteracoes[campo] = dados[campo]
+  camposPermitidos.forEach(
+    (campo) => {
+      if (
+        Object.prototype
+          .hasOwnProperty
+          .call(
+            dados,
+            campo
+          )
+      ) {
+        alteracoes[campo] =
+          dados[campo]
+      }
     }
-  })
+  )
 
-  if (Object.keys(alteracoes).length === 0) {
+  if (
+    Object.keys(
+      alteracoes
+    ).length === 0
+  ) {
     throw new Error(
       'A solicitação não possui alterações cadastrais válidas.'
     )
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from(TABLE_POLICIAIS)
     .update(alteracoes)
-    .eq('re', re)
-    .select()
-    .single()
 
-  if (error) throw error
+  if (policialId) {
+    query = query.eq(
+      'id',
+      policialId
+    )
+  } else {
+    query = query.ilike(
+      're',
+      `${re}-%`
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await query
+    .select()
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (!data) {
+    throw new Error(
+      'O policial vinculado à solicitação não foi encontrado.'
+    )
+  }
 
   return {
-    tipo: TIPOS_SOLICITACAO.ALTERACAO_CADASTRAL,
-    policial: data,
-    camposAlterados: Object.keys(alteracoes),
+    tipo:
+      TIPOS_SOLICITACAO
+        .ALTERACAO_CADASTRAL,
+
+    policial:
+      data,
+
+    camposAlterados:
+      Object.keys(
+        alteracoes
+      ),
+
     alteracoes
   }
 }

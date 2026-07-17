@@ -54,7 +54,7 @@ const menuItems = [
   {
   key: 'solicitacoes-cadastrais',
   label: 'Solicitações Cadastrais',
-  icon: '✓'
+  icon: '☷'
 },
   {
     key: 'viaturas',
