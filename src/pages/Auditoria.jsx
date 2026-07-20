@@ -49,6 +49,46 @@ function formatarTexto(valor) {
     )
 }
 
+function obterDadosAuditoria(registro) {
+  if (!registro) return {}
+
+  const possiveisJson = [
+    registro.acao,
+    registro.action,
+    registro.descricao,
+    registro.description
+  ]
+
+  for (const valor of possiveisJson) {
+    if (typeof valor !== 'string') continue
+
+    const texto = valor.trim()
+
+    if (
+      !texto.startsWith('{') &&
+      !texto.startsWith('[')
+    ) {
+      continue
+    }
+
+    try {
+      const dados = JSON.parse(texto)
+
+      if (
+        dados &&
+        typeof dados === 'object' &&
+        !Array.isArray(dados)
+      ) {
+        return dados
+      }
+    } catch {
+      // Mantém os campos originais do registro.
+    }
+  }
+
+  return {}
+}
+
 function formatarAcao(acao) {
   const acoesConhecidas = {
     LOGIN: 'Login',
@@ -73,47 +113,16 @@ function formatarAcao(acao) {
 }
 
 function obterDescricaoResumida(registro) {
-  const descricao = registro?.descricao
+  const dados = obterDadosAuditoria(registro)
+
+  const descricao =
+    dados.description ||
+    dados.descricao ||
+    registro?.description ||
+    registro?.descricao
 
   if (!descricao) {
     return 'Registro sem descrição.'
-  }
-
-  if (typeof descricao === 'string') {
-    const texto = descricao.trim()
-
-    if (
-      texto.startsWith('{') ||
-      texto.startsWith('[')
-    ) {
-      try {
-        const objeto = JSON.parse(texto)
-
-        return (
-          objeto.descricao ||
-          objeto.mensagem ||
-          objeto.message ||
-          objeto.acao ||
-          objeto.ACTION ||
-          'Informações técnicas registradas.'
-        )
-      } catch {
-        return texto
-      }
-    }
-
-    return texto
-  }
-
-  if (typeof descricao === 'object') {
-    return (
-      descricao.descricao ||
-      descricao.mensagem ||
-      descricao.message ||
-      descricao.acao ||
-      descricao.ACTION ||
-      'Informações técnicas registradas.'
-    )
   }
 
   return String(descricao)
@@ -156,6 +165,18 @@ function obterClasseSeveridade(severidade) {
   }
 
   return 'auditoria-badge--informativo'
+}
+
+function obterAcaoRegistro(registro) {
+  const dados = obterDadosAuditoria(registro)
+
+  return (
+    dados.action ||
+    dados.acao ||
+    registro?.action ||
+    registro?.acao ||
+    ''
+  )
 }
 
 function obterClasseAcao(acao) {
@@ -326,7 +347,9 @@ export default function Auditoria() {
     return [
       ...new Set(
         registros
-          .map((registro) => registro.acao)
+          .map((registro) =>
+            obterAcaoRegistro(registro)
+          )
           .filter(Boolean)
       )
     ].sort()
@@ -378,15 +401,18 @@ export default function Auditoria() {
         registro.perfil ||
         ''
 
-      const descricao =
+      const descricaoResumida =
         obterDescricaoResumida(registro)
+
+      const acaoRegistro =
+        obterAcaoRegistro(registro)
 
       const correspondePesquisa =
         !busca ||
         [
-          registro.acao,
-          formatarAcao(registro.acao),
-          descricao,
+          acaoRegistro,
+          formatarAcao(acaoRegistro),
+          descricaoResumida,
           registro.ator_nome,
           registro.ator_re,
           perfil,
@@ -398,7 +424,7 @@ export default function Auditoria() {
 
       const correspondeAcao =
         !filtroAcao ||
-        registro.acao === filtroAcao
+        acaoRegistro === filtroAcao
 
       const correspondeModulo =
         !filtroModulo ||
@@ -524,21 +550,26 @@ export default function Auditoria() {
     ]
 
     const linhas = registrosFiltrados.map(
-      (registro) => [
-        formatarDataHora(
-          registro.data_hora ||
-          registro.created_at
-        ),
-        formatarAcao(registro.acao),
-        registro.acao,
-        obterDescricaoResumida(registro),
-        registro.ator_nome,
-        registro.ator_re,
-        registro.ator_perfil ||
-          registro.perfil,
-        registro.modulo,
-        registro.severidade
-      ]
+      (registro) => {
+        const acaoRegistro =
+          obterAcaoRegistro(registro)
+
+        return [
+          formatarDataHora(
+            registro.data_hora ||
+            registro.created_at
+          ),
+          formatarAcao(acaoRegistro),
+          acaoRegistro,
+          obterDescricaoResumida(registro),
+          registro.ator_nome,
+          registro.ator_re,
+          registro.ator_perfil ||
+            registro.perfil,
+          registro.modulo,
+          registro.severidade
+        ]
+      }
     )
 
     const conteudo = [
@@ -816,16 +847,17 @@ export default function Auditoria() {
         )}
 
       {!erro &&
-        !loading &&
-        registrosFiltrados.length > 0 && (
-          <div className="auditoria-table-card">
+  !loading &&
+  registrosFiltrados.length > 0 && (
+    <div className="auditoria-table-card">
+      <SigmoHorizontalScroll
+        targetRef={scrollTabelaRef}
+      />
 
-  
-  <div
-    className="auditoria-table-wrapper"
-    ref={scrollTabelaRef}
-    onScroll={sincronizarScrollTabela}
-  >
+      <div
+        className="auditoria-table-wrapper"
+        ref={scrollTabelaRef}
+      >
     <table className="auditoria-table">
       <thead>
         <tr>
@@ -843,13 +875,16 @@ export default function Auditoria() {
 
             <tbody>
         {registrosFiltrados.map(
-          (registro, index) => {
-            const descricaoResumida =
-              obterDescricaoResumida(registro)
+  (registro, index) => {
+    const descricaoResumida =
+      obterDescricaoResumida(registro)
 
-            const dataHora =
-              registro.data_hora ||
-              registro.created_at
+    const acaoRegistro =
+      obterAcaoRegistro(registro)
+
+    const dataHora =
+      registro.data_hora ||
+      registro.created_at
 
             return (
               <tr
@@ -868,11 +903,11 @@ export default function Auditoria() {
                 <td data-label="Ação">
                   <span
                     className={`auditoria-acao ${obterClasseAcao(
-                      registro.acao
+                      acaoRegistro
                     )}`}
-                    title={registro.acao || ''}
+                    title={acaoRegistro || ''}
                   >
-                    {formatarAcao(registro.acao)}
+                    {formatarAcao(acaoRegistro)}
                   </span>
                 </td>
 
@@ -1016,7 +1051,9 @@ export default function Auditoria() {
 
             <p>
               {formatarAcao(
-                registroSelecionado.acao
+                obterAcaoRegistro(
+                  registroSelecionado
+                )
               )}
             </p>
           </div>
@@ -1091,11 +1128,6 @@ export default function Auditoria() {
     </div>
   </div>
 )}
-
-<SigmoHorizontalScroll
-  targetRef={scrollTabelaRef}
-/>
-
     </section>
   )
 }

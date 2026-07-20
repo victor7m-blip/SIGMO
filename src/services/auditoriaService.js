@@ -22,9 +22,7 @@ function normalizarTexto(valor) {
     return null
   }
 
-  if (
-    typeof valor === 'object'
-  ) {
+  if (typeof valor === 'object') {
     try {
       return JSON.stringify(valor)
     } catch {
@@ -41,7 +39,10 @@ function normalizarAcao(action) {
   return (
     normalizarTexto(action) ||
     'EVENTO'
-  ).toUpperCase()
+  )
+    .trim()
+    .replace(/\s+/g, '_')
+    .toUpperCase()
 }
 
 function normalizarModulo(module) {
@@ -56,6 +57,58 @@ function normalizarSeveridade(severity) {
     normalizarTexto(severity) ||
     'Informativo'
   )
+}
+
+function normalizarParametrosAuditoria(
+  action,
+  description,
+  user,
+  module,
+  severity
+) {
+  if (
+    action &&
+    typeof action === 'object' &&
+    !Array.isArray(action)
+  ) {
+    return {
+      action:
+        action.action ||
+        action.acao ||
+        action.tipo ||
+        'EVENTO',
+
+      description:
+        action.description ||
+        action.descricao ||
+        action.mensagem ||
+        'Evento registrado no sistema.',
+
+      user:
+        action.user ||
+        action.usuario ||
+        action.ator ||
+        null,
+
+      module:
+        action.module ||
+        action.modulo ||
+        'Sistema',
+
+      severity:
+        action.severity ||
+        action.severidade ||
+        'Informativo'
+    }
+  }
+
+  return {
+    action,
+    description,
+    user,
+    module,
+    severity
+  }
 }
 
 async function obterDadosCompletosAtor(user) {
@@ -158,15 +211,30 @@ export async function registerAudit(
   module = 'Sistema',
   severity = 'Informativo'
 ) {
+  const parametros =
+    normalizarParametrosAuditoria(
+      action,
+      description,
+      user,
+      module,
+      severity
+    )
+
   const ator =
-    await obterDadosCompletosAtor(user)
+    await obterDadosCompletosAtor(
+      parametros.user
+    )
 
   const registro = {
     acao:
-      normalizarAcao(action),
+      normalizarAcao(
+        parametros.action
+      ),
 
     descricao:
-      normalizarTexto(description) ||
+      normalizarTexto(
+        parametros.description
+      ) ||
       'Evento registrado no sistema.',
 
     ator_id:
@@ -187,10 +255,14 @@ export async function registerAudit(
       ator.perfil,
 
     modulo:
-      normalizarModulo(module),
+      normalizarModulo(
+        parametros.module
+      ),
 
     severidade:
-      normalizarSeveridade(severity)
+      normalizarSeveridade(
+        parametros.severity
+      )
   }
 
   const {
@@ -221,13 +293,13 @@ export async function registerPatrimonialAudit({
   modulo = 'Patrimônio',
   severidade = 'Informativo'
 }) {
-  return registerAudit(
-    tipo,
-    descricao,
-    usuario,
-    modulo,
-    severidade
-  )
+  return registerAudit({
+    action: tipo,
+    description: descricao,
+    user: usuario,
+    module: modulo,
+    severity: severidade
+  })
 }
 
 export async function listarUltimasAuditorias({
