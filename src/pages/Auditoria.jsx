@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 
@@ -9,6 +10,8 @@ import {
 } from '../services/auditoriaService'
 
 import './auditoria.css'
+
+import SigmoHorizontalScroll from '../components/SigmoHorizontalScroll/SigmoHorizontalScroll'
 
 function formatarDataHora(dataHora) {
   if (!dataHora) return '—'
@@ -33,6 +36,99 @@ function normalizarBusca(valor) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+function formatarTexto(valor) {
+  if (!valor) return '—'
+
+  return String(valor)
+    .trim()
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (letra) =>
+      letra.toUpperCase()
+    )
+}
+
+function formatarAcao(acao) {
+  const acoesConhecidas = {
+    LOGIN: 'Login',
+    LOGOUT: 'Logout',
+    CADASTRAR_POLICIAL: 'Cadastro de policial',
+    ATUALIZAR_POLICIAL: 'Atualização de policial',
+    EXCLUIR_POLICIAL: 'Exclusão de policial',
+    CADASTRAR_ARMA: 'Cadastro de arma',
+    ATUALIZAR_ARMA: 'Atualização de arma',
+    EXCLUIR_ARMA: 'Exclusão de arma',
+    SOLICITACAO_CRIADA: 'Solicitação criada',
+    SOLICITACAO_APROVADA: 'Solicitação aprovada',
+    SOLICITACAO_REPROVADA: 'Solicitação reprovada',
+    TENTATIVA_CADASTRO_COMANDANTE:
+      'Tentativa de cadastro de Comandante'
+  }
+
+  return (
+    acoesConhecidas[acao] ||
+    formatarTexto(acao)
+  )
+}
+
+function obterDescricaoResumida(registro) {
+  const descricao = registro?.descricao
+
+  if (!descricao) {
+    return 'Registro sem descrição.'
+  }
+
+  if (typeof descricao === 'string') {
+    const texto = descricao.trim()
+
+    if (
+      texto.startsWith('{') ||
+      texto.startsWith('[')
+    ) {
+      try {
+        const objeto = JSON.parse(texto)
+
+        return (
+          objeto.descricao ||
+          objeto.mensagem ||
+          objeto.message ||
+          objeto.acao ||
+          objeto.ACTION ||
+          'Informações técnicas registradas.'
+        )
+      } catch {
+        return texto
+      }
+    }
+
+    return texto
+  }
+
+  if (typeof descricao === 'object') {
+    return (
+      descricao.descricao ||
+      descricao.mensagem ||
+      descricao.message ||
+      descricao.acao ||
+      descricao.ACTION ||
+      'Informações técnicas registradas.'
+    )
+  }
+
+  return String(descricao)
+}
+
+function obterDetalhesTecnicos(registro) {
+  if (!registro) return '—'
+
+  try {
+    return JSON.stringify(registro, null, 2)
+  } catch {
+    return String(registro)
+  }
+}
+
 function obterClasseSeveridade(severidade) {
   const valor = normalizarBusca(severidade)
 
@@ -46,7 +142,8 @@ function obterClasseSeveridade(severidade) {
   if (
     valor.includes('alert') ||
     valor.includes('atenc') ||
-    valor.includes('medio')
+    valor.includes('medio') ||
+    valor.includes('importante')
   ) {
     return 'auditoria-badge--alerta'
   }
@@ -67,7 +164,8 @@ function obterClasseAcao(acao) {
   if (
     valor.includes('reprov') ||
     valor.includes('exclu') ||
-    valor.includes('erro')
+    valor.includes('erro') ||
+    valor.includes('tentativa')
   ) {
     return 'auditoria-acao--negativa'
   }
@@ -75,7 +173,8 @@ function obterClasseAcao(acao) {
   if (
     valor.includes('aprov') ||
     valor.includes('criad') ||
-    valor.includes('login')
+    valor.includes('login') ||
+    valor.includes('cadastr')
   ) {
     return 'auditoria-acao--positiva'
   }
@@ -83,7 +182,8 @@ function obterClasseAcao(acao) {
   if (
     valor.includes('logout') ||
     valor.includes('alter') ||
-    valor.includes('solicit')
+    valor.includes('solicit') ||
+    valor.includes('atualiz')
   ) {
     return 'auditoria-acao--atencao'
   }
@@ -99,8 +199,16 @@ export default function Auditoria() {
   const [filtroAcao, setFiltroAcao] = useState('')
   const [filtroModulo, setFiltroModulo] = useState('')
   const [filtroPerfil, setFiltroPerfil] = useState('')
-  const [filtroSeveridade, setFiltroSeveridade] = useState('')
-  const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
+  const [filtroSeveridade, setFiltroSeveridade] =
+    useState('')
+  const [ultimaAtualizacao, setUltimaAtualizacao] =
+    useState(null)
+  const [registroSelecionado, setRegistroSelecionado] =
+    useState(null)
+
+  const scrollSuperiorRef = useRef(null)
+  const scrollTabelaRef = useRef(null)
+  const sincronizandoScrollRef = useRef(false)
 
   async function carregarAuditoria() {
     try {
@@ -111,12 +219,23 @@ export default function Auditoria() {
         limite: 50
       })
 
-      const ordenados = [...(dados || [])].sort((a, b) => {
-        const dataA = new Date(a.data_hora || 0).getTime()
-        const dataB = new Date(b.data_hora || 0).getTime()
+      const ordenados = [...(dados || [])].sort(
+        (a, b) => {
+          const dataA = new Date(
+            a.data_hora ||
+            a.created_at ||
+            0
+          ).getTime()
 
-        return dataB - dataA
-      })
+          const dataB = new Date(
+            b.data_hora ||
+            b.created_at ||
+            0
+          ).getTime()
+
+          return dataB - dataA
+        }
+      )
 
       setRegistros(ordenados)
       setUltimaAtualizacao(new Date())
@@ -135,8 +254,72 @@ export default function Auditoria() {
     }
   }
 
+  function sincronizarScrollSuperior(event) {
+    if (
+      sincronizandoScrollRef.current ||
+      !scrollTabelaRef.current
+    ) {
+      return
+    }
+
+    sincronizandoScrollRef.current = true
+
+    scrollTabelaRef.current.scrollLeft =
+      event.currentTarget.scrollLeft
+
+    requestAnimationFrame(() => {
+      sincronizandoScrollRef.current = false
+    })
+  }
+
+  function sincronizarScrollTabela(event) {
+    if (
+      sincronizandoScrollRef.current ||
+      !scrollSuperiorRef.current
+    ) {
+      return
+    }
+
+    sincronizandoScrollRef.current = true
+
+    scrollSuperiorRef.current.scrollLeft =
+      event.currentTarget.scrollLeft
+
+    requestAnimationFrame(() => {
+      sincronizandoScrollRef.current = false
+    })
+  }
+
+  function abrirDetalhes(registro) {
+    setRegistroSelecionado(registro)
+  }
+
+  function fecharDetalhes() {
+    setRegistroSelecionado(null)
+  }
+
   useEffect(() => {
     carregarAuditoria()
+  }, [])
+
+  useEffect(() => {
+    function fecharComEscape(event) {
+      if (event.key === 'Escape') {
+        fecharDetalhes()
+      }
+    }
+
+    window.addEventListener(
+      'keydown',
+      fecharComEscape
+    )
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        fecharComEscape
+      )
+    }
   }, [])
 
   const acoes = useMemo(() => {
@@ -177,7 +360,10 @@ export default function Auditoria() {
     return [
       ...new Set(
         registros
-          .map((registro) => registro.severidade)
+          .map(
+            (registro) =>
+              registro.severidade
+          )
           .filter(Boolean)
       )
     ].sort()
@@ -192,11 +378,15 @@ export default function Auditoria() {
         registro.perfil ||
         ''
 
+      const descricao =
+        obterDescricaoResumida(registro)
+
       const correspondePesquisa =
         !busca ||
         [
           registro.acao,
-          registro.descricao,
+          formatarAcao(registro.acao),
+          descricao,
           registro.ator_nome,
           registro.ator_re,
           perfil,
@@ -220,7 +410,8 @@ export default function Auditoria() {
 
       const correspondeSeveridade =
         !filtroSeveridade ||
-        registro.severidade === filtroSeveridade
+        registro.severidade ===
+          filtroSeveridade
 
       return (
         correspondePesquisa &&
@@ -239,7 +430,17 @@ export default function Auditoria() {
     filtroSeveridade
   ])
 
-  const resumo = useMemo(() => {
+
+
+
+
+
+
+
+
+
+
+    const resumo = useMemo(() => {
     const agora = new Date()
 
     const inicioHoje = new Date(
@@ -251,7 +452,9 @@ export default function Auditoria() {
     const registrosHoje = registros.filter(
       (registro) => {
         const horario = new Date(
-          registro.data_hora
+          registro.data_hora ||
+          registro.created_at ||
+          0
         ).getTime()
 
         return (
@@ -279,7 +482,8 @@ export default function Auditoria() {
         .map(
           (registro) =>
             registro.ator_id ||
-            registro.ator_nome
+            registro.ator_nome ||
+            registro.usuario_id
         )
         .filter(Boolean)
     ).size
@@ -310,6 +514,7 @@ export default function Auditoria() {
     const cabecalho = [
       'Data e hora',
       'Ação',
+      'Código da ação',
       'Descrição',
       'Usuário',
       'RE',
@@ -320,12 +525,17 @@ export default function Auditoria() {
 
     const linhas = registrosFiltrados.map(
       (registro) => [
-        formatarDataHora(registro.data_hora),
+        formatarDataHora(
+          registro.data_hora ||
+          registro.created_at
+        ),
+        formatarAcao(registro.acao),
         registro.acao,
-        registro.descricao,
+        obterDescricaoResumida(registro),
         registro.ator_nome,
         registro.ator_re,
-        registro.ator_perfil || registro.perfil,
+        registro.ator_perfil ||
+          registro.perfil,
         registro.modulo,
         registro.severidade
       ]
@@ -349,6 +559,7 @@ export default function Auditoria() {
 
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
+
     const dataArquivo = new Date()
       .toISOString()
       .slice(0, 10)
@@ -360,6 +571,7 @@ export default function Auditoria() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+
     URL.revokeObjectURL(url)
   }
 
@@ -391,6 +603,11 @@ export default function Auditoria() {
             : 'Atualizar registros'}
         </button>
       </header>
+
+
+
+
+
 
       <div className="auditoria-resumo">
         <article className="auditoria-resumo-card">
@@ -456,7 +673,7 @@ export default function Auditoria() {
                 key={acao}
                 value={acao}
               >
-                {acao}
+                {formatarAcao(acao)}
               </option>
             ))}
           </select>
@@ -602,122 +819,283 @@ export default function Auditoria() {
         !loading &&
         registrosFiltrados.length > 0 && (
           <div className="auditoria-table-card">
-            <div className="auditoria-table-wrapper">
-              <table className="auditoria-table">
-                <thead>
-                  <tr>
-                    <th>Data/Hora</th>
-                    <th>Ação</th>
-                    <th>Descrição</th>
-                    <th>Usuário</th>
-                    <th>RE</th>
-                    <th>Perfil</th>
-                    <th>Módulo</th>
-                    <th>Severidade</th>
-                  </tr>
-                </thead>
 
-                <tbody>
-                  {registrosFiltrados.map(
-                    (registro, index) => (
-                      <tr
-                        key={
-                          registro.id ||
-                          `${registro.data_hora}-${index}`
-                        }
-                      >
-                        <td
-                          data-label="Data/Hora"
-                          className="auditoria-data"
-                        >
-                          {formatarDataHora(
-                            registro.data_hora
-                          )}
-                        </td>
+  
+  <div
+    className="auditoria-table-wrapper"
+    ref={scrollTabelaRef}
+    onScroll={sincronizarScrollTabela}
+  >
+    <table className="auditoria-table">
+      <thead>
+        <tr>
+          <th>Data/Hora</th>
+          <th>Ação</th>
+          <th>Descrição</th>
+          <th>Usuário</th>
+          <th>RE</th>
+          <th>Perfil</th>
+          <th>Módulo</th>
+          <th>Severidade</th>
+          <th>Detalhes</th>
+        </tr>
+      </thead>
 
-                        <td data-label="Ação">
-                          <span
-                            className={`auditoria-acao ${obterClasseAcao(
-                              registro.acao
-                            )}`}
-                          >
-                            {registro.acao || '—'}
-                          </span>
-                        </td>
+            <tbody>
+        {registrosFiltrados.map(
+          (registro, index) => {
+            const descricaoResumida =
+              obterDescricaoResumida(registro)
 
-                        <td
-                          data-label="Descrição"
-                          className="auditoria-descricao"
-                        >
-                          {registro.descricao || '—'}
-                        </td>
+            const dataHora =
+              registro.data_hora ||
+              registro.created_at
 
-                        <td data-label="Usuário">
-                          <span className="auditoria-ator">
-                            {registro.ator_nome || '—'}
-                          </span>
-                        </td>
+            return (
+              <tr
+                key={
+                  registro.id ||
+                  `${dataHora}-${index}`
+                }
+              >
+                <td
+                  data-label="Data/Hora"
+                  className="auditoria-data"
+                >
+                  {formatarDataHora(dataHora)}
+                </td>
 
-                        <td
-                          data-label="RE"
-                          className="auditoria-re"
-                        >
-                          {registro.ator_re || '—'}
-                        </td>
+                <td data-label="Ação">
+                  <span
+                    className={`auditoria-acao ${obterClasseAcao(
+                      registro.acao
+                    )}`}
+                    title={registro.acao || ''}
+                  >
+                    {formatarAcao(registro.acao)}
+                  </span>
+                </td>
 
-                        <td data-label="Perfil">
-                          {registro.ator_perfil ||
-                            registro.perfil ||
-                            '—'}
-                        </td>
+                <td
+                  data-label="Descrição"
+                  className="auditoria-descricao"
+                  title={descricaoResumida}
+                >
+                  <span className="auditoria-descricao-texto">
+                    {descricaoResumida}
+                  </span>
+                </td>
 
-                        <td data-label="Módulo">
-                          {registro.modulo || '—'}
-                        </td>
+                <td data-label="Usuário">
+                  <span className="auditoria-ator">
+                    {registro.ator_nome || '—'}
+                  </span>
+                </td>
 
-                        <td data-label="Severidade">
-                          <span
-                            className={`auditoria-badge ${obterClasseSeveridade(
-                              registro.severidade
-                            )}`}
-                          >
-                            {registro.severidade ||
-                              'Informativo'}
-                          </span>
-                        </td>
-                      </tr>
-                    )
+                <td
+                  data-label="RE"
+                  className="auditoria-re"
+                >
+                  {registro.ator_re || '—'}
+                </td>
+
+                <td data-label="Perfil">
+                  {formatarTexto(
+                    registro.ator_perfil ||
+                    registro.perfil
                   )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                </td>
 
-      <div className="auditoria-resultados">
-        <span>
-          Última atualização:{' '}
-          <strong>
-            {ultimaAtualizacao
-              ? formatarDataHora(
-                  ultimaAtualizacao
-                )
-              : '—'}
-          </strong>
-        </span>
+                <td data-label="Módulo">
+                  {formatarTexto(
+                    registro.modulo
+                  )}
+                </td>
+
+                <td data-label="Severidade">
+                  <span
+                    className={`auditoria-badge ${obterClasseSeveridade(
+                      registro.severidade
+                    )}`}
+                  >
+                    {formatarTexto(
+                      registro.severidade ||
+                      'Informativo'
+                    )}
+                  </span>
+                </td>
+
+                <td
+                  data-label="Detalhes"
+                  className="auditoria-detalhes-coluna"
+                >
+                  <button
+                    type="button"
+                    className="auditoria-button auditoria-button--details"
+                    onClick={() =>
+                      abrirDetalhes(registro)
+                    }
+                  >
+                    Ver
+                  </button>
+                </td>
+              </tr>
+            )
+          }
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
+)}
+
+<div className="auditoria-resultados">
+  <span>
+    Última atualização:{' '}
+    <strong>
+      {ultimaAtualizacao
+        ? formatarDataHora(
+            ultimaAtualizacao
+          )
+        : '—'}
+    </strong>
+  </span>
+
+  <button
+    type="button"
+    className="auditoria-button auditoria-button--secondary"
+    onClick={exportarCsv}
+    disabled={
+      loading ||
+      registrosFiltrados.length === 0
+    }
+  >
+    Exportar CSV
+  </button>
+</div>
+
+{registroSelecionado && (
+  <div
+    className="auditoria-modal-backdrop"
+    onClick={fecharDetalhes}
+  >
+    <div
+      className="auditoria-modal"
+      onClick={(event) =>
+        event.stopPropagation()
+      }
+    >
+      <header className="auditoria-modal-header">
+        <h2>Detalhes da Auditoria</h2>
 
         <button
           type="button"
-          className="auditoria-button auditoria-button--secondary"
-          onClick={exportarCsv}
-          disabled={
-            loading ||
-            registrosFiltrados.length === 0
-          }
+          className="auditoria-modal-close"
+          onClick={fecharDetalhes}
+          aria-label="Fechar detalhes"
         >
-          Exportar CSV
+          ✕
         </button>
+      </header>
+
+      <div className="auditoria-modal-body">
+        <div className="auditoria-modal-grid">
+          <div>
+            <strong>Data/Hora</strong>
+
+            <p>
+              {formatarDataHora(
+                registroSelecionado.data_hora ||
+                registroSelecionado.created_at
+              )}
+            </p>
+          </div>
+
+          <div>
+            <strong>Ação</strong>
+
+            <p>
+              {formatarAcao(
+                registroSelecionado.acao
+              )}
+            </p>
+          </div>
+
+          <div>
+            <strong>Usuário</strong>
+
+            <p>
+              {registroSelecionado.ator_nome ||
+                '—'}
+            </p>
+          </div>
+
+          <div>
+            <strong>RE</strong>
+
+            <p>
+              {registroSelecionado.ator_re ||
+                '—'}
+            </p>
+          </div>
+
+          <div>
+            <strong>Perfil</strong>
+
+            <p>
+              {formatarTexto(
+                registroSelecionado.ator_perfil ||
+                registroSelecionado.perfil
+              )}
+            </p>
+          </div>
+
+          <div>
+            <strong>Módulo</strong>
+
+            <p>
+              {formatarTexto(
+                registroSelecionado.modulo
+              )}
+            </p>
+          </div>
+
+          <div>
+            <strong>Severidade</strong>
+
+            <p>
+              {formatarTexto(
+                registroSelecionado.severidade ||
+                'Informativo'
+              )}
+            </p>
+          </div>
+        </div>
+
+        <h3>Descrição</h3>
+
+        <p>
+          {obterDescricaoResumida(
+            registroSelecionado
+          )}
+        </p>
+
+        <h3>Registro técnico</h3>
+
+               <pre className="auditoria-json">
+          {obterDetalhesTecnicos(
+            registroSelecionado
+          )}
+        </pre>
       </div>
+    </div>
+  </div>
+)}
+
+<SigmoHorizontalScroll
+  targetRef={scrollTabelaRef}
+/>
+
     </section>
   )
 }

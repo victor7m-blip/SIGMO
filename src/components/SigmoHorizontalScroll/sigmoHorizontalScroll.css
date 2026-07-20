@@ -1,0 +1,33 @@
+.sigmo-horizontal-scroll {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  z-index: 999;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  height: 18px;
+
+  background: rgba(245,247,250,.96);
+
+  border-top: 1px solid #d8e0ea;
+
+  backdrop-filter: blur(5px);
+
+  box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+}
+
+.sigmo-horizontal-scroll > div {
+  height: 1px;
+}
+
+@media (max-width:760px){
+
+  .sigmo-horizontal-scroll{
+    display:none;
+  }
+
+}

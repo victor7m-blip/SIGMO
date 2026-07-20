@@ -1129,9 +1129,10 @@ export default function PolicialForm({
 
         policialAtualizado =
           await atualizarPolicial(
-            policialEditando.id,
-            payload
-          )
+  policialEditando.id,
+  payload,
+  user
+)
 
         if (
           alteracoes.length >
@@ -1185,9 +1186,10 @@ export default function PolicialForm({
       }
 
       const novoPolicial =
-        await cadastrarPolicial(
-          payload
-        )
+       await cadastrarPolicial(
+  payload,
+  user
+)
 
       await registrarAuditoriaSegura({
         acao:
