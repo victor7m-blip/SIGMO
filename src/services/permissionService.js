@@ -18,6 +18,7 @@ export const ROTAS = {
   ARMAS: 'armas',
   TPD: 'tpd',
   HT: 'ht',
+  TASERS: 'tasers',
   MUNICOES: 'municoes',
   LOCAIS: 'locais',
   VIATURAS: 'viaturas',
@@ -25,10 +26,11 @@ export const ROTAS = {
   ALERTAS: 'alertas',
   AUDITORIA: 'auditoria',
   DIAGNOSTICO: 'diagnostico',
-  SOLICITACOES_CADASTRAIS:'solicitacoes-cadastrais',
-  EXPORTACAO_BACKUP: 'exportacao-backup',
+  SOLICITACOES_CADASTRAIS:
+    'solicitacoes-cadastrais',
+  EXPORTACAO_BACKUP:
+    'exportacao-backup',
   CONFIGURACOES: 'configuracoes'
-  
 }
 
 function removerAcentos(valor) {
@@ -220,6 +222,7 @@ const ROTAS_AUXILIAR = [
   ROTAS.ARMAS,
   ROTAS.TPD,
   ROTAS.HT,
+  ROTAS.TASERS,
   ROTAS.MUNICOES,
   ROTAS.LOCAIS,
   ROTAS.VIATURAS,

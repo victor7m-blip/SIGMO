@@ -38,22 +38,23 @@ const categorias = [
   status: 'disponivel',
   rota: 'tpd'
 },
-  {
-    id: 'ain',
-    icone: '⚡',
-    titulo: 'AIN',
-    descricao:
-      'Gerencie dispositivos de incapacitação neuromuscular, cartuchos e acessórios.',
-    status: 'em-breve',
-    destaque: 'roxo'
-  },
+ {
+  id: 'tasers',
+  rota: 'tasers',
+  icone: '⚡',
+  titulo: 'Taser',
+  descricao:
+    'Gerencie dispositivos de incapacitação neuromuscular, cartuchos e acessórios.',
+  status: 'disponivel',
+  destaque: 'roxo'
+},
   {
     id: 'cop',
     icone: '📹',
     titulo: 'COP (Câmera Corporal)',
     descricao:
       'Controle câmeras operacionais portáteis, bases, baterias e informações de uso.',
-    status: 'em-breve',
+    status: 'ativo',
     destaque: 'ciano'
   },
   {

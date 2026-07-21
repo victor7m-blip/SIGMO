@@ -22,6 +22,7 @@ import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
 import TPD from './TPD/TPD'
 import Policiais from './Policiais'
+import Taser from './Taser/Taser'
 import Municoes from './Municoes/Municoes'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
@@ -848,6 +849,11 @@ useEffect(() => {
 
 if (route === 'ht') {
   return <HT user={user} />
+}
+
+
+if (route === 'tasers') {
+  return <Taser user={user} />
 }
 
     if (route === 'policiais') {

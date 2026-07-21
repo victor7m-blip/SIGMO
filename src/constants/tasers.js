@@ -1,0 +1,51 @@
+export const TIPOS_TASER = [
+  'TASER 7',
+  'TASER X2',
+  'TASER X26P',
+  'OUTRO'
+]
+
+export const STATUS_TASER = [
+  'RESERVA',
+  'CAUTELADO',
+  'EM_SERVICO',
+  'MANUTENCAO',
+  'RECOLHIDO',
+  'BAIXADO'
+]
+
+export const CONDICOES_TASER = [
+  'SEM_AVARIAS',
+  'COM_AVARIAS',
+  'NAO_VERIFICADO'
+]
+
+export const TIPOS_MOVIMENTACAO_TASER = [
+  'RETIRADA_SERVICO',
+  'DEVOLUCAO_SERVICO',
+  'ENVIO_MANUTENCAO',
+  'RETORNO_MANUTENCAO',
+  'RECOLHIMENTO',
+  'BAIXA'
+]
+
+export const MARCAS_TASER = [
+  'AXON',
+  'TASER',
+  'OUTRA'
+]
+
+export const MODELOS_TASER = [
+  'TASER 7',
+  'TASER X2',
+  'TASER X26P',
+  'OUTRO'
+]
+
+export const LOCAIS_TASER = [
+  'COFRE DO SVDD',
+  'COFRE P4',
+  'EM SERVICO',
+  'MANUTENCAO',
+  'OUTRO'
+]

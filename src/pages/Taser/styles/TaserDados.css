@@ -1,0 +1,103 @@
+.taser-dados {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.taser-dados-section {
+  padding: 22px;
+  border: 1px solid #d8e2ef;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.taser-dados-section-header {
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5ebf3;
+}
+
+.taser-dados-section-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+  font-weigtaser: 800;
+  line-heigtaser: 1.25;
+}
+
+.taser-dados-section-header p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 0.88rem;
+  line-heigtaser: 1.45;
+}
+
+.taser-dados-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weigtaser: 800;
+  text-transform: uppercase;
+}
+
+.taser-dados-highligtaser {
+  border-color: #93c5fd;
+  background: #f5f9ff;
+}
+
+.taser-dados-warning {
+  border-color: #f5c96b;
+  background: #fffaf0;
+}
+
+.taser-dados-warning .taser-dados-badge {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.taser-dados-danger {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.taser-dados-danger .taser-dados-badge {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.taser-dados-notice {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 0.84rem;
+  font-weigtaser: 650;
+  line-heigtaser: 1.45;
+}
+
+@media (max-width: 768px) {
+  .taser-dados {
+    gap: 16px;
+  }
+
+  .taser-dados-section {
+    padding: 16px;
+    border-radius: 13px;
+  }
+
+  .taser-dados-section-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
+
+  .taser-dados-section-header h3 {
+    font-size: 1rem;
+  }
+}

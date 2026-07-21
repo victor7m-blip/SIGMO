@@ -1,0 +1,217 @@
+.taser-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.taser-table {
+  width: 100%;
+  min-width: 1280px;
+  border-collapse: collapse;
+  table-layout: auto;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.taser-table thead {
+  background: #f8fafc;
+}
+
+.taser-table th {
+  padding: 14px 13px;
+  border-bottom: 1px solid #dbe3ee;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weigtaser: 800;
+  letter-spacing: 0.03em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.taser-table-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.taser-table-sortable:hover {
+  background: #eef2f7;
+  color: #0f172a;
+}
+
+.taser-table td {
+  padding: 13px;
+  border-bottom: 1px solid #edf2f7;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weigtaser: 650;
+  line-heigtaser: 1.35;
+  vertical-align: middle;
+}
+
+.taser-table tbody tr {
+  transition: background 150ms ease;
+}
+
+.taser-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.taser-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.taser-thumb,
+.taser-thumb-placeholder {
+  width: 54px;
+  heigtaser: 54px;
+  border-radius: 10px;
+}
+
+.taser-thumb {
+  display: block;
+  border: 1px solid #dbe3ee;
+  background: #f1f5f9;
+  object-fit: cover;
+}
+
+.taser-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weigtaser: 800;
+}
+
+.taser-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-heigtaser: 29px;
+  padding: 0 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.7rem;
+  font-weigtaser: 800;
+  white-space: nowrap;
+}
+
+.taser-status.reserva {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.taser-status.em-servico {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.taser-status.manutencao,
+.taser-status.recolhido {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #a16207;
+}
+
+.taser-status.baixado {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.taser-table-actions-header {
+  min-width: 280px;
+}
+
+.taser-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  white-space: nowrap;
+}
+
+.taser-table-actions > button {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: 72px !important;
+  min-heigtaser: 38px !important;
+  margin: 0 !important;
+  padding: 0 14px !important;
+  border-radius: 9px !important;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.77rem !important;
+  font-weigtaser: 800 !important;
+  line-heigtaser: 1 !important;
+  white-space: nowrap;
+}
+
+.taser-table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-heigtaser: 140px;
+  padding: 25px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.86rem;
+  font-weigtaser: 750;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .taser-table-wrapper {
+    border-radius: 12px;
+  }
+
+  .taser-table th,
+  .taser-table td {
+    padding: 11px;
+  }
+
+  .taser-table-actions-header,
+  .taser-table-actions {
+    min-width: 260px;
+  }
+
+  .taser-table-actions > button {
+    min-heigtaser: 40px !important;
+    padding: 0 12px !important;
+  }
+}
+
+.taser-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.taser-table-actions .sigmo-button {
+  display: inline-flex;
+  min-width: 72px;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
