@@ -28,7 +28,7 @@ import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
 import TransferirMaterial from './TransferirMaterial/TransferirMaterial'
 import BaixarMaterial from './BaixarMaterial/BaixarMaterial'
 import CentralOperacional from './CentralOperacional'
-
+import HT from './HT/HT'
 import './DashboardV2.css'
 
 const ROUTE_STORAGE_KEY =
@@ -844,6 +844,10 @@ useEffect(() => {
 
     if (route === 'tpd') {
   return <TPD user={user} />
+}
+
+if (route === 'ht') {
+  return <HT user={user} />
 }
 
     if (route === 'policiais') {

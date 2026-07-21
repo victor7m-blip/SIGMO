@@ -21,14 +21,15 @@ const categorias = [
     destaque: 'vermelho'
   },
   {
-    id: 'ht',
-    icone: '📻',
-    titulo: 'HT (Rádios)',
-    descricao:
-      'Controle rádios comunicadores, prefixos, baterias, acessórios e situação operacional.',
-    status: 'em-breve',
-    destaque: 'amarelo'
-  },
+  id: 'ht',
+  rota: 'ht',
+  icone: '📻',
+  titulo: 'HT',
+  descricao:
+    'Gerencie rádios portáteis, números de série, patrimônios, status, fotos e responsáveis.',
+  status: 'disponivel',
+  destaque: 'azul'
+},
   {
   id: 'tpd',
   titulo: 'TPD',

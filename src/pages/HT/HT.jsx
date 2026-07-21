@@ -2,42 +2,42 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 
 import {
-  STATUS_TPD,
-  TIPOS_TPD
-} from '../../constants/tpds'
+  STATUS_HT,
+  TIPOS_HT
+} from '../../constants/hts'
 
 import {
   UNIDADES_27_BPMM
 } from '../../constants/unidades'
 
-import TPDForm from './components/TPDForm'
-import TPDTable from './components/TPDTable'
+import HTForm from './components/HTForm'
+import HTTable from './components/HTTable'
 
 import {
-  excluirTPD,
-  listarTPDs
-} from '../../services/tpdsService'
+  excluirHT,
+  listarHTs
+} from '../../services/htsService'
 
 import {
-  listarFotosTPD
-} from '../../services/tpdsFotosService'
+  listarFotosHT
+} from '../../services/htsFotosService'
 
-import "./styles/TPD.css";
+import './styles/HT.css'
 
 const LIMITE = 20
-const statusOptions = STATUS_TPD
-const tipoOptions = TIPOS_TPD
+const statusOptions = STATUS_HT
+const tipoOptions = TIPOS_HT
 
-export default function TPD({ user }) {
-  const [tpds, setTPDs] = useState([])
+export default function HT({ user }) {
+  const [hts, setHTs] = useState([])
   const [total, setTotal] = useState(0)
   const [pagina, setPagina] = useState(1)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
 
   const [formAberto, setFormAberto] = useState(false)
-  const [tpdEditando, setTPDEditando] = useState(null)
-  const [tpdVisualizando, setTPDVisualizando] = useState(null)
+  const [htEditando, setHTEditando] = useState(null)
+  const [htVisualizando, setHTVisualizando] = useState(null)
 
   const [fotosVisualizacao, setFotosVisualizacao] = useState([])
   const [carregandoFotos, setCarregandoFotos] = useState(false)
@@ -48,7 +48,7 @@ export default function TPD({ user }) {
 
   const [filtros, setFiltros] = useState({
     pesquisa: '',
-    tipo_equipamento: '',
+    tipo_ht: '',
     marca: '',
     modelo: '',
     status_operacional: '',
@@ -60,15 +60,15 @@ export default function TPD({ user }) {
     [total]
   )
 
-  const carregarTPDs = useCallback(async () => {
+  const carregarHTs = useCallback(async () => {
     try {
       setLoading(true)
       setErro('')
 
-      const resultado = await listarTPDs({
+      const resultado = await listarHTs({
         filtros: {
           pesquisa: filtros.pesquisa.trim(),
-          tipo_equipamento: filtros.tipo_equipamento,
+          tipo_ht: filtros.tipo_ht,
           marca: filtros.marca,
           modelo: filtros.modelo,
           status_operacional: filtros.status_operacional,
@@ -80,14 +80,14 @@ export default function TPD({ user }) {
         sortDirection
       })
 
-      setTPDs(resultado.data || [])
+      setHTs(resultado.data || [])
       setTotal(resultado.total || 0)
     } catch (error) {
       console.error(error)
 
       setErro(
         error.message ||
-        'Erro ao carregar os TPDs.'
+        'Erro ao carregar os HTs.'
       )
     } finally {
       setLoading(false)
@@ -100,8 +100,8 @@ export default function TPD({ user }) {
   ])
 
   useEffect(() => {
-    carregarTPDs()
-  }, [carregarTPDs])
+    carregarHTs()
+  }, [carregarHTs])
 
   function handleFiltroChange(event) {
     const { name, value } = event.target
@@ -117,7 +117,7 @@ export default function TPD({ user }) {
   function limparFiltros() {
     setFiltros({
       pesquisa: '',
-      tipo_equipamento: '',
+      tipo_ht: '',
       marca: '',
       modelo: '',
       status_operacional: '',
@@ -130,7 +130,7 @@ export default function TPD({ user }) {
   function rolarParaFormulario() {
     requestAnimationFrame(() => {
       document
-        .querySelector('.tpd-form-area')
+        .querySelector('.ht-form-area')
         ?.scrollIntoView({
           behavior: 'smooth',
           block: 'start'
@@ -139,34 +139,35 @@ export default function TPD({ user }) {
   }
 
   function limparVisualizacao() {
-    setTPDVisualizando(null)
+    setHTVisualizando(null)
     setFotosVisualizacao([])
     setCarregandoFotos(false)
     setErroFotos('')
   }
 
   function abrirNovoCadastro() {
-    setTPDEditando(null)
+    setHTEditando(null)
     limparVisualizacao()
     setFormAberto(true)
     rolarParaFormulario()
   }
 
-  function abrirEdicao(tpd) {
-    setTPDEditando(tpd)
+  function abrirEdicao(ht) {
+    setHTEditando(ht)
     limparVisualizacao()
     setFormAberto(true)
     rolarParaFormulario()
   }
 
-  async function abrirVisualizacao(tpd) {
-    setTPDVisualizando(tpd)
+  async function abrirVisualizacao(ht) {
+    setHTVisualizando(ht)
     setFotosVisualizacao([])
     setErroFotos('')
     setCarregandoFotos(true)
 
     try {
-      const fotos = await listarFotosTPD(tpd.id)
+      const fotos =
+        await listarFotosHT(ht.id)
 
       setFotosVisualizacao(
         Array.isArray(fotos)
@@ -175,13 +176,13 @@ export default function TPD({ user }) {
       )
     } catch (error) {
       console.error(
-        'Erro ao carregar fotos do TPD:',
+        'Erro ao carregar fotos do HT:',
         error
       )
 
       setErroFotos(
         error.message ||
-        'Não foi possível carregar as fotos do TPD.'
+        'Não foi possível carregar as fotos do HT.'
       )
     } finally {
       setCarregandoFotos(false)
@@ -194,38 +195,37 @@ export default function TPD({ user }) {
 
   function fecharFormulario() {
     setFormAberto(false)
-    setTPDEditando(null)
+    setHTEditando(null)
   }
 
   async function handleSaved() {
     fecharFormulario()
-    await carregarTPDs()
+    await carregarHTs()
   }
 
-  async function handleExcluir(tpd) {
+  async function handleExcluir(ht) {
     const identificacao =
-      tpd.patrimonio ||
-      tpd.numero_serie ||
-      'TPD'
+      ht.patrimonio ||
+      ht.numero_serie ||
+      'HT'
 
     const confirmou = window.confirm(
-      `Deseja realmente excluir o TPD "${identificacao}"?`
+      `Deseja realmente excluir o HT "${identificacao}"?`
     )
 
     if (!confirmou) return
 
     try {
-      await excluirTPD(tpd.id, user)
-      await carregarTPDs()
+      await excluirHT(ht.id, user)
+      await carregarHTs()
     } catch (error) {
       window.alert(
         error.message ||
-        'Erro ao excluir o TPD.'
+        'Erro ao excluir o HT.'
       )
     }
   }
-
-  function ordenar(campo) {
+    function ordenar(campo) {
     if (sortBy === campo) {
       setSortDirection((prev) =>
         prev === 'asc'
@@ -253,38 +253,38 @@ export default function TPD({ user }) {
   }
 
   return (
-    <main className="tpd-page">
-      <header className="tpd-header">
+    <main className="ht-page">
+      <header className="ht-header">
         <div>
-          <span className="tpd-kicker">
+          <span className="ht-kicker">
             Gestão Patrimonial
           </span>
 
-          <h1>TPD</h1>
+          <h1>HT</h1>
 
           <p>
             Cadastro, consulta e controle dos
-            Terminais Portáteis de Dados.
+            Rádios Portáteis (HT).
           </p>
         </div>
 
         <button
           type="button"
-          className="tpd-btn-primary"
+          className="ht-btn-primary"
           onClick={abrirNovoCadastro}
         >
-          Novo TPD
+          Novo HT
         </button>
       </header>
 
-        {erro && (
-        <div className="tpd-alert-error">
+      {erro && (
+        <div className="ht-alert-error">
           {erro}
         </div>
       )}
 
-      <section className="tpd-toolbar">
-        <div className="tpd-search">
+      <section className="ht-toolbar">
+        <div className="ht-search">
           <label htmlFor="pesquisa">
             Pesquisar
           </label>
@@ -299,15 +299,15 @@ export default function TPD({ user }) {
           />
         </div>
 
-        <div className="tpd-filter">
-          <label htmlFor="tipo_equipamento">
+        <div className="ht-filter">
+          <label htmlFor="tipo_ht">
             Tipo
           </label>
 
           <select
-            id="tipo_equipamento"
-            name="tipo_equipamento"
-            value={filtros.tipo_equipamento}
+            id="tipo_ht"
+            name="tipo_ht"
+            value={filtros.tipo_ht}
             onChange={handleFiltroChange}
           >
             <option value="">
@@ -330,7 +330,7 @@ export default function TPD({ user }) {
           </select>
         </div>
 
-        <div className="tpd-filter">
+        <div className="ht-filter">
           <label htmlFor="marca">
             Marca
           </label>
@@ -344,7 +344,7 @@ export default function TPD({ user }) {
           />
         </div>
 
-        <div className="tpd-filter">
+        <div className="ht-filter">
           <label htmlFor="modelo">
             Modelo
           </label>
@@ -354,11 +354,11 @@ export default function TPD({ user }) {
             name="modelo"
             value={filtros.modelo}
             onChange={handleFiltroChange}
-            placeholder="Ex.: G56"
+            placeholder="Ex.: APX 2000"
           />
         </div>
 
-        <div className="tpd-filter">
+        <div className="ht-filter">
           <label htmlFor="status_operacional">
             Status
           </label>
@@ -389,7 +389,7 @@ export default function TPD({ user }) {
           </select>
         </div>
 
-        <div className="tpd-filter">
+        <div className="ht-filter">
           <label htmlFor="unidade">
             Unidade
           </label>
@@ -419,7 +419,7 @@ export default function TPD({ user }) {
 
         <button
           type="button"
-          className="tpd-btn-secondary tpd-toolbar-clear"
+          className="ht-btn-secondary ht-toolbar-clear"
           onClick={limparFiltros}
         >
           Limpar
@@ -427,21 +427,21 @@ export default function TPD({ user }) {
       </section>
 
       {formAberto && (
-        <section className="tpd-form-area">
-          <TPDForm
+        <section className="ht-form-area">
+          <HTForm
             user={user}
-            tpdEditando={tpdEditando}
+            htEditando={htEditando}
             onCancel={fecharFormulario}
             onSaved={handleSaved}
           />
         </section>
       )}
 
-      <section className="tpd-list-card">
-        <div className="tpd-list-header">
+      <section className="ht-list-card">
+        <div className="ht-list-header">
           <div>
             <h2>
-              TPDs cadastrados
+              HTs cadastrados
             </h2>
 
             <p>
@@ -453,8 +453,8 @@ export default function TPD({ user }) {
           </div>
         </div>
 
-        <TPDTable
-          tpds={tpds}
+        <HTTable
+          hts={hts}
           loading={loading}
           sortBy={sortBy}
           sortDirection={sortDirection}
@@ -464,7 +464,7 @@ export default function TPD({ user }) {
           onDelete={handleExcluir}
         />
 
-        <footer className="tpd-pagination">
+        <footer className="ht-pagination">
           <button
             type="button"
             disabled={
@@ -507,19 +507,16 @@ export default function TPD({ user }) {
           </button>
         </footer>
       </section>
-
-               
-
-      {tpdVisualizando && (
-        <TPDDetalhesModal
-          tpd={tpdVisualizando}
+            {htVisualizando && (
+        <HTDetalhesModal
+          ht={htVisualizando}
           fotos={fotosVisualizacao}
           carregandoFotos={carregandoFotos}
           erroFotos={erroFotos}
           onClose={fecharVisualizacao}
           onEdit={() =>
             abrirEdicao(
-              tpdVisualizando
+              htVisualizando
             )
           }
         />
@@ -528,8 +525,8 @@ export default function TPD({ user }) {
   )
 }
 
-function TPDDetalhesModal({
-  tpd,
+function HTDetalhesModal({
+  ht,
   fotos = [],
   carregandoFotos = false,
   erroFotos = '',
@@ -542,15 +539,15 @@ function TPDDetalhesModal({
         (foto) => foto.principal
       ) ||
       fotos[0] ||
-      (tpd.foto_url
+      (ht.foto_url
         ? {
-            id: 'foto-principal-tpd',
-            url: tpd.foto_url,
+            id: 'foto-principal-ht',
+            url: ht.foto_url,
             principal: true
           }
         : null)
     )
-  }, [fotos, tpd.foto_url])
+  }, [fotos, ht.foto_url])
 
   const [
     fotoSelecionada,
@@ -572,7 +569,7 @@ function TPDDetalhesModal({
 
   return (
     <div
-      className="tpd-modal-backdrop"
+      className="ht-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
         if (
@@ -584,22 +581,22 @@ function TPDDetalhesModal({
       }}
     >
       <section
-        className="tpd-modal"
+        className="ht-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Detalhes do TPD"
+        aria-label="Detalhes do HT"
       >
         <header>
           <div>
             <span>
-              {tpd.tipo_equipamento ||
-                'TPD'}
+              {ht.tipo_ht ||
+                'HT'}
             </span>
 
             <h2>
-              {tpd.patrimonio ||
-                tpd.numero_serie ||
-                'Terminal Portátil de Dados'}
+              {ht.patrimonio ||
+                ht.numero_serie ||
+                'Rádio Portátil'}
             </h2>
           </div>
 
@@ -612,86 +609,38 @@ function TPDDetalhesModal({
           </button>
         </header>
 
-        <div className="tpd-modal-content">
-          <div className="tpd-modal-grid">
-            <Info
-              label="Patrimônio"
-              value={tpd.patrimonio}
-            />
-
-            <Info
-              label="Número de série"
-              value={tpd.numero_serie}
-            />
-
-            <Info
-              label="Marca"
-              value={tpd.marca}
-            />
-
-            <Info
-              label="Modelo"
-              value={tpd.modelo}
-            />
-
-            <Info
-              label="Tipo de equipamento"
-              value={
-                tpd.tipo_equipamento
-              }
-            />
-
-            <Info
-              label="Unidade"
-              value={tpd.unidade}
-            />
-
-            <Info
-              label="Status operacional"
-              value={
-                tpd.status_operacional
-              }
-            />
-
-            <Info
-              label="Local atual"
-              value={tpd.local_atual}
-            />
-
-            <Info
-              label="Equipe vinculada"
-              value={
-                tpd.equipe_vinculada
-              }
-            />
-
-            <Info
-              label="Viatura vinculada"
-              value={
-                tpd.viatura_vinculada
-              }
-            />
-
+        <div className="ht-modal-content">
+          <div className="ht-modal-grid">
+            <Info label="Patrimônio" value={ht.patrimonio} />
+            <Info label="Número de série" value={ht.numero_serie} />
+            <Info label="Marca" value={ht.marca} />
+            <Info label="Modelo" value={ht.modelo} />
+            <Info label="Tipo" value={ht.tipo_ht} />
+            <Info label="Unidade" value={ht.unidade} />
+            <Info label="Status operacional" value={ht.status_operacional} />
+            <Info label="Local atual" value={ht.local_atual} />
+            <Info label="Equipe vinculada" value={ht.equipe_vinculada} />
+            <Info label="Viatura vinculada" value={ht.viatura_vinculada} />
             <Info
               label="Situação do cadastro"
               value={
-                tpd.ativo === false
+                ht.ativo === false
                   ? 'INATIVO'
                   : 'ATIVO'
               }
             />
           </div>
 
-          <div className="tpd-modal-media-grid">
-            {tpd.qr_code && (
-              <div className="tpd-modal-media-card">
-                <span className="tpd-modal-media-title">
+          <div className="ht-modal-media-grid">
+            {ht.qr_code && (
+              <div className="ht-modal-media-card">
+                <span className="ht-modal-media-title">
                   QR Code
                 </span>
 
-                <div className="tpd-modal-qr-box">
+                <div className="ht-modal-qr-box">
                   <QRCodeCanvas
-                    value={tpd.qr_code}
+                    value={ht.qr_code}
                     size={150}
                     level="H"
                     includeMargin
@@ -699,26 +648,26 @@ function TPDDetalhesModal({
                 </div>
 
                 <strong>
-                  {tpd.numero_serie ||
-                    tpd.patrimonio}
+                  {ht.numero_serie ||
+                    ht.patrimonio}
                 </strong>
               </div>
             )}
 
-            <div className="tpd-modal-media-card tpd-modal-gallery-card">
-              <span className="tpd-modal-media-title">
+            <div className="ht-modal-media-card ht-modal-gallery-card">
+              <span className="ht-modal-media-title">
                 Fotos do equipamento
               </span>
 
               {carregandoFotos && (
-                <div className="tpd-gallery-message">
+                <div className="ht-gallery-message">
                   Carregando fotos...
                 </div>
               )}
 
               {!carregandoFotos &&
                 erroFotos && (
-                  <div className="tpd-gallery-error">
+                  <div className="ht-gallery-error">
                     {erroFotos}
                   </div>
                 )}
@@ -728,30 +677,25 @@ function TPDDetalhesModal({
                 fotoSelecionada && (
                   <>
                     <img
-                      src={
-                        fotoSelecionada.url
-                      }
+                      src={fotoSelecionada.url}
                       alt={
-                        tpd.patrimonio ||
-                        tpd.numero_serie ||
-                        'TPD'
+                        ht.patrimonio ||
+                        ht.numero_serie ||
+                        'HT'
                       }
-                      className="tpd-modal-photo"
+                      className="ht-modal-photo"
                     />
 
-                    {fotosDisponiveis.length >
-                      1 && (
-                      <div className="tpd-modal-thumbnails">
+                    {fotosDisponiveis.length > 1 && (
+                      <div className="ht-modal-thumbnails">
                         {fotosDisponiveis.map(
                           (
                             foto,
                             index
                           ) => {
                             const selecionada =
-                              fotoSelecionada?.id ===
-                                foto.id ||
-                              fotoSelecionada?.url ===
-                                foto.url
+                              fotoSelecionada?.id === foto.id ||
+                              fotoSelecionada?.url === foto.url
 
                             return (
                               <button
@@ -762,23 +706,17 @@ function TPDDetalhesModal({
                                 type="button"
                                 className={
                                   selecionada
-                                    ? 'tpd-modal-thumbnail is-selected'
-                                    : 'tpd-modal-thumbnail'
+                                    ? 'ht-modal-thumbnail is-selected'
+                                    : 'ht-modal-thumbnail'
                                 }
                                 onClick={() =>
-                                  setFotoSelecionada(
-                                    foto
-                                  )
+                                  setFotoSelecionada(foto)
                                 }
-                                aria-label={`Visualizar foto ${
-                                  index + 1
-                                }`}
+                                aria-label={`Visualizar foto ${index + 1}`}
                               >
                                 <img
                                   src={foto.url}
-                                  alt={`Miniatura ${
-                                    index + 1
-                                  } do TPD`}
+                                  alt={`Miniatura ${index + 1} do HT`}
                                 />
 
                                 {foto.principal && (
@@ -793,12 +731,9 @@ function TPDDetalhesModal({
                       </div>
                     )}
 
-                    <small className="tpd-gallery-counter">
-                      {
-                        fotosDisponiveis.length
-                      }{' '}
-                      {fotosDisponiveis.length ===
-                      1
+                    <small className="ht-gallery-counter">
+                      {fotosDisponiveis.length}{' '}
+                      {fotosDisponiveis.length === 1
                         ? 'foto cadastrada'
                         : 'fotos cadastradas'}
                     </small>
@@ -808,21 +743,20 @@ function TPDDetalhesModal({
               {!carregandoFotos &&
                 !erroFotos &&
                 !fotoSelecionada && (
-                  <div className="tpd-gallery-message">
-                    Nenhuma foto
-                    cadastrada.
+                  <div className="ht-gallery-message">
+                    Nenhuma foto cadastrada.
                   </div>
                 )}
             </div>
           </div>
 
-          <div className="tpd-modal-observacoes">
+          <div className="ht-modal-observacoes">
             <strong>
               Observações
             </strong>
 
             <p>
-              {tpd.observacoes ||
+              {ht.observacoes ||
                 'Sem observações.'}
             </p>
           </div>
@@ -831,7 +765,7 @@ function TPDDetalhesModal({
         <footer>
           <button
             type="button"
-            className="tpd-btn-secondary"
+            className="ht-btn-secondary"
             onClick={onClose}
           >
             Fechar
@@ -839,7 +773,7 @@ function TPDDetalhesModal({
 
           <button
             type="button"
-            className="tpd-btn-primary"
+            className="ht-btn-primary"
             onClick={onEdit}
           >
             Editar
@@ -855,7 +789,7 @@ function Info({
   value
 }) {
   return (
-    <div className="tpd-info">
+    <div className="ht-info">
       <span>
         {label}
       </span>

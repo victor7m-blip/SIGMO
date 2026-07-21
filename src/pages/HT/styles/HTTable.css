@@ -1,0 +1,196 @@
+.ht-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.ht-table {
+  width: 100%;
+  min-width: 1280px;
+  border-collapse: collapse;
+  table-layout: auto;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.ht-table thead {
+  background: #f8fafc;
+}
+
+.ht-table th {
+  padding: 14px 13px;
+  border-bottom: 1px solid #dbe3ee;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ht-table-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ht-table-sortable:hover {
+  background: #eef2f7;
+  color: #0f172a;
+}
+
+.ht-table td {
+  padding: 13px;
+  border-bottom: 1px solid #edf2f7;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.ht-table tbody tr {
+  transition: background 150ms ease;
+}
+
+.ht-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.ht-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ht-thumb,
+.ht-thumb-placeholder {
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+}
+
+.ht-thumb {
+  display: block;
+  border: 1px solid #dbe3ee;
+  background: #f1f5f9;
+  object-fit: cover;
+}
+
+.ht-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.ht-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 29px;
+  padding: 0 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ht-status.reserva {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.ht-status.em-servico {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.ht-status.manutencao,
+.ht-status.recolhido {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #a16207;
+}
+
+.ht-status.baixado {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.ht-table-actions-header {
+  min-width: 280px;
+}
+
+.ht-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  white-space: nowrap;
+}
+
+.ht-table-actions > button {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: 72px !important;
+  min-height: 38px !important;
+  margin: 0 !important;
+  padding: 0 14px !important;
+  border-radius: 9px !important;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.77rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  white-space: nowrap;
+}
+
+.ht-table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  padding: 25px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.86rem;
+  font-weight: 750;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .ht-table-wrapper {
+    border-radius: 12px;
+  }
+
+  .ht-table th,
+  .ht-table td {
+    padding: 11px;
+  }
+
+  .ht-table-actions-header,
+  .ht-table-actions {
+    min-width: 260px;
+  }
+
+  .ht-table-actions > button {
+    min-height: 40px !important;
+    padding: 0 12px !important;
+  }
+}
