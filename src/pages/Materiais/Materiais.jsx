@@ -30,14 +30,13 @@ const categorias = [
     destaque: 'amarelo'
   },
   {
-    id: 'tpd',
-    icone: '📱',
-    titulo: 'TPD (Terminais)',
-    descricao:
-      'Cadastre smartphones e terminais portáteis utilizados no serviço operacional.',
-    status: 'em-breve',
-    destaque: 'azul'
-  },
+  id: 'tpd',
+  titulo: 'TPD',
+  descricao: 'Terminal Portátil de Dados',
+  icone: '📱',
+  status: 'disponivel',
+  rota: 'tpd'
+},
   {
     id: 'ain',
     icone: '⚡',
@@ -114,6 +113,7 @@ export default function Materiais({
   user,
   onNavegar
 }) {
+
   function abrirCategoria(categoria) {
   console.log('Categoria clicada:', categoria)
 
@@ -123,9 +123,6 @@ export default function Materiais({
   ) {
     return
   }
-
-  console.log('Navegando para:', categoria.rota)
-  console.log('onNavegar:', onNavegar)
 
   onNavegar?.(categoria.rota)
 }

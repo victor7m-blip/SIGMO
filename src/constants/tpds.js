@@ -1,0 +1,63 @@
+export const TIPOS_TPD = [
+  'SMARTPHONE',
+  'TABLET',
+  'OUTRO'
+]
+
+export const STATUS_TPD = [
+  'RESERVA',
+  'EM_SERVICO',
+  'MANUTENCAO',
+  'RECOLHIDO',
+  'BAIXADO'
+]
+
+export const CONDICOES_TPD = [
+  'SEM_AVARIAS',
+  'COM_AVARIAS',
+  'NAO_VERIFICADO'
+]
+
+export const TIPOS_MOVIMENTACAO_TPD = [
+  'RETIRADA_SERVICO',
+  'DEVOLUCAO_SERVICO',
+  'ENVIO_MANUTENCAO',
+  'RETORNO_MANUTENCAO',
+  'RECOLHIMENTO',
+  'BAIXA'
+]
+
+export const MARCAS_TPD = [
+  'SAMSUNG',
+  'MOTOROLA',
+  'XIAOMI',
+  'APPLE',
+  'LG',
+  'POSITIVO',
+  'MULTILASER',
+  'OUTRA'
+]
+
+export const MODELOS_TPD = [
+  'GALAXY A14',
+  'GALAXY A15',
+  'GALAXY A24',
+  'GALAXY A34',
+  'GALAXY A54',
+  'GALAXY S21',
+  'GALAXY S22',
+  'GALAXY S23',
+  'MOTO G54',
+  'MOTO G84',
+  'REDMI NOTE',
+  'IPHONE',
+  'OUTRO'
+]
+
+export const LOCAIS_TPD = [
+  'COFRE DO SVDD',
+  'COFRE P4',
+  'EM SERVICO',
+  'MANUTENCAO',
+  'OUTRO'
+]

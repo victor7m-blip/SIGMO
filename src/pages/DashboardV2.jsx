@@ -20,6 +20,7 @@ import {
 import Locais from './Locais/Locais'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
+import TPD from './TPD/TPD'
 import Policiais from './Policiais'
 import Municoes from './Municoes/Municoes'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
@@ -840,6 +841,10 @@ useEffect(() => {
     if (route === 'armas') {
       return <Armas user={user} />
     }
+
+    if (route === 'tpd') {
+  return <TPD user={user} />
+}
 
     if (route === 'policiais') {
       return <Policiais user={user} />
