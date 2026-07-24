@@ -67,6 +67,18 @@ const categorias = [
     status: 'disponivel',
     destaque: 'laranja'
   },
+
+  {
+  id: 'tonfas',
+  rota: 'tonfas',
+  icone: '┠',
+  titulo: 'Tonfa',
+  descricao:
+    'Controle a quantidade de tonfas e cassetetes disponíveis, em uso e armazenados.',
+  status: 'disponivel',
+  destaque: 'amarelo'
+},
+
   {
     id: 'outros',
     icone: '📦',

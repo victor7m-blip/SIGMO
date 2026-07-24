@@ -78,6 +78,7 @@ const pelotoes = [
 
 const perfis = [
   'ADMINISTRADOR',
+  'P4',
   'COMANDANTE DE CIA',
   'ENCARREGADO DO SVDD',
   'AUXILIAR DO SVDD',

@@ -1,10 +1,7 @@
 import { supabase } from './supabaseClient'
 
 const FONTES = [
-  {
-    tabela: 'sigmo_timeline_patrimonial',
-    origem: 'TIMELINE'
-  },
+  
   {
     tabela: 'sigmo_patrimonio_historico',
     origem: 'HISTORICO'
@@ -27,7 +24,7 @@ function texto(valor) {
   return String(valor ?? '').trim()
 }
 
-function textoMaiusculo(valor) {
+function normalizarUpper(valor) {
   return texto(valor).toUpperCase()
 }
 
@@ -253,7 +250,7 @@ export async function registrarEventoTimelinePatrimonial({
   }
 
   const tipoNormalizado =
-    textoMaiusculo(tipo) || 'EVENTO'
+    normalizarUpper(tipo) || 'EVENTO'
 
   const descricaoNormalizada =
     texto(descricao) ||
@@ -290,10 +287,10 @@ export async function registrarEventoTimelinePatrimonial({
       texto(localAtual) || null,
 
     status_anterior:
-      textoMaiusculo(statusAnterior) || null,
+      normalizarUpper(statusAnterior) || null,
 
     status_atual:
-      textoMaiusculo(statusAtual) || null,
+      normalizarUpper(statusAtual) || null,
 
     responsavel_re:
       texto(responsavelRe) || null,
@@ -311,7 +308,7 @@ export async function registrarEventoTimelinePatrimonial({
     data,
     error
   } = await supabase
-    .from('sigmo_timeline_patrimonial')
+    .from('sigmo_patrimonio_historico')
     .insert(payload)
     .select('*')
     .single()
@@ -387,7 +384,7 @@ export async function registrarEventoConferencia({
   usuario
 } = {}) {
   const resultado =
-    textoMaiusculo(
+    normalizarUpper(
       conferencia?.resultado ||
       conferencia?.status
     ) || 'CONFERIDO'
@@ -492,7 +489,7 @@ export function normalizarEventoTimeline(evento) {
     evento?.detalhes_json
   )
 
-  const tipo = textoMaiusculo(
+  const tipo = normalizarUpper(
     evento?.tipo ||
     evento?.evento ||
     evento?.acao ||

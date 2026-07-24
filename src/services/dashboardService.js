@@ -220,7 +220,7 @@ async function contarMovimentacoesPorTipo(
       head: true
     })
     .eq(
-      'tipo',
+      'tipo_movimentacao',
       tipo
     )
 

@@ -1,0 +1,1787 @@
+.tonfa-page {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tonfa-header,
+.tonfa-toolbar,
+.tonfa-list-card,
+.tonfa-form-card,
+.tonfa-dashboard-section {
+  background: #fff;
+  border: 1px solid #dfe5ec;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.tonfa-header {
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+
+.tonfa-header span,
+.tonfa-section-title span,
+.tonfa-modal-header span {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.tonfa-header h1 {
+  margin: 5px 0;
+}
+
+.tonfa-header p {
+  margin: 0;
+  color: #64748b;
+}
+
+.tonfa-perfil-identificacao {
+  display: block;
+  margin-top: 10px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.tonfa-btn-primary,
+.tonfa-btn-secondary {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tonfa-btn-primary {
+  background: #146c43;
+  color: #fff;
+}
+
+.tonfa-btn-primary:hover {
+  background: #0f5937;
+}
+
+.tonfa-btn-secondary {
+  background: #e9eef4;
+  color: #253247;
+}
+
+.tonfa-btn-secondary:hover {
+  background: #dce4ed;
+}
+
+.tonfa-dashboard-section {
+  padding: 20px;
+}
+
+.tonfa-section-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.tonfa-section-title h2 {
+  margin: 4px 0 0;
+  color: #172033;
+}
+
+.tonfa-section-title small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.tonfa-resumo-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tonfa-resumo-grid-principal {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tonfa-resumo-card {
+  min-height: 120px;
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  text-align: center;
+  border: 1px solid #dfe5ec;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #172033;
+  font: inherit;
+}
+
+.tonfa-resumo-card:disabled {
+  opacity: 1;
+}
+
+.tonfa-resumo-card > span {
+  color: #526174;
+  font-size: 0.90rem;
+  font-weight: 900;
+  margin-bottom:6px;
+}
+
+.tonfa-resumo-card > strong {
+  margin: 8px 0;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.tonfa-resumo-card > small {
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.tonfa-resumo-clicavel {
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.tonfa-resumo-clicavel:hover {
+  transform: translateY(-2px);
+  border-color: #9eacbc;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+}
+
+.tonfa-resumo-azul {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.tonfa-resumo-azul > strong {
+  color: #1d4ed8;
+}
+
+.tonfa-resumo-verde {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.tonfa-resumo-verde > strong {
+  color: #15803d;
+}
+
+.tonfa-resumo-amarelo {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.tonfa-resumo-amarelo > strong {
+  color: #a16207;
+}
+
+.tonfa-resumo-vermelho {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.tonfa-resumo-vermelho > strong {
+  color: #b91c1c;
+}
+
+.tonfa-action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tonfa-action-grid button {
+  min-height: 105px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  text-align: left;
+  border: 1px solid #cbd5e1;
+  border-radius: 13px;
+  background: #fff;
+  color: #253247;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.tonfa-action-grid button:hover {
+  transform: translateY(-2px);
+  border-color: #146c43;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.09);
+}
+
+.tonfa-action-grid button strong {
+  font-size: 0.98rem;
+}
+
+.tonfa-action-grid button span {
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.tonfa-action-grid .tonfa-action-danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.tonfa-action-grid .tonfa-action-danger strong {
+  color: #b42318;
+}
+
+.tonfa-toolbar {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 2fr repeat(3, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.tonfa-toolbar label,
+.tonfa-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tonfa-toolbar span,
+.tonfa-form-grid span,
+.tonfa-observacoes span {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #475569;
+}
+
+.tonfa-toolbar input,
+.tonfa-toolbar select,
+.tonfa-form-grid input,
+.tonfa-form-grid select,
+.tonfa-form-grid textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font: inherit;
+  background: #fff;
+}
+
+.tonfa-toolbar input:focus,
+.tonfa-toolbar select:focus,
+.tonfa-form-grid input:focus,
+.tonfa-form-grid select:focus,
+.tonfa-form-grid textarea:focus {
+  outline: 2px solid rgba(20, 108, 67, 0.15);
+  border-color: #146c43;
+}
+
+.tonfa-list-card {
+  overflow: hidden;
+}
+
+.tonfa-list-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tonfa-list-header h2,
+.tonfa-list-header p {
+  margin: 0;
+}
+
+.tonfa-list-header p {
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.tonfa-table-wrap {
+  overflow-x: auto;
+}
+
+.tonfa-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tonfa-table th,
+.tonfa-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.tonfa-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.tonfa-row-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.tonfa-row-actions button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.tonfa-row-actions button:hover {
+  background: #f8fafc;
+}
+
+.tonfa-row-actions .danger {
+  color: #b42318;
+}
+
+.tonfa-status {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.tonfa-status-reserva {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.tonfa-status-carga {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.tonfa-status-cautela,
+.tonfa-status-cautelado {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tonfa-status-manutencao {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.tonfa-status-recolhido {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tonfa-status-baixado {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.tonfa-empty {
+  padding: 40px;
+  text-align: center;
+  color: #64748b;
+}
+
+.tonfa-pagination {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.tonfa-pagination button {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.tonfa-pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tonfa-form-card {
+  padding: 22px;
+}
+
+.tonfa-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.tonfa-form-header h2,
+.tonfa-form-header p {
+  margin: 0;
+}
+
+.tonfa-form-header p {
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.tonfa-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.tonfa-field-full {
+  grid-column: 1 / -1;
+}
+
+.tonfa-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.tonfa-after-save {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  gap: 20px;
+}
+
+.tonfa-qr-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px;
+  text-align: center;
+}
+
+.tonfa-qr-card h3 {
+  margin-top: 0;
+}
+
+.tonfa-qr-card small {
+  display: block;
+  margin-top: 8px;
+  word-break: break-all;
+}
+
+.tonfa-alert-error {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.tonfa-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 9999;
+}
+
+.tonfa-modal {
+  width: min(820px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 18px;
+  padding: 22px;
+}
+
+.tonfa-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tonfa-modal-header h2 {
+  margin: 4px 0 0;
+}
+
+.tonfa-modal-header button {
+  border: 0;
+  background: none;
+  font-size: 2rem;
+  cursor: pointer;
+}
+
+.tonfa-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.tonfa-detail-grid div {
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.tonfa-detail-grid span {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.tonfa-modal-body {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 20px;
+}
+
+.tonfa-modal-qr {
+  display: grid;
+  place-items: center;
+}
+
+.tonfa-modal-fotos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.tonfa-modal-fotos img {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.tonfa-observacoes {
+  margin-top: 18px;
+}
+
+.tonfa-observacoes p {
+  white-space: pre-wrap;
+}
+
+.tonfa-finish-actions {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+}
+
+@media (max-width: 1180px) {
+  .tonfa-resumo-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tonfa-action-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .tonfa-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tonfa-header {
+    align-items: flex-start;
+  }
+
+  .tonfa-after-save,
+  .tonfa-modal-body {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-modal-fotos {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tonfa-resumo-grid,
+  .tonfa-resumo-grid-principal {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tonfa-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .tonfa-page {
+    padding: 12px;
+  }
+
+  .tonfa-header {
+    flex-direction: column;
+  }
+
+  .tonfa-header .tonfa-btn-primary {
+    width: 100%;
+  }
+
+  .tonfa-toolbar,
+  .tonfa-form-grid,
+  .tonfa-detail-grid,
+  .tonfa-resumo-grid,
+  .tonfa-resumo-grid-principal,
+  .tonfa-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-field-full {
+    grid-column: auto;
+  }
+
+  .tonfa-toolbar .tonfa-btn-secondary {
+    width: 100%;
+  }
+
+  .tonfa-modal-fotos {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-dashboard-section {
+    padding: 16px;
+  }
+
+  .tonfa-resumo-card {
+    min-height: 105px;
+  }
+
+  .tonfa-action-grid button {
+    min-height: 90px;
+  }
+
+  .tonfa-list-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tonfa-list-header .tonfa-btn-secondary {
+    width: 100%;
+  }
+}
+/* ===========================================================
+   PATRIMÔNIO ENGINE
+=========================================================== */
+
+.tonfa-movement-groups{
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+}
+
+.tonfa-movement-group{
+    border:1px solid #e5e7eb;
+    border-radius:16px;
+    padding:20px;
+    background:#fafafa;
+}
+
+.tonfa-movement-group-header{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    margin-bottom:18px;
+}
+
+.tonfa-movement-group-icon{
+    width:52px;
+    height:52px;
+    border-radius:14px;
+    background:#146c43;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:1.4rem;
+}
+
+.tonfa-movement-group h3{
+    margin:0;
+    color:#172033;
+}
+
+.tonfa-movement-group p{
+    margin:4px 0 0;
+    color:#64748b;
+}
+
+.tonfa-cadastro-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:18px;
+}
+
+.tonfa-cadastro-grid button{
+    border:1px solid #dfe5ec;
+    background:#fff;
+    border-radius:14px;
+    padding:18px;
+    display:flex;
+    gap:16px;
+    align-items:center;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.tonfa-cadastro-grid button:hover{
+    transform:translateY(-2px);
+    border-color:#146c43;
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+}
+
+.tonfa-cadastro-icon{
+    width:54px;
+    height:54px;
+    border-radius:12px;
+    background:#146c43;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:1.4rem;
+    font-weight:bold;
+}
+
+.tonfa-cadastro-grid strong{
+    display:block;
+    margin-bottom:6px;
+}
+
+.tonfa-cadastro-grid small{
+    color:#64748b;
+}
+
+.tonfa-list-eyebrow{
+    display:block;
+    margin-bottom:6px;
+    font-size:.75rem;
+    font-weight:700;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#64748b;
+}
+
+.tonfa-toolbar-interna{
+    border-top:1px solid #e5e7eb;
+    border-bottom:1px solid #e5e7eb;
+    background:#fafafa;
+}
+
+@media(max-width:900px){
+
+    .tonfa-cadastro-grid{
+        grid-template-columns:1fr;
+    }
+
+}
+
+.tonfa-resumo-grid-carga {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .tonfa-resumo-grid-carga {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .tonfa-resumo-grid-carga {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tonfa-resumo-card-com-detalhes {
+  min-height: 150px;
+  justify-content: flex-start;
+}
+
+.tonfa-resumo-titulo {
+  width: 100%;
+}
+
+.tonfa-resumo-valor {
+  margin-top: 18px;
+}
+
+.tonfa-resumo-detalhes {
+  width: 100%;
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tonfa-resumo-detalhes div {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 0.84rem;
+}
+
+.tonfa-resumo-detalhes span {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.tonfa-resumo-detalhes strong {
+  flex: 0 0 auto;
+  margin: 0;
+  color: #172033;
+  font-size: 0.96rem;
+  line-height: 1;
+}
+
+.tonfa-resumo-bloco-secundario {
+  width: 100%;
+}
+
+.tonfa-resumo-divisor {
+  width: 100%;
+  height: 1px;
+  margin-top: 16px;
+  background: rgba(100, 116, 139, 0.22);
+}
+
+.tonfa-resumo-bloco-secundario .tonfa-resumo-detalhes {
+  margin-top: 14px;
+}
+
+.tonfa-resumo-card-com-detalhes > small {
+  margin-top: 16px;
+}
+
+@media (max-width: 600px) {
+  .tonfa-resumo-card-com-detalhes {
+    min-height: 138px;
+  }
+}
+
+
+/* ===========================================================
+   FORMULÁRIO DE ESTOQUE — FINALIZAÇÃO VISUAL
+=========================================================== */
+
+.tonfa-alert-success {
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.tonfa-alert-success-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #15803d;
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.tonfa-alert-success strong,
+.tonfa-alert-success span {
+  display: block;
+}
+
+.tonfa-alert-success strong {
+  font-size: 0.98rem;
+}
+
+.tonfa-alert-success span {
+  margin-top: 3px;
+  color: #3f6f51;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.tonfa-saldos-section {
+  margin-bottom: 22px;
+  padding: 20px;
+  border: 1px solid #dfe5ec;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.tonfa-section-heading {
+  margin-bottom: 16px;
+}
+
+.tonfa-section-heading h3,
+.tonfa-section-heading p {
+  margin: 0;
+}
+
+.tonfa-section-heading h3 {
+  margin-top: 4px;
+  color: #172033;
+}
+
+.tonfa-section-heading p {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.tonfa-section-eyebrow {
+  display: block;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tonfa-saldos-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tonfa-saldo-card {
+  min-height: 112px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid #dfe5ec;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.tonfa-saldo-card span {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.tonfa-saldo-card strong {
+  margin-top: 14px;
+  color: #94a3b8;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.tonfa-saldo-card-active {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.tonfa-saldo-card-active strong {
+  color: #15803d;
+}
+
+.tonfa-form-info {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #854d0e;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.tonfa-after-save {
+  align-items: stretch;
+}
+
+.tonfa-qr-card,
+.tonfa-fotos-card {
+  border: 1px solid #dfe5ec;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.tonfa-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tonfa-qr-card h3 {
+  margin: 5px 0 16px;
+  color: #172033;
+}
+
+.tonfa-qr-code-box {
+  padding: 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.tonfa-fotos-card {
+  padding: 18px;
+}
+
+.tonfa-fotos-card-header {
+  margin-bottom: 16px;
+}
+
+.tonfa-fotos-card-header h3,
+.tonfa-fotos-card-header p {
+  margin: 0;
+}
+
+.tonfa-fotos-card-header h3 {
+  margin-top: 5px;
+  color: #172033;
+}
+
+.tonfa-fotos-card-header p {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.tonfa-finish-actions {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tonfa-finish-text strong,
+.tonfa-finish-text span {
+  display: block;
+}
+
+.tonfa-finish-text strong {
+  color: #172033;
+}
+
+.tonfa-finish-text span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .tonfa-saldos-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .tonfa-alert-success {
+    align-items: flex-start;
+  }
+
+  .tonfa-saldos-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-saldo-card {
+    min-height: 95px;
+  }
+
+  .tonfa-finish-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tonfa-finish-actions .tonfa-btn-primary {
+    width: 100%;
+  }
+}
+
+.tonfa-form-grid input.tonfa-field-automatico:disabled {
+  background: #f1f5f9;
+  border-color: #d7dee8;
+  color: #475569;
+  opacity: 1;
+  cursor: not-allowed;
+  font-weight: 800;
+}
+/* ===========================================================
+   PAINEL GRÁFICO — TONFAS E CASSETETES
+=========================================================== */
+
+.tonfa-graficos-section {
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.05), transparent 34%),
+    #fff;
+}
+
+.tonfa-section-title-graficos {
+  align-items: center;
+}
+
+.tonfa-graficos-principais {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.92fr) minmax(520px, 1.45fr);
+  gap: 18px;
+}
+
+.tonfa-grafico-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e1e7ef;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.07);
+}
+
+.tonfa-grafico-header {
+  min-height: 48px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.tonfa-grafico-header span {
+  display: block;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tonfa-grafico-header h3 {
+  margin: 5px 0 0;
+  color: #14213d;
+  font-size: 1.05rem;
+}
+
+.tonfa-rosca-layout {
+  min-height: 300px;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.85fr) minmax(220px, 1.15fr);
+  align-items: center;
+  gap: 22px;
+}
+
+.tonfa-rosca {
+  width: min(250px, 100%);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9),
+    0 16px 32px rgba(15, 23, 42, 0.12);
+}
+
+.tonfa-rosca::after {
+  content: '';
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px #e5eaf1;
+}
+
+.tonfa-rosca-centro {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.tonfa-rosca-centro strong {
+  color: #0f172a;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.tonfa-rosca-centro span {
+  margin-top: 6px;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tonfa-rosca-centro small {
+  max-width: 96px;
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 0.66rem;
+  line-height: 1.25;
+}
+
+.tonfa-grafico-legenda {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tonfa-grafico-legenda > div,
+.tonfa-material-resumo-lista > div {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto 52px;
+  align-items: center;
+  gap: 9px;
+  padding-left: 14px;
+}
+
+.tonfa-grafico-legenda span,
+.tonfa-material-resumo-lista span {
+  min-width: 0;
+  overflow: hidden;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tonfa-grafico-legenda strong,
+.tonfa-material-resumo-lista strong {
+  color: #0f172a;
+  font-size: 0.85rem;
+}
+
+.tonfa-grafico-legenda small,
+.tonfa-material-resumo-lista small {
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.tonfa-legenda-cor {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+  border-radius: 999px;
+}
+
+.tonfa-legenda-p4,
+.tonfa-legenda-tonfa {
+  background: #22c55e;
+}
+
+.tonfa-legenda-svdd {
+  background: #7c3aed;
+}
+
+.tonfa-legenda-carga {
+  background: #f97316;
+}
+
+.tonfa-legenda-cautela {
+  background: #facc15;
+}
+
+.tonfa-legenda-nao-localizada {
+  background: #ef4444;
+}
+
+.tonfa-legenda-cassetete {
+  background: #2563eb;
+}
+
+.tonfa-barras-legenda {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.tonfa-barras-legenda span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tonfa-barras-area {
+  min-height: 300px;
+  padding: 18px 10px 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(80px, 1fr));
+  align-items: end;
+  gap: 16px;
+  border-bottom: 1px solid #cbd5e1;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 59px,
+      rgba(148, 163, 184, 0.17) 60px
+    );
+}
+
+.tonfa-barra-grupo {
+  height: 270px;
+  display: grid;
+  grid-template-rows: 1fr 48px;
+  align-items: end;
+  gap: 8px;
+}
+
+.tonfa-barra-grupo > span {
+  min-height: 34px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.tonfa-barra-colunas {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 7px;
+}
+
+.tonfa-barra-coluna {
+  width: min(34px, 42%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.tonfa-barra-coluna strong {
+  margin-bottom: 5px;
+  color: #172033;
+  font-size: 0.72rem;
+}
+
+.tonfa-barra {
+  width: 100%;
+  min-height: 8px;
+  border-radius: 8px 8px 2px 2px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+  transition: height 0.35s ease, filter 0.2s ease;
+}
+
+.tonfa-barra:hover {
+  filter: brightness(1.08);
+}
+
+.tonfa-barra-tonfa {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+}
+
+.tonfa-barra-cassetete {
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+}
+
+.tonfa-resumo-materiais-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.tonfa-material-resumo {
+  padding: 18px;
+  border: 1px solid #e1e7ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+}
+
+.tonfa-material-tonfa {
+  border-top: 4px solid #22c55e;
+}
+
+.tonfa-material-cassetete {
+  border-top: 4px solid #2563eb;
+}
+
+.tonfa-material-resumo-header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 16px;
+}
+
+.tonfa-material-icone {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: #f1f5f9;
+  color: #172033;
+  font-size: 2rem;
+  font-weight: 900;
+  transform: rotate(-35deg);
+}
+
+.tonfa-material-resumo-header span,
+.tonfa-material-resumo-header strong {
+  display: block;
+}
+
+.tonfa-material-resumo-header span {
+  color: #172033;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.tonfa-material-resumo-header strong {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+.tonfa-material-resumo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* Reforço visual dos cards já existentes */
+.tonfa-resumo-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, #fff 0%, #f8fafc 100%);
+  box-shadow: 0 9px 24px rgba(15, 23, 42, 0.07);
+}
+
+.tonfa-resumo-card::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 10px;
+  height: 4px;
+  border-radius: 999px;
+  background: #dbe3ee;
+}
+
+.tonfa-resumo-azul::after {
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+}
+
+.tonfa-resumo-verde::after {
+  background: linear-gradient(90deg, #16a34a, #4ade80);
+}
+
+.tonfa-resumo-amarelo::after {
+  background: linear-gradient(90deg, #eab308, #facc15);
+}
+
+.tonfa-resumo-vermelho::after {
+  background: linear-gradient(90deg, #dc2626, #f87171);
+}
+
+.tonfa-resumo-card > small,
+.tonfa-resumo-bloco-secundario {
+  padding-bottom: 10px;
+}
+
+@media (max-width: 1280px) {
+  .tonfa-graficos-principais {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-grafico-card-barras {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 900px) {
+  .tonfa-rosca-layout,
+  .tonfa-resumo-materiais-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-rosca-layout {
+    gap: 28px;
+  }
+
+  .tonfa-barras-area {
+    overflow-x: auto;
+    grid-template-columns: repeat(5, minmax(105px, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .tonfa-grafico-card {
+    padding: 16px;
+  }
+
+  .tonfa-grafico-header,
+  .tonfa-section-title-graficos {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tonfa-grafico-legenda > div,
+  .tonfa-material-resumo-lista > div {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+  }
+
+  .tonfa-grafico-legenda small,
+  .tonfa-material-resumo-lista small {
+    display: none;
+  }
+
+  .tonfa-rosca {
+    width: min(220px, 100%);
+  }
+}
+/* ===========================================================
+   AJUSTE FINAL — PAINÉIS GRÁFICOS
+=========================================================== */
+
+/* Mantém todo o conteúdo dentro do painel principal */
+.tonfa-graficos-section {
+  box-sizing: border-box;
+  width: 100%;
+  padding-left: 18px;
+  padding-right: 18px;
+  overflow: hidden;
+}
+
+/* Alinha os dois cards sem ultrapassar o painel principal */
+.tonfa-graficos-principais {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns:
+    minmax(420px, 0.93fr)
+    minmax(540px, 1.27fr);
+  gap: 18px;
+  transform: translateX(-6px);
+}
+
+/* Os dois quadrados brancos não podem ultrapassar a grade */
+.tonfa-graficos-principais > .tonfa-grafico-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Painel esquerdo */
+.tonfa-graficos-principais > .tonfa-grafico-card:first-child {
+  padding-left: 12px;
+  padding-right: 14px;
+}
+
+/* Painel do comparativo */
+.tonfa-grafico-card-barras {
+  padding-left: 20px;
+  padding-right: 20px;
+  transform: none;
+}
+
+/* Rosca e legenda */
+.tonfa-rosca-layout {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns:
+    minmax(185px, 0.68fr)
+    minmax(245px, 1.32fr);
+  align-items: center;
+  gap: 2px;
+}
+
+.tonfa-rosca {
+  width: min(215px, 100%);
+  margin-left: -12px;
+  transform: none;
+}
+
+/* Move a legenda completa para dentro do card */
+.tonfa-grafico-legenda,
+.tonfa-rosca-legenda {
+  width: calc(100% + 6px);
+  min-width: 0;
+  box-sizing: border-box;
+  margin-left: -22px;
+  transform: none;
+}
+
+/* Bolinha | descrição | quantidade | percentual */
+.tonfa-grafico-legenda > div,
+.tonfa-rosca-legenda > div,
+.tonfa-rosca-legenda-item {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns:
+    10px
+    minmax(118px, 1fr)
+    38px
+    48px;
+  align-items: center;
+  column-gap: 6px;
+}
+
+/* Impede nome, quantidade e percentual de serem cortados */
+.tonfa-grafico-legenda span,
+.tonfa-rosca-legenda span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.tonfa-grafico-legenda strong,
+.tonfa-rosca-legenda strong {
+  min-width: 38px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tonfa-grafico-legenda small,
+.tonfa-rosca-legenda small {
+  display: block;
+  min-width: 48px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Notebook e telas menores */
+@media (max-width: 1280px) {
+  .tonfa-graficos-section {
+    padding-left: 16px;
+    padding-right: 16px;
+    overflow: visible;
+  }
+
+  .tonfa-graficos-principais {
+    grid-template-columns: 1fr;
+    transform: none;
+  }
+
+  .tonfa-grafico-card-barras {
+    min-height: 420px;
+  }
+
+  .tonfa-rosca-layout {
+    grid-template-columns:
+      minmax(220px, 0.8fr)
+      minmax(260px, 1.2fr);
+    gap: 18px;
+  }
+
+  .tonfa-rosca {
+    margin-left: 0;
+  }
+
+  .tonfa-grafico-legenda,
+  .tonfa-rosca-legenda {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .tonfa-rosca-layout,
+  .tonfa-resumo-materiais-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-rosca {
+    margin: 0 auto;
+  }
+
+  .tonfa-barras-area {
+    overflow-x: auto;
+    grid-template-columns: repeat(5, minmax(105px, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .tonfa-grafico-card {
+    padding: 16px;
+  }
+
+  .tonfa-grafico-header,
+  .tonfa-section-title-graficos {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tonfa-grafico-legenda > div,
+  .tonfa-rosca-legenda > div,
+  .tonfa-rosca-legenda-item,
+  .tonfa-material-resumo-lista > div {
+    grid-template-columns:
+      10px
+      minmax(0, 1fr)
+      auto;
+  }
+
+  .tonfa-grafico-legenda small,
+  .tonfa-rosca-legenda small,
+  .tonfa-material-resumo-lista small {
+    display: none;
+  }
+
+  .tonfa-rosca {
+    width: min(220px, 100%);
+  }
+}
+
+
+/* Ajuste pontual da quantidade e do percentual */
+@media (min-width: 1281px) {
+  .tonfa-grafico-legenda > div > strong {
+    position: relative;
+    left: -12px;
+  }
+
+  .tonfa-grafico-legenda > div > small {
+    position: relative;
+    left: -14px;
+  }
+}

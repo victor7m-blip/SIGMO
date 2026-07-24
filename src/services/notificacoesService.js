@@ -28,24 +28,76 @@ function upper(
 function limparPayload(
   payload = {}
 ) {
+  const modulo =
+    upper(
+      payload.modulo,
+      'SISTEMA'
+    )
+
+  const tipoRecebido =
+    upper(
+      payload.tipo,
+      'INFORMACAO'
+    )
+
+  const tiposPermitidos = [
+    'INFORMACAO',
+    'SUCESSO',
+    'ALERTA',
+    'ERRO',
+    'SOLICITACAO',
+    'PATRIMONIO',
+    'SEGURANCA',
+    'SISTEMA'
+  ]
+
+  let tipo =
+    tipoRecebido
+
+  if (
+    !tiposPermitidos.includes(
+      tipo
+    )
+  ) {
+    const ehPatrimonial =
+      modulo.includes(
+        'PATRIMONIO'
+      ) ||
+      modulo.includes(
+        'PATRIMÔNIO'
+      ) ||
+      [
+        'TRANSFERENCIA',
+        'DISTRIBUICAO',
+        'MOVIMENTACAO',
+        'MOVIMENTACAO_PATRIMONIAL',
+        'CAUTELA',
+        'DEVOLUCAO',
+        'RECEBIMENTO'
+      ].includes(
+        tipoRecebido
+      )
+
+    tipo =
+      ehPatrimonial
+        ? 'PATRIMONIO'
+        : 'INFORMACAO'
+  }
+
   return {
     titulo:
-      texto(payload.titulo),
+      texto(
+        payload.titulo
+      ),
 
     mensagem:
-      texto(payload.mensagem),
-
-    tipo:
-      upper(
-        payload.tipo,
-        'INFORMATIVO'
+      texto(
+        payload.mensagem
       ),
 
-    modulo:
-      upper(
-        payload.modulo,
-        'SISTEMA'
-      ),
+    tipo,
+
+    modulo,
 
     prioridade:
       upper(
@@ -69,7 +121,9 @@ function limparPayload(
         : null,
 
     link:
-      texto(payload.link) ||
+      texto(
+        payload.link
+      ) ||
       null,
 
     metadata:
@@ -83,8 +137,11 @@ function limparPayload(
       payload.expira_em ||
       null,
 
-    lida: false,
-    arquivada: false
+    lida:
+      false,
+
+    arquivada:
+      false
   }
 }
 

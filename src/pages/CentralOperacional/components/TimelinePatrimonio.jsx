@@ -18,12 +18,12 @@ function texto(valor) {
   return String(valor ?? '').trim()
 }
 
-function textoMaiusculo(valor) {
+function normalizarUpper(valor) {
   return texto(valor).toUpperCase()
 }
 
 function classeEvento(tipo) {
-  const valor = textoMaiusculo(tipo)
+  const valor = normalizarUpper(tipo)
 
   if (
     valor.includes('BAIXA') ||
@@ -106,7 +106,7 @@ function classeEvento(tipo) {
 }
 
 function iconeEvento(tipo) {
-  const valor = textoMaiusculo(tipo)
+  const valor = normalizarUpper(tipo)
 
   if (
     valor.includes('BAIXA') ||
@@ -190,7 +190,7 @@ function iconeEvento(tipo) {
 }
 
 function tituloTipo(tipo) {
-  const valor = textoMaiusculo(tipo)
+  const valor = normalizarUpper(tipo)
 
   const titulos = {
     BAIXA: 'Baixa',

@@ -1,5 +1,6 @@
 export const PERFIS = {
   ADMINISTRADOR: 'ADMINISTRADOR',
+  P4: 'P4',
   COMANDANTE_CIA: 'COMANDANTE DE CIA',
   ENCARREGADO_SVDD: 'ENCARREGADO DO SVDD',
   AUXILIAR_SVDD: 'AUXILIAR DO SVDD',
@@ -19,6 +20,7 @@ export const ROTAS = {
   TPD: 'tpd',
   HT: 'ht',
   TASERS: 'tasers',
+  TONFAS: 'tonfas',
   MUNICOES: 'municoes',
   LOCAIS: 'locais',
   VIATURAS: 'viaturas',
@@ -48,6 +50,11 @@ export function normalizarPerfil(perfil) {
   const aliases = {
     ADMINISTRADOR: PERFIS.ADMINISTRADOR,
     ADMIN: PERFIS.ADMINISTRADOR,
+
+    P4: PERFIS.P4,
+    'SECAO P4': PERFIS.P4,
+    'SEÇÃO P4': PERFIS.P4,
+    'GESTOR PATRIMONIAL': PERFIS.P4,
 
     'COMANDANTE DE CIA':
       PERFIS.COMANDANTE_CIA,
@@ -166,6 +173,13 @@ export function ehAdministrador(user) {
   )
 }
 
+export function ehP4(user) {
+  return perfilEh(
+    user,
+    PERFIS.P4
+  )
+}
+
 export function ehComandante(user) {
   return perfilEh(
     user,
@@ -211,6 +225,26 @@ const ROTAS_USUARIO = [
   ROTAS.POLICIAIS
 ]
 
+const ROTAS_P4 = [
+  ROTAS.DASHBOARD,
+  ROTAS.CENTRAL_OPERACIONAL,
+  ROTAS.PAGAR_MATERIAL,
+  ROTAS.RECEBER_MATERIAL,
+  ROTAS.TRANSFERIR_MATERIAL,
+  ROTAS.BAIXAR_MATERIAL,
+  ROTAS.MATERIAIS,
+  ROTAS.ARMAS,
+  ROTAS.TPD,
+  ROTAS.HT,
+  ROTAS.TASERS,
+  ROTAS.TONFAS,
+  ROTAS.MUNICOES,
+  ROTAS.LOCAIS,
+  ROTAS.VIATURAS,
+  ROTAS.RELATORIOS,
+  ROTAS.ALERTAS
+]
+
 const ROTAS_AUXILIAR = [
   ROTAS.DASHBOARD,
   ROTAS.CENTRAL_OPERACIONAL,
@@ -223,6 +257,7 @@ const ROTAS_AUXILIAR = [
   ROTAS.TPD,
   ROTAS.HT,
   ROTAS.TASERS,
+  ROTAS.TONFAS,
   ROTAS.MUNICOES,
   ROTAS.LOCAIS,
   ROTAS.VIATURAS,
@@ -251,6 +286,9 @@ const ROTAS_ADMINISTRADOR = [
 const ROTAS_POR_PERFIL = {
   [PERFIS.USUARIO]:
     ROTAS_USUARIO,
+
+  [PERFIS.P4]:
+    ROTAS_P4,
 
   [PERFIS.AUXILIAR_SVDD]:
     ROTAS_AUXILIAR,
@@ -451,6 +489,7 @@ export function podeExcluirMaterial(
   return perfilEh(
     user,
     PERFIS.ADMINISTRADOR,
+    PERFIS.P4,
     PERFIS.COMANDANTE_CIA,
     PERFIS.ENCARREGADO_SVDD
   )

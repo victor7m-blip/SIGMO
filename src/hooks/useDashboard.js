@@ -95,6 +95,8 @@ export default function useDashboard() {
           new Date().toISOString()
       })
     } catch (error) {
+      console.dir(error)
+
       console.error(
         'Erro ao carregar dashboard:',
         error

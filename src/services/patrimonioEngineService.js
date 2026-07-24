@@ -290,3 +290,277 @@ export async function excluirPatrimonioEngine(
 
   return true
 }
+
+/*
+ * =====================================================
+ * PATRIMÔNIO ENGINE 7.6.2
+ * =====================================================
+ *
+ * Estas funções utilizam as tabelas centrais:
+ * - sigmo_patrimonio_itens
+ * - sigmo_patrimonio_lotes
+ * - sigmo_patrimonio_movimentacoes
+ * - sigmo_patrimonio_saldos
+ */
+
+function textoEngine(valor) {
+  return String(valor ?? '').trim()
+}
+
+function maiusculoEngine(valor) {
+  return textoEngine(valor).toUpperCase()
+}
+
+function numeroEngine(valor) {
+  const numero = Number(valor)
+
+  if (!Number.isFinite(numero)) {
+    return 0
+  }
+
+  return numero
+}
+
+function obterUsuarioEngine(user = null) {
+  return {
+    id:
+      user?.id ||
+      user?.user_id ||
+      user?.usuario_id ||
+      user?.usuario?.id ||
+      null,
+
+    nome:
+      textoEngine(
+        user?.nome_guerra ||
+          user?.nome ||
+          user?.name ||
+          user?.email ||
+          user?.usuario?.nome_guerra ||
+          user?.usuario?.nome
+      ) || null
+  }
+}
+
+export async function buscarItemPatrimonialEnginePorCodigo(
+  codigo
+) {
+  const codigoNormalizado =
+    maiusculoEngine(codigo)
+
+  if (!codigoNormalizado) {
+    throw new Error(
+      'Código do item patrimonial não informado.'
+    )
+  }
+
+  const { data, error } = await supabase
+    .from('sigmo_patrimonio_itens')
+    .select('*')
+    .eq('codigo', codigoNormalizado)
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (!data) {
+    throw new Error(
+      `Item patrimonial ${codigoNormalizado} não encontrado na Engine.`
+    )
+  }
+
+  return data
+}
+
+export async function receberPatrimonio({
+  itemId,
+  quantidade,
+  natureza = 'PROPRIO',
+
+  proprietario = {},
+  gestor = {},
+  guardiao = {},
+  local = {},
+  origem = {},
+  documento = {},
+
+  codigoLote = null,
+  dataRecebimento = null,
+  observacoes = null,
+  metadata = {},
+  user = null
+}) {
+  const quantidadeNormalizada =
+    numeroEngine(quantidade)
+
+  if (!itemId) {
+    throw new Error(
+      'Item patrimonial não informado.'
+    )
+  }
+
+  if (quantidadeNormalizada <= 0) {
+    throw new Error(
+      'A quantidade deve ser maior que zero.'
+    )
+  }
+
+  const usuario =
+    obterUsuarioEngine(user)
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_receber_patrimonio',
+    {
+      p_item_id:
+        itemId,
+
+      p_quantidade:
+        quantidadeNormalizada,
+
+      p_natureza:
+        maiusculoEngine(natureza) ||
+        'PROPRIO',
+
+      p_proprietario_tipo:
+        maiusculoEngine(proprietario.tipo) ||
+        'PMESP',
+
+      p_proprietario_id:
+        textoEngine(proprietario.id) ||
+        null,
+
+      p_proprietario_nome:
+        maiusculoEngine(proprietario.nome) ||
+        'PMESP',
+
+      p_gestor_tipo:
+        maiusculoEngine(gestor.tipo) ||
+        'P4',
+
+      p_gestor_id:
+        textoEngine(gestor.id) ||
+        null,
+
+      p_gestor_nome:
+        maiusculoEngine(gestor.nome) ||
+        'P4',
+
+      p_guardiao_tipo:
+        maiusculoEngine(guardiao.tipo) ||
+        'P4',
+
+      p_guardiao_id:
+        textoEngine(guardiao.id) ||
+        null,
+
+      p_guardiao_nome:
+        maiusculoEngine(guardiao.nome) ||
+        'P4',
+
+      p_local_tipo:
+        maiusculoEngine(local.tipo) ||
+        'SETOR',
+
+      p_local_id:
+        textoEngine(local.id) ||
+        null,
+
+      p_local_nome:
+        maiusculoEngine(local.nome) ||
+        'P4',
+
+      p_origem_tipo:
+        maiusculoEngine(origem.tipo) ||
+        null,
+
+      p_origem_id:
+        textoEngine(origem.id) ||
+        null,
+
+      p_origem_nome:
+        maiusculoEngine(origem.nome) ||
+        null,
+
+      p_documento_tipo:
+        maiusculoEngine(documento.tipo) ||
+        null,
+
+      p_documento_numero:
+        textoEngine(documento.numero) ||
+        null,
+
+      p_documento_data:
+        documento.data ||
+        null,
+
+      p_codigo_lote:
+        maiusculoEngine(codigoLote) ||
+        null,
+
+      p_data_recebimento:
+        dataRecebimento ||
+        null,
+
+      p_observacoes:
+        textoEngine(observacoes) ||
+        null,
+
+      p_metadata:
+        metadata && typeof metadata === 'object'
+          ? metadata
+          : {},
+
+      p_usuario_id:
+        usuario.id,
+
+      p_usuario_nome:
+        usuario.nome
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  if (!data?.sucesso) {
+    throw new Error(
+      data?.mensagem ||
+        'Não foi possível receber o patrimônio.'
+    )
+  }
+
+  return data
+}
+
+export async function receberPatrimonioPorCodigo({
+  codigoItem,
+  ...dados
+}) {
+  const item =
+    await buscarItemPatrimonialEnginePorCodigo(
+      codigoItem
+    )
+
+  const resultado =
+    await receberPatrimonio({
+      ...dados,
+      itemId: item.id,
+      metadata: {
+        ...(dados.metadata || {}),
+        item_codigo:
+          item.codigo,
+        item_categoria:
+          item.categoria,
+        item_nome:
+          item.nome
+      }
+    })
+
+  return {
+    item,
+    ...resultado
+  }
+}
+

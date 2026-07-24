@@ -23,6 +23,7 @@ import Armas from './Armas/Armas'
 import TPD from './TPD/TPD'
 import Policiais from './Policiais'
 import Taser from './Taser/Taser'
+import Tonfas from './Tonfas/Tonfas'
 import Municoes from './Municoes/Municoes'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
@@ -855,6 +856,11 @@ if (route === 'ht') {
 if (route === 'tasers') {
   return <Taser user={user} />
 }
+
+if (route === 'tonfas') {
+  return <Tonfas user={user} />
+}
+
 
     if (route === 'policiais') {
       return <Policiais user={user} />

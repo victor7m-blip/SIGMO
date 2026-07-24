@@ -44,7 +44,9 @@ function criarChaveMaterial(material) {
 }
 
 export default function PagarMaterial({
-  user
+  user,
+  onVoltar = null,
+  onConcluido = null
 }) {
   const [reRecebedor, setReRecebedor] =
     useState('')
@@ -279,6 +281,8 @@ export default function PagarMaterial({
       setAtualizarPesquisaEm(
         Date.now()
       )
+
+      await onConcluido?.(resultado)
     } catch (error) {
       console.error(error)
 
@@ -316,6 +320,19 @@ export default function PagarMaterial({
           </strong>
         </div>
       </header>
+
+      {typeof onVoltar === 'function' && (
+        <div className="pagar-material-top-actions">
+          <button
+            type="button"
+            className="pagar-material-refresh"
+            onClick={onVoltar}
+            disabled={salvando}
+          >
+            Voltar
+          </button>
+        </div>
+      )}
 
       {buscandoQrCode && (
         <div className="pagar-material-feedback">
