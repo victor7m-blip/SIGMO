@@ -1785,3 +1785,242 @@
     left: -14px;
   }
 }
+
+/* ===========================================================
+   MODAL DE CAUTELAS ATIVAS
+=========================================================== */
+
+.tonfa-cautelas-modal {
+  width: min(980px, 100%);
+}
+
+.tonfa-cautelas-subtitulo {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+
+.tonfa-cautelas-resumo {
+  margin: 20px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tonfa-cautelas-resumo > div {
+  padding: 16px;
+  border: 1px solid #dfe5ec;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.tonfa-cautelas-resumo span,
+.tonfa-cautela-dados span,
+.tonfa-cautela-observacao span {
+  display: block;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tonfa-cautelas-resumo strong {
+  display: block;
+  margin-top: 8px;
+  color: #172033;
+  font-size: 1.7rem;
+}
+
+.tonfa-cautelas-toolbar {
+  margin-bottom: 18px;
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 1fr)
+    auto
+    auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.tonfa-cautelas-toolbar > input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}
+
+.tonfa-cautelas-toolbar > input:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.14);
+  border-color: #2563eb;
+}
+
+.tonfa-cautelas-filtros {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tonfa-cautelas-filtros button {
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tonfa-cautelas-filtros button.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.tonfa-cautelas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tonfa-cautelas-vazio {
+  padding: 35px 20px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  color: #64748b;
+  text-align: center;
+}
+
+.tonfa-cautela-card {
+  padding: 18px;
+  border: 1px solid #dfe5ec;
+  border-left: 5px solid #2563eb;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.tonfa-cautela-card.is-vencida {
+  border-color: #fecaca;
+  border-left-color: #dc2626;
+  background: #fffafa;
+}
+
+.tonfa-cautela-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tonfa-cautela-card-header > div > span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tonfa-cautela-card-header h3 {
+  margin: 5px 0 0;
+  color: #172033;
+}
+
+.tonfa-cautela-card-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.tonfa-cautela-status {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.is-vencida .tonfa-cautela-status {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.tonfa-cautela-dados {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns:
+    repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tonfa-cautela-dados > div {
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.tonfa-cautela-dados strong {
+  display: block;
+  margin-top: 6px;
+  color: #172033;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.tonfa-cautela-observacao {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.tonfa-cautela-observacao p {
+  margin: 6px 0 0;
+  color: #475569;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.tonfa-cautela-acoes {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .tonfa-cautelas-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-cautelas-filtros {
+    flex-wrap: wrap;
+  }
+
+  .tonfa-cautela-dados {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .tonfa-cautelas-resumo,
+  .tonfa-cautela-dados {
+    grid-template-columns: 1fr;
+  }
+
+  .tonfa-cautela-card-header {
+    flex-direction: column;
+  }
+
+  .tonfa-cautela-status {
+    align-self: flex-start;
+  }
+}

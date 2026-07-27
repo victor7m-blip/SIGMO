@@ -3,6 +3,9 @@ import { supabase } from './supabaseClient'
 const PATRIMONIOS_TABLE =
   'sigmo_patrimonios'
 
+const TONFAS_TABLE =
+  'sigmo_tonfas'
+
 const FONTES_REFERENCIA = {
   arma: {
     modulo: 'ARMA',
@@ -22,6 +25,36 @@ const FONTES_REFERENCIA = {
   materiais: {
     modulo: 'MATERIAL',
     tabela: 'sigmo_materiais'
+  },
+
+  ht: {
+    modulo: 'HT',
+    tabela: 'sigmo_hts'
+  },
+
+  hts: {
+    modulo: 'HT',
+    tabela: 'sigmo_hts'
+  },
+
+  tpd: {
+    modulo: 'TPD',
+    tabela: 'sigmo_tpds'
+  },
+
+  tpds: {
+    modulo: 'TPD',
+    tabela: 'sigmo_tpds'
+  },
+
+  taser: {
+    modulo: 'TASER',
+    tabela: 'sigmo_tasers'
+  },
+
+  tasers: {
+    modulo: 'TASER',
+    tabela: 'sigmo_tasers'
   },
 
   municao: {
@@ -45,6 +78,19 @@ function normalizarTipo(valor) {
   return String(valor ?? '')
     .trim()
     .toLowerCase()
+}
+
+function numeroInteiro(valor) {
+  const numero = Number(valor)
+
+  if (!Number.isFinite(numero)) {
+    return 0
+  }
+
+  return Math.max(
+    0,
+    Math.trunc(numero)
+  )
 }
 
 function objeto(valor) {
@@ -200,7 +246,9 @@ function obterStatus({
 
   return normalizarTexto(
     patrimonioCentral?.status ||
+    referencia?.status_operacional ||
     referencia?.status ||
+    dados.status_operacional ||
     dados.status ||
     referencia?.situacao ||
     dados.situacao ||
@@ -208,13 +256,64 @@ function obterStatus({
   )
 }
 
-function registroDisponivel(status) {
-  return [
+function registroDisponivel({
+  status,
+  localAtual,
+  ativo = true,
+  controlaQuantidade = false,
+  quantidadeDisponivel = 0
+}) {
+  if (ativo === false) {
+    return false
+  }
+
+  if (controlaQuantidade) {
+    return numeroInteiro(
+      quantidadeDisponivel
+    ) > 0
+  }
+
+  const statusNormalizado =
+    normalizarTexto(status)
+
+  const localNormalizado =
+    normalizarTexto(localAtual)
+
+  const statusPermitido = [
     'DISPONÍVEL',
     'DISPONIVEL',
-    'ATIVO'
-  ].includes(
-    normalizarTexto(status)
+    'ATIVO',
+    'RESERVA'
+  ].includes(statusNormalizado)
+
+  const statusBloqueado = [
+    'CAUTELADO',
+    'CARGA',
+    'EM SERVIÇO',
+    'EM_SERVICO',
+    'MANUTENÇÃO',
+    'MANUTENCAO',
+    'RECOLHIDO',
+    'BAIXADO',
+    'APREENDIDO',
+    'INATIVO'
+  ].includes(statusNormalizado)
+
+  if (statusBloqueado) {
+    return false
+  }
+
+  if (statusPermitido) {
+    return true
+  }
+
+  return [
+    'COFRE DO SVDD',
+    'SVDD',
+    'SERVIÇO DE DIA',
+    'SERVICO DE DIA'
+  ].some((local) =>
+    localNormalizado.includes(local)
   )
 }
 
@@ -275,25 +374,25 @@ function normalizarRegistro({
       referencia
     })
 
+  const localAtual =
+    normalizarTexto(
+      obterLocal({
+        patrimonioCentral,
+        referencia
+      })
+    )
+
   return {
     ...referencia,
     ...dados,
     ...patrimonioCentral,
 
-    /*
-     * ID canônico usado pelas RPCs
-     * e pelo motor de movimentações.
-     */
     id:
       patrimonioCentral.id,
 
     patrimonio_id:
       patrimonioCentral.id,
 
-    /*
-     * ID existente na tabela específica,
-     * como sigmo_armas ou sigmo_materiais.
-     */
     referencia_id:
       patrimonioCentral.referencia_id ||
       referencia?.id ||
@@ -328,12 +427,7 @@ function normalizarRegistro({
       ),
 
     local_atual:
-      normalizarTexto(
-        obterLocal({
-          patrimonioCentral,
-          referencia
-        })
-      ),
+      localAtual,
 
     status,
 
@@ -359,8 +453,132 @@ function normalizarRegistro({
     tabela_origem:
       configuracao.tabela,
 
+    controla_quantidade:
+      false,
+
+    quantidade_disponivel:
+      1,
+
+    quantidade_maxima:
+      1,
+
     disponivel:
-      registroDisponivel(status)
+      registroDisponivel({
+        status,
+        localAtual,
+        ativo:
+          patrimonioCentral.ativo !== false,
+        controlaQuantidade: false
+      })
+  }
+}
+
+function normalizarTonfaParaEntrega(
+  registro,
+  origemLocal = 'COFRE DO SVDD'
+) {
+  const tipo =
+    normalizarTexto(
+      registro.tipo
+    ) || 'TONFA'
+
+  const origemNormalizada = normalizarTexto(origemLocal)
+
+  const quantidadeDisponivel = numeroInteiro(
+    origemNormalizada.includes('P4')
+      ? registro.quantidade_p4
+      : registro.quantidade_svdd
+  )
+
+  const localEstoque = origemNormalizada.includes('P4')
+    ? 'DEPÓSITO DO P4'
+    : 'COFRE DO SVDD'
+
+  const descricao =
+    tipo === 'CASSETETE'
+      ? 'CASSETETE'
+      : 'TONFA'
+
+  return {
+    ...registro,
+
+    id:
+      `tonfa-estoque-${registro.id}`,
+
+    patrimonio_id:
+      null,
+
+    referencia_id:
+      registro.id,
+
+    tonfa_id:
+      registro.id,
+
+    item_engine_id:
+      registro.item_engine_id ||
+      registro.patrimonio_item_id ||
+      null,
+
+    lote_id:
+      registro.lote_id ||
+      registro.patrimonio_lote_id ||
+      null,
+
+    patrimonio:
+      registro.qr_code ||
+      `ESTOQUE-${tipo}`,
+
+    descricao,
+
+    categoria:
+      tipo,
+
+    modulo:
+      'TONFAS',
+
+    tabela_origem:
+      TONFAS_TABLE,
+
+    local_atual:
+      localEstoque,
+
+    status:
+      quantidadeDisponivel > 0
+        ? `DISPONÍVEL - ${localEstoque}`
+        : `SEM SALDO - ${localEstoque}`,
+
+    numero_serie:
+      '',
+
+    qr_code:
+      normalizarTexto(
+        registro.qr_code
+      ),
+
+    controla_quantidade:
+      true,
+
+    quantidade_disponivel:
+      quantidadeDisponivel,
+
+    quantidade_maxima:
+      quantidadeDisponivel,
+
+    quantidade:
+      1,
+
+    disponivel:
+      registroDisponivel({
+        status:
+          registro.status_operacional,
+        localAtual:
+          localEstoque,
+        ativo:
+          registro.ativo !== false,
+        controlaQuantidade: true,
+        quantidadeDisponivel:
+          quantidadeDisponivel
+      })
   }
 }
 
@@ -382,6 +600,38 @@ async function carregarPatrimoniosCentrais() {
   }
 
   return data ?? []
+}
+
+async function carregarTonfasPorOrigem(origemLocal = 'COFRE DO SVDD') {
+  const {
+    data,
+    error
+  } = await supabase
+    .from(TONFAS_TABLE)
+    .select('*')
+    .eq('ativo', true)
+    .gt(
+      normalizarTexto(origemLocal).includes('P4')
+        ? 'quantidade_p4'
+        : 'quantidade_svdd',
+      0
+    )
+    .order('tipo', {
+      ascending: true
+    })
+
+  if (error) {
+    console.warn(
+      'Não foi possível carregar Tonfas/Cassetetes do SVDD.',
+      error
+    )
+
+    return []
+  }
+
+  return (data ?? []).map(
+    (registro) => normalizarTonfaParaEntrega(registro, origemLocal)
+  )
 }
 
 async function carregarRegistrosNormalizados() {
@@ -481,10 +731,21 @@ async function carregarRegistrosNormalizados() {
 
 export async function listarPatrimoniosParaEntrega({
   busca = '',
-  apenasDisponiveis = false
+  apenasDisponiveis = false,
+  origemLocal = 'COFRE DO SVDD'
 } = {}) {
-  let itens =
-    await carregarRegistrosNormalizados()
+  const [
+    patrimoniosIndividuais,
+    estoquesQuantidade
+  ] = await Promise.all([
+    carregarRegistrosNormalizados(),
+    carregarTonfasPorOrigem(origemLocal)
+  ])
+
+  let itens = [
+    ...estoquesQuantidade,
+    ...patrimoniosIndividuais
+  ]
 
   if (apenasDisponiveis) {
     itens = itens.filter(
@@ -511,7 +772,8 @@ export async function listarPatrimoniosParaEntrega({
           item.qr_code,
           item.codigo,
           item.id,
-          item.referencia_id
+          item.referencia_id,
+          item.tonfa_id
         ].some((valor) =>
           normalizarTexto(
             valor
@@ -521,8 +783,22 @@ export async function listarPatrimoniosParaEntrega({
   }
 
   return itens.sort(
-    (itemA, itemB) =>
-      String(
+    (itemA, itemB) => {
+      if (
+        itemA.controla_quantidade &&
+        !itemB.controla_quantidade
+      ) {
+        return -1
+      }
+
+      if (
+        !itemA.controla_quantidade &&
+        itemB.controla_quantidade
+      ) {
+        return 1
+      }
+
+      return String(
         itemA.descricao ?? ''
       ).localeCompare(
         String(
@@ -530,11 +806,13 @@ export async function listarPatrimoniosParaEntrega({
         ),
         'pt-BR'
       )
+    }
   )
 }
 
 export async function buscarPatrimonioPorQrCode(
-  valorQrCode
+  valorQrCode,
+  { origemLocal = 'COFRE DO SVDD' } = {}
 ) {
   const valor =
     normalizarTexto(
@@ -547,7 +825,8 @@ export async function buscarPatrimonioPorQrCode(
 
   const itens =
     await listarPatrimoniosParaEntrega({
-      busca: valor
+      busca: valor,
+      origemLocal
     })
 
   return (
@@ -560,7 +839,8 @@ export async function buscarPatrimonioPorQrCode(
         item.serie,
         item.codigo,
         item.id,
-        item.referencia_id
+        item.referencia_id,
+        item.tonfa_id
       ].some(
         (campo) =>
           normalizarTexto(

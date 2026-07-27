@@ -66,10 +66,17 @@ function obterNomeUsuario(user) {
 }
 
 function obterReUsuario(user) {
-  return normalizarRE(
+  const reBruto =
     user?.re ||
     user?.user_metadata?.re ||
-    '',
+    ''
+
+  const reNormalizado = String(reBruto)
+    .replace(/\D/g, '')
+    .slice(0, 6)
+
+  return normalizarRE(
+    reNormalizado,
     {
       obrigatorio: false
     }
@@ -320,11 +327,8 @@ export async function receberMaterial({
       companhiaDestino:
         unidadeDestino,
 
-      recebedorRE:
-        operadorRe,
-
-      recebedorNome:
-        operadorNome,
+      recebedorRE: null,
+      recebedorNome: null,
 
       motivo:
         'DEVOLUÇÃO DE MATERIAL À RESERVA',
@@ -332,6 +336,13 @@ export async function receberMaterial({
       observacao,
 
       dados: {
+       guardiao_destino: {
+       tipo: 'SETOR',
+       codigo: maiusculo(localDestino),
+       nome: maiusculo(localDestino),
+        id: null
+      },
+
         modulo:
           String(tipo)
             .trim()

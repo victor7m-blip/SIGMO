@@ -10,6 +10,14 @@ import {
 } from '../../services/responsabilidadeService'
 
 import {
+  listarTonfasEmServico
+} from '../../services/tonfasMovimentacoesService'
+
+import {
+  receberCautelaTonfa
+} from '../../services/tonfasService'
+
+import {
   receberMateriais,
   LOCAL_RETORNO_PADRAO
 } from '../../services/recebimentoService'
@@ -107,6 +115,16 @@ function obterLocalOrigem(item) {
 }
 
 function criarChaveItem(item) {
+  if (
+    item?.tipo_registro ===
+    'TONFA_QUANTIDADE'
+  ) {
+    return String(
+      item?.movimentacao_tonfa_id ||
+      item?.id
+    )
+  }
+
   return String(
     item?.patrimonio_id ||
     item?.id ||
@@ -157,7 +175,11 @@ function normalizarItem(item) {
     local_atual:
       obterLocalOrigem(item),
 
-    quantidade: 1
+    quantidade:
+      Number(
+        item?.quantidade ||
+        1
+      )
   }
 }
 
@@ -250,16 +272,35 @@ export default function ReceberMaterial({
           setErro('')
           setMensagem('')
 
-          const resultado =
-            await listarPatrimoniosResponsavel({
-              re: reEntregador,
-              nome: nomeEntregador
-            })
+          const [
+  patrimoniosIndividuais,
+  tonfasEmServico
+] = await Promise.all([
+  listarPatrimoniosResponsavel({
+    re:
+      reEntregador,
 
-          const lista =
-            (resultado ?? []).map(
-              normalizarItem
-            )
+    nome:
+      nomeEntregador
+  }),
+
+  listarTonfasEmServico({
+    re:
+      reEntregador,
+
+    policialId:
+      policialEntregador?.id ||
+      policialEntregador?.policial_id ||
+      null
+  })
+])
+
+const lista = [
+  ...(patrimoniosIndividuais ?? []),
+  ...(tonfasEmServico ?? [])
+].map(
+  normalizarItem
+)
 
           setPatrimonios(lista)
           setItensSelecionados([])
@@ -443,49 +484,68 @@ export default function ReceberMaterial({
   }
 
   async function confirmarRecebimento() {
-    if (!policialEntregador) {
-      setErro(
-        'Informe o RE de quem está entregando.'
+  if (!policialEntregador) {
+    setErro(
+      'Informe o RE de quem está entregando.'
+    )
+    return
+  }
+
+  if (
+    reEntregador.length !== 6
+  ) {
+    setErro(
+      'O RE de quem está entregando deve possuir 6 dígitos.'
+    )
+    return
+  }
+
+  if (
+    itensSelecionados.length === 0
+  ) {
+    setErro(
+      'Selecione pelo menos um patrimônio para receber.'
+    )
+    return
+  }
+
+  if (
+    !localRetorno.trim()
+  ) {
+    setErro(
+      'Informe o local de retorno.'
+    )
+    return
+  }
+
+  try {
+    setSalvando(true)
+    setErro('')
+    setMensagem('')
+
+    const itensTonfa =
+      itensSelecionados.filter(
+        (item) =>
+          item?.tipo_registro ===
+          'TONFA_QUANTIDADE'
       )
-      return
-    }
+
+    const itensIndividuais =
+      itensSelecionados.filter(
+        (item) =>
+          item?.tipo_registro !==
+          'TONFA_QUANTIDADE'
+      )
+
+    const resultadosIndividuais = []
 
     if (
-      reEntregador.length !== 6
+      itensIndividuais.length > 0
     ) {
-      setErro(
-        'O RE de quem está entregando deve possuir 6 dígitos.'
-      )
-      return
-    }
-
-    if (
-      itensSelecionados.length === 0
-    ) {
-      setErro(
-        'Selecione pelo menos um patrimônio para receber.'
-      )
-      return
-    }
-
-    if (
-      !localRetorno.trim()
-    ) {
-      setErro(
-        'Informe o local de retorno.'
-      )
-      return
-    }
-
-    try {
-      setSalvando(true)
-      setErro('')
-      setMensagem('')
-
       const resultado =
         await receberMateriais({
           itens:
-            itensSelecionados,
+            itensIndividuais,
 
           entregadorRE:
             reEntregador,
@@ -511,53 +571,108 @@ export default function ReceberMaterial({
           user
         })
 
-      setMensagem(
-        `${resultado.total} ${
-          resultado.total === 1
-            ? 'patrimônio recebido'
-            : 'patrimônios recebidos'
-        } com sucesso.`
-      )
-
-      const idsRecebidos =
-        new Set(
-          itensSelecionados.map(
-            criarChaveItem
-          )
+      resultadosIndividuais.push(
+        ...(
+          resultado?.resultados ||
+          []
         )
-
-      setPatrimonios(
-        (listaAtual) =>
-          listaAtual.filter(
-            (item) =>
-              !idsRecebidos.has(
-                criarChaveItem(item)
-              )
-          )
       )
-
-      setItensSelecionados([])
-      setBusca('')
-      setDocumento('')
-      setObservacoes('')
-
-      onConcluido?.(
-        resultado
-      )
-    } catch (error) {
-      console.error(
-        'Erro ao receber materiais:',
-        error
-      )
-
-      setErro(
-        error?.message ||
-        'Não foi possível concluir o recebimento.'
-      )
-    } finally {
-      setSalvando(false)
     }
+
+    const resultadosTonfas = []
+
+    for (
+      const item of itensTonfa
+    ) {
+      const resultado =
+        await receberCautelaTonfa({
+          movimentacaoId:
+            item.movimentacao_tonfa_id,
+
+          observacoes:
+            normalizarTexto(
+              observacoes
+            ),
+
+          user
+        })
+
+      resultadosTonfas.push({
+        item,
+        resultado
+      })
+    }
+
+    const totalRecebido =
+      itensIndividuais.length +
+      itensTonfa.length
+
+    const resultadoFinal = {
+      total:
+        totalRecebido,
+
+      total_individuais:
+        itensIndividuais.length,
+
+      total_quantitativos:
+        itensTonfa.length,
+
+      resultados: [
+        ...resultadosIndividuais,
+        ...resultadosTonfas
+      ]
+    }
+
+    setMensagem(
+      `${totalRecebido} ${
+        totalRecebido === 1
+          ? 'registro recebido'
+          : 'registros recebidos'
+      } com sucesso.`
+    )
+
+    const idsRecebidos =
+      new Set(
+        itensSelecionados.map(
+          criarChaveItem
+        )
+      )
+
+    setPatrimonios(
+      (listaAtual) =>
+        listaAtual.filter(
+          (item) =>
+            !idsRecebidos.has(
+              criarChaveItem(item)
+            )
+        )
+    )
+
+    setItensSelecionados([])
+    setBusca('')
+    setDocumento('')
+    setObservacoes('')
+
+    onConcluido?.(
+      resultadoFinal
+    )
+  } catch (error) {
+   console.error('Erro ao receber materiais:', {
+  code: error?.code,
+  message: error?.message,
+  details: error?.details,
+  hint: error?.hint,
+  error
+})
+
+    setErro(
+      error?.message ||
+      'Não foi possível concluir o recebimento.'
+    )
+  } finally {
+    setSalvando(false)
   }
+}
 
   return (
     <main className="pagar-material-page">
@@ -860,10 +975,20 @@ export default function ReceberMaterial({
                             </td>
 
                             <td>
-                              {
-                                item.descricao
-                              }
-                            </td>
+  {item.descricao}
+
+  {item.tipo_registro ===
+    'TONFA_QUANTIDADE' && (
+    <small
+      style={{
+        display: 'block',
+        marginTop: '4px'
+      }}
+    >
+      Quantidade: {item.quantidade}
+    </small>
+  )}
+</td>
 
                             <td>
                               {

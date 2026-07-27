@@ -17,6 +17,7 @@ import TonfaTransferenciaModal from './components/TonfaTransferenciaModal'
 import HistoricoPatrimonial from '../../components/Patrimonio/HistoricoPatrimonial'
 import PagarMaterial from '../PagarMaterial/PagarMaterial'
 import ReceberMaterial from '../ReceberMaterial/ReceberMaterial'
+import TonfaCautelasModal from './components/TonfaCautelasModal'
 import TonfaReceberP4 from './components/TonfaReceberP4'
 import './styles/Tonfas.css'
 import './styles/TonfaFotos.css'
@@ -631,6 +632,10 @@ export default function Tonfas({ user }) {
   const [transferenciaModo, setTransferenciaModo] = useState('P4_SVDD')
   const [mensagemSucesso, setMensagemSucesso] = useState('')
   const [movimentacaoAtiva, setMovimentacaoAtiva] = useState(null)
+  const [
+  cautelasModalAberto,
+  setCautelasModalAberto
+] = useState(false)
 
   const [filtros, setFiltros] = useState({
     pesquisa: '',
@@ -716,50 +721,104 @@ export default function Tonfas({ user }) {
   }, [carregarResumo])
 
   const resumo = useMemo(() => {
-    const base = tonfasResumo
+  const base = tonfasResumo
 
-    const totalGeral = somarQuantidades(base)
+  function resumirSaldoPorTipo(itens, campo) {
+    return {
+      tonfas: itens
+        .filter(
+          (item) =>
+            normalizarTexto(item?.tipo) ===
+            'TONFA'
+        )
+        .reduce(
+          (total, item) =>
+            total +
+            Number(item?.[campo] || 0),
+          0
+        ),
 
-    const totalTonfas = somarQuantidades(
-      base.filter(
-        (item) => normalizarTexto(item?.tipo) === 'TONFA'
-      )
-    )
+      cassetetes: itens
+        .filter(
+          (item) =>
+            normalizarTexto(item?.tipo) ===
+            'CASSETETE'
+        )
+        .reduce(
+          (total, item) =>
+            total +
+            Number(item?.[campo] || 0),
+          0
+        )
+    }
+  }
 
-    const totalCassetetes = somarQuantidades(
+  const totalGeral =
+    somarQuantidades(base)
+
+  const totalTonfas =
+    somarQuantidades(
       base.filter(
         (item) =>
-          normalizarTexto(item?.tipo) === 'CASSETETE'
+          normalizarTexto(item?.tipo) ===
+          'TONFA'
       )
     )
 
-    const itensNaoLocalizados = base.filter(
-      estaNaoLocalizado
-    )
-    const itensDepositoP4 = base.filter(estaNoP4)
-    const itensNoCofreSVDD = base.filter(estaNoSVDD)
-    const itensEmServicoSVDD = base.filter(
-      (item) =>
-        estaEmCautela(item) &&
-        !estaNoSVDD(item)
+  const totalCassetetes =
+    somarQuantidades(
+      base.filter(
+        (item) =>
+          normalizarTexto(item?.tipo) ===
+          'CASSETETE'
+      )
     )
 
-    const itensSobResponsabilidadeSVDD = [
-      ...itensNoCofreSVDD,
-      ...itensEmServicoSVDD
-    ]
-
-    const itensCarga = base.filter(estaEmCarga)
-    const itensCautela = base.filter(estaEmCautela)
-    const itensManutencao = base.filter(
-      estaEmManutencao
+  const depositoP4PorTipo =
+    resumirSaldoPorTipo(
+      base,
+      'quantidade_p4'
     )
-    const itensOutraCia = base.filter(estaEmOutraCia)
-    const itensFT = base.filter(estaNaFT)
-    const itensBTL = base.filter(estaNoBTL)
-    const itensBaixados = base.filter(estaBaixado)
 
-    const itensOutros = base.filter(
+  const cofreSVDDPorTipo =
+    resumirSaldoPorTipo(
+      base,
+      'quantidade_svdd'
+    )
+
+  const emServicoPorTipo =
+    resumirSaldoPorTipo(
+      base,
+      'quantidade_em_servico'
+    )
+
+  const totalCautelas =
+    emServicoPorTipo.tonfas +
+    emServicoPorTipo.cassetetes
+
+  const itensNaoLocalizados =
+    base.filter(estaNaoLocalizado)
+
+  const itensCarga =
+    base.filter(estaEmCarga)
+
+  const itensManutencao =
+    base.filter(estaEmManutencao)
+
+  const itensOutraCia =
+    base.filter(estaEmOutraCia)
+
+  const itensFT =
+    base.filter(estaNaFT)
+
+  const itensBTL =
+    base.filter(estaNoBTL)
+
+  const itensBaixados =
+    base.filter(estaBaixado)
+
+  const itensOutros =
+    base.filter(
       (item) =>
         !estaNaoLocalizado(item) &&
         !estaNoP4(item) &&
@@ -773,124 +832,142 @@ export default function Tonfas({ user }) {
         !estaBaixado(item)
     )
 
-    const depositoP4PorTipo =
-  resumirSaldoPorTipo(
-    base,
-    'quantidade_p4'
-  )
-
-const cofreSVDDPorTipo =
-  resumirSaldoPorTipo(
-    base,
-    'quantidade_svdd'
-  )
-
-const emServicoPorTipo =
-  resumirSaldoPorTipo(
-    base,
-    'quantidade_em_servico'
-  )
-
-function resumirSaldoPorTipo(
-  itens,
-  campo
-) {
   return {
-    tonfas: itens
-      .filter(
-        (item) =>
-          normalizarTexto(item?.tipo) ===
-          'TONFA'
-      )
-      .reduce(
-        (total, item) =>
-          total +
-          Number(item?.[campo] || 0),
-        0
-      ),
+    totalGeral,
+    totalTonfas,
+    totalCassetetes,
 
-    cassetetes: itens
-      .filter(
-        (item) =>
-          normalizarTexto(item?.tipo) ===
-          'CASSETETE'
-      )
-      .reduce(
-        (total, item) =>
-          total +
-          Number(item?.[campo] || 0),
-        0
-      )
-  }
-}
-
-    return {
-      totalGeral,
-      totalTonfas,
-      totalCassetetes,
-      naoLocalizadas: somarQuantidades(
+    naoLocalizadas:
+      somarQuantidades(
         itensNaoLocalizados
       ),
-      localizadas:
-        totalGeral -
-        somarQuantidades(itensNaoLocalizados),
 
-      depositoP4:
-  depositoP4PorTipo.tonfas +
-  depositoP4PorTipo.cassetetes,
-
-cofreSVDD: {
-  tonfas:
-    cofreSVDDPorTipo.tonfas +
-    emServicoPorTipo.tonfas,
-
-  cassetetes:
-    cofreSVDDPorTipo.cassetetes +
-    emServicoPorTipo.cassetetes,
-
-  noCofreTonfas:
-    cofreSVDDPorTipo.tonfas,
-
-  noCofreCassetetes:
-    cofreSVDDPorTipo.cassetetes,
-
-  emServicoTonfas:
-    emServicoPorTipo.tonfas,
-
-  emServicoCassetetes:
-    emServicoPorTipo.cassetetes
-},
-
-      cargas: somarQuantidades(itensCarga),
-      cautelas: somarQuantidades(itensCautela),
-      cautelasVencidas: somarQuantidades(
-        base.filter(possuiCautelaVencida)
+    localizadas:
+      totalGeral -
+      somarQuantidades(
+        itensNaoLocalizados
       ),
-      manutencao: somarQuantidades(itensManutencao),
-      outraCia: somarQuantidades(itensOutraCia),
-      ft: somarQuantidades(itensFT),
-      btl: somarQuantidades(itensBTL),
-      baixados: somarQuantidades(itensBaixados),
-outros: somarQuantidades(itensOutros),
 
-distribuicaoNaoLocalizada: resumirPorTipo(
-  itensNaoLocalizados
-),
+    depositoP4:
+      depositoP4PorTipo.tonfas +
+      depositoP4PorTipo.cassetetes,
 
-distribuicao: {
-  depositoP4:
-  depositoP4PorTipo,
-  cargaPermanente: resumirPorTipo(itensCarga),
-  cautelas: resumirPorTipo(itensCautela),
-  manutencao: resumirPorTipo(itensManutencao),
-  outraCia: resumirPorTipo(itensOutraCia),
-  forcaTatica: resumirPorTipo(itensFT),
-  batalhao: resumirPorTipo(itensBTL),
-  baixados: resumirPorTipo(itensBaixados),
-  outros: resumirPorTipo(itensOutros)
-}
+    cofreSVDD: {
+      tonfas:
+        cofreSVDDPorTipo.tonfas +
+        emServicoPorTipo.tonfas,
+
+      cassetetes:
+        cofreSVDDPorTipo.cassetetes +
+        emServicoPorTipo.cassetetes,
+
+      noCofreTonfas:
+        cofreSVDDPorTipo.tonfas,
+
+      noCofreCassetetes:
+        cofreSVDDPorTipo.cassetetes,
+
+      emServicoTonfas:
+        emServicoPorTipo.tonfas,
+
+      emServicoCassetetes:
+        emServicoPorTipo.cassetetes
+    },
+
+    cargas:
+      somarQuantidades(
+        itensCarga
+      ),
+
+    cautelas:
+      totalCautelas,
+
+    cautelasVencidas: 0,
+
+    manutencao:
+      somarQuantidades(
+        itensManutencao
+      ),
+
+    outraCia:
+      somarQuantidades(
+        itensOutraCia
+      ),
+
+    ft:
+      somarQuantidades(
+        itensFT
+      ),
+
+    btl:
+      somarQuantidades(
+        itensBTL
+      ),
+
+    baixados:
+      somarQuantidades(
+        itensBaixados
+      ),
+
+    outros:
+      somarQuantidades(
+        itensOutros
+      ),
+
+    distribuicaoNaoLocalizada:
+      resumirPorTipo(
+        itensNaoLocalizados
+      ),
+
+    distribuicao: {
+      depositoP4:
+        depositoP4PorTipo,
+
+      cargaPermanente: {
+        tonfas: 0,
+        cassetetes: 0
+      },
+
+      cautelas: {
+        tonfas:
+          emServicoPorTipo.tonfas,
+
+        cassetetes:
+          emServicoPorTipo.cassetetes
+      },
+
+      manutencao:
+        resumirPorTipo(
+          itensManutencao
+        ),
+
+      outraCia:
+        resumirPorTipo(
+          itensOutraCia
+        ),
+
+      forcaTatica:
+        resumirPorTipo(
+          itensFT
+        ),
+
+      batalhao:
+        resumirPorTipo(
+          itensBTL
+        ),
+
+      baixados:
+        resumirPorTipo(
+          itensBaixados
+        ),
+
+      outros:
+        resumirPorTipo(
+          itensOutros
+        )
     }
-  }, [tonfasResumo])
+  }
+}, [tonfasResumo])
 
   const tonfasDoPolicial = useMemo(() => {
     const policialId = String(
@@ -1323,7 +1400,9 @@ async function finalizarMovimentacao(resultado) {
                 }
               ]}
               destaque="amarelo"
-              onClick={() => filtrarPorPesquisa('cautela')}
+              onClick={() =>
+  setCautelasModalAberto(true)
+}
             />
 
             <CardResumo
@@ -1638,181 +1717,305 @@ async function finalizarMovimentacao(resultado) {
   }
 
   function renderPainelSVDD() {
-    return (
-      <>
-        <section className="tonfa-dashboard-section">
-          <div className="tonfa-section-title">
-            <div>
-              <span>Visão operacional</span>
-
-              <h2>
-                Materiais sob responsabilidade do SVDD
-              </h2>
-            </div>
-
-            {loadingResumo && (
-              <small>Atualizando indicadores...</small>
-            )}
-          </div>
-
-          <div className="tonfa-resumo-grid tonfa-resumo-grid-principal">
-            <CardResumo
-  titulo="No cofre"
-  valor={
+  const totalNoCofre =
     resumo.cofreSVDD.noCofreTonfas +
     resumo.cofreSVDD.noCofreCassetetes
-  }
-  descricao="Disponíveis no SVDD"
-  destaque="verde"
+
+  const totalEmServico =
+    resumo.cofreSVDD.emServicoTonfas +
+    resumo.cofreSVDD.emServicoCassetetes
+
+  return (
+    <>
+      <section className="tonfa-dashboard-section">
+        <div className="tonfa-section-title">
+          <div>
+            <span>Visão operacional</span>
+
+            <h2>
+              Materiais sob responsabilidade do SVDD
+            </h2>
+          </div>
+
+          {loadingResumo && (
+            <small>
+              Atualizando indicadores...
+            </small>
+          )}
+        </div>
+
+        <div className="tonfa-resumo-grid tonfa-resumo-grid-carga">
+          <CardResumo
+            titulo="Carga do SVDD"
+            valor={
+              totalNoCofre +
+              totalEmServico
+            }
+            descricao="Total sob responsabilidade operacional"
+            destaque="azul"
+          />
+
+          <CardResumo
+            titulo="No cofre"
+            valor={totalNoCofre}
+            descricao="Materiais disponíveis para cautela"
+            destaque="verde"
+            onClick={() =>
+              filtrarPorPesquisa('SVDD')
+            }
+          />
+
+          <CardResumo
+  titulo="Em serviço"
+  valor={totalEmServico}
+  descricao="Materiais temporariamente entregues"
+  destaque="amarelo"
   onClick={() =>
-    filtrarPorPesquisa('SVDD')
+    setCautelasModalAberto(true)
   }
 />
 
-            <CardResumo
-              titulo="Cautelas ativas"
-              valor={resumo.cautelas}
-              descricao="Materiais temporariamente entregues"
-              destaque="azul"
-              onClick={() =>
-                filtrarPorPesquisa('cautela')
-              }
-            />
+          <CardResumo
+            titulo="Cautelas vencidas"
+            valor={resumo.cautelasVencidas}
+            descricao="Materiais pendentes de devolução"
+            destaque="vermelho"
+            onClick={() =>
+              filtrarPorPesquisa('cautela')
+            }
+          />
+        </div>
+      </section>
 
-            <CardResumo
-              titulo="Cautelas vencidas"
-              valor={resumo.cautelasVencidas}
-              descricao="Com devolução em atraso"
-              destaque="vermelho"
-              onClick={() =>
-                filtrarPorPesquisa('cautela')
-              }
-            />
+      <section className="tonfa-dashboard-section">
+        <div className="tonfa-section-title">
+          <div>
+            <span>Distribuição atual</span>
 
-            <CardResumo
-              titulo="Manutenção"
-              valor={resumo.manutencao}
-              descricao="Materiais enviados para reparo"
-              destaque="amarelo"
-              onClick={() =>
-                filtrarPorPesquisa('manutenção')
-              }
-            />
+            <h2>
+              Situação dos materiais no SVDD
+            </h2>
           </div>
-        </section>
+        </div>
 
-        <section className="tonfa-dashboard-section tonfa-movements-section">
-          <div className="tonfa-section-title">
-            <div>
-              <span>Operações permitidas</span>
-              <h2>Movimentações do SVDD</h2>
-            </div>
-          </div>
+        <div className="tonfa-resumo-grid">
+          <CardResumo
+            titulo="Tonfas"
+            detalhes={[
+              {
+                titulo: 'No cofre',
+                valor:
+                  resumo.cofreSVDD
+                    .noCofreTonfas
+              },
+              {
+                titulo: 'Em serviço',
+                valor:
+                  resumo.cofreSVDD
+                    .emServicoTonfas
+              }
+            ]}
+            destaque="verde"
+          />
 
-          <div className="tonfa-movement-groups">
-            <GrupoMovimentacao
-              icone="📦"
-              titulo="Pagar patrimônio"
-              descricao="Entregas temporárias realizadas pelo SVDD."
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  iniciarMovimentacao(
-                    'Pagamento de cautela'
-                  )
-                }
-              >
-                <strong>Pagar cautela</strong>
-                <span>
-                  Entregar temporariamente a um policial
-                </span>
-              </button>
-            </GrupoMovimentacao>
+          <CardResumo
+            titulo="Cassetetes"
+            detalhes={[
+              {
+                titulo: 'No cofre',
+                valor:
+                  resumo.cofreSVDD
+                    .noCofreCassetetes
+              },
+              {
+                titulo: 'Em serviço',
+                valor:
+                  resumo.cofreSVDD
+                    .emServicoCassetetes
+              }
+            ]}
+            destaque="amarelo"
+          />
 
-            <GrupoMovimentacao
-  icone="📥"
-  titulo="Receber patrimônio"
-  descricao="Devoluções e retornos ao cofre."
->
-  <button
-    type="button"
-    onClick={() =>
-      iniciarMovimentacao('Recebimento do P4')
+          <CardResumo
+  titulo="Cautelas ativas"
+  detalhes={[
+    {
+      titulo: 'Tonfas',
+      valor:
+        resumo.distribuicao
+          .cautelas.tonfas
+    },
+    {
+      titulo: 'Cassetetes',
+      valor:
+        resumo.distribuicao
+          .cautelas.cassetetes
     }
-  >
-    <strong>Receber do P4</strong>
-
-    <span>
-      Confirmar material enviado pelo P4
-    </span>
-  </button>
-
-  <button
-    type="button"
-    onClick={() =>
-      iniciarMovimentacao('Recebimento de cautela')
-    }
-  >
-    <strong>Receber devolução</strong>
-
-    <span>
-      Encerrar cautela e retornar ao cofre
-    </span>
-  </button>
-
-  <button
-    type="button"
-    onClick={() =>
-      iniciarMovimentacao('Retorno da manutenção')
-    }
-  >
-    <strong>Receber manutenção</strong>
-
-    <span>
-      Registrar retorno para o cofre
-    </span>
-  </button>
-</GrupoMovimentacao>
-
-            <GrupoMovimentacao
-              icone="⚙️"
-              titulo="Gestão operacional"
-              descricao="Manutenção e devolução ao gestor."
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  iniciarMovimentacao(
-                    'Envio para manutenção'
-                  )
-                }
-              >
-                <strong>Enviar manutenção</strong>
-                <span>
-                  Registrar saída operacional para reparo
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  iniciarMovimentacao(
-                    'Devolução ao P4'
-                  )
-                }
-              >
-                <strong>Devolver ao P4</strong>
-                <span>
-                  Transferir saldo disponível ao gestor patrimonial
-                </span>
-              </button>
-            </GrupoMovimentacao>
-          </div>
-        </section>
-      </>
-    )
+  ]}
+  destaque="azul"
+  onClick={() =>
+    setCautelasModalAberto(true)
   }
+/>
+
+          <CardResumo
+            titulo="Manutenção"
+            detalhes={[
+              {
+                titulo: 'Tonfas',
+                valor:
+                  resumo.distribuicao
+                    .manutencao.tonfas
+              },
+              {
+                titulo: 'Cassetetes',
+                valor:
+                  resumo.distribuicao
+                    .manutencao.cassetetes
+              }
+            ]}
+            destaque="vermelho"
+          />
+        </div>
+      </section>
+
+      <section className="tonfa-dashboard-section tonfa-movements-section">
+        <div className="tonfa-section-title">
+          <div>
+            <span>Operações permitidas</span>
+
+            <h2>
+              Movimentações do SVDD
+            </h2>
+          </div>
+        </div>
+
+        <div className="tonfa-movement-groups">
+          <GrupoMovimentacao
+            icone="📦"
+            titulo="Pagar patrimônio"
+            descricao="Entregas temporárias realizadas pelo SVDD."
+          >
+            <button
+              type="button"
+              onClick={() =>
+                iniciarMovimentacao(
+                  'Pagamento de cautela'
+                )
+              }
+            >
+              <strong>
+                Pagar cautela
+              </strong>
+
+              <span>
+                Entregar temporariamente a um policial
+              </span>
+            </button>
+          </GrupoMovimentacao>
+
+          <GrupoMovimentacao
+            icone="📥"
+            titulo="Receber patrimônio"
+            descricao="Devoluções e retornos ao cofre."
+          >
+            <button
+              type="button"
+              onClick={() =>
+                iniciarMovimentacao(
+                  'Recebimento do P4'
+                )
+              }
+            >
+              <strong>
+                Receber do P4
+              </strong>
+
+              <span>
+                Confirmar material enviado pelo P4
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                iniciarMovimentacao(
+                  'Recebimento de cautela'
+                )
+              }
+            >
+              <strong>
+                Receber devolução
+              </strong>
+
+              <span>
+                Encerrar cautela e retornar ao cofre
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                iniciarMovimentacao(
+                  'Retorno da manutenção'
+                )
+              }
+            >
+              <strong>
+                Receber manutenção
+              </strong>
+
+              <span>
+                Registrar retorno para o cofre
+              </span>
+            </button>
+          </GrupoMovimentacao>
+
+          <GrupoMovimentacao
+            icone="⚙️"
+            titulo="Gestão operacional"
+            descricao="Manutenção e devolução ao gestor."
+          >
+            <button
+              type="button"
+              onClick={() =>
+                iniciarMovimentacao(
+                  'Envio para manutenção'
+                )
+              }
+            >
+              <strong>
+                Enviar manutenção
+              </strong>
+
+              <span>
+                Registrar saída operacional para reparo
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                iniciarMovimentacao(
+                  'Devolução ao P4'
+                )
+              }
+            >
+              <strong>
+                Devolver ao P4
+              </strong>
+
+              <span>
+                Transferir saldo disponível ao gestor patrimonial
+              </span>
+            </button>
+          </GrupoMovimentacao>
+        </div>
+      </section>
+    </>
+  )
+}
 
   function renderPainelPolicial() {
     return (
@@ -2180,6 +2383,17 @@ async function finalizarMovimentacao(resultado) {
     onConfirm={
       confirmarTransferencia
     }
+/>
+
+<TonfaCautelasModal
+  aberto={cautelasModalAberto}
+  onClose={() =>
+    setCautelasModalAberto(false)
+  }
+  onVerHistorico={() => {
+    setCautelasModalAberto(false)
+    setHistoricoAberto(true)
+  }}
 />
 
       <HistoricoPatrimonial

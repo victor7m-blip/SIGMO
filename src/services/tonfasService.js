@@ -21,6 +21,12 @@ import {
   criarGuardiaoPolicial
 } from '../features/patrimonio/constants/patrimonioCore'
 
+import {
+  registrarCautelaTonfa,
+  buscarMovimentacaoTonfaPorId,
+  concluirMovimentacaoTonfa
+} from './tonfasMovimentacoesService'
+
 const TABLE = 'sigmo_tonfas'
 const PATRIMONIOS_TABLE = 'sigmo_patrimonios'
 
@@ -1257,54 +1263,77 @@ export async function cautelarTonfaParaPolicial({
 
     user,
 
-    movimentacao: () =>
-      movimentarPatrimonio({
-        patrimonioId:
-          patrimonio.id,
+    movimentacao: async () => {
+      const movimentacaoEngine =
+        await movimentarPatrimonio({
+          patrimonioId:
+            patrimonio.id,
 
-        tipo:
-          TIPOS_MOVIMENTACAO_PATRIMONIAL.CAUTELA_SERVICO,
+          tipo:
+            TIPOS_MOVIMENTACAO_PATRIMONIAL.CAUTELA_SERVICO,
 
-        origem:
-          GUARDIOES_PATRIMONIAIS.SERVICO_DIA,
+          origem:
+            GUARDIOES_PATRIMONIAIS.SERVICO_DIA,
 
-        destino:
-          guardiaoPolicial,
+          destino:
+            guardiaoPolicial,
 
-        quantidade:
-          valor,
+          quantidade:
+            valor,
 
-        statusNovo:
-          STATUS_PATRIMONIAL.EM_SERVICO,
+          statusNovo:
+            STATUS_PATRIMONIAL.EM_SERVICO,
 
-        devolucaoPrevista,
+          devolucaoPrevista,
 
-        observacoes,
+          observacoes,
 
-        dados: {
-          categoria:
-            tonfa.tipo,
+          dados: {
+            categoria:
+              tonfa.tipo,
 
-          tonfa_id:
-            tonfa.id,
+            tonfa_id:
+              tonfa.id,
 
-          policial_id:
-            policial.id ||
-            null,
+            policial_id:
+              policial.id ||
+              null,
 
-          policial_re:
-            policial.re ||
-            null,
+            policial_re:
+              policial.re ||
+              null,
 
-          policial_nome:
-            policial.nome_guerra ||
-            policial.nome ||
-            null
-        },
+            policial_nome:
+              policial.nome_guerra ||
+              policial.nome ||
+              policial.nome_completo ||
+              null
+          },
 
-        usuario:
+          usuario:
+            user
+        })
+
+      const movimentacaoTonfa =
+        await registrarCautelaTonfa({
+          tonfa,
+          policial,
+          quantidade:
+            valor,
+
+          devolucaoPrevista,
+          observacoes,
           user
-      })
+        })
+
+      return {
+        engine:
+          movimentacaoEngine,
+
+        tonfa_movimentacao:
+          movimentacaoTonfa
+      }
+    }
   })
 }
 
@@ -1410,6 +1439,94 @@ export async function devolverTonfaDoPolicialAoSvdd({
           user
       })
   })
+}
+
+export async function receberCautelaTonfa({
+  movimentacaoId,
+  observacoes = null,
+  user = null
+}) {
+  const cautela =
+    await buscarMovimentacaoTonfaPorId(
+      movimentacaoId
+    )
+
+  if (
+    String(cautela.status || '')
+      .trim()
+      .toUpperCase() !==
+    'EM_SERVICO'
+  ) {
+    throw new Error(
+      'Esta cautela já foi devolvida ou não está mais ativa.'
+    )
+  }
+
+  const quantidade =
+    validarQuantidade(
+      cautela.quantidade
+    )
+
+  const policial = {
+  id:
+    cautela.policial_id ||
+    null,
+
+  re:
+    String(
+      cautela.policial_re ||
+      ''
+    )
+      .replace(/\D/g, '')
+      .slice(0, 6),
+
+  nome:
+    cautela.policial_nome ||
+    null,
+
+  nome_guerra:
+    cautela.policial_nome ||
+    null
+}
+
+  const resultado =
+    await devolverTonfaDoPolicialAoSvdd({
+      tonfaId:
+        cautela.tonfa_id,
+
+      policial,
+
+      quantidade,
+
+      observacoes,
+      user
+    })
+
+  try {
+    const movimentacaoConcluida =
+      await concluirMovimentacaoTonfa(
+        movimentacaoId
+      )
+
+    return {
+      ...resultado,
+
+      movimentacao_tonfa:
+        movimentacaoConcluida,
+
+      quantidade_recebida:
+        quantidade
+    }
+  } catch (error) {
+    console.error(
+      'A Tonfa retornou ao saldo do SVDD, mas a cautela não pôde ser encerrada:',
+      error
+    )
+
+    throw new Error(
+      'O saldo foi atualizado, mas houve erro ao encerrar o registro da cautela. Não repita a operação antes de verificar o histórico.'
+    )
+  }
 }
 
 export async function devolverTonfaDoSvddAoP4({

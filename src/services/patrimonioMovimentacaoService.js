@@ -520,7 +520,6 @@ function obterEntidade(
     codigo,
     id:
       valor.id ??
-      codigo ??
       null,
 
     nome,

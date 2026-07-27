@@ -810,3 +810,79 @@
     flex-direction: column;
   }
 }
+
+/* SPRINT 7.6.7 - PATRIMÔNIO ENGINE */
+.pagar-material-hidden-field {
+  display: none !important;
+}
+
+.pagar-material-table-wrap {
+  overflow-x: visible;
+}
+
+.pagar-material-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.pagar-material-table th:nth-child(1),
+.pagar-material-table td:nth-child(1) { width: 20%; }
+.pagar-material-table th:nth-child(2),
+.pagar-material-table td:nth-child(2) { width: 24%; }
+.pagar-material-table th:nth-child(3),
+.pagar-material-table td:nth-child(3) { width: 19%; }
+.pagar-material-table th:nth-child(4),
+.pagar-material-table td:nth-child(4) { width: 11%; }
+.pagar-material-table th:nth-child(5),
+.pagar-material-table td:nth-child(5) { width: 16%; }
+.pagar-material-table th:nth-child(6),
+.pagar-material-table td:nth-child(6) { width: 10%; }
+
+.pagar-material-table th,
+.pagar-material-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.pagar-material-selected-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.pagar-material-quantity {
+  display: grid;
+  grid-template-columns: 88px 82px;
+  gap: 6px 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.pagar-material-quantity > span {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #475569;
+}
+
+.pagar-material-quantity input {
+  width: 82px;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  padding: 0 9px;
+  font-weight: 800;
+}
+
+.pagar-material-quantity small {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .pagar-material-table-wrap {
+    overflow-x: auto;
+  }
+
+  .pagar-material-table {
+    min-width: 760px;
+  }
+}
