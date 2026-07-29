@@ -1,0 +1,85 @@
+/* Receber Material — largura total e organização das etapas */
+
+.pagar-material-page {
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box;
+}
+
+.pagar-material-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  width: 100% !important;
+  max-width: none !important;
+  gap: 20px;
+  align-items: start;
+}
+
+.pagar-material-main,
+.pagar-material-summary {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.pagar-material-card,
+.pagar-material-summary-card {
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box;
+}
+
+.pagar-material-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+}
+
+.pagar-material-search input {
+  min-width: 0;
+}
+
+.pagar-material-table-wrap {
+  width: 100% !important;
+  max-width: none !important;
+  overflow-x: auto;
+}
+
+.pagar-material-table {
+  width: 100% !important;
+  min-width: 900px;
+  table-layout: auto;
+}
+
+.pagar-material-summary {
+  position: static !important;
+}
+
+.pagar-material-photo-preview {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.pagar-material-photo-item {
+  display: grid;
+  gap: 8px;
+}
+
+.pagar-material-photo-item img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+@media (max-width: 760px) {
+  .pagar-material-search {
+    grid-template-columns: 1fr;
+  }
+
+  .pagar-material-search button {
+    width: 100%;
+  }
+}

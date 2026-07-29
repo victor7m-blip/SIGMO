@@ -18,9 +18,14 @@ import {
   listarArmas
 } from '../../services/armasService'
 
+
+import {
+  listarFotosArma
+} from '../../services/armasFotosService'
 import './styles/Armas.css'
 
 const LIMITE = 20
+const LIMITE_RESUMO = 5000
 
 const statusOptions = [
   'CAUTELADO',
@@ -36,8 +41,227 @@ const propriedadeOptions = [
   'PARTICULAR'
 ]
 
+
+function normalizarTexto(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+}
+
+function obterStatusArma(arma) {
+  return normalizarTexto(
+    arma?.status_operacional ||
+      arma?.status ||
+      arma?.situacao_operacional
+  )
+}
+
+function obterLocalArma(arma) {
+  return normalizarTexto(
+    arma?.local_atual ||
+      arma?.localizacao_atual ||
+      arma?.localizacao ||
+      arma?.local ||
+      arma?.guardiao_nome ||
+      ''
+  )
+}
+
+function estaNaoLocalizada(arma) {
+  const status = obterStatusArma(arma)
+  const local = obterLocalArma(arma)
+
+  return (
+    status.includes('NAO LOCALIZ') ||
+    local.includes('NAO LOCALIZ') ||
+    (!local && status === '')
+  )
+}
+
+function estaEmManutencao(arma) {
+  const status = obterStatusArma(arma)
+  const local = obterLocalArma(arma)
+
+  return (
+    status.includes('MANUTENCAO') ||
+    local.includes('MANUTENCAO')
+  )
+}
+
+function estaCautelada(arma) {
+  const status = obterStatusArma(arma)
+
+  return (
+    status.includes('CAUTELA') ||
+    status.includes('CAUTELADO')
+  )
+}
+
+function estaEmCarga(arma) {
+  const status = obterStatusArma(arma)
+
+  return (
+    status === 'CARGA' ||
+    status.includes('CARGA PERMANENTE')
+  )
+}
+
+function estaNoP4(arma) {
+  const status = obterStatusArma(arma)
+  const local = obterLocalArma(arma)
+
+  return (
+    status === 'RESERVA' ||
+    status === 'RECOLHIDO' ||
+    local.includes('P4') ||
+    local.includes('RESERVA') ||
+    local.includes('DEPOSITO')
+  )
+}
+
+function estaNoSVDD(arma) {
+  const local = obterLocalArma(arma)
+
+  return (
+    local.includes('SVDD') ||
+    local.includes('SERVICO DE DIA') ||
+    local.includes('COFRE DO SVDD')
+  )
+}
+
+function percentual(valor, total) {
+  const base = Number(total || 0)
+  const parte = Number(valor || 0)
+
+  if (!base || !Number.isFinite(parte)) return 0
+
+  return Math.max(0, Math.min(100, (parte / base) * 100))
+}
+
+function formatarPercentual(valor) {
+  return `${Number(valor || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  })}%`
+}
+
+function ArmaResumoCard({ titulo, valor, descricao, destaque = 'padrao', onClick }) {
+  return (
+    <button
+      type="button"
+      className={`armas-resumo-card armas-resumo-${destaque}`}
+      onClick={onClick}
+      disabled={typeof onClick !== 'function'}
+    >
+      <span>{titulo}</span>
+      <strong>{valor}</strong>
+      <small>{descricao}</small>
+    </button>
+  )
+}
+
+function GraficoRoscaArmas({ resumo }) {
+ const fatias = [
+  { label: 'Depósito do P4', valor: resumo.p4, cor: '#2563eb' },
+  { label: 'Cofre do SVDD', valor: resumo.svdd, cor: '#7c3aed' },
+  { label: 'Carga permanente', valor: resumo.carga, cor: '#16a34a' },
+  { label: 'Cautelas ativas', valor: resumo.cautelas, cor: '#eab308' },
+  { label: 'Manutenção', valor: resumo.manutencao, cor: '#f97316' },
+  { label: 'Não localizadas', valor: resumo.naoLocalizadas, cor: '#dc2626' },
+  { label: 'Apreendidas', valor: resumo.apreendidas, cor: '#8b5cf6' },
+  { label: 'Recolhidas', valor: resumo.recolhidas, cor: '#64748b' }
+]
+
+  let acumulado = 0
+  const partes = fatias.map((item) => {
+    const inicio = acumulado
+    const fim = acumulado + percentual(item.valor, resumo.total)
+    acumulado = fim
+    return `${item.cor} ${inicio}% ${fim}%`
+  })
+
+  if (acumulado < 100) {
+    partes.push(`#e8edf5 ${acumulado}% 100%`)
+  }
+
+  return (
+    <section className="armas-grafico-card armas-grafico-rosca-card">
+      <div className="armas-grafico-header">
+        <span>Visão consolidada</span>
+        <h3>Distribuição do armamento</h3>
+      </div>
+
+      <div className="armas-rosca-layout">
+        <div
+          className="armas-rosca"
+          style={{ background: `conic-gradient(${partes.join(', ')})` }}
+        >
+          <div className="armas-rosca-centro">
+            <strong>{resumo.total}</strong>
+            <span>Total de armas</span>
+          </div>
+        </div>
+
+        <div className="armas-grafico-legenda">
+          {fatias.map((item) => (
+            <div key={item.label}>
+              <i style={{ background: item.cor }} />
+              <span>{item.label}</span>
+              <strong>{item.valor}</strong>
+              <small>{formatarPercentual(percentual(item.valor, resumo.total))}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function GraficoBarrasArmas({ resumo }) {
+  const categorias = [
+  { label: 'Depósito do P4', valor: resumo.p4 },
+  { label: 'Cofre do SVDD', valor: resumo.svdd },
+  { label: 'Carga permanente', valor: resumo.carga },
+  { label: 'Cautelas', valor: resumo.cautelas },
+  { label: 'Manutenção', valor: resumo.manutencao },
+  { label: 'Não localizadas', valor: resumo.naoLocalizadas },
+  { label: 'Apreendidas', valor: resumo.apreendidas },
+  { label: 'Recolhidas', valor: resumo.recolhidas }
+]
+
+  const maior = Math.max(1, ...categorias.map((item) => item.valor))
+
+  return (
+    <section className="armas-grafico-card armas-grafico-barras-card">
+      <div className="armas-grafico-header">
+        <span>Comparativo patrimonial</span>
+        <h3>Quantidade de armas por situação</h3>
+      </div>
+
+      <div className="armas-barras-area">
+        {categorias.map((item) => (
+          <div className="armas-barra-grupo" key={item.label}>
+            <div className="armas-barra-coluna">
+              <strong>{item.valor}</strong>
+              <div
+                className="armas-barra"
+                style={{ height: `${Math.max(8, percentual(item.valor, maior))}%` }}
+              />
+            </div>
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function Armas({ user }) {
   const [armas, setArmas] = useState([])
+  const [armasResumo, setArmasResumo] = useState([])
+  const [loadingResumo, setLoadingResumo] = useState(false)
   const [total, setTotal] = useState(0)
   const [pagina, setPagina] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -46,7 +270,15 @@ export default function Armas({ user }) {
   const [formAberto, setFormAberto] = useState(false)
   const [armaEditando, setArmaEditando] = useState(null)
   const [armaVisualizando, setArmaVisualizando] = useState(null)
+  const [fotosVisualizacao, setFotosVisualizacao] =
+  useState([])
 
+const [loadingFotosVisualizacao, setLoadingFotosVisualizacao] =
+  useState(false)
+  const [
+  fotoSelecionadaVisualizacao,
+  setFotoSelecionadaVisualizacao
+] = useState(null)
   const [sortBy, setSortBy] = useState('created_at')
   const [sortDirection, setSortDirection] = useState('desc')
 
@@ -110,6 +342,143 @@ export default function Armas({ user }) {
     carregarArmas()
   }, [carregarArmas])
 
+
+  const carregarResumo = useCallback(async () => {
+    try {
+      setLoadingResumo(true)
+
+      const resultado = await listarArmas({
+        filtros: {},
+        pagina: 1,
+        limite: LIMITE_RESUMO,
+        sortBy: 'created_at',
+        sortDirection: 'desc'
+      })
+
+      setArmasResumo(resultado.data || [])
+    } catch (error) {
+      console.error('Erro ao carregar resumo de armas:', error)
+      setArmasResumo([])
+    } finally {
+      setLoadingResumo(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    carregarResumo()
+  }, [carregarResumo])
+
+   useEffect(() => {
+  async function carregarFotosVisualizacao() {
+    if (!armaVisualizando?.id) {
+  setFotosVisualizacao([])
+  setFotoSelecionadaVisualizacao(null)
+  return
+}
+
+    try {
+      setLoadingFotosVisualizacao(true)
+
+      const resultado = await listarFotosArma(
+        armaVisualizando.id
+      )
+
+      const fotosCarregadas = resultado || []
+
+setFotosVisualizacao(fotosCarregadas)
+
+setFotoSelecionadaVisualizacao(
+  fotosCarregadas.find(
+    (foto) => foto.principal
+  ) ||
+  fotosCarregadas[0] ||
+  null
+)
+    } catch (error) {
+      console.error(
+        'Erro ao carregar fotos da arma:',
+        error
+      )
+
+      setFotosVisualizacao([])
+    } finally {
+      setLoadingFotosVisualizacao(false)
+    }
+  }
+
+  carregarFotosVisualizacao()
+}, [armaVisualizando?.id])
+
+  const resumo = useMemo(() => {
+    const categorias = {
+  p4: 0,
+  svdd: 0,
+  carga: 0,
+  cautelas: 0,
+  manutencao: 0,
+  naoLocalizadas: 0,
+  apreendidas: 0,
+  recolhidas: 0,
+  outros: 0
+}
+
+armasResumo.forEach((arma) => {
+  const status = String(
+    arma.status_operacional ||
+    arma.status ||
+    ''
+  )
+    .trim()
+    .toUpperCase()
+
+  if (status === 'APREENDIDO') {
+    categorias.apreendidas += 1
+    return
+  }
+
+  if (status === 'RECOLHIDO') {
+    categorias.recolhidas += 1
+    return
+  }
+
+  if (estaNaoLocalizada(arma)) {
+    categorias.naoLocalizadas += 1
+    return
+  }
+
+  if (estaEmManutencao(arma)) {
+    categorias.manutencao += 1
+    return
+  }
+
+  if (estaCautelada(arma)) {
+    categorias.cautelas += 1
+    return
+  }
+
+  if (estaEmCarga(arma)) {
+    categorias.carga += 1
+    return
+  }
+
+  if (estaNoSVDD(arma)) {
+    categorias.svdd += 1
+    return
+  }
+
+  if (estaNoP4(arma)) {
+    categorias.p4 += 1
+    return
+  }
+
+  categorias.outros += 1
+})
+
+return {
+  total: armasResumo.length,
+  ...categorias
+}
+  }, [armasResumo])
   function handleFiltroChange(event) {
     const { name, value } = event.target
 
@@ -171,7 +540,7 @@ export default function Armas({ user }) {
 
   async function handleSaved() {
     fecharFormulario()
-    await carregarArmas()
+    await Promise.all([carregarArmas(), carregarResumo()])
   }
 
   async function handleExcluir(arma) {
@@ -201,7 +570,7 @@ export default function Armas({ user }) {
       ) {
         setPagina((prev) => prev - 1)
       } else {
-        await carregarArmas()
+        await Promise.all([carregarArmas(), carregarResumo()])
       }
     } catch (error) {
       console.error(error)
@@ -264,6 +633,146 @@ export default function Armas({ user }) {
           {erro}
         </div>
       )}
+
+
+      <section className="armas-dashboard-section">
+        <div className="armas-section-title">
+          <div>
+            <span>Visão estratégica</span>
+            <h2>Carga patrimonial de armas</h2>
+          </div>
+
+          {loadingResumo && <small>Atualizando indicadores...</small>}
+        </div>
+
+        <div className="armas-resumo-grid">
+          <ArmaResumoCard
+            titulo="Total de armas"
+            valor={resumo.total}
+            descricao="Armamento institucional e particular"
+            destaque="azul"
+            onClick={limparFiltros}
+          />
+
+          <ArmaResumoCard
+            titulo="Depósito do P4"
+            valor={resumo.p4}
+            descricao="Armas disponíveis ou recolhidas no P4"
+            destaque="verde"
+            onClick={() => {
+              setFiltros((prev) => ({ ...prev, pesquisa: '', status: 'RESERVA' }))
+              setPagina(1)
+            }}
+          />
+
+          <ArmaResumoCard
+            titulo="Cofre do SVDD"
+            valor={resumo.svdd}
+            descricao="Armas sob guarda operacional do Serviço de Dia"
+            destaque="roxo"
+            onClick={() => {
+              setFiltros((prev) => ({
+                ...prev,
+                pesquisa: 'SVDD',
+                status: ''
+              }))
+              setPagina(1)
+            }}
+          />
+
+          <ArmaResumoCard
+            titulo="Carga permanente"
+            valor={resumo.carga}
+            descricao="Armas vinculadas permanentemente"
+            destaque="azul"
+            onClick={() => {
+              setFiltros((prev) => ({ ...prev, pesquisa: '', status: 'CARGA' }))
+              setPagina(1)
+            }}
+          />
+
+          <ArmaResumoCard
+            titulo="Cautelas ativas"
+            valor={resumo.cautelas}
+            descricao="Armas entregues temporariamente"
+            destaque="amarelo"
+            onClick={() => {
+              setFiltros((prev) => ({ ...prev, pesquisa: '', status: 'CAUTELADO' }))
+              setPagina(1)
+            }}
+          />
+
+          <ArmaResumoCard
+            titulo="Manutenção"
+            valor={resumo.manutencao}
+            descricao="Armas fora de disponibilidade para reparo"
+            destaque="laranja"
+            onClick={() => {
+              setFiltros((prev) => ({ ...prev, pesquisa: 'MANUTENÇÃO', status: '' }))
+              setPagina(1)
+            }}
+          />
+
+                    <ArmaResumoCard
+            titulo="Não localizadas"
+            valor={resumo.naoLocalizadas}
+            descricao="Registros que exigem conferência"
+            destaque="vermelho"
+            onClick={() => {
+              setFiltros((prev) => ({
+                ...prev,
+                pesquisa: 'NÃO LOCALIZADA',
+                status: ''
+              }))
+              setPagina(1)
+            }}
+          />
+
+          <ArmaResumoCard
+            titulo="Apreendidas"
+            valor={resumo.apreendidas}
+            descricao="Armas apreendidas"
+            destaque="vermelho"
+            onClick={() => {
+              setFiltros((prev) => ({
+                ...prev,
+                pesquisa: '',
+                status: 'APREENDIDO'
+              }))
+              setPagina(1)
+            }}
+          />
+
+          <ArmaResumoCard
+            titulo="Recolhidas"
+            valor={resumo.recolhidas}
+            descricao="Armas recolhidas"
+            destaque="azul"
+            onClick={() => {
+              setFiltros((prev) => ({
+                ...prev,
+                pesquisa: '',
+                status: 'RECOLHIDO'
+              }))
+              setPagina(1)
+            }}
+          />
+        </div>
+      </section>
+
+      <section className="armas-dashboard-section armas-graficos-section">
+        <div className="armas-section-title">
+          <div>
+            <span>Painel gráfico</span>
+            <h2>Distribuição das armas</h2>
+          </div>
+        </div>
+
+        <div className="armas-graficos-verticais">
+          <GraficoRoscaArmas resumo={resumo} />
+          <GraficoBarrasArmas resumo={resumo} />
+        </div>
+      </section>
 
       <section className="armas-toolbar">
         <div className="armas-search">
@@ -348,14 +857,26 @@ export default function Armas({ user }) {
       Todos
     </option>
 
-    {CALIBRES_ARMAS.map((calibre) => (
-      <option
-        key={calibre}
-        value={calibre}
-      >
-        {calibre}
-      </option>
-    ))}
+    {CALIBRES_ARMAS.map((calibre) => {
+      const valorCalibre =
+        typeof calibre === 'string'
+          ? calibre
+          : calibre?.value || calibre?.label || ''
+
+      const nomeCalibre =
+        typeof calibre === 'string'
+          ? calibre
+          : calibre?.label || calibre?.value || ''
+
+      return (
+        <option
+          key={valorCalibre}
+          value={valorCalibre}
+        >
+          {nomeCalibre}
+        </option>
+      )
+    })}
   </select>
 </div>
 
@@ -690,6 +1211,7 @@ export default function Armas({ user }) {
               </button>
             </header>
 
+            
             <div className="armas-modal-grid">
               <Info
                 label="Número de série"
@@ -813,6 +1335,92 @@ export default function Armas({ user }) {
                 </>
               )}
             </div>
+
+           <div className="armas-modal-galeria">
+  <div className="armas-modal-galeria-header">
+    <strong>Fotos da arma</strong>
+
+    {fotosVisualizacao.length > 0 && (
+      <span>
+        {fotosVisualizacao.length}{' '}
+        {fotosVisualizacao.length === 1
+          ? 'foto'
+          : 'fotos'}
+      </span>
+    )}
+  </div>
+
+  {loadingFotosVisualizacao ? (
+    <div className="armas-modal-sem-foto">
+      Carregando fotos...
+    </div>
+  ) : !fotoSelecionadaVisualizacao ? (
+    <div className="armas-modal-sem-foto">
+      Nenhuma foto cadastrada.
+    </div>
+  ) : (
+    <>
+      <div className="armas-modal-foto-destaque">
+        <img
+          src={fotoSelecionadaVisualizacao.url}
+          alt={`Foto da arma ${
+            armaVisualizando?.patrimonio ||
+            armaVisualizando?.numero_serie ||
+            ''
+          }`}
+        />
+
+        {fotoSelecionadaVisualizacao.principal && (
+          <span className="armas-modal-selo-principal">
+            Foto principal
+          </span>
+        )}
+
+        <button
+          type="button"
+          className="armas-modal-ampliar"
+          onClick={() =>
+            window.open(
+              fotoSelecionadaVisualizacao.url,
+              '_blank',
+              'noopener,noreferrer'
+            )
+          }
+        >
+          Ampliar
+        </button>
+      </div>
+
+      {fotosVisualizacao.length > 1 && (
+        <div className="armas-modal-miniaturas">
+          {fotosVisualizacao.map((foto) => (
+            <button
+              key={foto.id}
+              type="button"
+              className={
+                fotoSelecionadaVisualizacao.id === foto.id
+                  ? 'ativa'
+                  : ''
+              }
+              onClick={() =>
+                setFotoSelecionadaVisualizacao(foto)
+              }
+            >
+              <img
+                src={foto.url}
+                alt="Miniatura da arma"
+              />
+
+              {foto.principal && (
+                <span>Principal</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )}
+</div>
 
             <div className="armas-modal-observacoes">
               <strong>Observações</strong>

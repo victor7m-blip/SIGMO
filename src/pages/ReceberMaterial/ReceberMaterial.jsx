@@ -27,6 +27,7 @@ import RecebedorCard from '../PagarMaterial/components/RecebedorCard'
 import CarrinhoMateriais from '../PagarMaterial/components/CarrinhoMateriais'
 
 import '../PagarMaterial/PagarMaterial.css'
+import './ReceberMaterial.css'
 
 function normalizarTexto(valor) {
   return String(valor ?? '')
@@ -1142,71 +1143,6 @@ setPatrimonios(
               </label>
 
               <label className="pagar-material-field-full">
-                Fotos da novidade
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  onChange={
-                    selecionarFotoNovidade
-                  }
-                />
-
-                <small>
-                  Tire fotos ou selecione várias imagens. Cada arquivo pode ter no máximo 5 MB.
-                </small>
-
-                {previewsFotosNovidade.length > 0 && (
-                  <div
-                    className="pagar-material-photo-preview"
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns:
-                        'repeat(auto-fit, minmax(160px, 1fr))',
-                      gap: '12px',
-                      marginTop: '12px'
-                    }}
-                  >
-                    {previewsFotosNovidade.map(
-                      (preview, indice) => (
-                        <div
-                          key={preview.id}
-                          style={{
-                            display: 'grid',
-                            gap: '8px'
-                          }}
-                        >
-                          <img
-                            src={preview.url}
-                            alt={`Pré-visualização ${indice + 1} da novidade`}
-                            style={{
-                              width: '100%',
-                              height: '150px',
-                              objectFit: 'cover',
-                              borderRadius: '8px'
-                            }}
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removerFotoNovidade(
-                                indice
-                              )
-                            }
-                          >
-                            Remover foto
-                          </button>
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
-              </label>
-
-              <label className="pagar-material-field-full">
                 Observações
 
                 <textarea
@@ -1633,6 +1569,53 @@ setPatrimonios(
                       }
                       placeholder="DESCREVA A AVARIA, DEFEITO OU OUTRA SITUAÇÃO ENCONTRADA"
                     />
+                  </label>
+
+                  <label className="pagar-material-field-full">
+                    Fotos da novidade
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      multiple
+                      onChange={
+                        selecionarFotoNovidade
+                      }
+                    />
+
+                    <small>
+                      Tire fotos ou selecione várias imagens. Cada arquivo pode ter no máximo 5 MB.
+                    </small>
+
+                    {previewsFotosNovidade.length > 0 && (
+                      <div className="pagar-material-photo-preview">
+                        {previewsFotosNovidade.map(
+                          (preview, indice) => (
+                            <div
+                              className="pagar-material-photo-item"
+                              key={preview.id}
+                            >
+                              <img
+                                src={preview.url}
+                                alt={`Pré-visualização ${indice + 1} da novidade`}
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removerFotoNovidade(
+                                    indice
+                                  )
+                                }
+                              >
+                                Remover foto
+                              </button>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
                   </label>
                 </div>
               )}

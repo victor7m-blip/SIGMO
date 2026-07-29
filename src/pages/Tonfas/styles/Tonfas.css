@@ -1312,6 +1312,10 @@
   background: #facc15;
 }
 
+.tonfa-legenda-manutencao {
+  background: #3b82f6;
+}
+
 .tonfa-legenda-nao-localizada {
   background: #ef4444;
 }
@@ -1341,7 +1345,7 @@
   min-height: 300px;
   padding: 18px 10px 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(80px, 1fr));
+   grid-template-columns:repeat(4,1fr);
   align-items: end;
   gap: 16px;
   border-bottom: 1px solid #cbd5e1;
@@ -1667,11 +1671,11 @@
   column-gap: 6px;
 }
 
-/* Impede nome, quantidade e percentual de serem cortados */
 .tonfa-grafico-legenda span,
 .tonfa-rosca-legenda span {
   min-width: 0;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 .tonfa-grafico-legenda strong,
@@ -1736,7 +1740,7 @@
 
   .tonfa-barras-area {
     overflow-x: auto;
-    grid-template-columns: repeat(5, minmax(105px, 1fr));
+     grid-template-columns:repeat(4,1fr);
   }
 }
 
@@ -2024,3 +2028,4 @@
     align-self: flex-start;
   }
 }
+

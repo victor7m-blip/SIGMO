@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useState
 } from 'react'
@@ -23,6 +24,12 @@ import {
 } from '../../../services/auditoriaService'
 
 import './ArmaForm.css'
+
+import {
+  listarFotosArma,
+  uploadFotoArma,
+  excluirFotoArma
+} from '../../../services/armasFotosService'
 
 const initialForm = {
   propriedade: 'PMESP',
@@ -83,11 +90,44 @@ export default function ArmaForm({
   const [etapa, setEtapa] =
     useState('dados')
 
+    const [fotos, setFotos] =
+    useState([])
+
+  const [uploadingFotos, setUploadingFotos] =
+    useState(false)
+
   const isEditing =
     Boolean(armaEditando?.id)
 
   const armaAtual =
     armaSalva || armaEditando
+
+    const carregarFotos = useCallback(async () => {
+    if (!armaAtual?.id) {
+      setFotos([])
+      return
+    }
+
+    try {
+      const resultado =
+        await listarFotosArma(
+          armaAtual.id
+        )
+
+      setFotos(resultado || [])
+    } catch (error) {
+      console.error(
+        'Erro ao carregar fotos da arma:',
+        error
+      )
+
+      setFotos([])
+    }
+  }, [armaAtual?.id])
+
+  useEffect(() => {
+    carregarFotos()
+  }, [carregarFotos])
 
   useEffect(() => {
     if (armaEditando) {
@@ -300,12 +340,13 @@ export default function ArmaForm({
     }
 
     const camposSemMaiusculo = [
-      'validade_registro',
-      'capacidade',
-      'ano_fabricacao',
-      'proprietario_policial_id',
-      'carga_policial_id'
-    ]
+  'validade_registro',
+  'capacidade',
+  'ano_fabricacao',
+  'proprietario_policial_id',
+  'carga_policial_id',
+  'calibre'
+]
 
     setForm((prev) => ({
       ...prev,
@@ -519,6 +560,76 @@ export default function ArmaForm({
     }
   }
 
+    async function handleUploadFoto(file) {
+    if (!file || !armaAtual?.id) {
+      return
+    }
+
+    try {
+      setUploadingFotos(true)
+      setErro('')
+
+      await uploadFotoArma(
+        file,
+        armaAtual.id,
+        user
+      )
+
+      await carregarFotos()
+    } catch (error) {
+      console.error(
+        'Erro ao enviar foto da arma:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível enviar a foto.'
+      )
+    } finally {
+      setUploadingFotos(false)
+    }
+  }
+
+  async function handleExcluirFoto(foto) {
+    if (!foto?.id) {
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        'Deseja excluir esta foto?'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setUploadingFotos(true)
+      setErro('')
+
+      await excluirFotoArma(
+        foto,
+        user
+      )
+
+      await carregarFotos()
+    } catch (error) {
+      console.error(
+        'Erro ao excluir foto da arma:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível excluir a foto.'
+      )
+    } finally {
+      setUploadingFotos(false)
+    }
+  }
+
   function handleFinalizar() {
     onSaved?.()
   }
@@ -603,9 +714,13 @@ export default function ArmaForm({
         {etapa === 'fotos' && (
           <>
             <ArmaFotos
-              user={user}
-              armaId={armaAtual?.id}
-            />
+  arma={armaAtual}
+  fotos={fotos}
+  uploading={uploadingFotos}
+  onUpload={handleUploadFoto}
+  onExcluir={handleExcluirFoto}
+  disabled={saving}
+/>
 
             <div className="arma-form-actions">
               <SigmoButton
