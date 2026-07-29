@@ -792,6 +792,12 @@ export default function Tonfas({ user }) {
       'quantidade_em_servico'
     )
 
+  const manutencaoPorTipo =
+  resumirSaldoPorTipo(
+    base,
+    'quantidade_manutencao'
+  )
+
   const totalCautelas =
     emServicoPorTipo.tonfas +
     emServicoPorTipo.cassetetes
@@ -885,9 +891,8 @@ export default function Tonfas({ user }) {
     cautelasVencidas: 0,
 
     manutencao:
-      somarQuantidades(
-        itensManutencao
-      ),
+  manutencaoPorTipo.tonfas +
+  manutencaoPorTipo.cassetetes,
 
     outraCia:
       somarQuantidades(
@@ -936,10 +941,13 @@ export default function Tonfas({ user }) {
           emServicoPorTipo.cassetetes
       },
 
-      manutencao:
-        resumirPorTipo(
-          itensManutencao
-        ),
+      manutencao: {
+  tonfas:
+    manutencaoPorTipo.tonfas,
+
+  cassetetes:
+    manutencaoPorTipo.cassetetes
+},
 
       outraCia:
         resumirPorTipo(
@@ -1725,6 +1733,10 @@ async function finalizarMovimentacao(resultado) {
     resumo.cofreSVDD.emServicoTonfas +
     resumo.cofreSVDD.emServicoCassetetes
 
+  const totalManutencao =
+  resumo.distribuicao.manutencao.tonfas +
+  resumo.distribuicao.manutencao.cassetetes
+
   return (
     <>
       <section className="tonfa-dashboard-section">
@@ -1748,9 +1760,10 @@ async function finalizarMovimentacao(resultado) {
           <CardResumo
             titulo="Carga do SVDD"
             valor={
-              totalNoCofre +
-              totalEmServico
-            }
+            totalNoCofre +
+            totalEmServico +
+            totalManutencao
+           }
             descricao="Total sob responsabilidade operacional"
             destaque="azul"
           />

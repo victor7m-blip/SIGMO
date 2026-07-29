@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 
@@ -194,6 +195,15 @@ export default function ReceberMaterial({
   ] = useState('')
 
   const [
+    fotosNovidade,
+    setFotosNovidade
+  ] = useState([])
+
+  const [
+    previewsFotosNovidade,
+    setPreviewsFotosNovidade
+  ] = useState([])
+  const [
     policialEntregador,
     setPolicialEntregador
   ] = useState(null)
@@ -222,6 +232,26 @@ export default function ReceberMaterial({
     observacoes,
     setObservacoes
   ] = useState('')
+
+  const [
+    registrarNovidade,
+    setRegistrarNovidade
+  ] = useState(false)
+
+  const [
+    tipoNovidade,
+    setTipoNovidade
+  ] = useState('')
+
+  const [
+    descricaoNovidade,
+    setDescricaoNovidade
+  ] = useState('')
+
+  const [
+    providenciaNovidade,
+    setProvidenciaNovidade
+  ] = useState('COFRE')
 
   const [
     localRetorno,
@@ -255,6 +285,120 @@ export default function ReceberMaterial({
       policialEntregador
     )
 
+  function limparFotosNovidade() {
+    previewsFotosNovidade.forEach(
+      (preview) => {
+        if (preview?.url) {
+          URL.revokeObjectURL(
+            preview.url
+          )
+        }
+      }
+    )
+
+    setFotosNovidade([])
+    setPreviewsFotosNovidade([])
+  }
+
+  function selecionarFotoNovidade(event) {
+    const arquivos = Array.from(
+      event.target.files || []
+    )
+
+    event.target.value = ''
+
+    if (arquivos.length === 0) {
+      return
+    }
+
+    const limiteBytes =
+      5 * 1024 * 1024
+
+    const arquivosInvalidos =
+      arquivos.filter(
+        (arquivo) =>
+          !arquivo.type.startsWith(
+            'image/'
+          )
+      )
+
+    if (arquivosInvalidos.length > 0) {
+      setErro(
+        'Selecione somente arquivos de imagem.'
+      )
+      return
+    }
+
+    const arquivosGrandes =
+      arquivos.filter(
+        (arquivo) =>
+          arquivo.size > limiteBytes
+      )
+
+    if (arquivosGrandes.length > 0) {
+      setErro(
+        'Cada foto deve possuir no máximo 5 MB.'
+      )
+      return
+    }
+
+    const novosPreviews =
+      arquivos.map(
+        (arquivo, indice) => ({
+          id: `${Date.now()}-${indice}-${arquivo.name}`,
+          nome: arquivo.name,
+          url: URL.createObjectURL(
+            arquivo
+          )
+        })
+      )
+
+    setFotosNovidade(
+      (listaAtual) => [
+        ...listaAtual,
+        ...arquivos
+      ]
+    )
+
+    setPreviewsFotosNovidade(
+      (listaAtual) => [
+        ...listaAtual,
+        ...novosPreviews
+      ]
+    )
+
+    setErro('')
+    setMensagem('')
+  }
+
+  function removerFotoNovidade(indice) {
+    setPreviewsFotosNovidade(
+      (listaAtual) => {
+        const preview =
+          listaAtual[indice]
+
+        if (preview?.url) {
+          URL.revokeObjectURL(
+            preview.url
+          )
+        }
+
+        return listaAtual.filter(
+          (_, posicao) =>
+            posicao !== indice
+        )
+      }
+    )
+
+    setFotosNovidade(
+      (listaAtual) =>
+        listaAtual.filter(
+          (_, posicao) =>
+            posicao !== indice
+        )
+    )
+  }
+
   const carregarCargaPatrimonial =
     useCallback(
       async () => {
@@ -273,34 +417,27 @@ export default function ReceberMaterial({
           setMensagem('')
 
           const [
-  patrimoniosIndividuais,
-  tonfasEmServico
-] = await Promise.all([
-  listarPatrimoniosResponsavel({
-    re:
-      reEntregador,
+            patrimoniosIndividuais,
+            tonfasEmServico
+          ] = await Promise.all([
+            listarPatrimoniosResponsavel({
+              re: reEntregador,
+              nome: nomeEntregador
+            }),
 
-    nome:
-      nomeEntregador
-  }),
+            listarTonfasEmServico({
+              re: reEntregador,
+              policialId:
+                policialEntregador?.id ||
+                policialEntregador?.policial_id ||
+                null
+            })
+          ])
 
-  listarTonfasEmServico({
-    re:
-      reEntregador,
-
-    policialId:
-      policialEntregador?.id ||
-      policialEntregador?.policial_id ||
-      null
-  })
-])
-
-const lista = [
-  ...(patrimoniosIndividuais ?? []),
-  ...(tonfasEmServico ?? [])
-].map(
-  normalizarItem
-)
+          const lista = [
+            ...(patrimoniosIndividuais ?? []),
+            ...(tonfasEmServico ?? [])
+          ].map(normalizarItem)
 
           setPatrimonios(lista)
           setItensSelecionados([])
@@ -339,6 +476,20 @@ const lista = [
   }, [
     carregarCargaPatrimonial
   ])
+
+  useEffect(() => {
+    return () => {
+      previewsFotosNovidade.forEach(
+        (preview) => {
+          if (preview?.url) {
+            URL.revokeObjectURL(
+              preview.url
+            )
+          }
+        }
+      )
+    }
+  }, [previewsFotosNovidade])
 
   const patrimoniosFiltrados =
     useMemo(() => {
@@ -424,22 +575,21 @@ const lista = [
   }
 
   function adicionarItem(item) {
-    if (
-      itemEstaSelecionado(item)
-    ) {
-      return
-    }
-
-    setItensSelecionados(
-      (listaAtual) => [
-        ...listaAtual,
-        item
-      ]
-    )
-
-    setErro('')
-    setMensagem('')
+  if (itemEstaSelecionado(item)) {
+    return
   }
+
+  setItensSelecionados((listaAtual) => [
+    ...listaAtual,
+    {
+      ...item,
+      quantidade_receber: 1
+    }
+  ])
+
+  setErro('')
+  setMensagem('')
+}
 
   function removerItem(itemId) {
     setItensSelecionados(
@@ -454,6 +604,31 @@ const lista = [
         )
     )
   }
+
+function alterarQuantidade(id, valor) {
+  const quantidade = Number(valor)
+
+  setItensSelecionados((lista) =>
+    lista.map((item) => {
+      if (String(item.id) !== String(id)) {
+        return item
+      }
+
+      const maximo = Number(item.quantidade || 1)
+
+      return {
+        ...item,
+        quantidade_receber: Math.max(
+          1,
+          Math.min(
+            quantidade || 1,
+            maximo
+          )
+        )
+      }
+    })
+  )
+}
 
   function alternarTodos() {
     if (todosSelecionados) {
@@ -476,14 +651,23 @@ const lista = [
     setBusca('')
     setDocumento('')
     setObservacoes('')
+    setRegistrarNovidade(false)
+    setTipoNovidade('')
+    setDescricaoNovidade('')
+    setProvidenciaNovidade('COFRE')
     setLocalRetorno(
       LOCAL_RETORNO_PADRAO
     )
+    limparFotosNovidade()
     setErro('')
     setMensagem('')
   }
 
-  async function confirmarRecebimento() {
+const recebimentoEmAndamento = useRef(false)
+
+async function confirmarRecebimento() {
+  if (recebimentoEmAndamento.current) return
+
   if (!policialEntregador) {
     setErro(
       'Informe o RE de quem está entregando.'
@@ -491,37 +675,94 @@ const lista = [
     return
   }
 
-  if (
-    reEntregador.length !== 6
-  ) {
+  if (reEntregador.length !== 6) {
     setErro(
       'O RE de quem está entregando deve possuir 6 dígitos.'
     )
     return
   }
 
-  if (
-    itensSelecionados.length === 0
-  ) {
+  if (itensSelecionados.length === 0) {
     setErro(
       'Selecione pelo menos um patrimônio para receber.'
     )
     return
   }
 
-  if (
-    !localRetorno.trim()
-  ) {
+  if (!localRetorno.trim()) {
     setErro(
       'Informe o local de retorno.'
     )
     return
   }
 
+  if (
+    registrarNovidade &&
+    !tipoNovidade
+  ) {
+    setErro(
+      'Selecione o tipo da novidade.'
+    )
+    return
+  }
+
+  if (
+    registrarNovidade &&
+    !descricaoNovidade.trim()
+  ) {
+    setErro(
+      'Descreva a novidade registrada.'
+    )
+    return
+  }
+
+  recebimentoEmAndamento.current = true
+
   try {
     setSalvando(true)
     setErro('')
     setMensagem('')
+
+      const novidadeRecebimento =
+      registrarNovidade
+        ? {
+            tipo:
+              normalizarTexto(
+                tipoNovidade
+              ),
+
+            descricao:
+              normalizarTexto(
+                descricaoNovidade
+              ),
+
+            providencia:
+              normalizarTexto(
+                providenciaNovidade
+              ),
+
+            status:
+              'PENDENTE',
+
+            registrada_em:
+              new Date().toISOString(),
+
+            registrada_por_id:
+              user?.id || null,
+
+            registrada_por_nome:
+              normalizarTexto(
+                obterNomeUsuario(user)
+              ),
+
+            fotos:
+              fotosNovidade,
+
+            foto:
+              fotosNovidade[0] ||
+              null
+          }
+        : null
 
     const itensTonfa =
       itensSelecionados.filter(
@@ -568,6 +809,9 @@ const lista = [
               observacoes
             ),
 
+          novidade:
+            novidadeRecebimento,
+
           user
         })
 
@@ -585,17 +829,57 @@ const lista = [
       const item of itensTonfa
     ) {
       const resultado =
-        await receberCautelaTonfa({
-          movimentacaoId:
-            item.movimentacao_tonfa_id,
+  await receberCautelaTonfa({
+    movimentacaoId:
+      item.movimentacao_tonfa_id,
 
-          observacoes:
-            normalizarTexto(
-              observacoes
-            ),
+    quantidade:
+      item.quantidade_receber || 1,
 
-          user
-        })
+    providencia:
+      providenciaNovidade,
+
+    observacoes:
+      normalizarTexto(
+        [
+          observacoes,
+          novidadeRecebimento
+            ? `NOVIDADE: ${novidadeRecebimento.tipo} - ${novidadeRecebimento.descricao} | PROVIDÊNCIA: ${novidadeRecebimento.providencia}`
+            : ''
+        ]
+          .filter(Boolean)
+          .join(' | ')
+      ),
+
+    novidade:
+      registrarNovidade
+        ? {
+            tipo:
+              tipoNovidade,
+
+            descricao:
+              descricaoNovidade,
+
+            fotos:
+              fotosNovidade,
+
+            foto:
+              fotosNovidade[0] ||
+              null,
+
+            origem:
+              'CAUTELA INDIVIDUAL',
+
+            destino:
+              providenciaNovidade,
+
+            policial:
+              policialEntregador
+          }
+        : null,
+
+    user
+  })
 
       resultadosTonfas.push({
         item,
@@ -631,27 +915,85 @@ const lista = [
       } com sucesso.`
     )
 
-    const idsRecebidos =
-      new Set(
-        itensSelecionados.map(
-          criarChaveItem
+    const saldosTonfas =
+  new Map(
+    resultadosTonfas.map(
+      ({ item, resultado }) => [
+        criarChaveItem(item),
+        Number(
+          resultado
+            ?.movimentacao_tonfa
+            ?.saldo || 0
         )
-      )
-
-    setPatrimonios(
-      (listaAtual) =>
-        listaAtual.filter(
-          (item) =>
-            !idsRecebidos.has(
-              criarChaveItem(item)
-            )
-        )
+      ]
     )
+  )
+
+const idsIndividuaisRecebidos =
+  new Set(
+    itensIndividuais.map(
+      criarChaveItem
+    )
+  )
+
+setPatrimonios(
+  (listaAtual) =>
+    listaAtual
+      .map((item) => {
+        const chave =
+          criarChaveItem(item)
+
+        if (
+          idsIndividuaisRecebidos.has(
+            chave
+          )
+        ) {
+          return null
+        }
+
+        if (
+          item?.tipo_registro ===
+            'TONFA_QUANTIDADE' &&
+          saldosTonfas.has(chave)
+        ) {
+          const saldoRestante =
+            saldosTonfas.get(chave)
+
+          if (
+            saldoRestante <= 0
+          ) {
+            return null
+          }
+
+          return {
+            ...item,
+
+            quantidade:
+              saldoRestante,
+
+            saldo:
+              saldoRestante,
+
+            quantidade_receber:
+              1
+          }
+        }
+
+        return item
+      })
+      .filter(Boolean)
+)
 
     setItensSelecionados([])
     setBusca('')
     setDocumento('')
     setObservacoes('')
+    setRegistrarNovidade(false)
+    setTipoNovidade('')
+    setDescricaoNovidade('')
+    setProvidenciaNovidade('COFRE')
+    limparFotosNovidade()
+    
 
     onConcluido?.(
       resultadoFinal
@@ -669,9 +1011,10 @@ const lista = [
       error?.message ||
       'Não foi possível concluir o recebimento.'
     )
-  } finally {
-    setSalvando(false)
-  }
+ } finally {
+  recebimentoEmAndamento.current = false
+  setSalvando(false)
+}
 }
 
   return (
@@ -799,19 +1142,82 @@ const lista = [
               </label>
 
               <label className="pagar-material-field-full">
+                Fotos da novidade
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  onChange={
+                    selecionarFotoNovidade
+                  }
+                />
+
+                <small>
+                  Tire fotos ou selecione várias imagens. Cada arquivo pode ter no máximo 5 MB.
+                </small>
+
+                {previewsFotosNovidade.length > 0 && (
+                  <div
+                    className="pagar-material-photo-preview"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'repeat(auto-fit, minmax(160px, 1fr))',
+                      gap: '12px',
+                      marginTop: '12px'
+                    }}
+                  >
+                    {previewsFotosNovidade.map(
+                      (preview, indice) => (
+                        <div
+                          key={preview.id}
+                          style={{
+                            display: 'grid',
+                            gap: '8px'
+                          }}
+                        >
+                          <img
+                            src={preview.url}
+                            alt={`Pré-visualização ${indice + 1} da novidade`}
+                            style={{
+                              width: '100%',
+                              height: '150px',
+                              objectFit: 'cover',
+                              borderRadius: '8px'
+                            }}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              removerFotoNovidade(
+                                indice
+                              )
+                            }
+                          >
+                            Remover foto
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </label>
+
+              <label className="pagar-material-field-full">
                 Observações
 
                 <textarea
-                  value={observacoes}
-                  onChange={(event) =>
-                    setObservacoes(
-                      normalizarTexto(
-                        event.target.value
-                      )
-                    )
-                  }
-                  placeholder="INFORMAÇÕES ADICIONAIS SOBRE O RECEBIMENTO"
-                />
+  value={observacoes}
+  onChange={(event) =>
+    setObservacoes(
+      event.target.value.toUpperCase()
+    )
+  }
+  placeholder="INFORMAÇÕES ADICIONAIS SOBRE O RECEBIMENTO"
+/>
               </label>
             </div>
           </section>
@@ -1099,13 +1505,138 @@ const lista = [
             </div>
 
             <CarrinhoMateriais
-              itens={
-                itensSelecionados
-              }
-              onRemover={
-                removerItem
-              }
-            />
+  itens={
+    itensSelecionados
+  }
+  onRemover={
+    removerItem
+  }
+  onQuantidadeChange={
+    alterarQuantidade
+  }
+/>
+
+            <div className="pagar-material-novidade">
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: 700
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    registrarNovidade
+                  }
+                  onChange={(event) => {
+                    const marcado =
+                      event.target.checked
+
+                    setRegistrarNovidade(
+                      marcado
+                    )
+
+                    if (!marcado) {
+                      setTipoNovidade('')
+                      setDescricaoNovidade('')
+                      setProvidenciaNovidade('COFRE')
+                      limparFotosNovidade()
+                    }
+                  }}
+                />
+
+                Registrar novidade neste recebimento
+              </label>
+
+               
+
+              {registrarNovidade && (
+                <div
+                  className="pagar-material-form-grid"
+                  style={{
+                    marginTop: '16px'
+                  }}
+                >
+                  <label>
+                    Tipo da novidade
+
+                    <select
+                      value={tipoNovidade}
+                      onChange={(event) =>
+                        setTipoNovidade(
+                          event.target.value
+                        )
+                      }
+                    >
+                      <option value="">
+                        SELECIONE
+                      </option>
+                      <option value="AVARIA">
+                        AVARIA
+                      </option>
+                      <option value="DEFEITO">
+                        DEFEITO
+                      </option>
+                      <option value="MANUTENCAO_PREVENTIVA">
+                        MANUTENÇÃO PREVENTIVA
+                      </option>
+                      <option value="LIMPEZA">
+                        LIMPEZA NECESSÁRIA
+                      </option>
+                      <option value="EXTRAVIO_ACESSORIO">
+                        EXTRAVIO DE ACESSÓRIO
+                      </option>
+                      <option value="OUTRO">
+                        OUTRO
+                      </option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Providência
+
+                    <select
+                      value={
+                        providenciaNovidade
+                      }
+                      onChange={(event) =>
+                        setProvidenciaNovidade(
+                          event.target.value
+                        )
+                      }
+                    >
+                      <option value="COFRE">
+                        RETORNAR AO COFRE
+                      </option>
+                      <option value="MANUTENCAO">
+                        ENVIAR PARA MANUTENÇÃO
+                      </option>
+                      <option value="BAIXA">
+                        SOLICITAR BAIXA PATRIMONIAL
+                      </option>
+                    </select>
+                  </label>
+
+                  <label className="pagar-material-field-full">
+                    Descrição da novidade
+
+                    <textarea
+                      value={
+                        descricaoNovidade
+                      }
+                      onChange={(event) =>
+                        setDescricaoNovidade(
+                          event.target.value.toUpperCase()
+                        )
+                      }
+                      placeholder="DESCREVA A AVARIA, DEFEITO OU OUTRA SITUAÇÃO ENCONTRADA"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
 
             <div className="pagar-material-actions">
               <button

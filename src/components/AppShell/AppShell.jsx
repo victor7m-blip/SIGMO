@@ -32,6 +32,11 @@ const menuItems = [
     icon: '▦'
   },
   {
+    key: 'manutencoes',
+    label: 'Manutenções',
+    icon: '🔧'
+  },
+  {
     key: 'pagar-material',
     label: 'Pagar Material',
     icon: '⬇'

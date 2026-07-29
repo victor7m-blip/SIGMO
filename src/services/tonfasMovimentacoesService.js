@@ -109,7 +109,13 @@ export async function registrarCautelaTonfa({
       'POLICIAL',
 
     quantidade:
-      valor,
+     valor,
+
+     quantidade_devolvida:
+     0,
+
+    saldo:
+     valor,
 
     policial_id:
       policial?.id ||
@@ -288,10 +294,47 @@ export async function listarTonfasEmServico({
       status:
         'EM SERVIÇO',
 
-      quantidade:
+      quantidade_original:
+  numeroInteiro(
+    movimentacao.quantidade
+  ),
+
+quantidade_devolvida:
+  numeroInteiro(
+    movimentacao.quantidade_devolvida
+  ),
+
+quantidade:
+  movimentacao.saldo === null ||
+  movimentacao.saldo === undefined
+    ? Math.max(
+        0,
         numeroInteiro(
           movimentacao.quantidade
-        ),
+        ) -
+          numeroInteiro(
+            movimentacao.quantidade_devolvida
+          )
+      )
+    : numeroInteiro(
+        movimentacao.saldo
+      ),
+
+saldo:
+  movimentacao.saldo === null ||
+  movimentacao.saldo === undefined
+    ? Math.max(
+        0,
+        numeroInteiro(
+          movimentacao.quantidade
+        ) -
+          numeroInteiro(
+            movimentacao.quantidade_devolvida
+          )
+      )
+    : numeroInteiro(
+        movimentacao.saldo
+      ),
 
       policial_id:
         movimentacao.policial_id,
@@ -380,14 +423,81 @@ export async function listarCautelasAtivas({
   )
 }
 
-export async function concluirMovimentacaoTonfa(
-  movimentacaoId
-) {
+export async function registrarDevolucaoMovimentacaoTonfa({
+  movimentacaoId,
+  quantidade
+}) {
   if (!movimentacaoId) {
     throw new Error(
       'Movimentação da Tonfa não informada.'
     )
   }
+
+  const valor =
+    numeroInteiro(quantidade)
+
+  if (valor <= 0) {
+    throw new Error(
+      'A quantidade devolvida deve ser maior que zero.'
+    )
+  }
+
+  const movimentacao =
+    await buscarMovimentacaoTonfaPorId(
+      movimentacaoId
+    )
+
+  if (
+    maiusculo(movimentacao.status) !==
+    STATUS_MOVIMENTACAO_TONFA.EM_SERVICO
+  ) {
+    throw new Error(
+      'Esta cautela já foi encerrada ou não está mais em serviço.'
+    )
+  }
+
+  const quantidadeOriginal =
+    numeroInteiro(
+      movimentacao.quantidade
+    )
+
+  const quantidadeJaDevolvida =
+    numeroInteiro(
+      movimentacao.quantidade_devolvida
+    )
+
+  const saldoAtual =
+    movimentacao.saldo === null ||
+    movimentacao.saldo === undefined
+      ? Math.max(
+          0,
+          quantidadeOriginal -
+            quantidadeJaDevolvida
+        )
+      : numeroInteiro(
+          movimentacao.saldo
+        )
+
+  if (valor > saldoAtual) {
+    throw new Error(
+      `A cautela possui apenas ${saldoAtual} unidade(s) pendente(s) de devolução.`
+    )
+  }
+
+  const novaQuantidadeDevolvida =
+    quantidadeJaDevolvida +
+    valor
+
+  const novoSaldo =
+    Math.max(
+      0,
+      saldoAtual - valor
+    )
+
+  const novoStatus =
+    novoSaldo === 0
+      ? STATUS_MOVIMENTACAO_TONFA.DEVOLVIDA
+      : STATUS_MOVIMENTACAO_TONFA.EM_SERVICO
 
   const {
     data,
@@ -395,8 +505,14 @@ export async function concluirMovimentacaoTonfa(
   } = await supabase
     .from(TABLE)
     .update({
+      quantidade_devolvida:
+        novaQuantidadeDevolvida,
+
+      saldo:
+        novoSaldo,
+
       status:
-        STATUS_MOVIMENTACAO_TONFA.DEVOLVIDA
+        novoStatus
     })
     .eq(
       'id',
@@ -414,6 +530,35 @@ export async function concluirMovimentacaoTonfa(
   }
 
   return data
+}
+
+export async function concluirMovimentacaoTonfa(
+  movimentacaoId
+) {
+  const movimentacao =
+    await buscarMovimentacaoTonfaPorId(
+      movimentacaoId
+    )
+
+  const saldoAtual =
+    movimentacao.saldo === null ||
+    movimentacao.saldo === undefined
+      ? numeroInteiro(
+          movimentacao.quantidade
+        )
+      : numeroInteiro(
+          movimentacao.saldo
+        )
+
+  if (saldoAtual <= 0) {
+    return movimentacao
+  }
+
+  return registrarDevolucaoMovimentacaoTonfa({
+    movimentacaoId,
+    quantidade:
+      saldoAtual
+  })
 }
 
 export async function reabrirMovimentacaoTonfa(

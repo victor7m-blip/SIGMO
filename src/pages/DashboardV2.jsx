@@ -30,6 +30,7 @@ import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
 import TransferirMaterial from './TransferirMaterial/TransferirMaterial'
 import BaixarMaterial from './BaixarMaterial/BaixarMaterial'
 import CentralOperacional from './CentralOperacional'
+import Manutencoes from './Manutencoes/Manutencoes'
 import HT from './HT/HT'
 import './DashboardV2.css'
 
@@ -787,6 +788,15 @@ useEffect(() => {
       )
     }
 
+    if (route === 'manutencoes') {
+      return (
+        <Manutencoes
+          user={user}
+          onVoltar={voltarDashboard}
+        />
+      )
+    }
+
     if (route === 'pagar-material') {
       return (
         <PagarMaterial
@@ -797,15 +807,17 @@ useEffect(() => {
       )
     }
 
-    if (route === 'receber-material') {
-      return (
-        <ReceberMaterial
-          user={user}
-          onVoltar={voltarDashboard}
-          onConcluido={voltarDashboard}
-        />
-      )
-    }
+   if (route === 'receber-material') {
+  return (
+    <ReceberMaterial
+      user={user}
+      onVoltar={voltarDashboard}
+      onConcluido={() => {
+        dashboard.atualizar()
+      }}
+    />
+  )
+}
 
     if (route === 'transferir-material') {
       return (

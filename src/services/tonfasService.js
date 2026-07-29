@@ -24,8 +24,13 @@ import {
 import {
   registrarCautelaTonfa,
   buscarMovimentacaoTonfaPorId,
-  concluirMovimentacaoTonfa
+  registrarDevolucaoMovimentacaoTonfa
 } from './tonfasMovimentacoesService'
+
+import {
+  registrarManutencao,
+  MODULOS_MANUTENCAO
+} from './manutencoesService'
 
 const TABLE = 'sigmo_tonfas'
 const PATRIMONIOS_TABLE = 'sigmo_patrimonios'
@@ -67,6 +72,11 @@ function normalizarTonfa(item = {}) {
       item.quantidade_em_servico
     )
 
+const quantidadeManutencao =
+  numeroInteiro(
+    item.quantidade_manutencao
+  )
+
   let quantidadeP4 =
     numeroInteiro(
       item.quantidade_p4
@@ -91,6 +101,7 @@ function normalizarTonfa(item = {}) {
     quantidadeP4 === 0 &&
     quantidadeSvdd === 0 &&
     quantidadeEmServico === 0 &&
+     quantidadeManutencao === 0 &&
     quantidadeDisponivel > 0
   ) {
     quantidadeP4 =
@@ -111,6 +122,9 @@ function normalizarTonfa(item = {}) {
 
     quantidade_em_servico:
       quantidadeEmServico,
+     
+    quantidade_manutencao:
+    quantidadeManutencao,
 
     quantidade_p4:
       quantidadeP4,
@@ -174,6 +188,9 @@ function prepararPayloadCadastro(
 
     quantidade_em_servico:
       0,
+
+    quantidade_manutencao:
+     0,
 
     quantidade_p4:
       item.quantidade,
@@ -297,6 +314,9 @@ function obterTotalSobGuarda(
     ) +
     numeroInteiro(
       tonfa.quantidade_em_servico
+    ) +
+    numeroInteiro(
+      tonfa.quantidade_manutencao
     )
   )
 }
@@ -444,7 +464,8 @@ async function atualizarSaldosTonfa({
   id,
   quantidadeP4,
   quantidadeSvdd,
-  quantidadeEmServico
+  quantidadeEmServico,
+  quantidadeManutencao
 }) {
   const p4 =
     numeroInteiro(
@@ -460,6 +481,13 @@ async function atualizarSaldosTonfa({
     numeroInteiro(
       quantidadeEmServico
     )
+
+const manutencao =
+  quantidadeManutencao === undefined
+    ? null
+    : numeroInteiro(
+        quantidadeManutencao
+      )
 
   const quantidadeDisponivel =
     p4
@@ -488,30 +516,39 @@ async function atualizarSaldosTonfa({
         emServico
     })
 
-  const {
-    data,
-    error
-  } = await supabase
-    .from(TABLE)
-    .update({
-      quantidade_p4:
-        p4,
+  const dadosAtualizacao = {
+  quantidade_p4:
+    p4,
 
-      quantidade_svdd:
-        svdd,
+  quantidade_svdd:
+    svdd,
 
-      quantidade_em_servico:
-        emServico,
+  quantidade_em_servico:
+    emServico,
 
-      quantidade_disponivel:
-        quantidadeDisponivel,
+  quantidade_disponivel:
+    quantidadeDisponivel,
 
-      status_operacional:
-        statusOperacional,
+  status_operacional:
+    statusOperacional,
 
-      local_atual:
-        localAtual
-    })
+  local_atual:
+    localAtual
+}
+
+if (manutencao !== null) {
+  dadosAtualizacao.quantidade_manutencao =
+    manutencao
+}
+
+const {
+  data,
+  error
+} = await supabase
+  .from(TABLE)
+  .update(
+    dadosAtualizacao
+  )
     .eq('id', id)
     .select()
     .single()
@@ -982,8 +1019,9 @@ export async function atualizarTonfa(
     )
 
   const foraDoP4 =
-    atual.quantidade_svdd +
-    atual.quantidade_em_servico
+  atual.quantidade_svdd +
+  atual.quantidade_em_servico +
+  atual.quantidade_manutencao
 
   if (
     dados.quantidade <
@@ -1009,6 +1047,9 @@ export async function atualizarTonfa(
 
   dados.quantidade_em_servico =
     atual.quantidade_em_servico
+
+  dados.quantidade_manutencao =
+   atual.quantidade_manutencao
 
   dados.status_operacional =
     obterStatusEstoque({
@@ -1082,8 +1123,9 @@ export async function excluirTonfa(
     )
 
   const foraDoP4 =
-    atual.quantidade_svdd +
-    atual.quantidade_em_servico
+  atual.quantidade_svdd +
+  atual.quantidade_em_servico +
+  atual.quantidade_manutencao
 
   if (foraDoP4 > 0) {
     throw new Error(
@@ -1441,9 +1483,100 @@ export async function devolverTonfaDoPolicialAoSvdd({
   })
 }
 
+export async function enviarTonfaParaManutencao({
+  tonfaId,
+  quantidade = 1,
+  origem = 'SVDD',
+  tipoNovidade = 'MANUTENCAO PREVENTIVA',
+  descricao = null,
+  observacoes = null,
+  foto = null,
+  fotos = [],
+  user = null
+}) {
+  const valor = validarQuantidade(quantidade)
+  const origemNormalizada = maiusculo(origem)
+
+  if (!['P4', 'SVDD'].includes(origemNormalizada)) {
+    throw new Error('A origem da manutenção deve ser P4 ou SVDD.')
+  }
+
+  const tonfa = await buscarTonfaPorId(tonfaId)
+  const saldoOrigem = origemNormalizada === 'P4'
+    ? tonfa.quantidade_p4
+    : tonfa.quantidade_svdd
+
+  if (valor > saldoOrigem) {
+    throw new Error(
+      `${origemNormalizada === 'P4' ? 'O P4' : 'O Serviço de Dia'} possui apenas ${saldoOrigem} unidade(s) disponível(is).`
+    )
+  }
+
+  const patrimonio = await buscarPatrimonioDaTonfa(tonfaId)
+  let tonfaAtualizada = null
+
+  try {
+    tonfaAtualizada = await atualizarSaldosTonfa({
+      id: tonfa.id,
+      quantidadeP4:
+        origemNormalizada === 'P4'
+          ? tonfa.quantidade_p4 - valor
+          : tonfa.quantidade_p4,
+      quantidadeSvdd:
+        origemNormalizada === 'SVDD'
+          ? tonfa.quantidade_svdd - valor
+          : tonfa.quantidade_svdd,
+      quantidadeEmServico: tonfa.quantidade_em_servico,
+      quantidadeManutencao: tonfa.quantidade_manutencao + valor
+    })
+
+    await sincronizarPatrimonioTonfa(tonfaAtualizada, user)
+
+    const manutencao = await registrarManutencao({
+      modulo: MODULOS_MANUTENCAO.TONFAS,
+      tipoMaterial: tonfa.tipo,
+      referenciaId: tonfa.id,
+      patrimonioId: patrimonio.id,
+      quantidade: valor,
+      tipoNovidade,
+      descricao,
+      observacoes,
+      origem: origemNormalizada,
+      destino: 'MANUTENCAO',
+      foto,
+      fotos,
+      user
+    })
+
+    return {
+      tonfa: tonfaAtualizada,
+      manutencao
+    }
+  } catch (error) {
+    if (tonfaAtualizada) {
+      try {
+        const restaurada = await atualizarSaldosTonfa({
+          id: tonfa.id,
+          quantidadeP4: tonfa.quantidade_p4,
+          quantidadeSvdd: tonfa.quantidade_svdd,
+          quantidadeEmServico: tonfa.quantidade_em_servico,
+          quantidadeManutencao: tonfa.quantidade_manutencao
+        })
+        await sincronizarPatrimonioTonfa(restaurada, user)
+      } catch (rollbackError) {
+        console.error('Erro ao desfazer envio de Tonfa para manutenção:', rollbackError)
+      }
+    }
+    throw error
+  }
+}
+
 export async function receberCautelaTonfa({
   movimentacaoId,
+  quantidade = 1,
+  providencia = 'COFRE',
   observacoes = null,
+  novidade = null,
   user = null
 }) {
   const cautela =
@@ -1462,71 +1595,291 @@ export async function receberCautelaTonfa({
     )
   }
 
-  const quantidade =
+  const saldoAtual =
+    cautela.saldo === null ||
+    cautela.saldo === undefined
+      ? Math.max(
+          0,
+          numeroInteiro(
+            cautela.quantidade
+          ) -
+            numeroInteiro(
+              cautela.quantidade_devolvida
+            )
+        )
+      : numeroInteiro(
+          cautela.saldo
+        )
+
+  const quantidadeRecebida =
     validarQuantidade(
-      cautela.quantidade
+      quantidade
     )
+
+  if (
+    quantidadeRecebida >
+    saldoAtual
+  ) {
+    throw new Error(
+      `Esta cautela possui apenas ${saldoAtual} unidade(s) pendente(s) de devolução.`
+    )
+  }
 
   const policial = {
-  id:
-    cautela.policial_id ||
-    null,
+    id:
+      cautela.policial_id ||
+      null,
 
-  re:
-    String(
-      cautela.policial_re ||
-      ''
+    re:
+      String(
+        cautela.policial_re ||
+        ''
+      )
+        .replace(/\D/g, '')
+        .slice(0, 6),
+
+    nome:
+      cautela.policial_nome ||
+      null,
+
+    nome_guerra:
+      cautela.policial_nome ||
+      null
+  }
+
+  let resultado
+
+if (
+  String(providencia || '')
+    .trim()
+    .toUpperCase() ===
+  'MANUTENCAO'
+) {
+  const tonfa =
+    await buscarTonfaPorId(
+      cautela.tonfa_id
     )
-      .replace(/\D/g, '')
-      .slice(0, 6),
 
-  nome:
-    cautela.policial_nome ||
-    null,
+  if (
+    quantidadeRecebida >
+    tonfa.quantidade_em_servico
+  ) {
+    throw new Error(
+      `Existem apenas ${tonfa.quantidade_em_servico} unidade(s) registradas em serviço.`
+    )
+  }
 
-  nome_guerra:
-    cautela.policial_nome ||
-    null
-}
+  const quantidadeManutencaoAtual =
+    numeroInteiro(
+      tonfa.quantidade_manutencao
+    )
 
-  const resultado =
+  const {
+    data,
+    error
+  } = await supabase
+    .from(TABLE)
+    .update({
+      quantidade_em_servico:
+        tonfa.quantidade_em_servico -
+        quantidadeRecebida,
+
+      quantidade_manutencao:
+        quantidadeManutencaoAtual +
+        quantidadeRecebida
+    })
+    .eq(
+      'id',
+      tonfa.id
+    )
+    .select()
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  const tonfaAtualizada =
+    normalizarTonfa(data)
+
+  await sincronizarPatrimonioTonfa(
+    tonfaAtualizada,
+    user
+  )
+
+  let manutencaoRegistrada = null
+
+  try {
+    const patrimonio =
+      await buscarPatrimonioDaTonfa(
+        tonfa.id
+      )
+
+    manutencaoRegistrada =
+      await registrarManutencao({
+        modulo:
+          MODULOS_MANUTENCAO.TONFAS,
+
+        tipoMaterial:
+          tonfa.tipo,
+
+        referenciaId:
+          tonfa.id,
+
+        patrimonioId:
+          patrimonio.id,
+
+        quantidade:
+          quantidadeRecebida,
+
+        tipoNovidade:
+          novidade?.tipo ||
+          'DEVOLVIDO COM NOVIDADE',
+
+        descricao:
+          novidade?.descricao ||
+          observacoes ||
+          'Material devolvido da cautela e encaminhado para manutenção.',
+
+        observacoes,
+
+        origem:
+          novidade?.origem ||
+          'POLICIAL',
+
+        destino:
+          novidade?.destino ||
+          'MANUTENCAO',
+
+        policial:
+          novidade?.policial ||
+          policial,
+
+        foto:
+          novidade?.foto ||
+          null,
+
+        fotos:
+          Array.isArray(
+            novidade?.fotos
+          )
+            ? novidade.fotos
+            : [],
+
+        user
+      })
+  } catch (error) {
+    const restaurada =
+      await atualizarSaldosTonfa({
+        id:
+          tonfa.id,
+
+        quantidadeP4:
+          tonfa.quantidade_p4,
+
+        quantidadeSvdd:
+          tonfa.quantidade_svdd,
+
+        quantidadeEmServico:
+          tonfa.quantidade_em_servico,
+
+        quantidadeManutencao:
+          tonfa.quantidade_manutencao
+      })
+
+    await sincronizarPatrimonioTonfa(
+      restaurada,
+      user
+    )
+
+    throw error
+  }
+
+  resultado = {
+    tonfa:
+      tonfaAtualizada,
+
+    manutencao:
+      manutencaoRegistrada,
+
+    movimentacao: {
+      tipo:
+        'MANUTENCAO',
+
+      quantidade:
+        quantidadeRecebida,
+
+      origem:
+        policial,
+
+      destino:
+        'MANUTENCAO'
+    }
+  }
+} else {
+  resultado =
     await devolverTonfaDoPolicialAoSvdd({
       tonfaId:
         cautela.tonfa_id,
 
       policial,
 
-      quantidade,
+      quantidade:
+        quantidadeRecebida,
 
       observacoes,
       user
     })
+}
 
-  try {
-    const movimentacaoConcluida =
-      await concluirMovimentacaoTonfa(
-        movimentacaoId
-      )
+try {
+  const movimentacaoAtualizada =
+    await registrarDevolucaoMovimentacaoTonfa({
+      movimentacaoId,
 
-    return {
-      ...resultado,
+      quantidade:
+        quantidadeRecebida
+    })
 
-      movimentacao_tonfa:
-        movimentacaoConcluida,
+  return {
+    ...resultado,
 
-      quantidade_recebida:
-        quantidade
-    }
-  } catch (error) {
-    console.error(
-      'A Tonfa retornou ao saldo do SVDD, mas a cautela não pôde ser encerrada:',
-      error
-    )
+    movimentacao_tonfa:
+      movimentacaoAtualizada,
 
-    throw new Error(
-      'O saldo foi atualizado, mas houve erro ao encerrar o registro da cautela. Não repita a operação antes de verificar o histórico.'
-    )
+    quantidade_recebida:
+      quantidadeRecebida,
+
+    quantidade_original:
+      numeroInteiro(
+        movimentacaoAtualizada.quantidade
+      ),
+
+    quantidade_devolvida:
+      numeroInteiro(
+        movimentacaoAtualizada.quantidade_devolvida
+      ),
+
+    saldo:
+      numeroInteiro(
+        movimentacaoAtualizada.saldo
+      ),
+
+    cautela_encerrada:
+      numeroInteiro(
+        movimentacaoAtualizada.saldo
+      ) === 0
   }
+} catch (error) {
+  console.error(
+    'A Tonfa retornou ao saldo do SVDD, mas a cautela não pôde ser atualizada:',
+    error
+  )
+
+  throw new Error(
+    'O saldo patrimonial foi atualizado, mas houve erro ao atualizar a cautela. Não repita a operação antes de verificar o histórico.'
+  )
+}
 }
 
 export async function devolverTonfaDoSvddAoP4({
@@ -1641,6 +1994,9 @@ export async function conferirSaldoTonfa(
 
     quantidade_em_servico:
       tonfa.quantidade_em_servico,
+
+    quantidade_manutencao:
+      tonfa.quantidade_manutencao,
 
     total_sob_guarda:
       totalSobGuarda,

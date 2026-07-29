@@ -8,11 +8,22 @@ import {
   TIPOS_MOVIMENTACAO
 } from './patrimonioMovimentacaoService'
 
+import {
+  registrarManutencao,
+  MODULOS_MANUTENCAO
+} from './manutencoesService'
+
 const PATRIMONIOS_TABLE =
   'sigmo_patrimonios'
 
 const LOCAL_RETORNO_PADRAO =
   'RESERVA DE MATERIAL'
+
+const NOVIDADES_FOTOS_BUCKET =
+  'novidades-fotos'
+
+const TAMANHO_MAXIMO_FOTO =
+  5 * 1024 * 1024
 
 const TABELAS_REFERENCIA = {
   material: 'sigmo_materiais',
@@ -109,6 +120,380 @@ function limparDadosResponsabilidade(dados) {
   delete atualizados.policial_nome
 
   return atualizados
+}
+
+
+function ehArquivo(valor) {
+  return (
+    valor &&
+    typeof valor === 'object' &&
+    typeof valor.arrayBuffer === 'function' &&
+    typeof valor.name === 'string'
+  )
+}
+
+function extensaoArquivo(arquivo) {
+  const nome =
+    String(arquivo?.name ?? '')
+
+  const partes =
+    nome.split('.')
+
+  if (partes.length > 1) {
+    return partes
+      .pop()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '') ||
+      'jpg'
+  }
+
+  const tipo =
+    String(arquivo?.type ?? '')
+      .toLowerCase()
+
+  if (tipo.includes('png')) {
+    return 'png'
+  }
+
+  if (tipo.includes('webp')) {
+    return 'webp'
+  }
+
+  if (tipo.includes('gif')) {
+    return 'gif'
+  }
+
+  return 'jpg'
+}
+
+function gerarIdentificador() {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return crypto.randomUUID()
+  }
+
+  return [
+    Date.now(),
+    Math.random()
+      .toString(16)
+      .slice(2)
+  ].join('-')
+}
+
+function validarFoto(arquivo) {
+  if (!ehArquivo(arquivo)) {
+    throw new Error(
+      'Uma das fotos selecionadas é inválida.'
+    )
+  }
+
+  if (
+    arquivo.type &&
+    !String(arquivo.type)
+      .toLowerCase()
+      .startsWith('image/')
+  ) {
+    throw new Error(
+      `O arquivo "${arquivo.name}" não é uma imagem válida.`
+    )
+  }
+
+  if (
+    Number(arquivo.size || 0) >
+    TAMANHO_MAXIMO_FOTO
+  ) {
+    throw new Error(
+      `A foto "${arquivo.name}" ultrapassa o limite de 5 MB.`
+    )
+  }
+}
+
+async function enviarFotosNovidade({
+  arquivos = [],
+  user = null
+}) {
+  if (
+    !Array.isArray(arquivos) ||
+    arquivos.length === 0
+  ) {
+    return []
+  }
+
+  const lote =
+    gerarIdentificador()
+
+  const data =
+    new Date()
+      .toISOString()
+      .slice(0, 10)
+
+  const usuario =
+    String(
+      user?.id ||
+      'usuario-sem-id'
+    )
+      .replace(
+        /[^a-zA-Z0-9_-]/g,
+        '-'
+      )
+
+  const fotosEnviadas = []
+
+  for (
+    let indice = 0;
+    indice < arquivos.length;
+    indice += 1
+  ) {
+    const arquivo =
+      arquivos[indice]
+
+    validarFoto(arquivo)
+
+    const extensao =
+      extensaoArquivo(
+        arquivo
+      )
+
+    const caminho = [
+      data,
+      usuario,
+      lote,
+      `${String(indice + 1).padStart(2, '0')}-${gerarIdentificador()}.${extensao}`
+    ].join('/')
+
+    const {
+      error
+    } = await supabase.storage
+      .from(
+        NOVIDADES_FOTOS_BUCKET
+      )
+      .upload(
+        caminho,
+        arquivo,
+        {
+          cacheControl: '3600',
+          contentType:
+            arquivo.type ||
+            'image/jpeg',
+          upsert: false
+        }
+      )
+
+    if (error) {
+      throw new Error(
+        `Não foi possível enviar a foto "${arquivo.name}": ${error.message}`
+      )
+    }
+
+    const {
+      data: urlData
+    } = supabase.storage
+      .from(
+        NOVIDADES_FOTOS_BUCKET
+      )
+      .getPublicUrl(
+        caminho
+      )
+
+    fotosEnviadas.push({
+      url:
+        urlData?.publicUrl ||
+        null,
+
+      caminho,
+
+      bucket:
+        NOVIDADES_FOTOS_BUCKET,
+
+      nome_original:
+        arquivo.name,
+
+      tipo:
+        arquivo.type ||
+        null,
+
+      tamanho:
+        Number(
+          arquivo.size || 0
+        ),
+
+      ordem:
+        indice + 1,
+
+      principal:
+        indice === 0
+    })
+  }
+
+  return fotosEnviadas
+}
+
+async function prepararNovidade({
+  novidade,
+  user
+}) {
+  if (
+    !novidade ||
+    typeof novidade !== 'object'
+  ) {
+    return null
+  }
+
+  const candidatos = [
+    ...(
+      Array.isArray(
+        novidade.fotos
+      )
+        ? novidade.fotos
+        : []
+    ),
+
+    ...(
+      novidade.foto
+        ? [novidade.foto]
+        : []
+    )
+  ]
+
+  const arquivos = []
+  const fotosExistentes = []
+
+  for (
+    const candidato of candidatos
+  ) {
+    if (
+      ehArquivo(candidato)
+    ) {
+      if (
+        !arquivos.includes(
+          candidato
+        )
+      ) {
+        arquivos.push(
+          candidato
+        )
+      }
+
+      continue
+    }
+
+    if (
+      candidato &&
+      typeof candidato === 'object'
+    ) {
+      fotosExistentes.push(
+        candidato
+      )
+    }
+  }
+
+  const fotosEnviadas =
+    await enviarFotosNovidade({
+      arquivos,
+      user
+    })
+
+  const fotos = [
+    ...fotosExistentes,
+    ...fotosEnviadas
+  ].map(
+    (foto, indice) => ({
+      ...foto,
+      ordem:
+        foto?.ordem ||
+        indice + 1,
+
+      principal:
+        indice === 0
+    })
+  )
+
+  const novidadePreparada = {
+    ...novidade,
+
+    fotos,
+
+    foto:
+      fotos[0]?.url ||
+      novidade?.foto_url ||
+      null,
+
+    quantidade_fotos:
+      fotos.length
+  }
+
+  return novidadePreparada
+}
+
+
+function obterModuloManutencao(tipo) {
+  const valor =
+    String(tipo ?? '')
+      .trim()
+      .toLowerCase()
+
+  if (
+    valor === 'arma' ||
+    valor === 'armas'
+  ) {
+    return MODULOS_MANUTENCAO.ARMAS
+  }
+
+  if (
+    valor === 'ht' ||
+    valor === 'hts'
+  ) {
+    return MODULOS_MANUTENCAO.HT
+  }
+
+  if (
+    valor === 'tpd' ||
+    valor === 'tpds'
+  ) {
+    return MODULOS_MANUTENCAO.TPD
+  }
+
+  if (
+    valor === 'taser' ||
+    valor === 'tasers'
+  ) {
+    return MODULOS_MANUTENCAO.TASER
+  }
+
+  if (
+    valor === 'colete' ||
+    valor === 'coletes'
+  ) {
+    return MODULOS_MANUTENCAO.COLETE
+  }
+
+  if (
+    valor === 'municao' ||
+    valor === 'municoes' ||
+    valor === 'munição' ||
+    valor === 'munições'
+  ) {
+    return MODULOS_MANUTENCAO.MUNICAO
+  }
+
+  return MODULOS_MANUTENCAO.OUTROS
+}
+
+function novidadeSolicitaManutencao(
+  novidade
+) {
+  return (
+    String(
+      novidade?.providencia ||
+      novidade?.destino ||
+      ''
+    )
+      .trim()
+      .toUpperCase() ===
+    'MANUTENCAO'
+  )
 }
 
 function erroDeColunaAusente(error) {
@@ -254,6 +639,8 @@ export async function receberMaterial({
 
   documento = '',
   observacao = '',
+  novidade = null,
+  novidadePreparada = false,
 
   user = null
 }) {
@@ -310,6 +697,17 @@ export async function receberMaterial({
 
   const operadorRe =
     obterReUsuario(user)
+
+  const novidadeOriginal =
+    novidade
+
+  const novidadeFinal =
+    novidadePreparada
+      ? novidade
+      : await prepararNovidade({
+          novidade,
+          user
+        })
 
   const movimentacao =
     await registrarMovimentacao({
@@ -376,7 +774,13 @@ export async function receberMaterial({
           ),
 
         documento:
-          texto(documento)
+          texto(documento),
+
+        novidade:
+          novidadeFinal &&
+          typeof novidadeFinal === 'object'
+            ? novidadeFinal
+            : null
       },
 
       user
@@ -396,13 +800,94 @@ export async function receberMaterial({
       unidadeDestino
     })
 
+  let manutencao = null
+
+  if (
+    novidadeSolicitaManutencao(
+      novidadeFinal
+    )
+  ) {
+    manutencao =
+      await registrarManutencao({
+        modulo:
+          obterModuloManutencao(
+            patrimonio?.tipo ||
+            tipo
+          ),
+
+        tipoMaterial:
+          patrimonio?.dados?.tipo ||
+          patrimonio?.dados?.especie ||
+          patrimonio?.dados?.categoria ||
+          patrimonio?.tipo ||
+          tipo ||
+          'MATERIAL',
+
+        referenciaId:
+          patrimonio?.referencia_id ||
+          referencia,
+
+        patrimonioId:
+          patrimonio?.id ||
+          null,
+
+        movimentacaoId:
+          movimentacao?.id ||
+          null,
+
+        quantidade:
+          1,
+
+        tipoNovidade:
+          novidadeFinal?.tipo ||
+          'DEVOLVIDO COM NOVIDADE',
+
+        descricao:
+          novidadeFinal?.descricao ||
+          observacao ||
+          'Material encaminhado para manutenção no recebimento.',
+
+        observacoes:
+          observacao,
+
+        origem:
+          'CAUTELA INDIVIDUAL',
+
+        destino:
+          'MANUTENCAO',
+
+        policial: {
+          re:
+            reEntregador,
+
+          nome:
+            entregadorNome
+        },
+
+        foto:
+          novidadeOriginal?.foto ||
+          null,
+
+        fotos:
+          Array.isArray(
+            novidadeOriginal?.fotos
+          )
+            ? novidadeOriginal.fotos
+            : [],
+
+        user
+      })
+  }
+
   return {
     patrimonio:
       patrimonioAtualizado,
 
     registroReferencia,
 
-    movimentacao
+    movimentacao,
+
+    manutencao
   }
 }
 
@@ -419,6 +904,7 @@ export async function receberMateriais({
 
   documento = '',
   observacao = '',
+  novidade = null,
 
   user = null
 }) {
@@ -458,6 +944,11 @@ export async function receberMateriais({
         unidadeDestino,
         documento,
         observacao,
+        novidade,
+
+        novidadePreparada:
+          false,
+
         user
       })
 

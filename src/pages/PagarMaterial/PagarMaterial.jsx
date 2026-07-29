@@ -473,7 +473,7 @@ console.log('Policial:', policialRecebedor)
             <div className="pagar-material-form-grid pagar-material-form-grid-spaced">
               <label>
                 Tipo de movimentação
-                <select value={tipoMovimentacao} onChange={(event) => setTipoMovimentacao(event.target.value)}>
+                <select value={tipoMovimentacao} onChange={(event) => setTipoMovimentacao(event.target.value.toUpperCase())}>
                   {opcoesTipo.map((opcao) => (
                     <option key={opcao.value} value={opcao.value}>{opcao.label}</option>
                   ))}
@@ -483,7 +483,7 @@ console.log('Policial:', policialRecebedor)
               <label>
                 Local de origem
                 {origemSelecionavel ? (
-                  <select value={localOrigem} onChange={(event) => setLocalOrigem(event.target.value)}>
+                  <select value={localOrigem} onChange={(event) => setLocalOrigem(event.target.value.toUpperCase())}>
                     <option value={ORIGEM_P4}>{ORIGEM_P4}</option>
                     <option value={ORIGEM_SVDD}>{ORIGEM_SVDD}</option>
                   </select>
