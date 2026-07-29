@@ -18,11 +18,18 @@ import {
   listarArmas
 } from '../../services/armasService'
 
+import {
+  aceitarTransferencia,
+  criarTransferenciaPendente,
+  listarTransferenciasPendentes,
+  recusarTransferencia
+} from '../../services/patrimonioTransferenciaService'
 
 import {
   listarFotosArma
 } from '../../services/armasFotosService'
 import './styles/Armas.css'
+import './styles/ArmasOperacoes.css'
 
 const LIMITE = 20
 const LIMITE_RESUMO = 5000
@@ -267,18 +274,55 @@ export default function Armas({ user }) {
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
 
+  const [transferindoArmaId, setTransferindoArmaId] =
+    useState(null)
+
+  const [transferenciaModalAberta, setTransferenciaModalAberta] =
+    useState(false)
+  const [recebimentoModalAberta, setRecebimentoModalAberta] =
+    useState(false)
+  const [pesquisaTransferencia, setPesquisaTransferencia] =
+    useState('')
+  const [armasSelecionadas, setArmasSelecionadas] =
+    useState([])
+  const [enviandoLote, setEnviandoLote] =
+    useState(false)
+
+  const [mensagemSucesso, setMensagemSucesso] =
+    useState('')
+
+  const [transferenciasPendentesArmas, setTransferenciasPendentesArmas] =
+    useState([])
+
+  const [loadingTransferenciasArmas, setLoadingTransferenciasArmas] =
+    useState(false)
+
+  const [processandoTransferenciaId, setProcessandoTransferenciaId] =
+    useState(null)
+
+  const [transferenciasSelecionadas, setTransferenciasSelecionadas] =
+    useState([])
+
+  const [processandoRecebimentoEmLote, setProcessandoRecebimentoEmLote] =
+    useState(false)
+
   const [formAberto, setFormAberto] = useState(false)
   const [armaEditando, setArmaEditando] = useState(null)
   const [armaVisualizando, setArmaVisualizando] = useState(null)
-  const [fotosVisualizacao, setFotosVisualizacao] =
-  useState([])
 
-const [loadingFotosVisualizacao, setLoadingFotosVisualizacao] =
-  useState(false)
+  const [fotosVisualizacao, setFotosVisualizacao] =
+    useState([])
+
   const [
-  fotoSelecionadaVisualizacao,
-  setFotoSelecionadaVisualizacao
-] = useState(null)
+    loadingFotosVisualizacao,
+    setLoadingFotosVisualizacao
+  ] = useState(false)
+
+  const [
+    fotoSelecionadaVisualizacao,
+    setFotoSelecionadaVisualizacao
+  ] = useState(null)
+
   const [sortBy, setSortBy] = useState('created_at')
   const [sortDirection, setSortDirection] = useState('desc')
 
@@ -290,6 +334,45 @@ const [loadingFotosVisualizacao, setLoadingFotosVisualizacao] =
     status: '',
     unidade: ''
   })
+
+  const perfilUsuario = normalizarTexto(
+    user?.perfil ||
+    user?.role ||
+    user?.tipo_usuario ||
+    user?.user_metadata?.perfil ||
+    user?.user_metadata?.role ||
+    ''
+  )
+
+  const ehPerfilP4 = [
+    'P4',
+    'SECAO P4',
+    'SEÇÃO P4',
+    'GESTOR PATRIMONIAL'
+  ].includes(perfilUsuario)
+
+  const ehPerfilSVDD = [
+    'SVDD',
+    'ENCARREGADO SVDD',
+    'ENCARREGADO DO SVDD',
+    'AUXILIAR SVDD',
+    'AUXILIAR DO SVDD'
+  ].includes(perfilUsuario)
+
+  const ehPerfilGestor = [
+    'ADMINISTRADOR',
+    'COMANDANTE DE CIA',
+    'COMANDANTE DA CIA',
+    'COMANDANTE'
+  ].includes(perfilUsuario)
+
+  const podeTransferirArmas = ehPerfilP4 || ehPerfilSVDD || ehPerfilGestor
+  const contextoTransferenciaSVDD = ehPerfilSVDD
+  const codigoOrigemTransferencia = contextoTransferenciaSVDD ? 'SVDD' : 'P4'
+  const nomeOrigemTransferencia = contextoTransferenciaSVDD ? 'COFRE DO SVDD' : 'GUARDA DO P4'
+  const codigoDestinoTransferencia = contextoTransferenciaSVDD ? 'P4' : 'SVDD'
+  const nomeDestinoTransferencia = contextoTransferenciaSVDD ? 'GUARDA DO P4' : 'COFRE DO SVDD'
+  const podeReceberTransferencia = ehPerfilP4 || ehPerfilSVDD || ehPerfilGestor
 
   const totalPaginas = useMemo(() => {
     return Math.max(1, Math.ceil(total / LIMITE))
@@ -367,6 +450,41 @@ const [loadingFotosVisualizacao, setLoadingFotosVisualizacao] =
   useEffect(() => {
     carregarResumo()
   }, [carregarResumo])
+
+  const carregarTransferenciasPendentesArmas = useCallback(async () => {
+    if (!podeReceberTransferencia) {
+      setTransferenciasPendentesArmas([])
+      return
+    }
+
+    try {
+      setLoadingTransferenciasArmas(true)
+
+      const resultado = await listarTransferenciasPendentes({
+        destinoCodigo: ehPerfilP4 ? 'P4' : 'SVDD',
+        categoria: 'ARMA',
+        limite: 100
+      })
+
+      setTransferenciasPendentesArmas(resultado || [])
+    } catch (error) {
+      console.error(
+        'Erro ao carregar transferências de armas:',
+        error
+      )
+
+      setErro(
+        error.message ||
+        'Não foi possível carregar as armas pendentes de recebimento.'
+      )
+    } finally {
+      setLoadingTransferenciasArmas(false)
+    }
+  }, [podeReceberTransferencia, ehPerfilP4])
+
+  useEffect(() => {
+    carregarTransferenciasPendentesArmas()
+  }, [carregarTransferenciasPendentesArmas])
 
    useEffect(() => {
   async function carregarFotosVisualizacao() {
@@ -582,6 +700,408 @@ return {
     }
   }
 
+  function alternarTransferenciaSelecionada(transferenciaId) {
+    setTransferenciasSelecionadas((atuais) =>
+      atuais.includes(transferenciaId)
+        ? atuais.filter((id) => id !== transferenciaId)
+        : [...atuais, transferenciaId]
+    )
+  }
+
+  function selecionarTodasTransferenciasPendentes() {
+    const idsVisiveis = transferenciasPendentesArmas.map(
+      (transferencia) => transferencia.id
+    )
+
+    const todasSelecionadas =
+      idsVisiveis.length > 0 &&
+      idsVisiveis.every((id) => transferenciasSelecionadas.includes(id))
+
+    setTransferenciasSelecionadas(
+      todasSelecionadas ? [] : idsVisiveis
+    )
+  }
+
+  async function handleReceberTransferenciasSelecionadas() {
+    const selecionadas = transferenciasPendentesArmas.filter(
+      (transferencia) => transferenciasSelecionadas.includes(transferencia.id)
+    )
+
+    if (selecionadas.length === 0) {
+      setErro('Selecione ao menos uma arma para receber.')
+      return
+    }
+
+    const confirmou = window.confirm(
+      `Confirmar o recebimento de ${selecionadas.length} ${
+        selecionadas.length === 1 ? 'arma' : 'armas'
+      } no ${ehPerfilP4 ? 'P4' : 'Cofre do SVDD'}?`
+    )
+
+    if (!confirmou) return
+
+    try {
+      setProcessandoRecebimentoEmLote(true)
+      setErro('')
+      setMensagemSucesso('')
+
+      const falhas = []
+
+      for (const transferencia of selecionadas) {
+        try {
+          await aceitarTransferencia({
+            transferenciaId: transferencia.id,
+            user
+          })
+        } catch (error) {
+          falhas.push({ transferencia, error })
+        }
+      }
+
+      setTransferenciasSelecionadas([])
+
+      await Promise.all([
+        carregarTransferenciasPendentesArmas(),
+        carregarArmas(),
+        carregarResumo()
+      ])
+
+      if (falhas.length > 0) {
+        setErro(
+          `${selecionadas.length - falhas.length} recebida(s) e ${falhas.length} com erro. ` +
+          (falhas[0]?.error?.message || 'Confira as pendências restantes.')
+        )
+      } else {
+        setMensagemSucesso(
+          `${selecionadas.length} ${
+            selecionadas.length === 1 ? 'arma recebida' : 'armas recebidas'
+          } com sucesso.`
+        )
+      }
+    } finally {
+      setProcessandoRecebimentoEmLote(false)
+    }
+  }
+
+  async function handleAceitarTransferenciaArma(transferencia) {
+    if (!transferencia?.id) return
+
+    const confirmou = window.confirm(
+      `Confirmar o recebimento da arma ${
+        transferencia?.metadata?.descricao_arma ||
+        transferencia?.metadata?.patrimonio ||
+        transferencia?.metadata?.numero_serie ||
+        transferencia.protocolo
+      } no ${ehPerfilP4 ? 'P4' : 'Cofre do SVDD'}?`
+    )
+
+    if (!confirmou) return
+
+    try {
+      setProcessandoTransferenciaId(transferencia.id)
+      setTransferenciasSelecionadas((atuais) =>
+        atuais.filter((id) => id !== transferencia.id)
+      )
+      setErro('')
+      setMensagemSucesso('')
+
+      await aceitarTransferencia({
+        transferenciaId: transferencia.id,
+        user
+      })
+
+      setMensagemSucesso(
+        `Transferência ${transferencia.protocolo} recebida. ` +
+        `A arma agora está ${ehPerfilP4 ? 'na Guarda do P4' : 'no Cofre do SVDD'}.`
+      )
+
+      await Promise.all([
+        carregarTransferenciasPendentesArmas(),
+        carregarArmas(),
+        carregarResumo()
+      ])
+    } catch (error) {
+      console.error(
+        'Erro ao aceitar transferência de arma:',
+        error
+      )
+
+      setErro(
+        error.message ||
+        'Não foi possível receber a arma.'
+      )
+    } finally {
+      setProcessandoTransferenciaId(null)
+    }
+  }
+
+  async function handleRecusarTransferenciaArma(transferencia) {
+    if (!transferencia?.id) return
+
+    const motivo = window.prompt(
+      `Informe o motivo da recusa da transferência ${transferencia.protocolo}:`
+    )
+
+    if (motivo === null) return
+
+    if (!String(motivo).trim()) {
+      setErro('Informe o motivo da recusa.')
+      return
+    }
+
+    try {
+      setProcessandoTransferenciaId(transferencia.id)
+      setErro('')
+      setMensagemSucesso('')
+
+      await recusarTransferencia({
+        transferenciaId: transferencia.id,
+        motivoRecusa: motivo,
+        user
+      })
+
+      setMensagemSucesso(
+        `Transferência ${transferencia.protocolo} recusada.`
+      )
+
+      await carregarTransferenciasPendentesArmas()
+    } catch (error) {
+      console.error(
+        'Erro ao recusar transferência de arma:',
+        error
+      )
+
+      setErro(
+        error.message ||
+        'Não foi possível recusar a transferência.'
+      )
+    } finally {
+      setProcessandoTransferenciaId(null)
+    }
+  }
+
+  async function handleTransferirParaSVDD(arma) {
+    if (!arma?.id) {
+      setErro('Arma inválida para transferência.')
+      return
+    }
+
+    if (!estaNoP4(arma) || estaNoSVDD(arma)) {
+      setErro(
+        'Somente armas localizadas no P4 podem ser transferidas para o SVDD.'
+      )
+      return
+    }
+
+    const identificacao =
+      [arma.especie, arma.marca, arma.modelo]
+        .filter(Boolean)
+        .join(' ') ||
+      arma.patrimonio ||
+      arma.numero_serie ||
+      'arma selecionada'
+
+    const confirmou = window.confirm(
+      `Deseja enviar ${identificacao} do P4 para o Cofre do SVDD?\n\n` +
+      'A movimentação ficará pendente até o aceite do SVDD.'
+    )
+
+    if (!confirmou) return
+
+    try {
+      setTransferindoArmaId(arma.id)
+      setErro('')
+      setMensagemSucesso('')
+
+      const transferencia = await criarTransferenciaPendente({
+        armaId: arma.id,
+        patrimonioId: arma.patrimonio_id || null,
+        categoria: 'ARMA',
+        quantidade: 1,
+        origemTipo: 'SETOR',
+        origemCodigo: 'P4',
+        origemNome: 'GUARDA DO P4',
+        destinoTipo: 'SETOR',
+        destinoCodigo: 'SVDD',
+        destinoNome: 'COFRE DO SVDD',
+        motivo: contextoTransferenciaSVDD ? 'DEVOLUCAO_AO_P4' : 'DISTRIBUICAO_OPERACIONAL',
+        observacoes:
+          `Envio da arma ${
+            arma.patrimonio ||
+            arma.numero_serie ||
+            arma.id
+          } do P4 para o SVDD.`,
+        metadata: {
+          arma_id: arma.id,
+          patrimonio: arma.patrimonio || null,
+          numero_serie: arma.numero_serie || null,
+          especie: arma.especie || null,
+          marca: arma.marca || null,
+          modelo: arma.modelo || null
+        },
+        user
+      })
+
+      setMensagemSucesso(
+        `Transferência ${transferencia.protocolo} criada. ` +
+        'A arma está aguardando recebimento pelo SVDD.'
+      )
+
+      setArmaVisualizando(null)
+
+      await Promise.all([
+        carregarArmas(),
+        carregarResumo()
+      ])
+    } catch (error) {
+      console.error(
+        'Erro ao transferir arma para o SVDD:',
+        error
+      )
+
+      setErro(
+        error.message ||
+        'Não foi possível criar a transferência da arma.'
+      )
+    } finally {
+      setTransferindoArmaId(null)
+    }
+  }
+
+
+  const armasDisponiveisTransferencia = useMemo(() => {
+    const termo = normalizarTexto(pesquisaTransferencia)
+
+    return armasResumo.filter((arma) => {
+      const estaNaOrigem = contextoTransferenciaSVDD
+        ? estaNoSVDD(arma)
+        : estaNoP4(arma) && !estaNoSVDD(arma)
+
+      if (!estaNaOrigem) return false
+      if (estaCautelada(arma) || estaEmCarga(arma) || estaEmManutencao(arma)) {
+        return false
+      }
+
+      if (!termo) return true
+
+      const alvo = normalizarTexto([
+        arma.patrimonio,
+        arma.numero_serie,
+        arma.especie,
+        arma.marca,
+        arma.modelo,
+        arma.calibre
+      ].filter(Boolean).join(' '))
+
+      return alvo.includes(termo)
+    })
+  }, [armasResumo, pesquisaTransferencia, contextoTransferenciaSVDD])
+
+  function abrirTransferenciaEmLote() {
+    setPesquisaTransferencia('')
+    setArmasSelecionadas([])
+    setTransferenciaModalAberta(true)
+    setErro('')
+    setMensagemSucesso('')
+  }
+
+  function alternarArmaSelecionada(armaId) {
+    setArmasSelecionadas((atuais) =>
+      atuais.includes(armaId)
+        ? atuais.filter((id) => id !== armaId)
+        : [...atuais, armaId]
+    )
+  }
+
+  function selecionarTodasVisiveis() {
+    const ids = armasDisponiveisTransferencia.map((arma) => arma.id)
+    const todasSelecionadas =
+      ids.length > 0 && ids.every((id) => armasSelecionadas.includes(id))
+
+    setArmasSelecionadas((atuais) => {
+      if (todasSelecionadas) {
+        return atuais.filter((id) => !ids.includes(id))
+      }
+
+      return Array.from(new Set([...atuais, ...ids]))
+    })
+  }
+
+  async function confirmarTransferenciaEmLote() {
+    const selecionadas = armasResumo.filter((arma) =>
+      armasSelecionadas.includes(arma.id)
+    )
+
+    if (selecionadas.length === 0) {
+      setErro('Selecione ao menos uma arma para transferir.')
+      return
+    }
+
+    const confirmou = window.confirm(
+      `${contextoTransferenciaSVDD ? 'Devolver' : 'Enviar'} ${selecionadas.length} ${selecionadas.length === 1 ? 'arma' : 'armas'} ${contextoTransferenciaSVDD ? 'do Cofre do SVDD para o P4' : 'do P4 para o Cofre do SVDD'}?\n\n` +
+      `Cada arma ficará pendente até o aceite do ${codigoDestinoTransferencia}.`
+    )
+
+    if (!confirmou) return
+
+    try {
+      setEnviandoLote(true)
+      setErro('')
+      setMensagemSucesso('')
+
+      const resultados = []
+
+      for (const arma of selecionadas) {
+        const transferencia = await criarTransferenciaPendente({
+          armaId: arma.id,
+          patrimonioId: arma.patrimonio_id || null,
+          categoria: 'ARMA',
+          quantidade: 1,
+          origemTipo: 'SETOR',
+          origemCodigo: codigoOrigemTransferencia,
+          origemNome: nomeOrigemTransferencia,
+          destinoTipo: 'SETOR',
+          destinoCodigo: codigoDestinoTransferencia,
+          destinoNome: nomeDestinoTransferencia,
+          motivo: contextoTransferenciaSVDD ? 'DEVOLUCAO_AO_P4' : 'DISTRIBUICAO_OPERACIONAL',
+          observacoes: `${contextoTransferenciaSVDD ? 'Devolução' : 'Envio'} em lote da arma ${arma.patrimonio || arma.numero_serie || arma.id} ${contextoTransferenciaSVDD ? 'do SVDD para o P4' : 'do P4 para o SVDD'}.`,
+          metadata: {
+            arma_id: arma.id,
+            patrimonio: arma.patrimonio || null,
+            numero_serie: arma.numero_serie || null,
+            especie: arma.especie || null,
+            marca: arma.marca || null,
+            modelo: arma.modelo || null,
+            lote_operacional: true
+          },
+          user
+        })
+
+        resultados.push(transferencia)
+      }
+
+      setTransferenciaModalAberta(false)
+      setArmasSelecionadas([])
+      setMensagemSucesso(
+        `${resultados.length} ${resultados.length === 1 ? 'arma foi movimentada' : 'armas foram movimentadas'} para o ${codigoDestinoTransferencia} e ${resultados.length === 1 ? 'está' : 'estão'} aguardando aceite.`
+      )
+
+      await Promise.all([
+        carregarArmas(),
+        carregarResumo(),
+        carregarTransferenciasPendentesArmas()
+      ])
+    } catch (error) {
+      console.error('Erro ao transferir armas em lote:', error)
+      setErro(
+        error.message ||
+        'Não foi possível concluir a transferência das armas selecionadas.'
+      )
+    } finally {
+      setEnviandoLote(false)
+    }
+  }
+
   function ordenar(campo) {
     if (sortBy === campo) {
       setSortDirection((prev) =>
@@ -602,6 +1122,7 @@ return {
       ? ' ↑'
       : ' ↓'
   }
+
 
   return (
     <main className="armas-page">
@@ -631,6 +1152,24 @@ return {
       {erro && (
         <div className="armas-alert-error">
           {erro}
+        </div>
+      )}
+
+      {mensagemSucesso && (
+        <div
+          role="status"
+          style={{
+            marginBottom: '18px',
+            padding: '14px 16px',
+            border: '1px solid #86efac',
+            borderRadius: '12px',
+            background: '#f0fdf4',
+            color: '#166534',
+            fontSize: '14px',
+            fontWeight: 600
+          }}
+        >
+          {mensagemSucesso}
         </div>
       )}
 
@@ -948,6 +1487,364 @@ return {
             onSaved={handleSaved}
           />
         </section>
+      )}
+
+      <section className="armas-dashboard-section armas-operacoes-section">
+        <div className="armas-section-title">
+          <div>
+            <span>Operações permitidas</span>
+            <h2>Movimentações patrimoniais</h2>
+          </div>
+        </div>
+
+        <div className="armas-movement-groups">
+          <div className="armas-movement-group">
+            <div className="armas-movement-group-header">
+              <div className="armas-movement-group-icon">📦</div>
+              <div>
+                <h3>Distribuir patrimônio</h3>
+                <p>Transferências e entregas de armamento.</p>
+              </div>
+            </div>
+
+            <div className="armas-action-grid">
+              <button
+                type="button"
+                disabled={!podeTransferirArmas}
+                onClick={abrirTransferenciaEmLote}
+              >
+                <strong>{contextoTransferenciaSVDD ? 'Devolver ao P4' : 'Transferir'}</strong>
+                <span>{contextoTransferenciaSVDD ? 'Selecionar uma ou várias armas e devolver ao P4' : 'Selecionar uma ou várias armas e enviar ao SVDD'}</span>
+              </button>
+
+              <button type="button" disabled>
+                <strong>Pagar carga</strong>
+                <span>Vincular permanentemente a um policial</span>
+              </button>
+
+              <button type="button" disabled>
+                <strong>Pagar cautela</strong>
+                <span>Entrega temporária com previsão de devolução</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="armas-movement-group">
+            <div className="armas-movement-group-header">
+              <div className="armas-movement-group-icon">📥</div>
+              <div>
+                <h3>Receber patrimônio</h3>
+                <p>Devoluções e retornos patrimoniais.</p>
+              </div>
+            </div>
+
+            <div className="armas-action-grid">
+              <button type="button" disabled>
+                <strong>Receber devolução</strong>
+                <span>Encerrar carga ou cautela e receber a arma</span>
+              </button>
+
+              <button type="button" disabled>
+                <strong>Receber manutenção</strong>
+                <span>Registrar retorno do armamento reparado</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={!podeReceberTransferencia}
+                onClick={() => {
+                  setRecebimentoModalAberta(true)
+                  carregarTransferenciasPendentesArmas()
+                }}
+              >
+                <strong>{ehPerfilP4 ? 'Receber do SVDD' : 'Receber do P4'}</strong>
+                <span>{ehPerfilP4 ? 'Confirmar armamento devolvido pelo SVDD' : 'Confirmar armamento enviado ao Cofre do SVDD'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="armas-movement-group">
+            <div className="armas-movement-group-header">
+              <div className="armas-movement-group-icon">⚙️</div>
+              <div>
+                <h3>Gestão patrimonial</h3>
+                <p>Manutenção, regularização e baixa.</p>
+              </div>
+            </div>
+
+            <div className="armas-action-grid">
+              <button type="button" disabled>
+                <strong>Enviar manutenção</strong>
+                <span>Registrar saída para reparo</span>
+              </button>
+
+              <button type="button" disabled>
+                <strong>Regularizar</strong>
+                <span>Corrigir localização ou responsabilidade</span>
+              </button>
+
+              <button type="button" className="danger" disabled>
+                <strong>Baixar patrimônio</strong>
+                <span>Encerrar o controle patrimonial da arma</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {recebimentoModalAberta && (
+        <div
+          className="armas-transferencia-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !processandoTransferenciaId
+            ) {
+              setRecebimentoModalAberta(false)
+            }
+          }}
+        >
+          <section
+            className="armas-transferencia-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={ehPerfilP4 ? 'Receber armas do SVDD' : 'Receber armas do P4'}
+          >
+            <header>
+              <div>
+                <span>Recebimento patrimonial</span>
+                <h2>{ehPerfilP4 ? 'SVDD → P4' : 'P4 → Cofre do SVDD'}</h2>
+                <p>Confirme ou recuse as armas pendentes de recebimento.</p>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Fechar"
+                disabled={Boolean(processandoTransferenciaId)}
+                onClick={() => setRecebimentoModalAberta(false)}
+              >
+                ×
+              </button>
+            </header>
+
+            {transferenciasPendentesArmas.length > 0 && (
+              <div className="armas-recebimento-toolbar">
+                <button
+                  type="button"
+                  disabled={
+                    Boolean(processandoTransferenciaId) ||
+                    processandoRecebimentoEmLote
+                  }
+                  onClick={selecionarTodasTransferenciasPendentes}
+                >
+                  {transferenciasPendentesArmas.every((transferencia) =>
+                    transferenciasSelecionadas.includes(transferencia.id)
+                  )
+                    ? 'Desmarcar todas'
+                    : 'Selecionar todas'}
+                </button>
+
+                <span>
+                  {transferenciasSelecionadas.length} selecionada(s)
+                </span>
+              </div>
+            )}
+
+            <div className="armas-transferencia-lista">
+              {loadingTransferenciasArmas ? (
+                <div className="armas-empty">Atualizando pendências...</div>
+              ) : transferenciasPendentesArmas.length === 0 ? (
+                <div className="armas-empty">
+                  Nenhuma arma pendente de recebimento.
+                </div>
+              ) : (
+                transferenciasPendentesArmas.map((transferencia) => (
+                  <div
+                    key={transferencia.id}
+                    className="armas-transferencia-item armas-recebimento-item"
+                  >
+                    <label className="armas-recebimento-selecao">
+                      <input
+                        type="checkbox"
+                        checked={transferenciasSelecionadas.includes(transferencia.id)}
+                        disabled={
+                          Boolean(processandoTransferenciaId) ||
+                          processandoRecebimentoEmLote
+                        }
+                        onChange={() =>
+                          alternarTransferenciaSelecionada(transferencia.id)
+                        }
+                      />
+
+                      <div>
+                        <strong>
+                          {transferencia?.metadata?.descricao_arma || 'ARMA'}
+                        </strong>
+                        <span>
+                          Protocolo: {transferencia.protocolo} · Patrimônio/Série: {transferencia?.metadata?.patrimonio_arma || transferencia?.metadata?.patrimonio || transferencia?.metadata?.numero_serie_arma || transferencia?.metadata?.numero_serie || '-'}
+                        </span>
+                        <span>
+                          Enviado por: {transferencia.enviado_por_nome || '-'}
+                        </span>
+                      </div>
+                    </label>
+
+                    <div className="armas-actions">
+                      <button
+                        type="button"
+                        disabled={
+                          Boolean(processandoTransferenciaId) ||
+                          processandoRecebimentoEmLote
+                        }
+                        onClick={() => handleAceitarTransferenciaArma(transferencia)}
+                      >
+                        {processandoTransferenciaId === transferencia.id
+                          ? 'Processando...'
+                          : 'Receber'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="danger"
+                        disabled={
+                          Boolean(processandoTransferenciaId) ||
+                          processandoRecebimentoEmLote
+                        }
+                        onClick={() => handleRecusarTransferenciaArma(transferencia)}
+                      >
+                        Recusar
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <footer>
+              <button
+                type="button"
+                className="armas-btn-secondary"
+                disabled={
+                  Boolean(processandoTransferenciaId) ||
+                  processandoRecebimentoEmLote
+                }
+                onClick={() => {
+                  setTransferenciasSelecionadas([])
+                  setRecebimentoModalAberta(false)
+                }}
+              >
+                Fechar
+              </button>
+
+              <button
+                type="button"
+                className="armas-btn-primary"
+                disabled={
+                  transferenciasSelecionadas.length === 0 ||
+                  Boolean(processandoTransferenciaId) ||
+                  processandoRecebimentoEmLote
+                }
+                onClick={handleReceberTransferenciasSelecionadas}
+              >
+                {processandoRecebimentoEmLote
+                  ? 'Recebendo...'
+                  : `Receber ${transferenciasSelecionadas.length || ''}`.trim()}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {transferenciaModalAberta && (
+        <div
+          className="armas-transferencia-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !enviandoLote) {
+              setTransferenciaModalAberta(false)
+            }
+          }}
+        >
+          <section
+            className="armas-transferencia-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={contextoTransferenciaSVDD ? "Devolver armas ao P4" : "Transferir armas para o SVDD"}
+          >
+            <header>
+              <div>
+                <span>Transferência patrimonial</span>
+                <h2>{contextoTransferenciaSVDD ? 'Cofre do SVDD → P4' : 'P4 → Cofre do SVDD'}</h2>
+                <p>Pesquise e selecione uma ou várias armas.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar"
+                disabled={enviandoLote}
+                onClick={() => setTransferenciaModalAberta(false)}
+              >×</button>
+            </header>
+
+            <div className="armas-transferencia-toolbar">
+              <input
+                type="search"
+                value={pesquisaTransferencia}
+                onChange={(event) => setPesquisaTransferencia(event.target.value)}
+                placeholder="Pesquisar patrimônio, série, espécie, marca ou modelo"
+              />
+              <button type="button" onClick={selecionarTodasVisiveis}>
+                Selecionar visíveis
+              </button>
+            </div>
+
+            <div className="armas-transferencia-contador">
+              <strong>{armasSelecionadas.length}</strong>
+              <span>{armasSelecionadas.length === 1 ? 'arma selecionada' : 'armas selecionadas'}</span>
+            </div>
+
+            <div className="armas-transferencia-lista">
+              {armasDisponiveisTransferencia.length === 0 ? (
+                <div className="armas-empty">Nenhuma arma disponível no {contextoTransferenciaSVDD ? 'SVDD' : 'P4'}.</div>
+              ) : armasDisponiveisTransferencia.map((arma) => (
+                <label key={arma.id} className="armas-transferencia-item">
+                  <input
+                    type="checkbox"
+                    checked={armasSelecionadas.includes(arma.id)}
+                    onChange={() => alternarArmaSelecionada(arma.id)}
+                  />
+                  <div>
+                    <strong>
+                      {[arma.especie, arma.marca, arma.modelo].filter(Boolean).join(' ') || 'Arma'}
+                    </strong>
+                    <span>
+                      Patrimônio: {arma.patrimonio || '-'} · Série: {arma.numero_serie || '-'} · Calibre: {arma.calibre || '-'}
+                    </span>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <footer>
+              <button
+                type="button"
+                className="armas-btn-secondary"
+                disabled={enviandoLote}
+                onClick={() => setTransferenciaModalAberta(false)}
+              >Cancelar</button>
+              <button
+                type="button"
+                className="armas-btn-primary"
+                disabled={enviandoLote || armasSelecionadas.length === 0}
+                onClick={confirmarTransferenciaEmLote}
+              >
+                {enviandoLote
+                  ? 'Enviando...'
+                  : `${contextoTransferenciaSVDD ? 'Devolver' : 'Enviar'} ${armasSelecionadas.length || ''} para o ${codigoDestinoTransferencia}`}
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
 
       <section className="armas-list-card">

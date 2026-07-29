@@ -1,0 +1,103 @@
+.armas-operacoes-section { margin-top: 24px; }
+.armas-movement-groups { display: grid; gap: 18px; }
+.armas-movement-group { border: 1px solid #dbe3ef; border-radius: 18px; padding: 20px; background: #fff; }
+.armas-movement-group-header { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
+.armas-movement-group-icon { width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center; background: #087443; font-size: 24px; }
+.armas-movement-group-header h3 { margin: 0; font-size: 20px; }
+.armas-movement-group-header p { margin: 4px 0 0; color: #64748b; }
+.armas-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.armas-action-grid > button { text-align: left; min-height: 108px; padding: 16px; border: 1px solid #bfd0e4; border-radius: 15px; background: #fff; cursor: pointer; display: flex; flex-direction: column; gap: 7px; }
+.armas-action-grid > button:hover:not(:disabled) { border-color: #087443; box-shadow: 0 8px 22px rgba(15,23,42,.08); transform: translateY(-1px); }
+.armas-action-grid > button strong { font-size: 17px; color: #0f172a; }
+.armas-action-grid > button span { color: #64748b; line-height: 1.4; }
+.armas-action-grid > button:disabled { opacity: .52; cursor: not-allowed; background: #f8fafc; }
+.armas-action-grid > button.danger { border-color: #fecaca; }
+.armas-transferencia-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(15,23,42,.66); display: grid; place-items: center; padding: 20px; }
+.armas-transferencia-modal { width: min(980px, 96vw); max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; background: #fff; border-radius: 20px; box-shadow: 0 28px 80px rgba(0,0,0,.28); }
+.armas-transferencia-modal > header { padding: 22px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 20px; }
+.armas-transferencia-modal > header span { color: #087443; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: .06em; }
+.armas-transferencia-modal > header h2 { margin: 4px 0; }
+.armas-transferencia-modal > header p { margin: 0; color: #64748b; }
+.armas-transferencia-modal > header > button { border: 0; background: transparent; font-size: 30px; cursor: pointer; }
+.armas-transferencia-toolbar { padding: 16px 24px; display: grid; grid-template-columns: 1fr auto; gap: 12px; border-bottom: 1px solid #e2e8f0; }
+.armas-transferencia-toolbar input { min-height: 44px; border: 1px solid #cbd5e1; border-radius: 12px; padding: 0 14px; }
+.armas-transferencia-toolbar button { border: 1px solid #087443; color: #087443; background: #fff; border-radius: 12px; padding: 0 16px; font-weight: 700; cursor: pointer; }
+.armas-transferencia-contador { padding: 10px 24px; background: #f0fdf4; display: flex; gap: 8px; align-items: baseline; color: #166534; }
+.armas-transferencia-contador strong { font-size: 22px; }
+.armas-transferencia-lista { overflow: auto; padding: 12px 24px 20px; display: grid; gap: 10px; }
+.armas-transferencia-item { border: 1px solid #dbe3ef; border-radius: 14px; padding: 14px; display: grid; grid-template-columns: auto 1fr; gap: 13px; cursor: pointer; }
+.armas-transferencia-item:has(input:checked) { border-color: #16a34a; background: #f0fdf4; }
+.armas-transferencia-item input { width: 20px; height: 20px; margin-top: 2px; }
+.armas-transferencia-item div { display: flex; flex-direction: column; gap: 4px; }
+.armas-transferencia-item span { color: #64748b; }
+.armas-transferencia-modal > footer { padding: 18px 24px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; }
+@media (max-width: 900px) { .armas-action-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .armas-transferencia-toolbar { grid-template-columns: 1fr; } .armas-transferencia-modal > footer { flex-direction: column-reverse; } }
+
+
+.armas-recebimento-item {
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.armas-recebimento-item > div:first-child {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.armas-recebimento-item .armas-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 700px) {
+  .armas-recebimento-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.armas-recebimento-toolbar {
+  padding: 12px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8fafc;
+}
+
+.armas-recebimento-toolbar button {
+  border: 1px solid #087443;
+  color: #087443;
+  background: #fff;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.armas-recebimento-toolbar span {
+  color: #475569;
+  font-weight: 700;
+}
+
+.armas-recebimento-selecao {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.armas-recebimento-selecao input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.armas-recebimento-selecao > div {
+  min-width: 0;
+}

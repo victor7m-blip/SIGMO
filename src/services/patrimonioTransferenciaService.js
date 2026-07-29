@@ -19,6 +19,7 @@ import { PERFIS } from '../constants/perfis'
 
 const TABLE = 'sigmo_transferencias_patrimoniais'
 const TONFAS_TABLE = 'sigmo_tonfas'
+const ARMAS_TABLE = 'sigmo_armas'
 const PATRIMONIOS_TABLE = 'sigmo_patrimonios'
 const PATRIMONIO_ITENS_TABLE = 'sigmo_patrimonio_itens'
 
@@ -67,10 +68,39 @@ function gerarProtocolo() {
   return `TRF-${data}-${hora}-${aleatorio}`
 }
 
-function descricaoMaterial(categoria, quantidade) {
-  const nome = upper(categoria) === 'CASSETETE' ? 'cassetete(s)' : 'tonfa(s)'
+function descricaoMaterial(categoria, quantidade, metadata = {}) {
+  const categoriaNormalizada = upper(categoria)
+
+  if (categoriaNormalizada === 'ARMA') {
+    const identificacao =
+      texto(metadata?.descricao_arma) ||
+      texto(metadata?.identificacao) ||
+      texto(metadata?.patrimonio) ||
+      texto(metadata?.numero_serie)
+
+    return identificacao
+      ? `a arma ${identificacao}`
+      : '1 arma'
+  }
+
+  const nome =
+    categoriaNormalizada === 'CASSETETE'
+      ? 'cassetete(s)'
+      : 'tonfa(s)'
+
   return `${quantidade} ${nome}`
 }
+
+function linkDoModulo(categoria, recebimento = false) {
+  if (upper(categoria) === 'ARMA') {
+    return '/armas'
+  }
+
+  return recebimento
+    ? '/tonfas/receber-p4'
+    : '/tonfas'
+}
+
 
 async function notificarPerfis(notificacoes) {
   try {
@@ -158,12 +188,115 @@ async function buscarVinculosDaTonfa(
   }
 }
 
+async function buscarItemCatalogo(categoria) {
+  const categoriaNormalizada = upper(categoria)
+  const categoriasAceitas =
+    categoriaNormalizada === 'ARMA'
+      ? ['ARMA', 'ARMAS']
+      : [categoriaNormalizada]
+
+  const { data, error } = await supabase
+    .from(PATRIMONIO_ITENS_TABLE)
+    .select('*')
+    .in('categoria', categoriasAceitas)
+    .eq('ativo', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+
+  if (!data) {
+    throw new Error(
+      `O item de catálogo ${categoriaNormalizada} não foi encontrado.`
+    )
+  }
+
+  return data
+}
+
+async function buscarVinculosDaArma(armaId) {
+  if (!armaId) {
+    throw new Error('A arma da transferência não foi informada.')
+  }
+
+  const { data: arma, error: armaError } = await supabase
+    .from(ARMAS_TABLE)
+    .select('*')
+    .eq('id', armaId)
+    .maybeSingle()
+
+  if (armaError) throw armaError
+
+  if (!arma) {
+    throw new Error('A arma selecionada não foi encontrada.')
+  }
+
+  const { data: patrimonio, error: patrimonioError } = await supabase
+    .from(PATRIMONIOS_TABLE)
+    .select('*')
+    .eq('tipo', 'arma')
+    .eq('referencia_id', armaId)
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (patrimonioError) throw patrimonioError
+
+  if (!patrimonio) {
+    throw new Error(
+      'O registro patrimonial desta arma não foi encontrado. Sincronize o cadastro e tente novamente.'
+    )
+  }
+
+  let itemPatrimonial = null
+
+  if (patrimonio.item_id) {
+    const { data: itemVinculado, error: itemVinculadoError } = await supabase
+      .from(PATRIMONIO_ITENS_TABLE)
+      .select('*')
+      .eq('id', patrimonio.item_id)
+      .eq('ativo', true)
+      .maybeSingle()
+
+    if (itemVinculadoError) throw itemVinculadoError
+    itemPatrimonial = itemVinculado
+  }
+
+  if (!itemPatrimonial) {
+    itemPatrimonial = await buscarItemCatalogo('ARMA')
+  }
+
+  return {
+    arma,
+    patrimonio,
+    itemPatrimonial
+  }
+}
+
+function montarDescricaoArma(arma) {
+  const modelo = [arma?.especie, arma?.marca, arma?.modelo]
+    .map(texto)
+    .filter(Boolean)
+    .join(' ')
+
+  const identificador =
+    texto(arma?.patrimonio) ||
+    texto(arma?.numero_serie)
+
+  if (modelo && identificador) {
+    return `${modelo} - ${identificador}`
+  }
+
+  return modelo || identificador || 'arma não identificada'
+}
+
+
 export async function criarTransferenciaPendente({
   patrimonioId = null,
   itemId = null,
   tonfaId = null,
+  armaId = null,
   categoria,
-  quantidade,
+  quantidade = 1,
   origemTipo = 'SETOR',
   origemCodigo = 'P4',
   origemNome = 'GUARDA DO P4',
@@ -176,24 +309,79 @@ export async function criarTransferenciaPendente({
   user = null
 }) {
   const ator = usuarioNormalizado(user)
-  const quantidadeNormalizada = quantidadeInteira(quantidade)
   const categoriaNormalizada = upper(categoria)
 
-  if (!['TONFA', 'CASSETETE'].includes(categoriaNormalizada)) {
+  if (!['TONFA', 'CASSETETE', 'ARMA'].includes(categoriaNormalizada)) {
     throw new Error('Categoria patrimonial inválida para esta transferência.')
   }
 
- const vinculos = await buscarVinculosDaTonfa(
-  tonfaId,
-  categoriaNormalizada
-)
+  const individual = categoriaNormalizada === 'ARMA'
+  const quantidadeNormalizada = individual
+    ? 1
+    : quantidadeInteira(quantidade)
 
-const patrimonioIdResolvido =
-  patrimonioId ||
-  vinculos.patrimonio.id
+  let vinculos
 
-const itemIdResolvido =
-  vinculos.itemPatrimonial.id
+  if (individual) {
+    vinculos = await buscarVinculosDaArma(
+      armaId || metadata?.arma_id
+    )
+  } else {
+    vinculos = await buscarVinculosDaTonfa(
+      tonfaId,
+      categoriaNormalizada
+    )
+  }
+
+  const origemCodigoNormalizado = upper(origemCodigo, 'P4')
+  const destinoCodigoNormalizado = upper(destinoCodigo, 'SVDD')
+
+  const patrimonioIdResolvido =
+    patrimonioId ||
+    vinculos.patrimonio.id
+
+  if (individual) {
+    const { data: pendenteExistente, error: pendenteError } = await supabase
+      .from(TABLE)
+      .select('id, protocolo')
+      .eq('patrimonio_id', patrimonioIdResolvido)
+      .eq('status', STATUS_TRANSFERENCIA.PENDENTE)
+      .limit(1)
+      .maybeSingle()
+
+    if (pendenteError) throw pendenteError
+
+    if (pendenteExistente) {
+      throw new Error(
+        `Esta arma já possui a transferência ${pendenteExistente.protocolo} pendente de recebimento.`
+      )
+    }
+  }
+
+  const itemIdResolvido =
+    itemId ||
+    vinculos.itemPatrimonial.id
+
+  const metadataNormalizada = {
+    ...(metadata && typeof metadata === 'object' ? metadata : {}),
+    tonfa_id: individual
+      ? null
+      : tonfaId || metadata?.tonfa_id || null,
+    arma_id: individual
+      ? vinculos.arma.id
+      : metadata?.arma_id || null,
+    descricao_arma: individual
+      ? montarDescricaoArma(vinculos.arma)
+      : metadata?.descricao_arma || null,
+    patrimonio_arma: individual
+      ? vinculos.arma.patrimonio || null
+      : metadata?.patrimonio_arma || null,
+    numero_serie_arma: individual
+      ? vinculos.arma.numero_serie || null
+      : metadata?.numero_serie_arma || null,
+    item_individual: individual,
+    criado_por_perfil: ator.perfil
+  }
 
   const horaServidor = await obterHoraServidor()
   const protocolo = gerarProtocolo()
@@ -205,10 +393,10 @@ const itemIdResolvido =
     categoria: categoriaNormalizada,
     quantidade: quantidadeNormalizada,
     origem_tipo: upper(origemTipo, 'SETOR'),
-    origem_codigo: upper(origemCodigo) || null,
+    origem_codigo: origemCodigoNormalizado || null,
     origem_nome: upper(origemNome, 'GUARDA DO P4'),
     destino_tipo: upper(destinoTipo, 'SETOR'),
-    destino_codigo: upper(destinoCodigo) || null,
+    destino_codigo: destinoCodigoNormalizado || null,
     destino_nome: upper(destinoNome, 'COFRE DO SVDD'),
     status: STATUS_TRANSFERENCIA.PENDENTE,
     motivo: upper(motivo) || null,
@@ -217,11 +405,7 @@ const itemIdResolvido =
     enviado_por_re: ator.re,
     enviado_por_nome: ator.nome,
     enviado_em: horaServidor,
-    metadata: {
-      ...(metadata && typeof metadata === 'object' ? metadata : {}),
-      tonfa_id: tonfaId || metadata?.tonfa_id || null,
-      criado_por_perfil: ator.perfil
-    },
+    metadata: metadataNormalizada,
     updated_at: horaServidor
   }
 
@@ -235,32 +419,38 @@ const itemIdResolvido =
 
   const material = descricaoMaterial(
     categoriaNormalizada,
-    quantidadeNormalizada
+    quantidadeNormalizada,
+    metadataNormalizada
   )
   const dataHora = formatarDataHoraServidor(horaServidor)
   const mensagem =
-    `O P4 enviou ${material} ao SVDD. ` +
+    `O ${origemCodigoNormalizado} enviou ${material} ao ${destinoCodigoNormalizado}. ` +
     `A transferência ${protocolo} está pendente de recebimento. ` +
     `Enviado por ${ator.nome}${ator.re ? `, RE ${ator.re}` : ''}, em ${dataHora}.`
 
+  const perfilDestino = destinoCodigoNormalizado === 'P4'
+    ? PERFIS.P4
+    : PERFIS.ENCARREGADO_SVDD
+
   await notificarPerfis([
     {
-      titulo: 'Material pendente de recebimento',
+      titulo: `Material pendente de recebimento no ${destinoCodigoNormalizado}`,
       mensagem,
       tipo: 'PATRIMONIO',
       modulo: 'PATRIMONIO',
       prioridade: 'ALTA',
-      destinatario_perfil: PERFIS.ENCARREGADO_SVDD,
+      destinatario_perfil: perfilDestino,
       referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
       referencia_id: data.id,
-      link: '/tonfas/receber-p4',
+      link: linkDoModulo(categoriaNormalizada, true),
       metadata: {
         protocolo,
+        categoria: categoriaNormalizada,
         status: STATUS_TRANSFERENCIA.PENDENTE
       }
     },
     {
-      titulo: 'P4 enviou material ao SVDD',
+      titulo: `${origemCodigoNormalizado} enviou material ao ${destinoCodigoNormalizado}`,
       mensagem,
       tipo: 'PATRIMONIO',
       modulo: 'PATRIMONIO',
@@ -268,9 +458,10 @@ const itemIdResolvido =
       destinatario_perfil: PERFIS.COMANDANTE_CIA,
       referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
       referencia_id: data.id,
-      link: '/tonfas',
+      link: linkDoModulo(categoriaNormalizada),
       metadata: {
         protocolo,
+        categoria: categoriaNormalizada,
         status: STATUS_TRANSFERENCIA.PENDENTE
       }
     }
@@ -279,8 +470,8 @@ const itemIdResolvido =
   await auditar({
     tipo: 'TRANSFERENCIA_PATRIMONIAL_ENVIADA',
     descricao:
-      `Criou a transferência ${protocolo}: ${material} do P4 para o SVDD, ` +
-      'aguardando aceite do Encarregado do SVDD.',
+      `Criou a transferência ${protocolo}: ${material} do ${origemCodigoNormalizado} para o ${destinoCodigoNormalizado}, ` +
+      `aguardando aceite do ${destinoCodigoNormalizado}.`,
     usuario: user,
     modulo: 'Patrimônio',
     severidade: 'Informativo'
@@ -288,6 +479,7 @@ const itemIdResolvido =
 
   return data
 }
+
 
 export async function listarTransferenciasPendentes({
   destinoCodigo = 'SVDD',
@@ -343,81 +535,26 @@ async function buscarEstoqueDaTransferencia(transferencia) {
   return data
 }
 
-export async function aceitarTransferencia({
-  transferenciaId,
-  user = null
+async function aceitarTransferenciaDeArma({
+  transferencia,
+  ator,
+  horaServidor,
+  user
 }) {
-  const ator = usuarioNormalizado(user)
-  const transferencia = await buscarTransferenciaPorId(transferenciaId)
+  const armaId = transferencia?.metadata?.arma_id
 
-  if (transferencia.status !== STATUS_TRANSFERENCIA.PENDENTE) {
-    throw new Error(`Esta transferência já está ${transferencia.status.toLowerCase()}.`)
+  if (!armaId) {
+    throw new Error('A transferência não possui vínculo com a arma.')
   }
 
-  const estoque = await buscarEstoqueDaTransferencia(transferencia)
-  const quantidade = quantidadeInteira(transferencia.quantidade)
-  const saldoP4 = Number(estoque.quantidade_p4 || 0)
-  const saldoSvdd = Number(estoque.quantidade_svdd || 0)
-  const origemCodigo = upper(transferencia.origem_codigo)
-  const destinoCodigo = upper(transferencia.destino_codigo)
+  const { data: armaAnterior, error: armaBuscaError } = await supabase
+    .from(ARMAS_TABLE)
+    .select('*')
+    .eq('id', armaId)
+    .maybeSingle()
 
-  let novoSaldoP4 = saldoP4
-  let novoSaldoSvdd = saldoSvdd
-  let campoConferencia = ''
-  let saldoConferencia = 0
-
-  if (origemCodigo === 'P4' && destinoCodigo === 'SVDD') {
-    if (saldoP4 < quantidade) {
-      throw new Error(
-        `Saldo insuficiente no P4. Disponível: ${saldoP4}; solicitado: ${quantidade}.`
-      )
-    }
-
-    novoSaldoP4 = saldoP4 - quantidade
-    novoSaldoSvdd = saldoSvdd + quantidade
-    campoConferencia = 'quantidade_p4'
-    saldoConferencia = saldoP4
-  } else if (origemCodigo === 'SVDD' && destinoCodigo === 'P4') {
-    if (saldoSvdd < quantidade) {
-      throw new Error(
-        `Saldo insuficiente no SVDD. Disponível: ${saldoSvdd}; solicitado: ${quantidade}.`
-      )
-    }
-
-    novoSaldoP4 = saldoP4 + quantidade
-    novoSaldoSvdd = saldoSvdd - quantidade
-    campoConferencia = 'quantidade_svdd'
-    saldoConferencia = saldoSvdd
-  } else {
-    throw new Error(
-      `Fluxo patrimonial não suportado: ${origemCodigo || 'SEM ORIGEM'} → ${destinoCodigo || 'SEM DESTINO'}.`
-    )
-  }
-
-  const horaServidor = await obterHoraServidor()
-
-  let atualizacaoEstoque = supabase
-    .from(TONFAS_TABLE)
-    .update({
-      quantidade_p4: novoSaldoP4,
-      quantidade_svdd: novoSaldoSvdd
-    })
-    .eq('id', estoque.id)
-
-  atualizacaoEstoque = atualizacaoEstoque.eq(
-    campoConferencia,
-    saldoConferencia
-  )
-
-  const { data: estoqueAtualizado, error: estoqueError } =
-    await atualizacaoEstoque
-      .select('*')
-      .maybeSingle()
-
-  if (estoqueError) throw estoqueError
-  if (!estoqueAtualizado) {
-    throw new Error('O saldo foi alterado por outro usuário. Atualize a tela e tente novamente.')
-  }
+  if (armaBuscaError) throw armaBuscaError
+  if (!armaAnterior) throw new Error('A arma da transferência não foi encontrada.')
 
   let movimentacao = null
 
@@ -431,15 +568,41 @@ export async function aceitarTransferencia({
       dados: {
         transferencia_id: transferencia.id,
         protocolo_transferencia: transferencia.protocolo,
-        quantidade,
-        categoria: transferencia.categoria,
+        quantidade: 1,
+        categoria: 'ARMA',
+        item_individual: true,
+        arma_id: armaId,
         origem_codigo: transferencia.origem_codigo,
         origem_nome: transferencia.origem_nome,
         destino_codigo: transferencia.destino_codigo,
-        destino_nome: transferencia.destino_nome
+        destino_nome: transferencia.destino_nome,
+        guardiao_origem: {
+          tipo: 'SETOR',
+          codigo: transferencia.origem_codigo,
+          nome: transferencia.origem_nome
+        },
+        guardiao_destino: {
+          tipo: 'SETOR',
+          codigo: transferencia.destino_codigo,
+          nome: transferencia.destino_nome
+        }
       },
       user
     })
+
+    const { data: armaAtualizada, error: armaError } = await supabase
+      .from(ARMAS_TABLE)
+      .update({
+        local_atual: transferencia.destino_nome
+      })
+      .eq('id', armaId)
+      .select('*')
+      .maybeSingle()
+
+    if (armaError) throw armaError
+    if (!armaAtualizada) {
+      throw new Error('Não foi possível atualizar a localização da arma.')
+    }
 
     const { data, error } = await supabase
       .from(TABLE)
@@ -449,7 +612,7 @@ export async function aceitarTransferencia({
         recebido_por_re: ator.re,
         recebido_por_nome: ator.nome,
         recebido_em: horaServidor,
-        movimentacao_id: movimentacao?.id || null,
+        movimentacao_id: movimentacao?.id || movimentacao?.movimentacao?.id || null,
         updated_at: horaServidor
       })
       .eq('id', transferencia.id)
@@ -460,63 +623,236 @@ export async function aceitarTransferencia({
     if (error) throw error
     if (!data) throw new Error('A transferência foi alterada por outro usuário.')
 
-    const material = descricaoMaterial(transferencia.categoria, quantidade)
-    const setorDestino = destinoCodigo === 'P4' ? 'P4' : 'SVDD'
-    const setorOrigem = origemCodigo === 'SVDD' ? 'SVDD' : 'P4'
-    const mensagem =
-      `O ${setorDestino} confirmou o recebimento de ${material}. ` +
-      `Transferência ${transferencia.protocolo} concluída por ${ator.nome}` +
-      `${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}.`
-
-    await notificarPerfis([
-      {
-        titulo: `Transferência recebida pelo ${setorDestino}`,
-        mensagem,
-        tipo: 'SUCESSO',
-        modulo: 'PATRIMONIO',
-        prioridade: 'NORMAL',
-        destinatario_perfil:
-          setorOrigem === 'P4' ? PERFIS.P4 : PERFIS.ENCARREGADO_SVDD,
-        referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
-        referencia_id: transferencia.id,
-        link: '/tonfas',
-        metadata: { protocolo: transferencia.protocolo, status: STATUS_TRANSFERENCIA.ACEITA }
-      },
-      {
-        titulo: `${setorDestino} confirmou recebimento`,
-        mensagem,
-        tipo: 'SUCESSO',
-        modulo: 'PATRIMONIO',
-        prioridade: 'NORMAL',
-        destinatario_perfil: PERFIS.COMANDANTE_CIA,
-        referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
-        referencia_id: transferencia.id,
-        link: '/tonfas',
-        metadata: { protocolo: transferencia.protocolo, status: STATUS_TRANSFERENCIA.ACEITA }
-      }
-    ])
-
-    await auditar({
-      tipo: 'TRANSFERENCIA_PATRIMONIAL_ACEITA',
-      descricao: `Aceitou a transferência ${transferencia.protocolo}: ${material} recebidos pelo ${setorDestino}.`,
-      usuario: user,
-      modulo: 'Patrimônio',
-      severidade: 'Informativo'
-    })
-
-    return { transferencia: data, estoque: estoqueAtualizado, movimentacao }
+    return {
+      transferencia: data,
+      estoque: armaAtualizada,
+      arma: armaAtualizada,
+      movimentacao
+    }
   } catch (error) {
     await supabase
-      .from(TONFAS_TABLE)
+      .from(ARMAS_TABLE)
       .update({
-        quantidade_p4: saldoP4,
-        quantidade_svdd: saldoSvdd
+        local_atual: armaAnterior.local_atual ?? null
       })
-      .eq('id', estoque.id)
+      .eq('id', armaId)
 
     throw error
   }
 }
+
+
+export async function aceitarTransferencia({
+  transferenciaId,
+  user = null
+}) {
+  const ator = usuarioNormalizado(user)
+  const transferencia = await buscarTransferenciaPorId(transferenciaId)
+
+  if (transferencia.status !== STATUS_TRANSFERENCIA.PENDENTE) {
+    throw new Error(`Esta transferência já está ${transferencia.status.toLowerCase()}.`)
+  }
+
+  const horaServidor = await obterHoraServidor()
+  const categoria = upper(transferencia.categoria)
+  const origemCodigo = upper(transferencia.origem_codigo)
+  const destinoCodigo = upper(transferencia.destino_codigo)
+
+  if (
+    !(
+      (origemCodigo === 'P4' && destinoCodigo === 'SVDD') ||
+      (origemCodigo === 'SVDD' && destinoCodigo === 'P4')
+    )
+  ) {
+    throw new Error(
+      `Fluxo patrimonial não suportado: ${origemCodigo || 'SEM ORIGEM'} → ${destinoCodigo || 'SEM DESTINO'}.`
+    )
+  }
+
+  let resultado
+
+  if (categoria === 'ARMA') {
+    resultado = await aceitarTransferenciaDeArma({
+      transferencia,
+      ator,
+      horaServidor,
+      user
+    })
+  } else {
+    const estoque = await buscarEstoqueDaTransferencia(transferencia)
+    const quantidade = quantidadeInteira(transferencia.quantidade)
+    const saldoP4 = Number(estoque.quantidade_p4 || 0)
+    const saldoSvdd = Number(estoque.quantidade_svdd || 0)
+
+    let novoSaldoP4 = saldoP4
+    let novoSaldoSvdd = saldoSvdd
+    let campoConferencia = ''
+    let saldoConferencia = 0
+
+    if (origemCodigo === 'P4' && destinoCodigo === 'SVDD') {
+      if (saldoP4 < quantidade) {
+        throw new Error(
+          `Saldo insuficiente no P4. Disponível: ${saldoP4}; solicitado: ${quantidade}.`
+        )
+      }
+
+      novoSaldoP4 = saldoP4 - quantidade
+      novoSaldoSvdd = saldoSvdd + quantidade
+      campoConferencia = 'quantidade_p4'
+      saldoConferencia = saldoP4
+    } else {
+      if (saldoSvdd < quantidade) {
+        throw new Error(
+          `Saldo insuficiente no SVDD. Disponível: ${saldoSvdd}; solicitado: ${quantidade}.`
+        )
+      }
+
+      novoSaldoP4 = saldoP4 + quantidade
+      novoSaldoSvdd = saldoSvdd - quantidade
+      campoConferencia = 'quantidade_svdd'
+      saldoConferencia = saldoSvdd
+    }
+
+    let atualizacaoEstoque = supabase
+      .from(TONFAS_TABLE)
+      .update({
+        quantidade_p4: novoSaldoP4,
+        quantidade_svdd: novoSaldoSvdd
+      })
+      .eq('id', estoque.id)
+      .eq(campoConferencia, saldoConferencia)
+
+    const { data: estoqueAtualizado, error: estoqueError } =
+      await atualizacaoEstoque
+        .select('*')
+        .maybeSingle()
+
+    if (estoqueError) throw estoqueError
+    if (!estoqueAtualizado) {
+      throw new Error('O saldo foi alterado por outro usuário. Atualize a tela e tente novamente.')
+    }
+
+    let movimentacao = null
+
+    try {
+      movimentacao = await registrarMovimentacao({
+        patrimonioId: transferencia.patrimonio_id,
+        tipo: 'TRANSFERENCIA',
+        localDestino: transferencia.destino_nome,
+        motivo: transferencia.motivo,
+        observacao: transferencia.observacoes,
+        dados: {
+          transferencia_id: transferencia.id,
+          protocolo_transferencia: transferencia.protocolo,
+          quantidade,
+          categoria: transferencia.categoria,
+          origem_codigo: transferencia.origem_codigo,
+          origem_nome: transferencia.origem_nome,
+          destino_codigo: transferencia.destino_codigo,
+          destino_nome: transferencia.destino_nome
+        },
+        user
+      })
+
+      const { data, error } = await supabase
+        .from(TABLE)
+        .update({
+          status: STATUS_TRANSFERENCIA.ACEITA,
+          recebido_por_id: ator.id,
+          recebido_por_re: ator.re,
+          recebido_por_nome: ator.nome,
+          recebido_em: horaServidor,
+          movimentacao_id: movimentacao?.id || movimentacao?.movimentacao?.id || null,
+          updated_at: horaServidor
+        })
+        .eq('id', transferencia.id)
+        .eq('status', STATUS_TRANSFERENCIA.PENDENTE)
+        .select('*')
+        .maybeSingle()
+
+      if (error) throw error
+      if (!data) throw new Error('A transferência foi alterada por outro usuário.')
+
+      resultado = {
+        transferencia: data,
+        estoque: estoqueAtualizado,
+        movimentacao
+      }
+    } catch (error) {
+      await supabase
+        .from(TONFAS_TABLE)
+        .update({
+          quantidade_p4: saldoP4,
+          quantidade_svdd: saldoSvdd
+        })
+        .eq('id', estoque.id)
+
+      throw error
+    }
+  }
+
+  const quantidade = categoria === 'ARMA'
+    ? 1
+    : quantidadeInteira(transferencia.quantidade)
+  const material = descricaoMaterial(
+    categoria,
+    quantidade,
+    transferencia.metadata || {}
+  )
+  const setorDestino = destinoCodigo === 'P4' ? 'P4' : 'SVDD'
+  const setorOrigem = origemCodigo === 'SVDD' ? 'SVDD' : 'P4'
+  const mensagem =
+    `O ${setorDestino} confirmou o recebimento de ${material}. ` +
+    `Transferência ${transferencia.protocolo} concluída por ${ator.nome}` +
+    `${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}.`
+
+  await notificarPerfis([
+    {
+      titulo: `Transferência recebida pelo ${setorDestino}`,
+      mensagem,
+      tipo: 'SUCESSO',
+      modulo: 'PATRIMONIO',
+      prioridade: 'NORMAL',
+      destinatario_perfil:
+        setorOrigem === 'P4' ? PERFIS.P4 : PERFIS.ENCARREGADO_SVDD,
+      referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
+      referencia_id: transferencia.id,
+      link: linkDoModulo(categoria),
+      metadata: {
+        protocolo: transferencia.protocolo,
+        categoria,
+        status: STATUS_TRANSFERENCIA.ACEITA
+      }
+    },
+    {
+      titulo: `${setorDestino} confirmou recebimento`,
+      mensagem,
+      tipo: 'SUCESSO',
+      modulo: 'PATRIMONIO',
+      prioridade: 'NORMAL',
+      destinatario_perfil: PERFIS.COMANDANTE_CIA,
+      referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
+      referencia_id: transferencia.id,
+      link: linkDoModulo(categoria),
+      metadata: {
+        protocolo: transferencia.protocolo,
+        categoria,
+        status: STATUS_TRANSFERENCIA.ACEITA
+      }
+    }
+  ])
+
+  await auditar({
+    tipo: 'TRANSFERENCIA_PATRIMONIAL_ACEITA',
+    descricao: `Aceitou a transferência ${transferencia.protocolo}: ${material} recebido(s) pelo ${setorDestino}.`,
+    usuario: user,
+    modulo: 'Patrimônio',
+    severidade: 'Informativo'
+  })
+
+  return resultado
+}
+
 
 export async function recusarTransferencia({
   transferenciaId,
@@ -553,22 +889,22 @@ export async function recusarTransferencia({
   if (error) throw error
   if (!data) throw new Error('A transferência foi alterada por outro usuário.')
 
-  const material = descricaoMaterial(transferencia.categoria, transferencia.quantidade)
+  const material = descricaoMaterial(transferencia.categoria, transferencia.quantidade, transferencia.metadata || {})
   const mensagem =
-    `O SVDD recusou ${material} da transferência ${transferencia.protocolo}. ` +
+    `O ${upper(transferencia.destino_codigo)} recusou ${material} da transferência ${transferencia.protocolo}. ` +
     `Motivo: ${motivo}. Responsável: ${ator.nome}.`
 
   await notificarPerfis([
     {
-      titulo: 'Transferência recusada pelo SVDD',
+      titulo: `Transferência recusada pelo ${upper(transferencia.destino_codigo)}`,
       mensagem,
       tipo: 'ALERTA',
       modulo: 'PATRIMONIO',
       prioridade: 'ALTA',
-      destinatario_perfil: PERFIS.P4,
+      destinatario_perfil: upper(transferencia.origem_codigo) === 'P4' ? PERFIS.P4 : PERFIS.ENCARREGADO_SVDD,
       referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
       referencia_id: transferencia.id,
-      link: '/tonfas',
+      link: linkDoModulo(transferencia.categoria),
       metadata: { protocolo: transferencia.protocolo, status: STATUS_TRANSFERENCIA.RECUSADA }
     },
     {
@@ -580,7 +916,7 @@ export async function recusarTransferencia({
       destinatario_perfil: PERFIS.COMANDANTE_CIA,
       referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
       referencia_id: transferencia.id,
-      link: '/tonfas',
+      link: linkDoModulo(transferencia.categoria),
       metadata: { protocolo: transferencia.protocolo, status: STATUS_TRANSFERENCIA.RECUSADA }
     }
   ])
@@ -634,19 +970,19 @@ export async function cancelarTransferencia({
   if (!data) throw new Error('A transferência foi alterada por outro usuário.')
 
   const mensagem =
-    `O P4 cancelou a transferência ${transferencia.protocolo}. Motivo: ${motivo}.`
+    `O ${upper(transferencia.origem_codigo)} cancelou a transferência ${transferencia.protocolo}. Motivo: ${motivo}.`
 
   await notificarPerfis([
     {
-      titulo: 'Transferência cancelada pelo P4',
+      titulo: `Transferência cancelada pelo ${upper(transferencia.origem_codigo)}`,
       mensagem,
       tipo: 'ALERTA',
       modulo: 'PATRIMONIO',
       prioridade: 'NORMAL',
-      destinatario_perfil: PERFIS.ENCARREGADO_SVDD,
+      destinatario_perfil: upper(transferencia.destino_codigo) === 'P4' ? PERFIS.P4 : PERFIS.ENCARREGADO_SVDD,
       referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
       referencia_id: transferencia.id,
-      link: '/tonfas/receber-p4',
+      link: linkDoModulo(transferencia.categoria, true),
       metadata: { protocolo: transferencia.protocolo, status: STATUS_TRANSFERENCIA.CANCELADA }
     },
     {
@@ -658,7 +994,7 @@ export async function cancelarTransferencia({
       destinatario_perfil: PERFIS.COMANDANTE_CIA,
       referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
       referencia_id: transferencia.id,
-      link: '/tonfas',
+      link: linkDoModulo(transferencia.categoria),
       metadata: { protocolo: transferencia.protocolo, status: STATUS_TRANSFERENCIA.CANCELADA }
     }
   ])
