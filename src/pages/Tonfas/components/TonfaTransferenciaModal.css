@@ -70,15 +70,15 @@
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: #15803d;
+  background: #092544;
   color: #fff;
   font-weight: 900;
 }
 
 .tonfa-transfer-origin span,
 .tonfa-transfer-origin strong { display: block; }
-.tonfa-transfer-origin span { color: #4b6c58; font-size: 0.76rem; font-weight: 800; text-transform: uppercase; }
-.tonfa-transfer-origin strong { margin-top: 2px; color: #166534; }
+.tonfa-transfer-origin span { color: #092544; font-size: 0.76rem; font-weight: 800; text-transform: uppercase; }
+.tonfa-transfer-origin strong { margin-top: 2px; color: #092544; }
 .tonfa-transfer-error { margin-bottom: 18px; }
 
 .tonfa-transfer-grid {

@@ -385,6 +385,31 @@ export default function ArmaForm({
         )
       }
 
+      const patrimonioNormalizado =
+        String(form.patrimonio || '').trim().toUpperCase()
+
+      const numeroSerieNormalizado =
+        String(form.numero_serie || '').trim().toUpperCase()
+
+      // Algumas armas antigas não possuem patrimônio preenchido e são
+      // identificadas pelo número de série. Nesses casos, o QR é criado
+      // usando o número de série como referência.
+      const referenciaQr =
+        patrimonioNormalizado || numeroSerieNormalizado
+
+      const qrCodeExistente =
+        String(
+          armaAtual?.qr_code ||
+          armaEditando?.qr_code ||
+          ''
+        ).trim()
+
+      const qrCode =
+        qrCodeExistente ||
+        (referenciaQr
+          ? `SIGMO-ARMA-${referenciaQr}`
+          : null)
+
       const payload = {
         ...form,
 
@@ -396,16 +421,14 @@ export default function ArmaForm({
             .toUpperCase(),
 
         patrimonio:
-          String(
-            form.patrimonio || ''
-          ).trim() || null,
+          patrimonioNormalizado || null,
 
-        numero_serie:
-          String(
-            form.numero_serie || ''
-          )
-            .trim()
-            .toUpperCase(),
+        // Mantém o QR já existente. Quando estiver vazio, cria no padrão
+        // SIGMO-ARMA-{PATRIMÔNIO}; se patrimônio estiver vazio, usa o número
+        // de série, preservando compatibilidade com registros antigos.
+        qr_code: qrCode,
+
+        numero_serie: numeroSerieNormalizado,
 
         marca:
           String(

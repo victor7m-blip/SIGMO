@@ -156,9 +156,9 @@ const destinoCodigo =
     estoqueSelecionado.patrimonioId ||
     null,
   itemId:
-    estoqueSelecionado.item_id ||
-    estoqueSelecionado.itemId ||
-    estoqueSelecionado.id,
+  estoqueSelecionado.item_id ||
+  estoqueSelecionado.itemId ||
+  null,
   quantidade,
 
 origemCodigo,

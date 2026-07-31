@@ -255,3 +255,65 @@
     width: 100%;
   }
 }
+/* Modo lateral: ficha do policial aberta a partir de Armas */
+.policial-modal-overlay-lateral {
+  z-index: 10001;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 22px;
+  padding-left: max(22px, 52vw);
+  background: rgba(2, 8, 23, 0.18);
+  pointer-events: none;
+}
+.policial-modal-overlay-lateral .policial-modal-lateral {
+  width: min(620px, 46vw);
+  max-height: calc(100vh - 44px);
+  pointer-events: auto;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: -18px 24px 60px rgba(2, 8, 23, 0.30);
+}
+.policial-modal-overlay-lateral .policial-modal-body {
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px;
+  padding: 20px;
+}
+.policial-modal-overlay-lateral .policial-modal-header { padding: 18px 20px; }
+.policial-modal-overlay-lateral .policial-modal-header h2 { font-size: 22px; }
+.policial-modal-overlay-lateral .policial-modal-footer { padding: 14px 20px; }
+.policial-modal-overlay-lateral .policial-info-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.policial-modal-overlay-lateral .policial-info-item { padding: 10px 11px; }
+.policial-modal-overlay-lateral .policial-info-item strong { font-size: 13px; }
+.policial-modal-overlay-lateral .policial-modal-qrcode { min-height: 120px; }
+
+@media (max-width: 1180px) {
+  .policial-modal-overlay-lateral {
+    justify-content: center;
+    padding: 24px;
+    background: rgba(2, 8, 23, 0.72);
+    pointer-events: auto;
+  }
+  .policial-modal-overlay-lateral .policial-modal-lateral {
+    width: min(900px, 100%);
+    max-height: 92vh;
+  }
+  .policial-modal-overlay-lateral .policial-modal-body {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+}
+@media (max-width: 850px) {
+  .policial-modal-overlay-lateral {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .policial-modal-overlay-lateral .policial-modal-lateral {
+    width: 100%;
+    max-height: 94vh;
+    border-radius: 18px 18px 0 0;
+  }
+  .policial-modal-overlay-lateral .policial-modal-body {
+    grid-template-columns: 1fr;
+  }
+}

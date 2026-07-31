@@ -135,7 +135,9 @@ function obterReUsuario(user) {
 }
 
 export default function Policiais({
-  user
+  user,
+  abrirPolicialRe = '',
+  onPolicialAberto
 }) {
   const usuarioRestrito =
     ehUsuario(user)
@@ -325,6 +327,35 @@ export default function Policiais({
     filters,
     usuarioRestrito
   ])
+
+  useEffect(() => {
+    if (usuarioRestrito || !abrirPolicialRe) return
+
+    const re = String(abrirPolicialRe).trim().toUpperCase()
+    if (!re) return
+
+    const novosFiltros = { ...initialFilters, re }
+    setFilters(novosFiltros)
+    setDebouncedFilters(novosFiltros)
+    setPagina(1)
+  }, [abrirPolicialRe, usuarioRestrito])
+
+  useEffect(() => {
+    if (!abrirPolicialRe || loading || policiais.length === 0) return
+
+    const normalizarRe = (valor) =>
+      String(valor || '').toUpperCase().replace(/[^0-9A-Z]/g, '')
+
+    const alvo = normalizarRe(abrirPolicialRe)
+    const policial = policiais.find(
+      (item) => normalizarRe(item?.re) === alvo
+    )
+
+    if (!policial) return
+
+    handleView(policial)
+    onPolicialAberto?.()
+  }, [abrirPolicialRe, loading, policiais, onPolicialAberto])
 
   useEffect(() => {
     carregarPoliciais()

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   CALIBRES_ARMAS,
@@ -12,11 +12,24 @@ import {
 } from '../../constants/unidades'
 
 import ArmaForm from './components/ArmaForm'
+import ArmaViewModal from './components/ArmaViewModal'
+
+import PolicialViewModal
+  from '../Policiais/components/PolicialViewModal'
 
 import {
+  buscarArmaPorId,
   excluirArma,
   listarArmas
 } from '../../services/armasService'
+
+import {
+  listarPoliciais
+} from '../../services/policiaisService'
+
+import {
+  listarFotosPolicial
+} from '../../services/policiaisFotosService'
 
 import {
   aceitarTransferencia,
@@ -28,8 +41,10 @@ import {
 import {
   listarFotosArma
 } from '../../services/armasFotosService'
+
 import './styles/Armas.css'
 import './styles/ArmasOperacoes.css'
+import '../Policiais/components/policialViewModal.css'
 
 const LIMITE = 20
 const LIMITE_RESUMO = 5000
@@ -74,6 +89,35 @@ function obterLocalArma(arma) {
       arma?.guardiao_nome ||
       ''
   )
+}
+
+
+function obterEspecieArma(arma) {
+  const especie = normalizarTexto(arma?.especie || arma?.tipo || '')
+  if (especie.includes('PISTOLA')) return 'PISTOLA'
+  if (especie.includes('FUZIL')) return 'FUZIL'
+  if (especie.includes('ESPINGARDA')) return 'ESPINGARDA'
+  return 'OUTRA'
+}
+
+function obterResponsavelArma(arma) {
+  return {
+    nome:
+      arma?.responsavel_atual_nome ||
+      arma?.carga_policial_nome ||
+      arma?.proprietario_nome ||
+      arma?.proprietario_policial_nome ||
+      arma?.responsavel_nome ||
+      arma?.policial_nome ||
+      '',
+    re:
+      arma?.carga_policial_re ||
+      arma?.responsavel_re ||
+      arma?.proprietario_re ||
+      arma?.proprietario_policial_re ||
+      arma?.policial_re ||
+      ''
+  }
 }
 
 function estaNaoLocalizada(arma) {
@@ -154,37 +198,90 @@ function formatarPercentual(valor) {
   })}%`
 }
 
-function ArmaResumoCard({ titulo, valor, descricao, destaque = 'padrao', onClick }) {
+function ArmaResumoCard({ titulo, valor, descricao, detalhes = [], destaque = 'padrao', onClick, onDetalheClick }) {
+  const temDetalhes = Array.isArray(detalhes) && detalhes.length > 0
+  const cardClicavel = typeof onClick === 'function'
+
+  function abrirCard(event) {
+    if (!cardClicavel) return
+
+    // Os números internos têm filtro próprio. Nunca deixe o clique
+    // deles subir e executar também o clique geral do card.
+    if (event?.target?.closest?.('.armas-resumo-detalhe-clicavel')) return
+
+    onClick()
+  }
+
+  function tratarTeclaCard(event) {
+    if (!cardClicavel || event.target !== event.currentTarget) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onClick()
+    }
+  }
+
   return (
-    <button
-      type="button"
-      className={`armas-resumo-card armas-resumo-${destaque}`}
-      onClick={onClick}
-      disabled={typeof onClick !== 'function'}
+    <div
+      className={`armas-resumo-card armas-resumo-${destaque}${cardClicavel ? ' armas-resumo-card-clicavel' : ''}`}
+      role={cardClicavel ? 'button' : undefined}
+      tabIndex={cardClicavel ? 0 : undefined}
+      onClick={abrirCard}
+      onKeyDown={tratarTeclaCard}
     >
       <span>{titulo}</span>
-      <strong>{valor}</strong>
-      <small>{descricao}</small>
-    </button>
+      {temDetalhes ? (
+        <div className="armas-resumo-detalhes">
+          {detalhes.map((item) => {
+            const detalheClicavel = typeof onDetalheClick === 'function' && Number(item.valor || 0) > 0
+
+            return detalheClicavel ? (
+              <button
+                type="button"
+                key={item.titulo}
+                className="armas-resumo-detalhe-clicavel"
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onDetalheClick(item)
+                }}
+              >
+                <span>{item.titulo}</span>
+                <strong>{item.valor}</strong>
+              </button>
+            ) : (
+              <div key={item.titulo}>
+                <span>{item.titulo}</span>
+                <strong>{item.valor}</strong>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <strong>{valor}</strong>
+      )}
+      {descricao && <small>{descricao}</small>}
+    </div>
   )
 }
 
 function GraficoRoscaArmas({ resumo }) {
  const fatias = [
-  { label: 'Depósito do P4', valor: resumo.p4, cor: '#2563eb' },
-  { label: 'Cofre do SVDD', valor: resumo.svdd, cor: '#7c3aed' },
-  { label: 'Carga permanente', valor: resumo.carga, cor: '#16a34a' },
-  { label: 'Cautelas ativas', valor: resumo.cautelas, cor: '#eab308' },
-  { label: 'Manutenção', valor: resumo.manutencao, cor: '#f97316' },
-  { label: 'Não localizadas', valor: resumo.naoLocalizadas, cor: '#dc2626' },
-  { label: 'Apreendidas', valor: resumo.apreendidas, cor: '#8b5cf6' },
-  { label: 'Recolhidas', valor: resumo.recolhidas, cor: '#64748b' }
+  { label: 'Depósito do P4', valor: resumo.p4.total, cor: '#2563eb' },
+  { label: 'Cofre do SVDD', valor: resumo.svdd.total, cor: '#7c3aed' },
+  { label: 'Carga permanente', valor: resumo.carga.total, cor: '#16a34a' },
+  { label: 'Cautelas ativas', valor: resumo.cautelas.total, cor: '#eab308' },
+  { label: 'Manutenção', valor: resumo.manutencao.total, cor: '#f97316' },
+  { label: 'Não localizadas', valor: resumo.naoLocalizadas.total, cor: '#dc2626' },
+  { label: 'Apreendidas', valor: resumo.apreendidas.total, cor: '#8b5cf6' },
+  { label: 'Recolhidas', valor: resumo.recolhidas.total, cor: '#64748b' }
 ]
 
   let acumulado = 0
   const partes = fatias.map((item) => {
     const inicio = acumulado
-    const fim = acumulado + percentual(item.valor, resumo.total)
+    const fim = acumulado + percentual(item.valor, resumo.total.total)
     acumulado = fim
     return `${item.cor} ${inicio}% ${fim}%`
   })
@@ -206,7 +303,7 @@ function GraficoRoscaArmas({ resumo }) {
           style={{ background: `conic-gradient(${partes.join(', ')})` }}
         >
           <div className="armas-rosca-centro">
-            <strong>{resumo.total}</strong>
+            <strong>{resumo.total.total}</strong>
             <span>Total de armas</span>
           </div>
         </div>
@@ -217,7 +314,7 @@ function GraficoRoscaArmas({ resumo }) {
               <i style={{ background: item.cor }} />
               <span>{item.label}</span>
               <strong>{item.valor}</strong>
-              <small>{formatarPercentual(percentual(item.valor, resumo.total))}</small>
+              <small>{formatarPercentual(percentual(item.valor, resumo.total.total))}</small>
             </div>
           ))}
         </div>
@@ -228,14 +325,14 @@ function GraficoRoscaArmas({ resumo }) {
 
 function GraficoBarrasArmas({ resumo }) {
   const categorias = [
-  { label: 'Depósito do P4', valor: resumo.p4 },
-  { label: 'Cofre do SVDD', valor: resumo.svdd },
-  { label: 'Carga permanente', valor: resumo.carga },
-  { label: 'Cautelas', valor: resumo.cautelas },
-  { label: 'Manutenção', valor: resumo.manutencao },
-  { label: 'Não localizadas', valor: resumo.naoLocalizadas },
-  { label: 'Apreendidas', valor: resumo.apreendidas },
-  { label: 'Recolhidas', valor: resumo.recolhidas }
+  { label: 'Depósito do P4', valor: resumo.p4.total },
+  { label: 'Cofre do SVDD', valor: resumo.svdd.total },
+  { label: 'Carga permanente', valor: resumo.carga.total },
+  { label: 'Cautelas', valor: resumo.cautelas.total },
+  { label: 'Manutenção', valor: resumo.manutencao.total },
+  { label: 'Não localizadas', valor: resumo.naoLocalizadas.total },
+  { label: 'Apreendidas', valor: resumo.apreendidas.total },
+  { label: 'Recolhidas', valor: resumo.recolhidas.total }
 ]
 
   const maior = Math.max(1, ...categorias.map((item) => item.valor))
@@ -265,7 +362,7 @@ function GraficoBarrasArmas({ resumo }) {
   )
 }
 
-export default function Armas({ user }) {
+export default function Armas({ user, onAbrirPolicial }) {
   const [armas, setArmas] = useState([])
   const [armasResumo, setArmasResumo] = useState([])
   const [loadingResumo, setLoadingResumo] = useState(false)
@@ -309,6 +406,17 @@ export default function Armas({ user }) {
   const [formAberto, setFormAberto] = useState(false)
   const [armaEditando, setArmaEditando] = useState(null)
   const [armaVisualizando, setArmaVisualizando] = useState(null)
+  const [policialVisualizando, setPolicialVisualizando] = useState(null)
+  const [fotosPolicial, setFotosPolicial] = useState([])
+  const [abrindoPolicial, setAbrindoPolicial] = useState(false)
+  const [painelResumo, setPainelResumo] = useState(null)
+
+  const listaRef = useRef(null)
+  const tabelaScrollRef = useRef(null)
+  const tabelaScrollTopoRef = useRef(null)
+  const tabelaRef = useRef(null)
+  const [larguraTabela, setLarguraTabela] = useState(0)
+  const [destacarLista, setDestacarLista] = useState(false)
 
   const [fotosVisualizacao, setFotosVisualizacao] =
     useState([])
@@ -322,6 +430,7 @@ export default function Armas({ user }) {
     fotoSelecionadaVisualizacao,
     setFotoSelecionadaVisualizacao
   ] = useState(null)
+
 
   const [sortBy, setSortBy] = useState('created_at')
   const [sortDirection, setSortDirection] = useState('desc')
@@ -426,6 +535,26 @@ export default function Armas({ user }) {
   }, [carregarArmas])
 
 
+  const abrirVisualizacao = useCallback(async (arma) => {
+    if (!arma) return
+
+    // Abre imediatamente e, em seguida, recarrega o registro completo.
+    // Isso evita perder campos como qr_code após refatorações da listagem.
+    setArmaVisualizando(arma)
+
+    if (!arma.id) return
+
+    try {
+      const armaCompleta = await buscarArmaPorId(arma.id)
+
+      if (armaCompleta) {
+        setArmaVisualizando(armaCompleta)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar os dados completos da arma:', error)
+    }
+  }, [])
+
   const carregarResumo = useCallback(async () => {
     try {
       setLoadingResumo(true)
@@ -528,75 +657,147 @@ setFotoSelecionadaVisualizacao(
 }, [armaVisualizando?.id])
 
   const resumo = useMemo(() => {
+    const vazio = () => ({ total: 0, pistolas: 0, fuzis: 0, espingardas: 0, outras: 0 })
     const categorias = {
-  p4: 0,
-  svdd: 0,
-  carga: 0,
-  cautelas: 0,
-  manutencao: 0,
-  naoLocalizadas: 0,
-  apreendidas: 0,
-  recolhidas: 0,
-  outros: 0
-}
+      total: vazio(),
+      p4: vazio(),
+      svdd: vazio(),
+      disponiveis: vazio(),
+      carga: vazio(),
+      cautelas: vazio(),
+      manutencao: vazio(),
+      naoLocalizadas: vazio(),
+      apreendidas: vazio(),
+      recolhidas: vazio(),
+      baixadas: vazio(),
+      outros: vazio()
+    }
 
-armasResumo.forEach((arma) => {
-  const status = String(
-    arma.status_operacional ||
-    arma.status ||
-    ''
-  )
-    .trim()
-    .toUpperCase()
+    function somar(chave, arma) {
+      const especie = obterEspecieArma(arma)
+      categorias[chave].total += 1
+      if (especie === 'PISTOLA') categorias[chave].pistolas += 1
+      else if (especie === 'FUZIL') categorias[chave].fuzis += 1
+      else if (especie === 'ESPINGARDA') categorias[chave].espingardas += 1
+      else categorias[chave].outras += 1
+    }
 
-  if (status === 'APREENDIDO') {
-    categorias.apreendidas += 1
-    return
+    armasResumo.forEach((arma) => {
+      const status = obterStatusArma(arma)
+      somar('total', arma)
+
+      if (status === 'BAIXADO') return somar('baixadas', arma)
+      if (status === 'APREENDIDO') return somar('apreendidas', arma)
+      if (status === 'RECOLHIDO') return somar('recolhidas', arma)
+      if (estaNaoLocalizada(arma)) return somar('naoLocalizadas', arma)
+      if (estaEmManutencao(arma)) return somar('manutencao', arma)
+      if (estaCautelada(arma)) return somar('cautelas', arma)
+      if (estaEmCarga(arma)) return somar('carga', arma)
+
+      if (status === 'RESERVA' || status === 'DISPONIVEL') {
+        somar('disponiveis', arma)
+      }
+
+      if (estaNoSVDD(arma)) return somar('svdd', arma)
+      if (estaNoP4(arma)) return somar('p4', arma)
+      somar('outros', arma)
+    })
+
+    return {
+      ...categorias,
+      movimentadas: transferenciasPendentesArmas.length
+    }
+  }, [armasResumo, transferenciasPendentesArmas])
+
+  const detalhesEspecies = useCallback((grupo) => [
+    { titulo: 'Pistolas', especie: 'PISTOLA', valor: grupo?.pistolas || 0 },
+    { titulo: 'Fuzis', especie: 'FUZIL', valor: grupo?.fuzis || 0 },
+    { titulo: 'Espingardas', especie: 'ESPINGARDA', valor: grupo?.espingardas || 0 }
+  ], [])
+
+  const itensPainelResumo = useMemo(() => {
+    if (!painelResumo?.tipo) return []
+
+    return armasResumo.filter((arma) => {
+      const status = obterStatusArma(arma)
+      const pertenceAoGrupo = (() => {
+        switch (painelResumo.tipo) {
+        case 'TODAS':
+          return true
+        case 'P4':
+          return estaNoP4(arma)
+        case 'SVDD':
+          return estaNoSVDD(arma)
+        case 'CAUTELADAS':
+          return estaCautelada(arma)
+        case 'PAGAS':
+          return estaCautelada(arma) || estaEmCarga(arma)
+        case 'CARGA':
+          return estaEmCarga(arma)
+        case 'RECOLHIDAS':
+          return status === 'RECOLHIDO'
+        case 'BAIXADAS':
+          return status === 'BAIXADO'
+        case 'APREENDIDAS':
+          return status === 'APREENDIDO'
+        case 'MANUTENCAO':
+          return estaEmManutencao(arma)
+        case 'NAO_LOCALIZADAS':
+          return estaNaoLocalizada(arma)
+        case 'OUTROS':
+          return !estaNoP4(arma) && !estaNoSVDD(arma) && !estaCautelada(arma) && !estaEmCarga(arma) && !estaEmManutencao(arma) && !estaNaoLocalizada(arma) && !['RECOLHIDO', 'BAIXADO', 'APREENDIDO'].includes(status)
+          default:
+            return false
+        }
+      })()
+
+      if (!pertenceAoGrupo) return false
+      if (!painelResumo.especie) return true
+
+      return obterEspecieArma(arma) === painelResumo.especie
+    })
+  }, [armasResumo, painelResumo])
+
+  function abrirPainelResumo(tipo, titulo, descricao, especie = '') {
+    const filtrosPainel = {
+      TODAS: () => true,
+      P4: (arma) => estaNoP4(arma),
+      SVDD: (arma) => estaNoSVDD(arma),
+      CAUTELADAS: (arma) => estaCautelada(arma),
+      PAGAS: (arma) => estaCautelada(arma) || estaEmCarga(arma),
+      CARGA: (arma) => estaEmCarga(arma),
+      RECOLHIDAS: (arma) => obterStatusArma(arma) === 'RECOLHIDO',
+      BAIXADAS: (arma) => obterStatusArma(arma) === 'BAIXADO',
+      APREENDIDAS: (arma) => obterStatusArma(arma) === 'APREENDIDO',
+      MANUTENCAO: (arma) => estaEmManutencao(arma),
+      NAO_LOCALIZADAS: (arma) => estaNaoLocalizada(arma),
+      OUTROS: (arma) => {
+        const status = obterStatusArma(arma)
+        return !estaNoP4(arma) && !estaNoSVDD(arma) && !estaCautelada(arma) && !estaEmCarga(arma) && !estaEmManutencao(arma) && !estaNaoLocalizada(arma) && !['RECOLHIDO', 'BAIXADO', 'APREENDIDO'].includes(status)
+      }
+    }
+
+    const filtroGrupo = filtrosPainel[tipo] || (() => false)
+    const quantidade = armasResumo.filter((arma) => (
+      filtroGrupo(arma) && (!especie || obterEspecieArma(arma) === especie)
+    )).length
+    if (quantidade === 0) return
+
+    setPainelResumo({ tipo, titulo, descricao, especie })
   }
 
-  if (status === 'RECOLHIDO') {
-    categorias.recolhidas += 1
-    return
+  function abrirPainelResumoPorEspecie(tipo, tituloGrupo, descricaoGrupo, detalhe) {
+    const especie = detalhe?.especie || ''
+    const tituloEspecie = detalhe?.titulo || 'Armas'
+
+    abrirPainelResumo(
+      tipo,
+      `${tituloEspecie} — ${tituloGrupo}`,
+      `${descricaoGrupo} Exibindo somente ${tituloEspecie.toLowerCase()}.`,
+      especie
+    )
   }
 
-  if (estaNaoLocalizada(arma)) {
-    categorias.naoLocalizadas += 1
-    return
-  }
-
-  if (estaEmManutencao(arma)) {
-    categorias.manutencao += 1
-    return
-  }
-
-  if (estaCautelada(arma)) {
-    categorias.cautelas += 1
-    return
-  }
-
-  if (estaEmCarga(arma)) {
-    categorias.carga += 1
-    return
-  }
-
-  if (estaNoSVDD(arma)) {
-    categorias.svdd += 1
-    return
-  }
-
-  if (estaNoP4(arma)) {
-    categorias.p4 += 1
-    return
-  }
-
-  categorias.outros += 1
-})
-
-return {
-  total: armasResumo.length,
-  ...categorias
-}
-  }, [armasResumo])
   function handleFiltroChange(event) {
     const { name, value } = event.target
 
@@ -619,36 +820,52 @@ return {
     })
 
     setPagina(1)
+    irParaLista()
+  }
+
+  const irParaLista = useCallback(() => {
+    requestAnimationFrame(() => {
+      listaRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      })
+
+      setDestacarLista(true)
+      window.setTimeout(() => setDestacarLista(false), 1200)
+    })
+  }, [])
+
+  function aplicarFiltroEspecie(especie) {
+    setFiltros((prev) => ({
+      ...prev,
+      pesquisa: '',
+      especie,
+      status: ''
+    }))
+    setPagina(1)
+    irParaLista()
+  }
+
+  function aplicarFiltroResumo(status, pesquisa = '') {
+    setFiltros((prev) => ({
+      ...prev,
+      pesquisa,
+      status
+    }))
+    setPagina(1)
+    irParaLista()
   }
 
   function abrirNovoCadastro() {
     setArmaEditando(null)
     setArmaVisualizando(null)
     setFormAberto(true)
-
-    requestAnimationFrame(() => {
-      document
-        .querySelector('.armas-form-area')
-        ?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        })
-    })
   }
 
   function abrirEdicao(arma) {
     setArmaEditando(arma)
     setArmaVisualizando(null)
     setFormAberto(true)
-
-    requestAnimationFrame(() => {
-      document
-        .querySelector('.armas-form-area')
-        ?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        })
-    })
   }
 
   function fecharFormulario() {
@@ -1123,7 +1340,79 @@ return {
       : ' ↓'
   }
 
+  useEffect(() => {
+    if (!formAberto) return undefined
 
+    const overflowAnterior = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    function fecharComEscape(event) {
+      if (event.key === 'Escape') fecharFormulario()
+    }
+
+    window.addEventListener('keydown', fecharComEscape)
+
+    return () => {
+      document.body.style.overflow = overflowAnterior
+      window.removeEventListener('keydown', fecharComEscape)
+    }
+  }, [formAberto])
+
+  useEffect(() => {
+    function atualizarLarguraTabela() {
+      setLarguraTabela(tabelaRef.current?.scrollWidth || 0)
+    }
+
+    atualizarLarguraTabela()
+    window.addEventListener('resize', atualizarLarguraTabela)
+
+    return () => window.removeEventListener('resize', atualizarLarguraTabela)
+  }, [armas, loading, filtros, pagina])
+
+   async function abrirPolicialResponsavel(re) {
+  const valorRe = String(re || '').trim()
+
+  if (!valorRe) return
+
+  try {
+    setAbrindoPolicial(true)
+    setErro('')
+
+    const resultado = await listarPoliciais({
+      filtros: {
+        re: valorRe
+      },
+      pagina: 1,
+      limite: 1,
+      sortBy: 'nome_guerra',
+      sortDirection: 'asc'
+    })
+
+    const policial = resultado?.data?.[0]
+
+    if (!policial) {
+      setErro(`Policial RE ${valorRe} não localizado.`)
+      return
+    }
+
+    const fotos = await listarFotosPolicial(policial.id)
+
+    setPolicialVisualizando(policial)
+    setFotosPolicial(fotos || [])
+  } catch (error) {
+    console.error(
+      'Erro ao abrir policial responsável:',
+      error
+    )
+
+    setErro(
+      error?.message ||
+      'Não foi possível abrir o cadastro do policial.'
+    )
+  } finally {
+    setAbrindoPolicial(false)
+  }
+}
   return (
     <main className="armas-page">
       <header className="armas-header">
@@ -1140,13 +1429,15 @@ return {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="armas-btn-primary"
-          onClick={abrirNovoCadastro}
-        >
-          Nova arma
-        </button>
+        <div className="armas-header-actions">
+          <button
+            type="button"
+            className="armas-btn-primary"
+            onClick={abrirNovoCadastro}
+          >
+            Nova arma
+          </button>
+        </div>
       </header>
 
       {erro && (
@@ -1178,127 +1469,155 @@ return {
         <div className="armas-section-title">
           <div>
             <span>Visão estratégica</span>
-            <h2>Carga patrimonial de armas</h2>
+            <h2>Carga patrimonial</h2>
           </div>
-
           {loadingResumo && <small>Atualizando indicadores...</small>}
         </div>
 
-        <div className="armas-resumo-grid">
+        <div className="armas-resumo-grid armas-resumo-grid-carga">
           <ArmaResumoCard
-            titulo="Total de armas"
-            valor={resumo.total}
-            descricao="Armamento institucional e particular"
+            titulo="Carga total"
+            valor={resumo.total.total}
+            descricao="Armamento cadastrado"
             destaque="azul"
-            onClick={limparFiltros}
+            onClick={resumo.total.total ? () => abrirPainelResumo(
+              'TODAS',
+              'Carga patrimonial completa',
+              'Todas as armas cadastradas no SIGMO.'
+            ) : undefined}
           />
-
           <ArmaResumoCard
-            titulo="Depósito do P4"
-            valor={resumo.p4}
-            descricao="Armas disponíveis ou recolhidas no P4"
+            titulo="Pistolas"
+            valor={resumo.total.pistolas}
+            descricao="Quantidade total de pistolas"
             destaque="verde"
-            onClick={() => {
-              setFiltros((prev) => ({ ...prev, pesquisa: '', status: 'RESERVA' }))
-              setPagina(1)
-            }}
+            onClick={resumo.total.pistolas ? () => abrirPainelResumo(
+              'TODAS',
+              'Pistolas cadastradas',
+              'Todas as pistolas cadastradas no SIGMO.',
+              'PISTOLA'
+            ) : undefined}
           />
-
           <ArmaResumoCard
-            titulo="Cofre do SVDD"
-            valor={resumo.svdd}
-            descricao="Armas sob guarda operacional do Serviço de Dia"
-            destaque="roxo"
-            onClick={() => {
-              setFiltros((prev) => ({
-                ...prev,
-                pesquisa: 'SVDD',
-                status: ''
-              }))
-              setPagina(1)
-            }}
-          />
-
-          <ArmaResumoCard
-            titulo="Carga permanente"
-            valor={resumo.carga}
-            descricao="Armas vinculadas permanentemente"
-            destaque="azul"
-            onClick={() => {
-              setFiltros((prev) => ({ ...prev, pesquisa: '', status: 'CARGA' }))
-              setPagina(1)
-            }}
-          />
-
-          <ArmaResumoCard
-            titulo="Cautelas ativas"
-            valor={resumo.cautelas}
-            descricao="Armas entregues temporariamente"
+            titulo="Fuzis"
+            valor={resumo.total.fuzis}
+            descricao="Quantidade total de fuzis"
             destaque="amarelo"
-            onClick={() => {
-              setFiltros((prev) => ({ ...prev, pesquisa: '', status: 'CAUTELADO' }))
-              setPagina(1)
-            }}
+            onClick={resumo.total.fuzis ? () => abrirPainelResumo(
+              'TODAS',
+              'Fuzis cadastrados',
+              'Todos os fuzis cadastrados no SIGMO.',
+              'FUZIL'
+            ) : undefined}
           />
-
           <ArmaResumoCard
-            titulo="Manutenção"
-            valor={resumo.manutencao}
-            descricao="Armas fora de disponibilidade para reparo"
-            destaque="laranja"
-            onClick={() => {
-              setFiltros((prev) => ({ ...prev, pesquisa: 'MANUTENÇÃO', status: '' }))
-              setPagina(1)
-            }}
-          />
-
-                    <ArmaResumoCard
-            titulo="Não localizadas"
-            valor={resumo.naoLocalizadas}
-            descricao="Registros que exigem conferência"
-            destaque="vermelho"
-            onClick={() => {
-              setFiltros((prev) => ({
-                ...prev,
-                pesquisa: 'NÃO LOCALIZADA',
-                status: ''
-              }))
-              setPagina(1)
-            }}
-          />
-
-          <ArmaResumoCard
-            titulo="Apreendidas"
-            valor={resumo.apreendidas}
-            descricao="Armas apreendidas"
-            destaque="vermelho"
-            onClick={() => {
-              setFiltros((prev) => ({
-                ...prev,
-                pesquisa: '',
-                status: 'APREENDIDO'
-              }))
-              setPagina(1)
-            }}
-          />
-
-          <ArmaResumoCard
-            titulo="Recolhidas"
-            valor={resumo.recolhidas}
-            descricao="Armas recolhidas"
-            destaque="azul"
-            onClick={() => {
-              setFiltros((prev) => ({
-                ...prev,
-                pesquisa: '',
-                status: 'RECOLHIDO'
-              }))
-              setPagina(1)
-            }}
+            titulo="Espingardas"
+            valor={resumo.total.espingardas}
+            descricao="Quantidade total de espingardas calibre 12"
+            destaque="roxo"
+            onClick={resumo.total.espingardas ? () => abrirPainelResumo(
+              'TODAS',
+              'Espingardas cadastradas',
+              'Todas as espingardas calibre 12 cadastradas no SIGMO.',
+              'ESPINGARDA'
+            ) : undefined}
           />
         </div>
       </section>
 
+      <section className="armas-dashboard-section">
+        <div className="armas-section-title">
+          <div>
+            <span>Distribuição atual</span>
+            <h2>Onde estão as armas</h2>
+          </div>
+        </div>
+
+        <div className="armas-resumo-grid">
+          {!ehPerfilSVDD && (
+            <ArmaResumoCard
+              titulo="Depósito do P4"
+              detalhes={detalhesEspecies(resumo.p4)}
+              descricao="Armas sob guarda do P4"
+              onClick={resumo.p4.total ? () => abrirPainelResumo('P4', 'Armas no Depósito do P4', 'Armamento atualmente sob guarda patrimonial do P4.') : undefined}
+              onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('P4', 'Depósito do P4', 'Armamento atualmente sob guarda patrimonial do P4.', detalhe)}
+            />
+          )}
+          <ArmaResumoCard
+            titulo="Cofre do SVDD"
+            detalhes={detalhesEspecies(resumo.svdd)}
+            descricao="Armas sob gestão do Serviço de Dia"
+            destaque="verde"
+            onClick={resumo.svdd.total ? () => abrirPainelResumo('SVDD', 'Armas no Cofre do SVDD', 'Armamento atualmente sob guarda do Serviço de Dia.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('SVDD', 'Cofre do SVDD', 'Armamento atualmente sob guarda do Serviço de Dia.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Carga permanente"
+            detalhes={detalhesEspecies(resumo.carga)}
+            descricao="Vinculadas permanentemente a policiais"
+            destaque="azul"
+            onClick={resumo.carga.total ? () => abrirPainelResumo('CARGA', 'Carga permanente', 'Armas vinculadas permanentemente a policiais.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('CARGA', 'Carga permanente', 'Armas vinculadas permanentemente a policiais.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Cautelas ativas"
+            detalhes={detalhesEspecies(resumo.cautelas)}
+            descricao="Entregas temporárias a policiais"
+            destaque="amarelo"
+            onClick={resumo.cautelas.total ? () => abrirPainelResumo('CAUTELADAS', 'Armas cauteladas', 'Armamento sob cautela, com identificação do responsável.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('CAUTELADAS', 'Cautelas ativas', 'Armamento sob cautela, com identificação do responsável.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Manutenção"
+            detalhes={detalhesEspecies(resumo.manutencao)}
+            descricao="Fora de disponibilidade para reparo"
+            destaque="laranja"
+            onClick={resumo.manutencao.total ? () => abrirPainelResumo('MANUTENCAO', 'Armas em manutenção', 'Armamento temporariamente indisponível para reparo.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('MANUTENCAO', 'Manutenção', 'Armamento temporariamente indisponível para reparo.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Recolhidas"
+            detalhes={detalhesEspecies(resumo.recolhidas)}
+            descricao="Recolhidas e indisponíveis"
+            destaque="azul"
+            onClick={resumo.recolhidas.total ? () => abrirPainelResumo('RECOLHIDAS', 'Armas recolhidas', 'Armamento recolhido e indisponível para utilização.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('RECOLHIDAS', 'Recolhidas', 'Armamento recolhido e indisponível para utilização.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Apreendidas"
+            detalhes={detalhesEspecies(resumo.apreendidas)}
+            descricao="Registradas como apreendidas"
+            destaque="roxo"
+            onClick={resumo.apreendidas.total ? () => abrirPainelResumo('APREENDIDAS', 'Armas apreendidas', 'Armamento registrado como apreendido.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('APREENDIDAS', 'Apreendidas', 'Armamento registrado como apreendido.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Baixadas"
+            detalhes={detalhesEspecies(resumo.baixadas)}
+            descricao="Controle patrimonial encerrado"
+            destaque="vermelho"
+            onClick={resumo.baixadas.total ? () => abrirPainelResumo('BAIXADAS', 'Armas baixadas', 'Armamento com controle patrimonial encerrado.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('BAIXADAS', 'Baixadas', 'Armamento com controle patrimonial encerrado.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Não localizadas"
+            detalhes={detalhesEspecies(resumo.naoLocalizadas)}
+            descricao="Com localização pendente"
+            destaque="vermelho"
+            onClick={resumo.naoLocalizadas.total ? () => abrirPainelResumo('NAO_LOCALIZADAS', 'Armas não localizadas', 'Armamento com localização pendente de regularização.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('NAO_LOCALIZADAS', 'Não localizadas', 'Armamento com localização pendente de regularização.', detalhe)}
+          />
+          <ArmaResumoCard
+            titulo="Outras situações"
+            detalhes={detalhesEspecies(resumo.outros)}
+            descricao="Demais classificações patrimoniais"
+            onClick={resumo.outros.total ? () => abrirPainelResumo('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.') : undefined}
+            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.', detalhe)}
+          />
+        </div>
+      </section>
+
+      {!ehPerfilSVDD && (
       <section className="armas-dashboard-section armas-graficos-section">
         <div className="armas-section-title">
           <div>
@@ -1312,23 +1631,9 @@ return {
           <GraficoBarrasArmas resumo={resumo} />
         </div>
       </section>
+      )}
 
       <section className="armas-toolbar">
-        <div className="armas-search">
-          <label htmlFor="pesquisa">
-            Pesquisar
-          </label>
-
-          <input
-            id="pesquisa"
-            name="pesquisa"
-            type="search"
-            value={filtros.pesquisa}
-            onChange={handleFiltroChange}
-            placeholder="Nº RE, SÉRIE, PATRIMONIO, NOME"
-          />
-        </div>
-
         <div className="armas-filter">
           <label htmlFor="propriedade">
             Propriedade
@@ -1479,15 +1784,305 @@ return {
       </section>
 
       {formAberto && (
-        <section className="armas-form-area">
-          <ArmaForm
-            user={user}
-            armaEditando={armaEditando}
-            onCancel={fecharFormulario}
-            onSaved={handleSaved}
-          />
-        </section>
+        <div
+          className="armas-form-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) fecharFormulario()
+          }}
+        >
+          <section
+            className="armas-form-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={armaEditando ? 'Editar arma' : 'Cadastrar arma'}
+          >
+            <ArmaForm
+              user={user}
+              armaEditando={armaEditando}
+              onCancel={fecharFormulario}
+              onSaved={handleSaved}
+            />
+          </section>
+        </div>
       )}
+
+      <section
+        ref={listaRef}
+        className={`armas-list-card ${destacarLista ? 'armas-list-card-destaque' : ''}`}
+      >
+        <div className="armas-list-header">
+          <div className="armas-list-title">
+            <h2>Armamento cadastrado</h2>
+
+            <p>
+              {total}{' '}
+              {total === 1
+                ? 'registro encontrado'
+                : 'registros encontrados'}
+            </p>
+          </div>
+
+          <div className="armas-list-search">
+            <label htmlFor="pesquisa">Pesquisar armamento</label>
+
+            <div className="armas-list-search-control">
+              <input
+                id="pesquisa"
+                name="pesquisa"
+                type="search"
+                value={filtros.pesquisa}
+                onChange={handleFiltroChange}
+                placeholder="RE, série, patrimônio ou nome"
+              />
+
+              {filtros.pesquisa && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFiltros((prev) => ({ ...prev, pesquisa: '' }))
+                  }
+                  aria-label="Limpar pesquisa"
+                  title="Limpar pesquisa"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="armas-empty">
+            Carregando armas...
+          </div>
+        ) : armas.length === 0 ? (
+          <div className="armas-empty">
+            Nenhuma arma encontrada.
+          </div>
+        ) : (
+          <>
+            <div
+              ref={tabelaScrollTopoRef}
+              className="armas-table-scroll-top"
+              onScroll={(event) => {
+                if (tabelaScrollRef.current) {
+                  tabelaScrollRef.current.scrollLeft = event.currentTarget.scrollLeft
+                }
+              }}
+            >
+              <div style={{ width: larguraTabela, height: 1 }} />
+            </div>
+
+            <div
+              ref={tabelaScrollRef}
+              className="armas-table-wrap"
+              onScroll={(event) => {
+                if (tabelaScrollTopoRef.current) {
+                  tabelaScrollTopoRef.current.scrollLeft = event.currentTarget.scrollLeft
+                }
+              }}
+            >
+            <table ref={tabelaRef} className="armas-table">
+              <thead>
+                <tr>
+                  <th>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        ordenar('propriedade')
+                      }
+                    >
+                      Propriedade
+                      {indicadorOrdenacao(
+                        'propriedade'
+                      )}
+                    </button>
+                  </th>
+
+                  <th>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        ordenar('patrimonio')
+                      }
+                    >
+                      Patrimônio
+                      {indicadorOrdenacao(
+                        'patrimonio'
+                      )}
+                    </button>
+                  </th>
+
+                  <th>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        ordenar('numero_serie')
+                      }
+                    >
+                      Número de série
+                      {indicadorOrdenacao(
+                        'numero_serie'
+                      )}
+                    </button>
+                  </th>
+
+                  <th>Espécie</th>
+                  <th>Marca / Modelo</th>
+                  <th>Calibre</th>
+                  <th>Responsável</th>
+
+                  <th>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        ordenar(
+                          'status_operacional'
+                        )
+                      }
+                    >
+                      Status
+                      {indicadorOrdenacao(
+                        'status_operacional'
+                      )}
+                    </button>
+                  </th>
+
+                  <th>Ações</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {armas.map((arma) => (
+                  <tr key={arma.id}>
+                    <td>
+                      <span
+                        className={
+                          arma.propriedade ===
+                          'PARTICULAR'
+                            ? 'armas-badge particular'
+                            : 'armas-badge pmesp'
+                        }
+                      >
+                        {arma.propriedade ||
+                          'PMESP'}
+                      </span>
+                    </td>
+
+                    <td>
+                      {arma.patrimonio || '-'}
+                    </td>
+
+                    <td>
+                      {arma.numero_serie || '-'}
+                    </td>
+
+                    <td>
+                      {arma.especie || '-'}
+                    </td>
+
+                    <td>
+                      {[arma.marca, arma.modelo]
+                        .filter(Boolean)
+                        .join(' / ') || '-'}
+                    </td>
+
+                    <td>
+                      {arma.calibre || '-'}
+                    </td>
+
+                    <td>
+                      {arma.proprietario_nome || arma.responsavel_nome || '-'}
+                      {(arma.proprietario_re || arma.responsavel_re) && (
+                        <small className="armas-responsavel-re">
+                          RE {arma.proprietario_re || arma.responsavel_re}
+                        </small>
+                      )}
+                    </td>
+
+                    <td>
+                      <span className="armas-status">
+                        {arma.status_operacional ||
+                          arma.status ||
+                          '-'}
+                      </span>
+                    </td>
+
+                    <td>
+                      <div className="armas-actions">
+                        <button
+                          type="button"
+                          onClick={() => abrirVisualizacao(arma)}
+                        >
+                          Ver
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            abrirEdicao(arma)
+                          }
+                        >
+                          Editar
+                        </button>
+
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() =>
+                            handleExcluir(arma)
+                          }
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </>
+        )}
+
+        <footer className="armas-pagination">
+          <button
+            type="button"
+            disabled={pagina <= 1 || loading}
+            onClick={() =>
+              setPagina((prev) =>
+                Math.max(1, prev - 1)
+              )
+            }
+          >
+            Anterior
+          </button>
+
+          <span>
+            Página {pagina} de {totalPaginas}
+          </span>
+
+          <button
+            type="button"
+            disabled={
+              pagina >= totalPaginas ||
+              loading
+            }
+            onClick={() =>
+              setPagina((prev) =>
+                Math.min(
+                  totalPaginas,
+                  prev + 1
+                )
+              )
+            }
+          >
+            Próxima
+          </button>
+        </footer>
+      </section>
+
 
       <section className="armas-dashboard-section armas-operacoes-section">
         <div className="armas-section-title">
@@ -1847,515 +2442,104 @@ return {
         </div>
       )}
 
-      <section className="armas-list-card">
-        <div className="armas-list-header">
-          <div>
-            <h2>Armamento cadastrado</h2>
-
-            <p>
-              {total}{' '}
-              {total === 1
-                ? 'registro encontrado'
-                : 'registros encontrados'}
-            </p>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="armas-empty">
-            Carregando armas...
-          </div>
-        ) : armas.length === 0 ? (
-          <div className="armas-empty">
-            Nenhuma arma encontrada.
-          </div>
-        ) : (
-          <div className="armas-table-wrap">
-            <table className="armas-table">
-              <thead>
-                <tr>
-                  <th>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        ordenar('propriedade')
-                      }
-                    >
-                      Propriedade
-                      {indicadorOrdenacao(
-                        'propriedade'
-                      )}
-                    </button>
-                  </th>
-
-                  <th>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        ordenar('patrimonio')
-                      }
-                    >
-                      Patrimônio
-                      {indicadorOrdenacao(
-                        'patrimonio'
-                      )}
-                    </button>
-                  </th>
-
-                  <th>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        ordenar('numero_serie')
-                      }
-                    >
-                      Número de série
-                      {indicadorOrdenacao(
-                        'numero_serie'
-                      )}
-                    </button>
-                  </th>
-
-                  <th>Espécie</th>
-                  <th>Marca / Modelo</th>
-                  <th>Calibre</th>
-
-                  <th>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        ordenar(
-                          'status_operacional'
-                        )
-                      }
-                    >
-                      Status
-                      {indicadorOrdenacao(
-                        'status_operacional'
-                      )}
-                    </button>
-                  </th>
-
-                  <th>Ações</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {armas.map((arma) => (
-                  <tr key={arma.id}>
-                    <td>
-                      <span
-                        className={
-                          arma.propriedade ===
-                          'PARTICULAR'
-                            ? 'armas-badge particular'
-                            : 'armas-badge pmesp'
-                        }
-                      >
-                        {arma.propriedade ||
-                          'PMESP'}
-                      </span>
-                    </td>
-
-                    <td>
-                      {arma.patrimonio || '-'}
-                    </td>
-
-                    <td>
-                      {arma.numero_serie || '-'}
-                    </td>
-
-                    <td>
-                      {arma.especie || '-'}
-                    </td>
-
-                    <td>
-                      {[arma.marca, arma.modelo]
-                        .filter(Boolean)
-                        .join(' / ') || '-'}
-                    </td>
-
-                    <td>
-                      {arma.calibre || '-'}
-                    </td>
-
-                    <td>
-                      <span className="armas-status">
-                        {arma.status_operacional ||
-                          arma.status ||
-                          '-'}
-                      </span>
-                    </td>
-
-                    <td>
-                      <div className="armas-actions">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setArmaVisualizando(
-                              arma
-                            )
-                          }
-                        >
-                          Ver
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            abrirEdicao(arma)
-                          }
-                        >
-                          Editar
-                        </button>
-
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={() =>
-                            handleExcluir(arma)
-                          }
-                        >
-                          Excluir
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <footer className="armas-pagination">
-          <button
-            type="button"
-            disabled={pagina <= 1 || loading}
-            onClick={() =>
-              setPagina((prev) =>
-                Math.max(1, prev - 1)
-              )
-            }
-          >
-            Anterior
-          </button>
-
-          <span>
-            Página {pagina} de {totalPaginas}
-          </span>
-
-          <button
-            type="button"
-            disabled={
-              pagina >= totalPaginas ||
-              loading
-            }
-            onClick={() =>
-              setPagina((prev) =>
-                Math.min(
-                  totalPaginas,
-                  prev + 1
-                )
-              )
-            }
-          >
-            Próxima
-          </button>
-        </footer>
-      </section>
-
-      {armaVisualizando && (
+      {painelResumo && (
         <div
-          className="armas-modal-backdrop"
+          className="armas-resumo-modal-backdrop"
           role="presentation"
           onMouseDown={(event) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              setArmaVisualizando(null)
-            }
+            if (event.target === event.currentTarget) setPainelResumo(null)
           }}
         >
           <section
-            className="armas-modal"
+            className="armas-resumo-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Detalhes da arma"
+            aria-label={painelResumo.titulo}
           >
             <header>
               <div>
-                <span>
-                  {armaVisualizando.propriedade ||
-                    'PMESP'}
-                </span>
-
-                <h2>
-                  {armaVisualizando.patrimonio ||
-                    armaVisualizando.numero_serie ||
-                    'Arma'}
-                </h2>
+                <span>Visão patrimonial</span>
+                <h2>{painelResumo.titulo}</h2>
+                <p>{painelResumo.descricao}</p>
               </div>
-
-              <button
-                type="button"
-                aria-label="Fechar"
-                onClick={() =>
-                  setArmaVisualizando(null)
-                }
-              >
-                ×
-              </button>
+              <button type="button" onClick={() => setPainelResumo(null)} aria-label="Fechar">×</button>
             </header>
 
-            
-            <div className="armas-modal-grid">
-              <Info
-                label="Número de série"
-                value={
-                  armaVisualizando.numero_serie
-                }
-              />
-
-              <Info
-                label="Espécie"
-                value={armaVisualizando.especie}
-              />
-
-              <Info
-                label="Marca"
-                value={armaVisualizando.marca}
-              />
-
-              <Info
-                label="Modelo"
-                value={armaVisualizando.modelo}
-              />
-
-              <Info
-                label="Calibre"
-                value={armaVisualizando.calibre}
-              />
-
-              <Info
-                label="Acabamento"
-                value={
-                  armaVisualizando.acabamento
-                }
-              />
-
-              <Info
-                label="Unidade"
-                value={armaVisualizando.unidade}
-              />
-
-              <Info
-                label="Status"
-                value={
-                  armaVisualizando.status_operacional ||
-                  armaVisualizando.status
-                }
-              />
-
-              {armaVisualizando.propriedade ===
-                'PARTICULAR' && (
-                <>
-                  <Info
-                    label="Número SIGMA"
-                    value={
-                      armaVisualizando.numero_sigma
-                    }
-                  />
-
-                  <Info
-                    label="Número do registro"
-                    value={
-                      armaVisualizando.numero_registro
-                    }
-                  />
-
-                  <Info
-                    label="Validade do registro"
-                    value={
-                      armaVisualizando.validade_registro
-                    }
-                  />
-
-                  <Info
-                    label="Comprimento do cano"
-                    value={
-                      armaVisualizando.comprimento_cano
-                    }
-                  />
-
-                  <Info
-                    label="Capacidade"
-                    value={
-                      armaVisualizando.capacidade
-                    }
-                  />
-
-                  <Info
-                    label="País de fabricação"
-                    value={
-                      armaVisualizando.pais_fabricacao
-                    }
-                  />
-
-                  <Info
-                    label="Ano de fabricação"
-                    value={
-                      armaVisualizando.ano_fabricacao
-                    }
-                  />
-
-                  <Info
-                    label="Proprietário"
-                    value={
-                      armaVisualizando.proprietario_nome
-                    }
-                  />
-
-                  <Info
-                    label="RE do proprietário"
-                    value={
-                      armaVisualizando.proprietario_re
-                    }
-                  />
-
-                  <Info
-                    label="Situação documental"
-                    value={
-                      armaVisualizando.situacao_documental
-                    }
-                  />
-                </>
-              )}
+            <div className="armas-resumo-modal-contagem">
+              <strong>{itensPainelResumo.length}</strong>
+              <span>{itensPainelResumo.length === 1 ? 'arma encontrada' : 'armas encontradas'}</span>
             </div>
 
-           <div className="armas-modal-galeria">
-  <div className="armas-modal-galeria-header">
-    <strong>Fotos da arma</strong>
-
-    {fotosVisualizacao.length > 0 && (
-      <span>
-        {fotosVisualizacao.length}{' '}
-        {fotosVisualizacao.length === 1
-          ? 'foto'
-          : 'fotos'}
-      </span>
-    )}
-  </div>
-
-  {loadingFotosVisualizacao ? (
-    <div className="armas-modal-sem-foto">
-      Carregando fotos...
-    </div>
-  ) : !fotoSelecionadaVisualizacao ? (
-    <div className="armas-modal-sem-foto">
-      Nenhuma foto cadastrada.
-    </div>
-  ) : (
-    <>
-      <div className="armas-modal-foto-destaque">
-        <img
-          src={fotoSelecionadaVisualizacao.url}
-          alt={`Foto da arma ${
-            armaVisualizando?.patrimonio ||
-            armaVisualizando?.numero_serie ||
-            ''
-          }`}
-        />
-
-        {fotoSelecionadaVisualizacao.principal && (
-          <span className="armas-modal-selo-principal">
-            Foto principal
-          </span>
-        )}
-
-        <button
-          type="button"
-          className="armas-modal-ampliar"
-          onClick={() =>
-            window.open(
-              fotoSelecionadaVisualizacao.url,
-              '_blank',
-              'noopener,noreferrer'
-            )
-          }
-        >
-          Ampliar
-        </button>
-      </div>
-
-      {fotosVisualizacao.length > 1 && (
-        <div className="armas-modal-miniaturas">
-          {fotosVisualizacao.map((foto) => (
-            <button
-              key={foto.id}
-              type="button"
-              className={
-                fotoSelecionadaVisualizacao.id === foto.id
-                  ? 'ativa'
-                  : ''
-              }
-              onClick={() =>
-                setFotoSelecionadaVisualizacao(foto)
-              }
-            >
-              <img
-                src={foto.url}
-                alt="Miniatura da arma"
-              />
-
-              {foto.principal && (
-                <span>Principal</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </>
-  )}
-</div>
-
-            <div className="armas-modal-observacoes">
-              <strong>Observações</strong>
-
-              <p>
-                {armaVisualizando.observacoes ||
-                  'Sem observações.'}
-              </p>
+            <div className="armas-resumo-modal-lista">
+              {itensPainelResumo.map((arma) => (
+                <button
+                  type="button"
+                  className="armas-resumo-modal-item"
+                  key={arma.id}
+                  onClick={() => {
+                    setPainelResumo(null)
+                    abrirVisualizacao(arma)
+                  }}
+                >
+                  <div className="armas-resumo-modal-identificacao">
+                    <strong>{arma.patrimonio || arma.numero_serie || 'Arma sem identificação'}</strong>
+                    <span>{[arma.especie, arma.marca, arma.modelo].filter(Boolean).join(' • ') || 'Dados não informados'}</span>
+                    <small>{arma.calibre ? `Calibre ${arma.calibre}` : 'Calibre não informado'}</small>
+                  </div>
+                  <div className="armas-resumo-modal-responsavel">
+                    {(() => {
+                      const responsavel = obterResponsavelArma(arma)
+                      return (
+                        <>
+                          <strong>{responsavel.nome || 'Sem responsável informado'}</strong>
+                          <span>{responsavel.re ? `RE ${responsavel.re}` : 'RE não informado'}</span>
+                          <small>{obterLocalArma(arma) || obterStatusArma(arma) || 'Situação não informada'}</small>
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <span className="armas-resumo-modal-ver">Visualizar →</span>
+                </button>
+              ))}
             </div>
 
             <footer>
-              <button
-                type="button"
-                className="armas-btn-secondary"
-                onClick={() =>
-                  setArmaVisualizando(null)
-                }
-              >
-                Fechar
-              </button>
-
-              <button
-                type="button"
-                className="armas-btn-primary"
-                onClick={() => {
-                  const arma =
-                    armaVisualizando
-
-                  setArmaVisualizando(null)
-                  abrirEdicao(arma)
-                }}
-              >
-                Editar
-              </button>
+              <button type="button" onClick={() => setPainelResumo(null)}>Fechar</button>
             </footer>
           </section>
         </div>
       )}
+
+      {armaVisualizando && (
+        <ArmaViewModal
+          arma={armaVisualizando}
+          fotos={fotosVisualizacao}
+          carregandoFotos={loadingFotosVisualizacao}
+          onClose={() => setArmaVisualizando(null)}
+          onEdit={(arma) => {
+            setArmaVisualizando(null)
+            abrirEdicao(arma)
+          }}
+          onAbrirPolicial={(re) => {
+  if (!re) return
+  abrirPolicialResponsavel(re)
+}}
+        />
+      )}
+
+
+    {policialVisualizando && (
+  <PolicialViewModal
+    policial={policialVisualizando}
+    fotos={fotosPolicial}
+    user={user}
+    modoLateral
+    onClose={() => {
+      setPolicialVisualizando(null)
+      setFotosPolicial([])
+    }}
+  />
+)}
     </main>
   )
 }

@@ -715,7 +715,7 @@
     width:52px;
     height:52px;
     border-radius:14px;
-    background:#146c43;
+    background:#092544;
     color:#fff;
     display:flex;
     align-items:center;
@@ -761,7 +761,7 @@
     width:54px;
     height:54px;
     border-radius:12px;
-    background:#146c43;
+    background:#092544;
     color:#fff;
     display:flex;
     align-items:center;
@@ -2029,3 +2029,65 @@
   }
 }
 
+/* =========================================================
+   CABEÇALHO TONFAS E CASSETETES — PADRÃO SIGMO
+   ========================================================= */
+
+.tonfa-header {
+  background: linear-gradient(135deg, #061a32, #092544) !important;
+  color: #ffffff !important;
+}
+
+/* GESTÃO PATRIMONIAL */
+.tonfa-header .tonfa-eyebrow,
+.tonfa-header span {
+  color: #93c5fd !important;
+}
+
+/* Tonfas e Cassetetes */
+.tonfa-header h1,
+.tonfa-header h2 {
+  color: #ffffff !important;
+}
+
+/* Painel estratégico... */
+.tonfa-header p {
+  color: #dbeafe !important;
+}
+
+/* Perfil identificado: P4 */
+.tonfa-header strong {
+  color: #ffffff !important;
+}
+
+/* =========================================================
+   CABEÇALHO RECEBER DO P4 — PADRÃO SIGMO
+   ========================================================= */
+
+.tonfa-p4-header {
+  background: linear-gradient(135deg, #061a32, #092544) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+/* Título */
+.tonfa-p4-header h1,
+.tonfa-p4-header h2 {
+  color: #ffffff !important;
+}
+
+/* Textos auxiliares */
+.tonfa-p4-header p {
+  color: #dbeafe !important;
+}
+
+/* Textos pequenos / identificação */
+.tonfa-p4-header span,
+.tonfa-p4-header small {
+  color: #93c5fd !important;
+}
+
+/* Caso tenha strong no cabeçalho */
+.tonfa-p4-header strong {
+  color: #ffffff !important;
+}

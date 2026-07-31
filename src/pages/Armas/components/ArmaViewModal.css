@@ -1,181 +1,371 @@
 .arma-view-overlay {
   position: fixed;
+  z-index: 9999;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
-  z-index: 2000;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 22px;
+  background: rgba(9, 18, 31, 0.68);
+  backdrop-filter: blur(3px);
 }
 
 .arma-view-card {
-  width: min(1050px, 100%);
-  max-height: 94vh;
-  background: white;
-  border-radius: 18px;
-  overflow: hidden;
   display: flex;
+  width: min(960px, 100%);
+  max-height: calc(100vh - 44px);
   flex-direction: column;
-  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(8, 18, 34, 0.38);
 }
 
 .arma-view-header {
-  padding: 18px 20px;
-  border-bottom: 1px solid #e5e7eb;
+    background: #082b52;
+  color: #ffffff;
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 18px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #e5eaf1;
+}
+
+.arma-view-header span {
+  display: block;
+  margin-bottom: 5px;
+  color: #3b86d7;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .arma-view-header h2 {
   margin: 0;
-  color: #111827;
-}
-
-.arma-view-header p {
-  margin: 6px 0 0;
-  color: #6b7280;
+  color: #ffffff;
+  font-size: 1.35rem;
 }
 
 .arma-view-close {
-  border: none;
-  background: #f3f4f6;
+  display: inline-flex;
   width: 36px;
   height: 36px;
-  border-radius: 999px;
-  font-size: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d6dee8;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #475467;
   cursor: pointer;
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
-.arma-view-body {
-  padding: 20px;
-  overflow: auto;
+.arma-view-content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 22px 24px;
+  scrollbar-gutter: stable;
+}
+
+.arma-view-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.arma-view-content::-webkit-scrollbar-track {
+  background: #eef2f7;
+}
+
+.arma-view-content::-webkit-scrollbar-thumb {
+  border: 2px solid #eef2f7;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.arma-view-grid {
   display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.arma-view-foto-principal {
-  width: 100%;
-  height: 260px;
-  border-radius: 14px;
-  overflow: hidden;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+.arma-view-info {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid #e0e6ed;
+  border-radius: 12px;
+  background: #f9fbfd;
 }
 
-.arma-view-foto-principal img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.arma-view-info span,
+.arma-view-media-title {
   display: block;
+  margin-bottom: 5px;
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
 }
 
-.arma-view-sem-foto {
-  height: 100%;
+.arma-view-info strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #1d2939;
+  font-size: 0.86rem;
+}
+
+.arma-view-media-grid {
   display: grid;
-  place-items: center;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.35fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.arma-view-media-card {
+  display: flex;
+  min-width: 0;
+  min-height: 300px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #e0e6ed;
+  border-radius: 14px;
+  background: #f9fbfd;
+  text-align: center;
+}
+
+.arma-view-media-card > strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #1d2939;
+  font-size: 0.82rem;
+}
+
+.arma-view-media-card > small {
   color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.arma-view-qr-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.arma-view-qr-box canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.arma-view-gallery-card {
+  justify-content: flex-start;
+}
+
+.arma-view-photo-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+}
+
+.arma-view-photo {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  border: 1px solid #d6dee8;
+  border-radius: 12px;
+  background: #ffffff;
+  object-fit: contain;
+}
+
+.arma-view-principal-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.84);
+  color: #ffffff;
+  font-size: 0.68rem;
   font-weight: 800;
 }
 
-.arma-view-miniaturas {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-  overflow-x: auto;
+.arma-view-ampliar {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
-.arma-view-miniatura {
+.arma-view-thumbnails {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.arma-view-thumbnail {
+  position: relative;
+  display: inline-flex;
   width: 70px;
-  height: 55px;
-  border: 2px solid transparent;
-  border-radius: 10px;
+  height: 70px;
+  min-width: 70px;
+  min-height: 70px;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   padding: 0;
-  background: #f3f4f6;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #ffffff;
   cursor: pointer;
-  flex: 0 0 auto;
 }
 
-.arma-view-miniatura.active {
+.arma-view-thumbnail.is-selected {
   border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
 }
 
-.arma-view-miniatura img {
+.arma-view-thumbnail img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.arma-view-qr {
-  margin-top: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  padding: 12px;
+.arma-view-thumbnail span {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  left: 3px;
+  padding: 2px 3px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #ffffff;
+  font-size: 0.52rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.arma-view-message,
+.arma-view-error {
+  width: 100%;
+  padding: 18px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 650;
   text-align: center;
 }
 
-.arma-view-qr img {
-  width: 130px;
-  height: 130px;
-  object-fit: contain;
-  display: block;
-  margin: 8px auto;
+.arma-view-message {
+  border: 1px dashed #cbd5e1;
+  background: #ffffff;
+  color: #64748b;
 }
 
-.arma-view-qr span {
-  font-size: 12px;
-  color: #475569;
+.arma-view-error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
 }
 
-.arma-view-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.arma-view-gallery-counter {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 650;
 }
 
-.arma-view-grid div {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 12px;
+.arma-view-observacoes {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e0e6ed;
+  border-radius: 13px;
+  background: #ffffff;
 }
 
-.arma-view-grid strong {
-  display: block;
-  color: #374151;
-  font-size: 12px;
-  margin-bottom: 5px;
+.arma-view-observacoes strong {
+  color: #344054;
+  font-size: 0.78rem;
 }
 
-.arma-view-grid span {
-  color: #111827;
-  font-weight: 700;
-  word-break: break-word;
-}
-
-.arma-view-full {
-  grid-column: 1 / -1;
+.arma-view-observacoes p {
+  margin: 7px 0 0;
+  color: #667085;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .arma-view-actions {
-  padding: 16px 20px;
-  border-top: 1px solid #e5e7eb;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 17px 24px;
+  border-top: 1px solid #e5eaf1;
+  background: #f9fbfd;
+}
+
+.arma-view-actions-left,
+.arma-view-actions-right {
+  display: flex;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-@media (max-width: 768px) {
-  .arma-view-body {
-    grid-template-columns: 1fr;
+@media (max-width: 820px) {
+  .arma-view-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .arma-view-foto-principal {
-    height: 220px;
+  .arma-view-media-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .arma-view-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .arma-view-card {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .arma-view-header,
+  .arma-view-actions {
+    padding: 17px;
+  }
+
+  .arma-view-content {
+    padding: 17px;
   }
 
   .arma-view-grid {
@@ -183,6 +373,292 @@
   }
 
   .arma-view-actions {
+    align-items: stretch;
     flex-direction: column;
   }
+
+  .arma-view-actions-left,
+  .arma-view-actions-right {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .arma-view-actions button {
+    width: 100%;
+  }
+}
+
+/* Situação patrimonial atual da arma */
+.arma-view-vinculo {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+}
+
+.arma-view-vinculo-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.arma-view-vinculo-header span {
+  color: #1d5a9b;
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.arma-view-vinculo-header strong {
+  color: #172033;
+  font-size: 0.95rem;
+}
+
+.arma-view-vinculo-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.arma-view-vinculo .arma-view-info {
+  background: #ffffff;
+}
+
+@media (max-width: 760px) {
+  .arma-view-vinculo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .arma-view-vinculo-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .arma-view-vinculo-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Acesso rápido ao cadastro do policial responsável */
+.arma-view-info-link { width: 100%; margin: 0; text-align: left; font: inherit; cursor: pointer; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.arma-view-info-link:not(:disabled):hover { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37,99,235,.10); transform: translateY(-1px); }
+.arma-view-info-link:not(:disabled) strong { color: #1d5a9b; }
+.arma-view-info-link small { display: block; margin-top: 5px; color: #2563eb; font-size: .68rem; font-weight: 750; }
+.arma-view-info-link.is-disabled { cursor: default; }
+
+
+/* =========================================================
+   CABEÇALHO AZUL — MODAL DE RESUMO PATRIMONIAL
+   ========================================================= */
+
+.armas-resumo-modal > header {
+  background: #082b52;
+  color: #ffffff;
+  padding: 20px 22px;
+  border-bottom: 1px solid #0b3766;
+  border-radius: 20px 20px 0 0;
+}
+
+.armas-resumo-modal > header * {
+  color: inherit;
+  
+}
+
+.armas-resumo-modal > header .armas-resumo-modal-kicker {
+  color: #93c5fd;
+}
+
+.armas-resumo-modal > header button {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.armas-resumo-modal > header button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Textos brancos no cabeçalho do resumo patrimonial */
+.armas-resumo-modal > header h2 {
+  color: #ffffff !important;
+}
+
+.armas-resumo-modal > header p {
+  color: #ffffff !important;
+}
+
+.armas-resumo-modal > header span {
+  color: #93c5fd !important;
+}
+
+/* =========================================================
+   CABEÇALHO DA ARMA — MESMO PADRÃO DO CARD DO POLICIAL
+   ========================================================= */
+
+.arma-view-header {
+  background: linear-gradient(135deg, #061a32, #092544) !important;
+  color: #ffffff !important;
+  padding: 22px 26px !important;
+  border-bottom: none !important;
+}
+
+.arma-view-header span {
+  color: #93c5fd !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+}
+
+.arma-view-header h2 {
+  margin: 4px 0 0 !important;
+  color: #ffffff !important;
+  font-size: 28px !important;
+  font-weight: 800 !important;
+}
+
+/* X igual ao card do policial */
+.arma-view-header .arma-view-close {
+  width: 42px !important;
+  height: 42px !important;
+  border: none !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  font-size: 30px !important;
+  cursor: pointer !important;
+}
+
+.arma-view-header .arma-view-close:hover {
+  background: rgba(255, 255, 255, 0.20) !important;
+}
+
+/* =========================================================
+   MODAL RESUMO PATRIMONIAL
+   Cabeçalho no mesmo padrão do modal da arma/policial
+   ========================================================= */
+
+.armas-resumo-modal > header {
+  background: linear-gradient(135deg, #061a32, #092544) !important;
+  color: #ffffff !important;
+  padding: 22px 26px !important;
+  border-bottom: none !important;
+}
+
+/* VISÃO PATRIMONIAL */
+.armas-resumo-modal > header span {
+  color: #93c5fd !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+}
+
+/* Pistolas — Carga permanente */
+.armas-resumo-modal > header h2 {
+  margin: 4px 0 !important;
+  color: #ffffff !important;
+  font-size: 28px !important;
+  font-weight: 800 !important;
+}
+
+/* Texto explicativo */
+.armas-resumo-modal > header p {
+  color: #ffffff !important;
+  margin: 0 !important;
+}
+
+/* Botão X */
+.armas-resumo-modal > header button {
+  width: 42px !important;
+  height: 42px !important;
+  border: none !important;
+  border-radius: 12px !important;
+
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+
+  font-size: 28px !important;
+  font-weight: 400 !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  cursor: pointer !important;
+}
+
+/* Hover do X */
+.armas-resumo-modal > header button:hover {
+  background: rgba(255, 255, 255, 0.20) !important;
+}
+
+/* =========================================================
+   CABEÇALHO AZUL — TRANSFERÊNCIA TONFA/CASSETETE
+   Mesmo padrão de Armas e Policiais
+   ========================================================= */
+
+.tonfa-transfer-header {
+  background: linear-gradient(135deg, #061a32, #092544) !important;
+  color: #ffffff !important;
+
+  margin: -24px -24px 24px -24px !important;
+  padding: 22px 26px !important;
+
+  border-radius: 20px 20px 0 0 !important;
+  border-bottom: none !important;
+}
+
+/* MOVIMENTAÇÃO PATRIMONIAL */
+.tonfa-transfer-header span {
+  color: #93c5fd !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  letter-spacing: 1.5px !important;
+  text-transform: uppercase !important;
+}
+
+/* Transferir patrimônio / Devolver patrimônio */
+.tonfa-transfer-header h2 {
+  color: #ffffff !important;
+  margin: 4px 0 !important;
+  font-weight: 800 !important;
+}
+
+/* Descrição abaixo do título */
+.tonfa-transfer-header p {
+  color: #ffffff !important;
+  margin: 0 !important;
+}
+
+/* Botão X */
+.tonfa-transfer-close {
+  width: 42px !important;
+  height: 42px !important;
+  border: none !important;
+  border-radius: 12px !important;
+
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+
+  font-size: 28px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  cursor: pointer !important;
+}
+
+/* Hover do X */
+.tonfa-transfer-close:hover {
+  background: rgba(255, 255, 255, 0.20) !important;
 }

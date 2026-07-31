@@ -709,6 +709,8 @@ export default function DashboardV2({
   return obterRotaInicial(user)
 })
 
+  const [policialAbrirRe, setPolicialAbrirRe] = useState('')
+
   const dashboard = useDashboard()
 
   function setRoute(novaRota) {
@@ -766,6 +768,17 @@ useEffect(() => {
   ) {
     dashboard.atualizar()
   }
+}
+
+  function abrirCadastroPolicial(re) {
+  const valorRe = String(re || '').trim()
+
+  if (!valorRe) return
+
+  setPolicialAbrirRe(valorRe)
+
+  salvarRota('policiais')
+  setRouteState('policiais')
 }
 
   function renderPage() {
@@ -853,7 +866,12 @@ useEffect(() => {
 }
 
     if (route === 'armas') {
-      return <Armas user={user} />
+      return (
+        <Armas
+          user={user}
+          onAbrirPolicial={abrirCadastroPolicial}
+        />
+      )
     }
 
     if (route === 'tpd') {
@@ -875,7 +893,13 @@ if (route === 'tonfas') {
 
 
     if (route === 'policiais') {
-      return <Policiais user={user} />
+      return (
+        <Policiais
+          user={user}
+          abrirPolicialRe={policialAbrirRe}
+          onPolicialAberto={() => setPolicialAbrirRe('')}
+        />
+      )
     }
 
     if (route === 'municoes') {

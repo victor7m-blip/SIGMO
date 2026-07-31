@@ -110,9 +110,7 @@
 
 .armas-toolbar {
   display: grid;
-  grid-template-columns:
-    minmax(200px, 1.5fr)
-    repeat(5, minmax(110px, 1fr));
+  grid-template-columns: repeat(5, minmax(130px, 1fr)) auto;
   align-items: end;
   gap: 14px;
   margin-bottom: 22px;
@@ -521,9 +519,7 @@
 
 @media (max-width: 1180px) {
   .armas-toolbar {
-    grid-template-columns:
-      minmax(220px, 2fr)
-      repeat(3, minmax(140px, 1fr));
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
   }
 
   .armas-toolbar .armas-btn-secondary {
@@ -1347,4 +1343,658 @@
   color: white;
   font-size: 8px;
   font-weight: 700;
+}
+/* Sprint 7.6.10 - QR Code restaurado no detalhe da arma */
+.armas-modal-qr-section {
+  margin: 18px 24px 0;
+  padding: 18px;
+  border: 1px solid #dce4ef;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.armas-modal-qr-content {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.armas-modal-qr-content img {
+  width: 150px;
+  height: 150px;
+  padding: 8px;
+  border: 1px solid #d8e1ed;
+  border-radius: 12px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.armas-modal-qr-content > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.armas-modal-qr-content strong {
+  overflow-wrap: anywhere;
+  color: #061a32;
+  font-size: 14px;
+}
+
+.armas-modal-qr-content small {
+  color: #667085;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .armas-modal-qr-section {
+    margin: 14px 14px 0;
+  }
+
+  .armas-modal-qr-content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .armas-modal-qr-content img {
+    width: 132px;
+    height: 132px;
+  }
+}
+
+.armas-responsavel-re {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Sprint 7.6.10 — navegação rápida, tabela operacional e formulário em modal */
+.armas-list-card {
+  scroll-margin-top: 18px;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+
+.armas-list-card-destaque {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16), 0 18px 44px rgba(15, 23, 42, 0.12);
+  transform: translateY(-2px);
+}
+
+.armas-table-scroll-top {
+  width: 100%;
+  height: 17px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid #dce4ee;
+  background: #f8fafc;
+  scrollbar-gutter: stable;
+}
+
+.armas-table-scroll-top::-webkit-scrollbar,
+.armas-table-wrap::-webkit-scrollbar {
+  height: 13px;
+  width: 13px;
+}
+
+.armas-table-scroll-top::-webkit-scrollbar-thumb,
+.armas-table-wrap::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: #94a3b8;
+  background-clip: padding-box;
+}
+
+.armas-table-scroll-top::-webkit-scrollbar-track,
+.armas-table-wrap::-webkit-scrollbar-track {
+  background: #edf2f7;
+}
+
+.armas-table-wrap {
+  max-height: min(62vh, 650px);
+  overflow: auto;
+  scrollbar-gutter: stable both-edges;
+}
+
+.armas-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  box-shadow: 0 1px 0 #dce4ee;
+}
+
+.armas-form-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(3px);
+}
+
+.armas-form-modal {
+  width: min(1180px, 100%);
+  height: min(92vh, 920px);
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+}
+
+.armas-form-modal .arma-form-card {
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.armas-form-modal .arma-form-card > form {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.armas-form-modal .arma-form-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(8px);
+}
+
+.armas-form-modal .arma-form-error {
+  margin: 16px 24px 0;
+}
+
+.armas-form-modal .arma-dados,
+.armas-form-modal .arma-fotos-box {
+  margin: 20px 24px 88px;
+}
+
+.armas-form-modal .arma-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  flex: 0 0 auto;
+  margin: auto 0 0;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 768px) {
+  .armas-form-modal-backdrop {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .armas-form-modal {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .armas-form-modal .arma-form-header,
+  .armas-form-modal .arma-form-actions {
+    padding: 14px 16px;
+  }
+
+  .armas-form-modal .arma-dados,
+  .armas-form-modal .arma-fotos-box {
+    margin: 16px 14px 92px;
+  }
+}
+
+/* Pesquisa vinculada à lista de armamentos */
+.armas-list-title {
+  min-width: 0;
+}
+
+.armas-list-search {
+  display: flex;
+  width: min(430px, 48%);
+  min-width: 260px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.armas-list-search label {
+  color: #344054;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.armas-list-search-control {
+  position: relative;
+  width: 100%;
+}
+
+.armas-list-search-control input {
+  width: 100%;
+  height: 42px;
+  padding: 0 42px 0 12px;
+  border: 1px solid #cfd8e5;
+  border-radius: 10px;
+  outline: none;
+  background: #ffffff;
+  color: #172033;
+  font-family: inherit;
+  font-size: 0.88rem;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.armas-list-search-control input:focus {
+  border-color: #3574ba;
+  box-shadow: 0 0 0 3px rgba(53, 116, 186, 0.13);
+}
+
+.armas-list-search-control input::placeholder {
+  color: #98a2b3;
+}
+
+.armas-list-search-control button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #667085;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.armas-list-search-control button:hover {
+  background: #eef3f8;
+  color: #172033;
+}
+
+@media (max-width: 820px) {
+  .armas-list-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .armas-list-search {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Sprint 7.6.10 — total patrimonial e visualização dos cards de situação */
+.armas-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.armas-header-total {
+  min-width: 190px;
+  padding: 12px 16px;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 2px;
+}
+
+.armas-header-total span,
+.armas-header-total small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.armas-header-total strong {
+  color: #0f172a;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.armas-resumo-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.66);
+  display: grid;
+  place-items: center;
+}
+
+.armas-resumo-modal {
+  width: min(980px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.armas-resumo-modal > header {
+  padding: 20px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.armas-resumo-modal > header span {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.armas-resumo-modal > header h2 {
+  margin: 4px 0 5px;
+  color: #0f172a;
+}
+
+.armas-resumo-modal > header p {
+  margin: 0;
+  color: #64748b;
+}
+
+.armas-resumo-modal > header > button {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.armas-resumo-modal-contagem {
+  padding: 12px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.armas-resumo-modal-contagem strong {
+  color: #0f172a;
+  font-size: 22px;
+}
+
+.armas-resumo-modal-contagem span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.armas-resumo-modal-lista {
+  overflow: auto;
+  padding: 14px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.armas-resumo-modal-item {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.armas-resumo-modal-item:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 8px 22px rgba(37, 99, 235, .10);
+  transform: translateY(-1px);
+}
+
+.armas-resumo-modal-item > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.armas-resumo-modal-item strong,
+.armas-resumo-modal-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.armas-resumo-modal-item strong {
+  color: #0f172a;
+}
+
+.armas-resumo-modal-item span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.armas-resumo-modal-ver {
+  color: #2563eb !important;
+  font-weight: 800;
+}
+
+.armas-resumo-modal > footer {
+  padding: 14px 22px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.armas-resumo-modal > footer button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 18px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .armas-header-actions,
+  .armas-header-total,
+  .armas-header-actions .armas-btn-primary {
+    width: 100%;
+  }
+
+  .armas-resumo-modal-backdrop {
+    padding: 0;
+  }
+
+  .armas-resumo-modal {
+    width: 100%;
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .armas-resumo-modal-item {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+/* Sprint 7.6.10 - Dashboard de Armas no padrão Tonfas */
+.armas-resumo-grid-carga {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.armas-resumo-detalhes {
+  width: 100%;
+  margin: 10px 0 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.armas-resumo-detalhes > div {
+  min-width: 0;
+  padding: 8px 6px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  border: 1px solid rgba(148, 163, 184, .28);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .72);
+}
+
+.armas-resumo-detalhes span {
+  max-width: 100%;
+  overflow: hidden;
+  color: #64748b;
+  font-size: .68rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.armas-resumo-detalhes strong {
+  color: #0f172a;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.armas-resumo-modal-item small {
+  overflow: hidden;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.armas-resumo-modal-responsavel strong {
+  color: #0f172a;
+}
+
+@media (max-width: 900px) {
+  .armas-resumo-grid-carga {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .armas-resumo-grid-carga {
+    grid-template-columns: 1fr;
+  }
+
+  .armas-resumo-detalhes {
+    gap: 5px;
+  }
+
+  .armas-resumo-detalhes span {
+    font-size: .62rem;
+  }
+}
+
+/* Sprint 7.6.10 - filtros por espécie dentro dos cards de distribuição */
+.armas-resumo-card-clicavel {
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.armas-resumo-card-clicavel:hover,
+.armas-resumo-card-clicavel:focus-visible {
+  transform: translateY(-2px);
+  border-color: #9eb0c7;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.11);
+  outline: none;
+}
+
+.armas-resumo-detalhes > button.armas-resumo-detalhe-clicavel {
+  min-width: 0;
+  padding: 8px 6px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  border: 1px solid rgba(148, 163, 184, .28);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .72);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.armas-resumo-detalhes > button.armas-resumo-detalhe-clicavel:hover,
+.armas-resumo-detalhes > button.armas-resumo-detalhe-clicavel:focus-visible {
+  transform: translateY(-1px);
+  border-color: #64748b;
+  background: #ffffff;
+  outline: 2px solid rgba(37, 99, 235, .18);
+  outline-offset: 1px;
+}
+
+
+/* =========================================================
+   CABEÇALHO ARMAS — PADRÃO SIGMO
+   ========================================================= */
+
+.armas-header {
+  background: linear-gradient(135deg, #061a32, #092544) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+/* GESTÃO PATRIMONIAL */
+.armas-header .armas-eyebrow,
+.armas-header span {
+  color: #93c5fd !important;
+}
+
+/* Título ARMAS */
+.armas-header h1,
+.armas-header h2 {
+  color: #ffffff !important;
+}
+
+/* Cadastro, consulta e controle... */
+.armas-header p {
+  color: #dbeafe !important;
+}
+
+/* Caso exista strong */
+.armas-header strong {
+  color: #ffffff !important;
 }

@@ -45,7 +45,7 @@
   min-width: 230px;
   padding: 14px 16px;
   border-radius: 14px;
-  background: #eef5ff;
+  background: #04203f;
 }
 
 .tonfa-p4-operador strong {
@@ -215,4 +215,25 @@ textarea:disabled {
   .tonfa-p4-operador {
     min-width: 0;
   }
+}
+
+/* Botão principal — azul padrão SIGMO */
+.tonfa-p4-confirm {
+  background: #0f5fa8 !important;
+  border-color: #0f5fa8 !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.tonfa-p4-confirm:hover:not(:disabled) {
+  background: #0b4f8a !important;
+  border-color: #0b4f8a !important;
+}
+
+/* Desabilitado — continua azul, apenas um pouco mais suave */
+.tonfa-p4-confirm:disabled {
+  background: #2563a6 !important;
+  border-color: #2563a6 !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
 }

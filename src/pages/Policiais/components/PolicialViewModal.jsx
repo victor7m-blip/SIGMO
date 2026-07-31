@@ -19,7 +19,8 @@ export default function PolicialViewModal({
   fotos = [],
   onClose,
   onPrintFicha,
-  onPrintCredencial
+  onPrintCredencial,
+  modoLateral = false
 }) {
   const [
     policialAtual,
@@ -141,8 +142,8 @@ export default function PolicialViewModal({
     })
 
   return (
-    <div className="policial-modal-overlay">
-      <div className="policial-modal">
+    <div className={`policial-modal-overlay${modoLateral ? ' policial-modal-overlay-lateral' : ''}`}>
+      <div className={`policial-modal${modoLateral ? ' policial-modal-lateral' : ''}`}>
         <div className="policial-modal-header">
           <div>
             <span>

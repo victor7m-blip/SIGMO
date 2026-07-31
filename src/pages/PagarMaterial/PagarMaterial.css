@@ -912,3 +912,39 @@
   font-weight: 700;
   cursor: pointer;
 }
+/* Sprint 7.6.10 - rolagem horizontal sempre acessível na área da tabela */
+.pagar-material-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pagar-material-table {
+  width: max-content;
+  min-width: 980px;
+  table-layout: auto;
+}
+
+.pagar-material-table th,
+.pagar-material-table td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.pagar-material-table th:nth-child(1),
+.pagar-material-table td:nth-child(1),
+.pagar-material-table th:nth-child(2),
+.pagar-material-table td:nth-child(2),
+.pagar-material-table th:nth-child(3),
+.pagar-material-table td:nth-child(3),
+.pagar-material-table th:nth-child(4),
+.pagar-material-table td:nth-child(4),
+.pagar-material-table th:nth-child(5),
+.pagar-material-table td:nth-child(5),
+.pagar-material-table th:nth-child(6),
+.pagar-material-table td:nth-child(6) {
+  width: auto;
+}
