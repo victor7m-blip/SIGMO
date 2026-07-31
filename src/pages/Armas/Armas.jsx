@@ -670,6 +670,7 @@ setFotoSelecionadaVisualizacao(
       apreendidas: vazio(),
       recolhidas: vazio(),
       baixadas: vazio(),
+      particulares: vazio(),
       outros: vazio()
     }
 
@@ -685,7 +686,12 @@ setFotoSelecionadaVisualizacao(
     armasResumo.forEach((arma) => {
       const status = obterStatusArma(arma)
       somar('total', arma)
-
+      
+      if (
+  normalizarTexto(arma.propriedade) === 'PARTICULAR'
+) {
+  somar('particulares', arma)
+}
       if (status === 'BAIXADO') return somar('baixadas', arma)
       if (status === 'APREENDIDO') return somar('apreendidas', arma)
       if (status === 'RECOLHIDO') return somar('recolhidas', arma)
@@ -744,6 +750,8 @@ setFotoSelecionadaVisualizacao(
           return estaEmManutencao(arma)
         case 'NAO_LOCALIZADAS':
           return estaNaoLocalizada(arma)
+          case 'PARTICULARES':
+  return normalizarTexto(arma.propriedade) === 'PARTICULAR'
         case 'OUTROS':
           return !estaNoP4(arma) && !estaNoSVDD(arma) && !estaCautelada(arma) && !estaEmCarga(arma) && !estaEmManutencao(arma) && !estaNaoLocalizada(arma) && !['RECOLHIDO', 'BAIXADO', 'APREENDIDO'].includes(status)
           default:
@@ -771,6 +779,8 @@ setFotoSelecionadaVisualizacao(
       APREENDIDAS: (arma) => obterStatusArma(arma) === 'APREENDIDO',
       MANUTENCAO: (arma) => estaEmManutencao(arma),
       NAO_LOCALIZADAS: (arma) => estaNaoLocalizada(arma),
+      PARTICULARES: (arma) =>
+  normalizarTexto(arma.propriedade) === 'PARTICULAR',
       OUTROS: (arma) => {
         const status = obterStatusArma(arma)
         return !estaNoP4(arma) && !estaNoSVDD(arma) && !estaCautelada(arma) && !estaEmCarga(arma) && !estaEmManutencao(arma) && !estaNaoLocalizada(arma) && !['RECOLHIDO', 'BAIXADO', 'APREENDIDO'].includes(status)
@@ -1374,21 +1384,48 @@ setFotoSelecionadaVisualizacao(
 
   if (!valorRe) return
 
+  const normalizarRe = (valor) =>
+    String(valor || '')
+      .toUpperCase()
+      .replace(/[^0-9A-Z]/g, '')
+
+  const reNormalizado =
+    normalizarRe(valorRe)
+
+  const reBusca =
+    reNormalizado.length >= 6
+      ? reNormalizado.slice(0, 6)
+      : reNormalizado
+
   try {
     setAbrindoPolicial(true)
     setErro('')
 
     const resultado = await listarPoliciais({
       filtros: {
-        re: valorRe
+        re: reBusca
       },
       pagina: 1,
-      limite: 1,
+      limite: 20,
       sortBy: 'nome_guerra',
       sortDirection: 'asc'
     })
 
-    const policial = resultado?.data?.[0]
+    const policiais =
+      resultado?.data || []
+
+    const policial =
+      policiais.find(
+        (item) =>
+          normalizarRe(item?.re) ===
+          reNormalizado
+      ) ||
+      policiais.find(
+        (item) =>
+          normalizarRe(item?.re)
+            .startsWith(reBusca)
+      ) ||
+      policiais[0]
 
     if (!policial) {
       setErro(`Policial RE ${valorRe} não localizado.`)
@@ -1397,6 +1434,7 @@ setFotoSelecionadaVisualizacao(
 
     const fotos = await listarFotosPolicial(policial.id)
 
+    setArmaVisualizando(null)
     setPolicialVisualizando(policial)
     setFotosPolicial(fotos || [])
   } catch (error) {
@@ -1614,6 +1652,30 @@ setFotoSelecionadaVisualizacao(
             onClick={resumo.outros.total ? () => abrirPainelResumo('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.') : undefined}
             onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.', detalhe)}
           />
+          <ArmaResumoCard
+  titulo="Armas particulares"
+  detalhes={detalhesEspecies(resumo.particulares)}
+  descricao="Armamento particular cadastrado"
+  destaque="azul"
+  onClick={
+    resumo.particulares.total
+      ? () =>
+          abrirPainelResumo(
+            'PARTICULARES',
+            'Armas particulares',
+            'Armamento particular cadastrado no SIGMO.'
+          )
+      : undefined
+  }
+  onDetalheClick={(detalhe) =>
+    abrirPainelResumoPorEspecie(
+      'PARTICULARES',
+      'Armas particulares',
+      'Armamento particular cadastrado no SIGMO.',
+      detalhe
+    )
+  }
+       />
         </div>
       </section>
 

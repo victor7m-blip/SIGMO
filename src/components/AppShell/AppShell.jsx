@@ -186,7 +186,7 @@ export default function AppShell({
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell app-shell-${route}`}>
       <button
         type="button"
         className="menu-toggle"

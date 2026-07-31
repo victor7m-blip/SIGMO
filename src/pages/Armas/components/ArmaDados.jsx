@@ -36,6 +36,18 @@ function normalizarReBase(valor) {
     .slice(0, 6)
 }
 
+function formatarReCompleto(valor) {
+  const numeros = String(valor || '')
+    .replace(/\D/g, '')
+    .slice(0, 7)
+
+  if (numeros.length <= 6) {
+    return numeros
+  }
+
+  return `${numeros.slice(0, 6)}-${numeros.slice(6)}`
+}
+
 export default function ArmaDados({
   form,
   onChange,
@@ -49,6 +61,12 @@ export default function ArmaDados({
 
   const [policialCarga, setPolicialCarga] =
     useState(null)
+
+  const [buscandoProprietario, setBuscandoProprietario] =
+    useState(false)
+
+  const [erroProprietario, setErroProprietario] =
+    useState('')
 
   const [marcas, setMarcas] =
     useState([])
@@ -243,6 +261,86 @@ export default function ArmaDados({
     )
 
     setPolicialCarga(null)
+  }
+
+  async function buscarProprietarioPorRe(reInformado) {
+    const re = String(
+      reInformado ?? form.proprietario_re ?? ''
+    )
+      .replace(/\D/g, '')
+      .slice(0, 7)
+
+    if (re.length < 6) {
+      atualizarCampo('proprietario_policial_id', '')
+      atualizarCampo('proprietario_nome', '')
+      setErroProprietario('Informe o RE do policial.')
+      return
+    }
+
+    try {
+      setBuscandoProprietario(true)
+      setErroProprietario('')
+
+      const { data, error } = await supabase
+        .from('policiais')
+        .select('id, re, nome, nome_guerra')
+        .ilike('re', `${re}%`)
+        .limit(1)
+        .maybeSingle()
+
+      if (error) throw error
+
+      if (!data) {
+        atualizarCampo('proprietario_policial_id', '')
+        atualizarCampo('proprietario_nome', '')
+        setErroProprietario(
+          'Nenhum policial foi localizado com este RE.'
+        )
+        return
+      }
+
+      atualizarCampo('proprietario_policial_id', data.id)
+      atualizarCampo(
+        'proprietario_re',
+        formatarReCompleto(data.re || re)
+      )
+      atualizarCampo(
+        'proprietario_nome',
+        data.nome || data.nome_guerra || ''
+      )
+    } catch (error) {
+      console.error('Erro ao localizar proprietário pelo RE:', error)
+      atualizarCampo('proprietario_policial_id', '')
+      atualizarCampo('proprietario_nome', '')
+      setErroProprietario('Não foi possível localizar o policial.')
+    } finally {
+      setBuscandoProprietario(false)
+    }
+  }
+
+  function handleReProprietarioChange(event) {
+    const re = String(event.target.value || '')
+      .replace(/\D/g, '')
+      .slice(0, 7)
+
+    const apagando =
+      event?.nativeEvent?.inputType ===
+      'deleteContentBackward'
+
+    setErroProprietario('')
+    atualizarCampo(
+      'proprietario_re',
+      formatarReCompleto(re)
+    )
+    atualizarCampo('proprietario_policial_id', '')
+    atualizarCampo('proprietario_nome', '')
+
+    // Ao completar os 6 números-base, localiza o policial.
+    // Se o usuário estiver apagando com Backspace, não refaz
+    // a busca automaticamente — assim o campo não "volta".
+    if (!apagando && re.length === 6) {
+      buscarProprietarioPorRe(re)
+    }
   }
 
   async function buscarPolicialPorRe(
@@ -816,17 +914,43 @@ export default function ArmaDados({
             <SigmoInput
               label="RE do proprietário"
               name="proprietario_re"
-              value={form.proprietario_re}
-              onChange={onChange}
+              value={formatarReCompleto(
+                form.proprietario_re
+              )}
+              onChange={handleReProprietarioChange}
+              onBlur={() => {
+                const re = String(
+                  form.proprietario_re || ''
+                ).replace(/\D/g, '')
+
+                if (re.length >= 6) {
+                  buscarProprietarioPorRe(re)
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  buscarProprietarioPorRe()
+                }
+              }}
+              inputMode="numeric"
+              maxLength={8}
               required
               disabled={disabled}
             />
           </PatrimonioFormGrid>
 
-          <div className="arma-dados-aviso">
-            Neste primeiro momento, o nome e
-            o RE são preenchidos manualmente.
-          </div>
+          {buscandoProprietario && (
+            <div className="arma-dados-aviso">
+              Localizando policial...
+            </div>
+          )}
+
+          {erroProprietario && !buscandoProprietario && (
+            <div className="arma-dados-aviso">
+              {erroProprietario}
+            </div>
+          )}
         </section>
       )}
 

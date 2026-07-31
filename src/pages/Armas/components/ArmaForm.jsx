@@ -300,6 +300,19 @@ export default function ArmaForm({
       return
     }
 
+    if (name === 'proprietario_re') {
+      const re = String(value || '')
+        .replace(/\D/g, '')
+        .slice(0, 7)
+
+      setForm((prev) => ({
+        ...prev,
+        proprietario_re: re
+      }))
+
+      return
+    }
+
     if (name === 'status') {
       const status =
         String(
@@ -460,6 +473,14 @@ export default function ArmaForm({
 
         proprietario_policial_id:
           form.proprietario_policial_id ||
+          null,
+
+        proprietario_nome:
+          form.proprietario_nome ||
+          null,
+
+        proprietario_re:
+          form.proprietario_re ||
           null,
 
         validade_registro:

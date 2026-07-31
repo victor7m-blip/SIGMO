@@ -11,8 +11,10 @@ import {
 } from 'react'
 
 import AppShell from '../components/AppShell/AppShell'
+import brasaoPM from '../assets/unidade/brasao-pm-sp.jpg'
 
 import useDashboard from '../hooks/useDashboard'
+import useDashboardVitrine from '../hooks/useDashboardVitrine'
 import {
   obterRotaInicial,
   podeAcessarRota
@@ -219,6 +221,238 @@ function EstadoPainel({
   )
 }
 
+
+function pct(valor, total) {
+  if (!Number(total)) return 0
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      (Number(valor || 0) /
+        Number(total)) *
+        100
+    )
+  )
+}
+
+function DashboardIcon({
+  children,
+  tone = 'blue'
+}) {
+  return (
+    <span
+      className={`sigmo-command-icon sigmo-command-icon-${tone}`}
+      aria-hidden="true"
+    >
+      {children}
+    </span>
+  )
+}
+
+function KpiStrip({
+  icon,
+  tone,
+  label,
+  value,
+  detail
+}) {
+  return (
+    <article className="sigmo-command-kpi">
+      <DashboardIcon tone={tone}>
+        {icon}
+      </DashboardIcon>
+
+      <div>
+        <span>{label}</span>
+        <strong>{numero(value)}</strong>
+        <small>{detail}</small>
+      </div>
+    </article>
+  )
+}
+
+function ArmaMiniCard({
+  label,
+  value,
+  tone = 'blue',
+  icon = '•'
+}) {
+  return (
+    <div className="sigmo-command-arma-mini">
+      <DashboardIcon tone={tone}>
+        {icon}
+      </DashboardIcon>
+
+      <div>
+        <span>{label}</span>
+        <strong>{numero(value)}</strong>
+      </div>
+    </div>
+  )
+}
+
+function LegendaLinha({
+  label,
+  value,
+  total,
+  tone
+}) {
+  const percentual = pct(value, total)
+
+  return (
+    <div className="sigmo-command-legend-row">
+      <span
+        className={`sigmo-command-dot sigmo-command-dot-${tone}`}
+      />
+      <span>{label}</span>
+      <b>{numero(value)}</b>
+      <small>
+        {percentual.toLocaleString(
+          'pt-BR',
+          {
+            maximumFractionDigits: 1
+          }
+        )}%
+      </small>
+    </div>
+  )
+}
+
+function Donut({
+  total,
+  values,
+  label = 'TOTAL'
+}) {
+  const segmentos = values.map(
+    (item) => ({
+      ...item,
+      percentual: pct(
+        item.value,
+        total
+      )
+    })
+  )
+
+  let acumulado = 0
+
+  const stops = segmentos.map(
+    (item) => {
+      const inicio = acumulado
+      acumulado +=
+        item.percentual
+
+      return `var(--dash-${item.tone}) ${inicio}% ${acumulado}%`
+    }
+  )
+
+  if (acumulado < 100) {
+    stops.push(
+      `#143052 ${acumulado}% 100%`
+    )
+  }
+
+  return (
+    <div
+      className="sigmo-command-donut"
+      style={{
+        background:
+          `conic-gradient(${stops.join(
+            ', '
+          )})`
+      }}
+    >
+      <div>
+        <strong>
+          {numero(total)}
+        </strong>
+        <small>{label}</small>
+      </div>
+    </div>
+  )
+}
+
+function BarraHorizontal({
+  label,
+  value,
+  total,
+  tone = 'blue'
+}) {
+  return (
+    <div className="sigmo-command-bar-row">
+      <span>{label}</span>
+
+      <div className="sigmo-command-bar-track">
+        <i
+          className={`sigmo-command-bar-fill sigmo-command-bar-fill-${tone}`}
+          style={{
+            width: `${pct(
+              value,
+              total
+            )}%`
+          }}
+        />
+      </div>
+
+      <b>{numero(value)}</b>
+    </div>
+  )
+}
+
+function MovimentoLinha({
+  item
+}) {
+  return (
+    <div className="sigmo-command-movement">
+      <DashboardIcon
+        tone={
+          classeTipo(item.tipo) ===
+          'baixa'
+            ? 'red'
+            : classeTipo(item.tipo) ===
+              'cautela'
+            ? 'yellow'
+            : classeTipo(item.tipo) ===
+              'transferencia'
+            ? 'blue'
+            : 'green'
+        }
+      >
+        {obterIniciais(
+          tipoMovimentacao(item.tipo)
+        )}
+      </DashboardIcon>
+
+      <div className="sigmo-command-movement-copy">
+        <strong>
+          {item.titulo ||
+            tipoMovimentacao(
+              item.tipo
+            )}
+        </strong>
+        <span>
+          {item.autor
+            ? `${item.autor} · `
+            : ''}
+          {item.data_formatada ||
+            dataHora(
+              item.created_at
+            )}
+        </span>
+      </div>
+
+      <em
+        className={`sigmo-command-badge sigmo-command-badge-${classeTipo(
+          item.tipo
+        )}`}
+      >
+        {tipoMovimentacao(
+          item.tipo
+        )}
+      </em>
+    </div>
+  )
+}
+
 function PainelDashboard({
   user,
   dashboard,
@@ -227,8 +461,6 @@ function PainelDashboard({
   const {
     cards,
     movimentacoes,
-    indicadores,
-    totaisPorModulo,
     timeline,
     atualizadoEm,
     loading,
@@ -236,452 +468,1015 @@ function PainelDashboard({
     atualizar
   } = dashboard
 
-  const modulos = useMemo(
-    () => totaisPorModulo.slice(0, 8),
-    [totaisPorModulo]
-  )
+  const vitrine =
+    useDashboardVitrine()
+
+  const [agora, setAgora] =
+    useState(() => new Date())
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setAgora(new Date()),
+      30000
+    )
+
+    return () =>
+      window.clearInterval(timer)
+  }, [])
 
   const nomeUsuario =
     obterNomeUsuario(user)
+
+  const totalIntegrado =
+    Number(
+      vitrine.armas.total || 0
+    ) +
+    Number(
+      vitrine.tonfas.total || 0
+    )
+
+  const p4Integrado =
+    Number(vitrine.armas.p4 || 0) +
+    Number(vitrine.tonfas.p4 || 0)
+
+  const svddIntegrado =
+    Number(vitrine.armas.svdd || 0) +
+    Number(vitrine.tonfas.svdd || 0)
+
+  const emUsoIntegrado =
+    Number(vitrine.armas.carga || 0) +
+    Number(
+      vitrine.armas.cautelas ||
+        0
+    ) +
+    Number(
+      vitrine.tonfas.emServico ||
+        0
+    )
+
+  const manutencaoIntegrada =
+    Number(
+      vitrine.armas.manutencao ||
+        0
+    ) +
+    Number(
+      vitrine.tonfas.manutencao ||
+        0
+    )
+
+  const armasGrafico = [
+    {
+      label: 'P4',
+      value: vitrine.armas.p4,
+      tone: 'blue'
+    },
+    {
+      label: 'SVDD',
+      value: vitrine.armas.svdd,
+      tone: 'purple'
+    },
+    {
+      label: 'Carga permanente',
+      value: vitrine.armas.carga,
+      tone: 'green'
+    },
+    {
+      label: 'Cautelas ativas',
+      value: vitrine.armas.cautelas,
+      tone: 'yellow'
+    },
+    {
+      label: 'Particulares',
+      value:
+        vitrine.armas.particulares,
+      tone: 'cyan'
+    },
+    {
+      label: 'Manutenção',
+      value:
+        vitrine.armas.manutencao,
+      tone: 'orange'
+    },
+    {
+      label: 'Não localizadas',
+      value:
+        vitrine.armas.naoLocalizadas,
+      tone: 'red'
+    }
+  ]
+
+  const tonfaGrafico = [
+    {
+      label: 'P4',
+      value:
+        vitrine.tonfasDetalhe?.p4 ||
+        0,
+      tone: 'blue'
+    },
+    {
+      label: 'SVDD',
+      value:
+        vitrine.tonfasDetalhe
+          ?.svdd || 0,
+      tone: 'purple'
+    },
+    {
+      label: 'Em serviço',
+      value:
+        vitrine.tonfasDetalhe
+          ?.emServico || 0,
+      tone: 'yellow'
+    },
+    {
+      label: 'Manutenção',
+      value:
+        vitrine.tonfasDetalhe
+          ?.manutencao || 0,
+      tone: 'red'
+    }
+  ]
+
+  const casseteteGrafico = [
+    {
+      label: 'P4',
+      value:
+        vitrine.cassetetesDetalhe
+          ?.p4 || 0,
+      tone: 'blue'
+    },
+    {
+      label: 'SVDD',
+      value:
+        vitrine.cassetetesDetalhe
+          ?.svdd || 0,
+      tone: 'purple'
+    },
+    {
+      label: 'Em serviço',
+      value:
+        vitrine.cassetetesDetalhe
+          ?.emServico || 0,
+      tone: 'yellow'
+    },
+    {
+      label: 'Manutenção',
+      value:
+        vitrine.cassetetesDetalhe
+          ?.manutencao || 0,
+      tone: 'red'
+    }
+  ]
 
   if (
     loading &&
     !atualizadoEm
   ) {
     return (
-      <main className="sigmo-dashboard-v2">
-        <EstadoPainel>
+      <main className="sigmo-command-dashboard">
+        <div className="sigmo-command-loading">
           Carregando painel operacional...
-        </EstadoPainel>
+        </div>
       </main>
     )
   }
 
   return (
-    <main className="sigmo-dashboard-v2">
-      <section className="sigmo-hero-panel">
+    <main className="sigmo-command-dashboard">
+      <header className="sigmo-command-header">
         <div>
-          <span className="sigmo-kicker">
-            CENTRAL OPERACIONAL
-          </span>
-
           <h1>
-            Visão patrimonial do SIGMO
+            Bem-vindo ao SIGMO
           </h1>
-
           <p>
-            Olá, {nomeUsuario}. Acompanhe o
-            patrimônio, as movimentações e a
-            situação operacional dos módulos.
+            Sistema Integrado de Gestão
+            de Materiais e Operações
           </p>
         </div>
 
-        <div className="sigmo-hero-side">
-          <div className="sigmo-hero-status">
-            <span className="sigmo-live-dot" />
-
+        <div className="sigmo-command-header-meta">
+          <div className="sigmo-command-live">
+            <span className="sigmo-command-live-dot" />
             <div>
               <strong>
-                Dados conectados
+                Sistema operacional
               </strong>
-
-              <span>
-                Atualizado em{' '}
-                {dataHora(atualizadoEm)}
-              </span>
+              <small>
+                Todos os serviços ativos
+              </small>
             </div>
           </div>
 
-          <button
-            type="button"
-            className="sigmo-refresh-button"
-            onClick={atualizar}
-            disabled={loading}
-          >
-            {loading
-              ? 'Atualizando...'
-              : 'Atualizar painel'}
-          </button>
-        </div>
-      </section>
+          <div className="sigmo-command-clock">
+            <DashboardIcon tone="blue">
+              ▣
+            </DashboardIcon>
 
-      {erro && (
-        <EstadoPainel tipo="erro">
-          <span>{erro}</span>
+            <div>
+              <strong>
+                {new Intl.DateTimeFormat(
+                  'pt-BR'
+                ).format(agora)}
+              </strong>
+              <small>
+                {new Intl.DateTimeFormat(
+                  'pt-BR',
+                  {
+                    weekday:
+                      'long'
+                  }
+                ).format(agora)}
+              </small>
+            </div>
 
-          <button
-            type="button"
-            onClick={atualizar}
-          >
-            Tentar novamente
-          </button>
-        </EstadoPainel>
-      )}
-
-      <section className="sigmo-dashboard-section">
-        <div className="sigmo-section-heading">
-          <div>
-            <span>VISÃO GERAL</span>
-            <h2>Resumo patrimonial</h2>
+            <b>
+              {new Intl.DateTimeFormat(
+                'pt-BR',
+                {
+                  hour: '2-digit',
+                  minute:
+                    '2-digit'
+                }
+              ).format(agora)}
+            </b>
           </div>
 
-          <strong>
-            {numero(
-              indicadores.percentualOperacional
-            )}
-            % operacional
-          </strong>
+          <div className="sigmo-command-unit">
+            <img
+              src={brasaoPM}
+              alt="Polícia Militar do Estado de São Paulo"
+            />
+          </div>
         </div>
+      </header>
 
-        <div className="sigmo-summary-grid">
-          <CardResumo
-            titulo="Total patrimonial"
-            valor={cards.total}
-            detalhe="Itens registrados no núcleo central"
-            sigla="PT"
-          />
-
-          <CardResumo
-            titulo="Ativos"
-            valor={cards.ativos}
-            detalhe="Patrimônios em situação ativa"
-            sigla="AT"
-            tone="green"
-          />
-
-          <CardResumo
-            titulo="Disponíveis"
-            valor={cards.disponiveis}
-            detalhe="Prontos para utilização"
-            sigla="DP"
-            tone="cyan"
-          />
-
-          <CardResumo
-            titulo="Cautelados"
-            valor={cards.cautelados}
-            detalhe="Vinculados a recebedores"
-            sigla="CT"
-            tone="yellow"
-          />
-
-          <CardResumo
-            titulo="Recolhidos"
-            valor={cards.recolhidos}
-            detalhe="Itens recolhidos operacionalmente"
-            sigla="RC"
-            tone="orange"
-          />
-
-          <CardResumo
-            titulo="Baixados"
-            valor={cards.baixados}
-            detalhe="Patrimônios fora de operação"
-            sigla="BX"
-            tone="red"
-          />
-
-          <CardResumo
-            titulo="Movimentações hoje"
-            valor={cards.movimentacoesHoje}
-            detalhe="Eventos registrados desde 00h"
-            sigla="HJ"
-            tone="purple"
-          />
+      {(erro || vitrine.erro) && (
+        <div className="sigmo-command-error">
+          {erro || vitrine.erro}
         </div>
+      )}
+
+      <section className="sigmo-command-kpi-strip">
+        <KpiStrip
+          icon="◇"
+          tone="blue"
+          label="Patrimônio integrado"
+          value={totalIntegrado}
+          detail="itens sob gestão"
+        />
+        <KpiStrip
+          icon="▣"
+          tone="cyan"
+          label="Depósito P4"
+          value={p4Integrado}
+          detail="itens disponíveis"
+        />
+        <KpiStrip
+          icon="▦"
+          tone="purple"
+          label="Cofre SVDD"
+          value={svddIntegrado}
+          detail="itens no cofre"
+        />
+        <KpiStrip
+          icon="●"
+          tone="yellow"
+          label="Em serviço"
+          value={emUsoIntegrado}
+          detail="itens em uso"
+        />
+        <KpiStrip
+          icon="◆"
+          tone="red"
+          label="Em manutenção"
+          value={manutencaoIntegrada}
+          detail="itens em manutenção"
+        />
       </section>
 
-      <section className="sigmo-dashboard-grid">
-        <article className="sigmo-panel-card">
-          <div className="sigmo-panel-title">
+      <section className="sigmo-command-main-grid">
+        <article className="sigmo-command-panel sigmo-command-arms">
+          <div className="sigmo-command-panel-title">
+            <div className="sigmo-command-title-icon">
+              ▰
+            </div>
+
             <div>
-              <span>ATIVIDADE RECENTE</span>
-              <h2>
-                Últimas movimentações
-              </h2>
+              <span>ARMAS</span>
+              <small>Total de armas</small>
+              <strong>
+                {numero(
+                  vitrine.armas.total
+                )}
+              </strong>
             </div>
 
             <button
               type="button"
-              className="sigmo-text-button"
               onClick={() =>
-                onNavegar('movimentacoes')
+                onNavegar('armas')
               }
             >
-              Abrir movimentações
+              Abrir módulo
             </button>
           </div>
 
-          {timeline.length === 0 ? (
-            <EstadoPainel>
-              Nenhuma movimentação encontrada.
-            </EstadoPainel>
-          ) : (
-            <div className="sigmo-activity-list">
-              {timeline.map((item, index) => (
-                <div
-                  className="sigmo-activity-item"
-                  key={
-                    item.id ||
-                    `${item.created_at}-${index}`
-                  }
-                >
-                  <div
-                    className={`sigmo-activity-icon sigmo-activity-${classeTipo(
-                      item.tipo
-                    )}`}
-                  >
-                    {obterIniciais(
-                      tipoMovimentacao(item.tipo)
-                    )}
-                  </div>
-
-                  <div className="sigmo-activity-content">
-                    <strong>
-                      {item.autor || 'SISTEMA'}
-                    </strong>
-
-                    <p>
-                      {item.titulo ||
-                        'Registrou uma movimentação patrimonial'}
-                    </p>
-
-                    <span>
-                      {item.data_formatada ||
-                        dataHora(item.created_at)}
-                    </span>
-                  </div>
-
-                  <span
-                    className={`sigmo-status sigmo-status-${classeTipo(
-                      item.tipo
-                    )}`}
-                  >
-                    {tipoMovimentacao(item.tipo)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </article>
-
-        <div className="sigmo-dashboard-column">
-          <article className="sigmo-panel-card">
-            <div className="sigmo-panel-title">
-              <div>
-                <span>OPERAÇÃO</span>
-                <h2>
-                  Movimentações registradas
-                </h2>
-              </div>
-            </div>
-
-            <div className="sigmo-operation-list">
-              <button
-                type="button"
-                onClick={() =>
-                  onNavegar('receber-material')
-                }
-              >
-                <span className="sigmo-operation-icon">
-                  RE
-                </span>
-
-                <div>
-                  <strong>Recebimentos</strong>
-                  <small>
-                    Abrir recebimento de material
-                  </small>
-                </div>
-
-                <b>
-                  {numero(
-                    movimentacoes.recebimentos
-                  )}
-                </b>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  onNavegar('transferir-material')
-                }
-              >
-                <span className="sigmo-operation-icon">
-                  TR
-                </span>
-
-                <div>
-                  <strong>Transferências</strong>
-                  <small>
-                    Transferir material
-                  </small>
-                </div>
-
-                <b>
-                  {numero(
-                    movimentacoes.transferencias
-                  )}
-                </b>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  onNavegar('baixar-material')
-                }
-              >
-                <span className="sigmo-operation-icon">
-                  BX
-                </span>
-
-                <div>
-                  <strong>Baixas</strong>
-                  <small>
-                    Registrar baixa patrimonial
-                  </small>
-                </div>
-
-                <b>
-                  {numero(
-                    movimentacoes.baixas
-                  )}
-                </b>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  onNavegar('pagar-material')
-                }
-              >
-                <span className="sigmo-operation-icon">
-                  PG
-                </span>
-
-                <div>
-                  <strong>Pagar material</strong>
-                  <small>
-                    Cautela e entrega ao policial
-                  </small>
-                </div>
-
-                <b>→</b>
-              </button>
-            </div>
-          </article>
-
-          <article className="sigmo-panel-card">
-            <div className="sigmo-panel-title">
-              <div>
-                <span>MÓDULOS</span>
-                <h2>
-                  Distribuição patrimonial
-                </h2>
-              </div>
-
-              <strong className="sigmo-panel-total">
-                {numero(cards.total)}
-              </strong>
-            </div>
-
-            {modulos.length === 0 ? (
-              <EstadoPainel>
-                Nenhum módulo patrimonial encontrado.
-              </EstadoPainel>
-            ) : (
-              <div className="sigmo-module-list">
-                {modulos.map((item) => {
-                  const percentual =
-                    cards.total > 0
-                      ? Math.round(
-                          (
-                            Number(item.total) /
-                            Number(cards.total)
-                          ) * 100
-                        )
-                      : 0
-
-                  return (
-                    <div
-                      className="sigmo-module-item"
-                      key={item.tipo}
-                    >
-                      <div className="sigmo-module-head">
-                        <strong>
-                          {nomeModulo(item.tipo)}
-                        </strong>
-
-                        <span>
-                          {numero(item.total)}
-                        </span>
-                      </div>
-
-                      <div className="sigmo-module-track">
-                        <span
-                          style={{
-                            width: `${Math.min(
-                              percentual,
-                              100
-                            )}%`
-                          }}
-                        />
-                      </div>
-
-                      <small>
-                        {percentual}% do patrimônio
-                      </small>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </article>
-        </div>
-      </section>
-
-      <section className="sigmo-indicator-panel">
-        <div>
-          <span>ITENS OPERACIONAIS</span>
-
-          <strong>
-            {numero(indicadores.operacionais)}
-          </strong>
-
-          <small>
-            Ativos, disponíveis, cautelados e
-            recolhidos
-          </small>
-        </div>
-
-        <div className="sigmo-indicator-progress">
-          <div>
-            <strong>
-              Saúde operacional
-            </strong>
-
-            <span>
-              {numero(
-                indicadores.percentualOperacional
-              )}
-              %
-            </span>
-          </div>
-
-          <div className="sigmo-indicator-track">
-            <span
-              style={{
-                width: `${Math.min(
-                  Number(
-                    indicadores.percentualOperacional
-                  ) || 0,
-                  100
-                )}%`
-              }}
+          <div className="sigmo-command-arm-summary">
+            <ArmaMiniCard
+              label="P4"
+              value={vitrine.armas.p4}
+              tone="blue"
+              icon="⌂"
+            />
+            <ArmaMiniCard
+              label="SVDD"
+              value={vitrine.armas.svdd}
+              tone="purple"
+              icon="▦"
+            />
+            <ArmaMiniCard
+              label="Carga permanente"
+              value={vitrine.armas.carga}
+              tone="green"
+              icon="♟"
+            />
+            <ArmaMiniCard
+              label="Cautelas ativas"
+              value={
+                vitrine.armas.cautelas
+              }
+              tone="yellow"
+              icon="●"
+            />
+            <ArmaMiniCard
+              label="Particulares"
+              value={
+                vitrine.armas
+                  .particulares
+              }
+              tone="cyan"
+              icon="◇"
+            />
+            <ArmaMiniCard
+              label="Manutenção"
+              value={
+                vitrine.armas
+                  .manutencao
+              }
+              tone="orange"
+              icon="◆"
+            />
+            <ArmaMiniCard
+              label="Não localizadas"
+              value={
+                vitrine.armas
+                  .naoLocalizadas
+              }
+              tone="red"
+              icon="●"
             />
           </div>
+
+          <div className="sigmo-command-arms-charts">
+            <div>
+              <h3>
+                Distribuição das armas
+              </h3>
+
+              <div className="sigmo-command-donut-block">
+                <Donut
+                  total={
+                    vitrine.armas.total
+                  }
+                  values={armasGrafico}
+                />
+
+                <div className="sigmo-command-legend">
+                  {armasGrafico.map(
+                    (item) => (
+                      <LegendaLinha
+                        key={
+                          item.label
+                        }
+                        label={
+                          item.label
+                        }
+                        value={
+                          item.value
+                        }
+                        total={
+                          vitrine.armas
+                            .total
+                        }
+                        tone={
+                          item.tone
+                        }
+                      />
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3>
+                Armas por local
+              </h3>
+
+              <div className="sigmo-command-bars">
+                <BarraHorizontal
+                  label="P4"
+                  value={vitrine.armas.p4}
+                  total={vitrine.armas.total}
+                  tone="blue"
+                />
+                <BarraHorizontal
+                  label="SVDD"
+                  value={vitrine.armas.svdd}
+                  total={vitrine.armas.total}
+                  tone="purple"
+                />
+                <BarraHorizontal
+                  label="Carga permanente"
+                  value={vitrine.armas.carga}
+                  total={vitrine.armas.total}
+                  tone="green"
+                />
+                <BarraHorizontal
+                  label="Cautelas ativas"
+                  value={vitrine.armas.cautelas}
+                  total={vitrine.armas.total}
+                  tone="yellow"
+                />
+                <BarraHorizontal
+                  label="Particulares"
+                  value={vitrine.armas.particulares}
+                  total={vitrine.armas.total}
+                  tone="cyan"
+                />
+                <BarraHorizontal
+                  label="Manutenção"
+                  value={vitrine.armas.manutencao}
+                  total={vitrine.armas.total}
+                  tone="orange"
+                />
+                <BarraHorizontal
+                  label="Não localizadas"
+                  value={vitrine.armas.naoLocalizadas}
+                  total={vitrine.armas.total}
+                  tone="red"
+                />
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article className="sigmo-command-panel sigmo-command-tonfas">
+          <div className="sigmo-command-panel-title">
+            <div className="sigmo-command-title-icon sigmo-command-title-icon-purple">
+              ╱
+            </div>
+
+            <div>
+              <span>
+                TONFAS / CASSETETES
+              </span>
+              <small>
+                Controle operacional
+              </small>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar('tonfas')
+              }
+            >
+              Abrir módulo
+            </button>
+          </div>
+
+          <div className="sigmo-command-tonfa-totals">
+            <div>
+              <span>TONFAS</span>
+              <strong>
+                {numero(
+                  vitrine.tonfas.tonfas
+                )}
+              </strong>
+
+              <div className="sigmo-command-four-values">
+                <small>
+                  P4
+                  <b>
+                    {numero(
+                      vitrine
+                        .tonfasDetalhe
+                        ?.p4
+                    )}
+                  </b>
+                </small>
+                <small>
+                  SVDD
+                  <b>
+                    {numero(
+                      vitrine
+                        .tonfasDetalhe
+                        ?.svdd
+                    )}
+                  </b>
+                </small>
+                <small>
+                  Em serviço
+                  <b>
+                    {numero(
+                      vitrine
+                        .tonfasDetalhe
+                        ?.emServico
+                    )}
+                  </b>
+                </small>
+                <small>
+                  Manutenção
+                  <b>
+                    {numero(
+                      vitrine
+                        .tonfasDetalhe
+                        ?.manutencao
+                    )}
+                  </b>
+                </small>
+              </div>
+            </div>
+
+            <div>
+              <span>CASSETETES</span>
+              <strong>
+                {numero(
+                  vitrine.tonfas
+                    .cassetetes
+                )}
+              </strong>
+
+              <div className="sigmo-command-four-values">
+                <small>
+                  P4
+                  <b>
+                    {numero(
+                      vitrine
+                        .cassetetesDetalhe
+                        ?.p4
+                    )}
+                  </b>
+                </small>
+                <small>
+                  SVDD
+                  <b>
+                    {numero(
+                      vitrine
+                        .cassetetesDetalhe
+                        ?.svdd
+                    )}
+                  </b>
+                </small>
+                <small>
+                  Em serviço
+                  <b>
+                    {numero(
+                      vitrine
+                        .cassetetesDetalhe
+                        ?.emServico
+                    )}
+                  </b>
+                </small>
+                <small>
+                  Manutenção
+                  <b>
+                    {numero(
+                      vitrine
+                        .cassetetesDetalhe
+                        ?.manutencao
+                    )}
+                  </b>
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <div className="sigmo-command-tonfa-charts">
+            <div>
+              <h3>
+                Distribuição Tonfas
+              </h3>
+
+              <div className="sigmo-command-small-donut">
+                <Donut
+                  total={
+                    vitrine.tonfas
+                      .tonfas
+                  }
+                  values={
+                    tonfaGrafico
+                  }
+                />
+
+                <div className="sigmo-command-legend">
+                  {tonfaGrafico.map(
+                    (item) => (
+                      <LegendaLinha
+                        key={
+                          item.label
+                        }
+                        label={
+                          item.label
+                        }
+                        value={
+                          item.value
+                        }
+                        total={
+                          vitrine.tonfas
+                            .tonfas
+                        }
+                        tone={
+                          item.tone
+                        }
+                      />
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3>
+                Distribuição Cassetetes
+              </h3>
+
+              <div className="sigmo-command-small-donut">
+                <Donut
+                  total={
+                    vitrine.tonfas
+                      .cassetetes
+                  }
+                  values={
+                    casseteteGrafico
+                  }
+                />
+
+                <div className="sigmo-command-legend">
+                  {casseteteGrafico.map(
+                    (item) => (
+                      <LegendaLinha
+                        key={
+                          item.label
+                        }
+                        label={
+                          item.label
+                        }
+                        value={
+                          item.value
+                        }
+                        total={
+                          vitrine.tonfas
+                            .cassetetes
+                        }
+                        tone={
+                          item.tone
+                        }
+                      />
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section className="sigmo-command-bottom-grid">
+        <article className="sigmo-command-panel">
+          <div className="sigmo-command-section-title">
+            <h2>
+              Últimas movimentações
+            </h2>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar(
+                  'central-operacional'
+                )
+              }
+            >
+              Ver todas
+            </button>
+          </div>
+
+          <div className="sigmo-command-movements">
+            {timeline.length ? (
+              timeline
+                .slice(0, 5)
+                .map(
+                  (
+                    item,
+                    index
+                  ) => (
+                    <MovimentoLinha
+                      key={
+                        item.id ||
+                        index
+                      }
+                      item={item}
+                    />
+                  )
+                )
+            ) : (
+              <div className="sigmo-command-empty">
+                Nenhuma movimentação
+                recente.
+              </div>
+            )}
+          </div>
+        </article>
+
+        <article className="sigmo-command-panel">
+          <div className="sigmo-command-section-title">
+            <h2>
+              Alertas importantes
+            </h2>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar('alertas')
+              }
+            >
+              Ver todos
+            </button>
+          </div>
+
+          <div className="sigmo-command-alert-list">
+            <div>
+              <DashboardIcon tone="red">
+                !
+              </DashboardIcon>
+              <span>
+                <strong>
+                  {numero(
+                    manutencaoIntegrada
+                  )}{' '}
+                  itens em manutenção
+                </strong>
+                <small>
+                  Acompanhe o retorno ao
+                  serviço
+                </small>
+              </span>
+            </div>
+
+            <div>
+              <DashboardIcon tone="yellow">
+                ◷
+              </DashboardIcon>
+              <span>
+                <strong>
+                  {numero(
+                    vitrine.armas
+                      .cautelas
+                  )}{' '}
+                  cautelas de armas
+                </strong>
+                <small>
+                  Controle operacional
+                  ativo
+                </small>
+              </span>
+            </div>
+
+            <div>
+              <DashboardIcon tone="blue">
+                ↔
+              </DashboardIcon>
+              <span>
+                <strong>
+                  {numero(
+                    cards
+                      .movimentacoesHoje
+                  )}{' '}
+                  movimentações hoje
+                </strong>
+                <small>
+                  Atividade patrimonial
+                  registrada
+                </small>
+              </span>
+            </div>
+
+            <div>
+              <DashboardIcon tone="purple">
+                ▦
+              </DashboardIcon>
+              <span>
+                <strong>
+                  {numero(
+                    movimentacoes
+                      .transferencias
+                  )}{' '}
+                  transferências
+                </strong>
+                <small>
+                  Fluxos contabilizados
+                  no período
+                </small>
+              </span>
+            </div>
+          </div>
+        </article>
+
+        <article className="sigmo-command-panel">
+          <div className="sigmo-command-section-title">
+            <h2>
+              Atalhos operacionais
+            </h2>
+          </div>
+
+          <div className="sigmo-command-shortcuts">
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar(
+                  'pagar-material'
+                )
+              }
+            >
+              <DashboardIcon tone="green">
+                ↓
+              </DashboardIcon>
+              <span>
+                Pagar Material
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar(
+                  'receber-material'
+                )
+              }
+            >
+              <DashboardIcon tone="purple">
+                ↑
+              </DashboardIcon>
+              <span>
+                Receber Material
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar(
+                  'transferir-material'
+                )
+              }
+            >
+              <DashboardIcon tone="blue">
+                ↔
+              </DashboardIcon>
+              <span>
+                Transferir Material
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar(
+                  'central-operacional'
+                )
+              }
+            >
+              <DashboardIcon tone="yellow">
+                ◉
+              </DashboardIcon>
+              <span>
+                Central Operacional
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar('armas')
+              }
+            >
+              <DashboardIcon tone="blue">
+                ▰
+              </DashboardIcon>
+              <span>Armas</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar('tonfas')
+              }
+            >
+              <DashboardIcon tone="purple">
+                ╱
+              </DashboardIcon>
+              <span>
+                Tonfas/Cassetetes
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar('locais')
+              }
+            >
+              <DashboardIcon tone="cyan">
+                ●
+              </DashboardIcon>
+              <span>Locais</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar('relatorios')
+              }
+            >
+              <DashboardIcon tone="green">
+                ▤
+              </DashboardIcon>
+              <span>Relatórios</span>
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section className="sigmo-command-roadmap">
+        <div className="sigmo-command-section-title">
+          <h2>
+            Módulos em desenvolvimento /
+            integrações futuras
+          </h2>
+        </div>
+
+        <div className="sigmo-command-roadmap-grid">
+          {[
+            ['▥', 'HT'],
+            ['▦', 'TPD'],
+            ['ϟ', 'Tasers'],
+            ['▰', 'Munições'],
+            ['◇', 'Coletes'],
+            ['▱', 'Viaturas']
+          ].map(
+            ([icon, label]) => (
+              <div key={label}>
+                <DashboardIcon tone="muted">
+                  {icon}
+                </DashboardIcon>
+
+                <span>
+                  <strong>{label}</strong>
+                  <small>Em breve</small>
+                </span>
+              </div>
+            )
+          )}
         </div>
       </section>
+
+      <footer className="sigmo-command-footer">
+        <span>
+          Administrador: {nomeUsuario}
+        </span>
+
+        <span>
+          Última atualização:{' '}
+          {dataHora(atualizadoEm)}
+        </span>
+
+        <button
+          type="button"
+          onClick={() => {
+            atualizar()
+            vitrine.atualizar()
+          }}
+          disabled={
+            loading ||
+            vitrine.loading
+          }
+        >
+          {loading ||
+          vitrine.loading
+            ? 'Atualizando...'
+            : '↻ Atualizar agora'}
+        </button>
+      </footer>
     </main>
   )
 }
