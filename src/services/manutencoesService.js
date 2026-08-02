@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { criarOuAtualizarPatrimonio } from './patrimoniosService'
+import { criarNotificacaoParaPerfil } from './notificacoesService'
 
 const TABLE = 'sigmo_manutencoes'
 const BUCKET = 'manutencoes-fotos'
@@ -818,9 +819,125 @@ async function aplicarRetornoTonfa(manutencao, user) {
   }
 }
 
+
+async function notificarP4SaidaManutencao({ manutencao, ht, user }) {
+  const identificacao = ht?.patrimonio || ht?.numero_serie || 'HT'
+  const perfis = ['ADMINISTRADOR']
+
+  for (const perfil of perfis) {
+    try {
+      await criarNotificacaoParaPerfil({
+        perfil,
+        titulo: 'Saída de manutenção aprovada',
+        mensagem: `${identificacao} teve o retorno da manutenção registrado e ficou disponível em ${ht?.local_atual || 'seu guardião atual'}.`,
+        tipo: 'PATRIMONIO',
+        modulo: 'HT',
+        prioridade: 'NORMAL',
+        link: 'ht',
+        metadata: {
+          modulo: 'HT',
+          ht_id: ht?.id || manutencao?.referencia_id || null,
+          manutencao_id: manutencao?.id || null,
+          aprovado_por: obterUsuarioNome(user)
+        }
+      })
+    } catch (error) {
+      console.warn(`Saída do HT concluída, mas não foi possível notificar o perfil ${perfil}:`, error)
+    }
+  }
+}
+
+async function aplicarRetornoHT(manutencao, user) {
+  const { data: ht, error } = await supabase
+    .from('sigmo_hts')
+    .select('*')
+    .eq('id', manutencao.referencia_id)
+    .single()
+
+  if (error) throw error
+
+  if (maiusculo(ht.status_operacional) !== 'MANUTENCAO') {
+    throw new Error('O HT não está registrado como em manutenção.')
+  }
+
+  const payloadAnterior = {
+    status_operacional: ht.status_operacional,
+    local_atual: ht.local_atual,
+    equipe_vinculada: ht.equipe_vinculada,
+    viatura_vinculada: ht.viatura_vinculada
+  }
+
+  const localAtual = maiusculo(ht.local_atual)
+  const retornoAoSVDD =
+    localAtual.includes('SVDD') ||
+    localAtual.includes('SERVICO DE DIA')
+
+  const payloadNovo = {
+    status_operacional: 'RESERVA',
+    local_atual: retornoAoSVDD ? 'COFRE DO SVDD' : 'DEPÓSITO P4',
+    equipe_vinculada: null,
+    viatura_vinculada: null,
+    ativo: true
+  }
+
+  const { data: atualizado, error: updateError } = await supabase
+    .from('sigmo_hts')
+    .update(payloadNovo)
+    .eq('id', ht.id)
+    .select()
+    .single()
+
+  if (updateError) throw updateError
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo: 'ht',
+      referencia_id: atualizado.id,
+      dados: atualizado,
+      user,
+      local_atual: atualizado.local_atual,
+      companhia_atual: atualizado.unidade || ''
+    })
+  } catch (error) {
+    await supabase
+      .from('sigmo_hts')
+      .update(payloadAnterior)
+      .eq('id', ht.id)
+
+    throw error
+  }
+
+  return {
+    ht: atualizado,
+    rollback: async () => {
+      const { data: restaurado, error: rollbackError } = await supabase
+        .from('sigmo_hts')
+        .update(payloadAnterior)
+        .eq('id', ht.id)
+        .select()
+        .single()
+
+      if (rollbackError) throw rollbackError
+
+      await criarOuAtualizarPatrimonio({
+        tipo: 'ht',
+        referencia_id: restaurado.id,
+        dados: restaurado,
+        user,
+        local_atual: restaurado.local_atual,
+        companhia_atual: restaurado.unidade || ''
+      })
+    }
+  }
+}
+
 async function aplicarRetornoPatrimonial(manutencao, user) {
   if (manutencao.modulo === MODULOS_MANUTENCAO.TONFAS) {
     return aplicarRetornoTonfa(manutencao, user)
+  }
+
+  if (manutencao.modulo === MODULOS_MANUTENCAO.HT) {
+    return aplicarRetornoHT(manutencao, user)
   }
 
   return {
@@ -830,7 +947,9 @@ async function aplicarRetornoPatrimonial(manutencao, user) {
 
 export async function concluirManutencao({
   manutencaoId,
+  servicoExecutado = null,
   observacoes = null,
+  fotos = [],
   user = null
 }) {
   if (!manutencaoId) {
@@ -846,8 +965,23 @@ export async function concluirManutencao({
   const retorno = await aplicarRetornoPatrimonial(atual, user)
   const agora = new Date().toISOString()
 
+  const blocoRetorno = [
+    texto(servicoExecutado)
+      ? `SERVIÇO EXECUTADO: ${maiusculo(servicoExecutado)}`
+      : null,
+    texto(observacoes)
+      ? `OBSERVAÇÕES DO RETORNO: ${maiusculo(observacoes)}`
+      : null,
+    `RETORNO REGISTRADO EM: ${new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short'
+    }).format(new Date(agora))}`
+  ]
+    .filter(Boolean)
+    .join(' | ')
+
   const observacoesFinais =
-    [texto(atual.observacoes), texto(observacoes)]
+    [texto(atual.observacoes), blocoRetorno]
       .filter(Boolean)
       .join(' | ') || null
 
@@ -868,6 +1002,30 @@ export async function concluirManutencao({
       .single()
 
     if (error) throw error
+
+    if (atual.modulo === MODULOS_MANUTENCAO.HT && retorno?.ht) {
+      await notificarP4SaidaManutencao({
+        manutencao: data,
+        ht: retorno.ht,
+        user
+      })
+    }
+
+    const arquivosRetorno = normalizarArquivosFotos({ fotos })
+
+    for (let indice = 0; indice < arquivosRetorno.length; indice += 1) {
+      await adicionarFotoManutencao({
+        manutencaoId,
+        modulo: atual.modulo,
+        referenciaId: atual.referencia_id,
+        arquivo: arquivosRetorno[indice],
+        categoria: 'RETORNO',
+        tipo: 'RETORNO_MANUTENCAO',
+        legenda: texto(servicoExecutado) || 'RETORNO DA MANUTENÇÃO',
+        principal: false,
+        user
+      })
+    }
 
     return normalizarManutencao(data)
   } catch (error) {

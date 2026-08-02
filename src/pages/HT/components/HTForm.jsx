@@ -18,6 +18,11 @@ import {
   registerAudit
 } from '../../../services/auditoriaService'
 
+import {
+  normalizarLocalParaFormulario,
+  normalizarLocalPatrimonial
+} from '../../../utils/patrimonioLocalUtils'
+
 import '../../../ui/patrimonio/PatrimonioForm.css'
 
 const initialForm = {
@@ -91,7 +96,9 @@ export default function HTForm({
           'RESERVA',
 
         local_atual:
-          htEditando.local_atual || '',
+          normalizarLocalParaFormulario(
+            htEditando.local_atual
+          ),
 
         equipe_vinculada:
           htEditando.equipe_vinculada ||
@@ -269,10 +276,9 @@ export default function HTForm({
         status,
 
       local_atual:
-        String(form.local_atual || '')
-          .trim()
-          .toUpperCase() ||
-        null,
+        normalizarLocalPatrimonial(
+          form.local_atual
+        ) || null,
 
       equipe_vinculada:
         emServico

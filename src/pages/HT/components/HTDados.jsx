@@ -29,6 +29,13 @@ function padronizarIdentificador(valor) {
     .toUpperCase()
     .replace(/\s+/g, '')
 }
+const STATUS_HT_COM_NAO_LOCALIZADO = [
+  ...STATUS_HT,
+  ...(STATUS_HT.some((item) => String(typeof item === 'string' ? item : item?.value).toUpperCase() === 'NAO_LOCALIZADO')
+    ? []
+    : [{ value: 'NAO_LOCALIZADO', label: 'NÃO LOCALIZADO' }])
+]
+
 
 export default function HTDados({
   form,
@@ -231,7 +238,7 @@ export default function HTDados({
             onChange={onChange}
             required
             disabled={disabled}
-            options={STATUS_HT}
+            options={STATUS_HT_COM_NAO_LOCALIZADO}
           />
 
           <SigmoSelect

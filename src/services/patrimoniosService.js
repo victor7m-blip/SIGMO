@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { normalizarLocalPatrimonial } from '../utils/patrimonioLocalUtils'
 
 const TABLE = 'sigmo_patrimonios'
 
@@ -115,9 +116,9 @@ export async function criarOuAtualizarPatrimonio({
       normalizarStatus(dados),
 
     local_atual:
-      texto(local_atual) ||
-      texto(dados.local_atual) ||
-      null,
+      normalizarLocalPatrimonial(
+        texto(local_atual) || texto(dados.local_atual)
+      ) || null,
 
     responsavel_atual_id:
       responsavelId,

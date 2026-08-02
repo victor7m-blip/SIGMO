@@ -1,196 +1,51 @@
-.ht-table-wrapper {
-  width: 100%;
-  overflow-x: auto;
-  border: 1px solid #dbe3ee;
-  border-radius: 14px;
-  background: #ffffff;
-}
-
-.ht-table {
-  width: 100%;
-  min-width: 1280px;
-  border-collapse: collapse;
-  table-layout: auto;
-  background: #ffffff;
-  color: #0f172a;
-}
-
-.ht-table thead {
-  background: #f8fafc;
-}
-
-.ht-table th {
-  padding: 14px 13px;
-  border-bottom: 1px solid #dbe3ee;
-  color: #475569;
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  text-align: left;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ht-table-sortable {
-  cursor: pointer;
-  user-select: none;
-}
-
-.ht-table-sortable:hover {
-  background: #eef2f7;
-  color: #0f172a;
-}
-
-.ht-table td {
-  padding: 13px;
-  border-bottom: 1px solid #edf2f7;
-  color: #334155;
-  font-size: 0.84rem;
-  font-weight: 650;
-  line-height: 1.35;
-  vertical-align: middle;
-}
-
-.ht-table tbody tr {
-  transition: background 150ms ease;
-}
-
-.ht-table tbody tr:hover {
-  background: #f8fafc;
-}
-
-.ht-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
+.ht-table-wrapper { width: 100%; overflow-x: auto; background: #fff; }
+.ht-table { width: 100%; min-width: 1120px; border-collapse: collapse; color: #172033; }
+.ht-table thead { background: #f5f7fa; }
+.ht-table th { padding: 13px 14px; border-bottom: 1px solid #dce4ed; color: #536175; font-size: .7rem; font-weight: 850; letter-spacing: .035em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.ht-table-sortable { cursor: pointer; user-select: none; }
+.ht-table-sortable:hover { background: #edf2f7; color: #172033; }
+.ht-table td { padding: 12px 14px; border-bottom: 1px solid #e9eef4; color: #3b4758; font-size: .82rem; line-height: 1.35; vertical-align: middle; }
+.ht-table tbody tr { transition: background .14s ease; }
+.ht-table tbody tr:hover { background: #f8fafc; }
+.ht-table tbody tr:last-child td { border-bottom: 0; }
+.ht-equipment-cell { display: flex; min-width: 220px; align-items: center; gap: 11px; }
+.ht-equipment-cell > div:last-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.ht-equipment-cell strong { overflow: hidden; color: #172033; font-size: .83rem; text-overflow: ellipsis; white-space: nowrap; }
+.ht-equipment-cell span { color: #7a8798; font-size: .7rem; font-weight: 750; }
 .ht-thumb,
-.ht-thumb-placeholder {
-  width: 54px;
-  height: 54px;
-  border-radius: 10px;
-}
-
-.ht-thumb {
-  display: block;
-  border: 1px solid #dbe3ee;
-  background: #f1f5f9;
-  object-fit: cover;
-}
-
-.ht-thumb-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed #cbd5e1;
-  background: #f8fafc;
-  color: #64748b;
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.ht-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 29px;
-  padding: 0 11px;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #475569;
-  font-size: 0.7rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.ht-status.reserva {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.ht-status.em-servico {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
-}
-
-.ht-status.manutencao,
-.ht-status.recolhido {
-  border-color: #fde68a;
-  background: #fffbeb;
-  color: #a16207;
-}
-
-.ht-status.baixado {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
-}
-
-.ht-table-actions-header {
-  min-width: 280px;
-}
-
-.ht-table-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 280px;
-  white-space: nowrap;
-}
-
-.ht-table-actions > button {
-  display: inline-flex !important;
-  flex: 0 0 auto !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: auto !important;
-  min-width: 72px !important;
-  min-height: 38px !important;
-  margin: 0 !important;
-  padding: 0 14px !important;
-  border-radius: 9px !important;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.77rem !important;
-  font-weight: 800 !important;
-  line-height: 1 !important;
-  white-space: nowrap;
-}
-
-.ht-table-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 140px;
-  padding: 25px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 14px;
-  background: #f8fafc;
-  color: #64748b;
-  font-size: 0.86rem;
-  font-weight: 750;
-  text-align: center;
-}
-
-@media (max-width: 720px) {
-  .ht-table-wrapper {
-    border-radius: 12px;
-  }
-
+.ht-thumb-placeholder { width: 48px; height: 48px; flex: 0 0 auto; border-radius: 9px; }
+.ht-thumb { display: block; border: 1px solid #d7e0eb; background: #eef2f6; object-fit: cover; }
+.ht-thumb-placeholder { display: flex; align-items: center; justify-content: center; border: 1px dashed #bdc9d8; background: #f4f7fa; color: #617084; font-size: .65rem; font-weight: 900; }
+.ht-code { color: #203149; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; }
+.ht-location-cell { display: flex; min-width: 180px; flex-direction: column; gap: 3px; }
+.ht-location-cell strong { color: #344054; font-size: .79rem; }
+.ht-location-cell span { color: #758194; font-size: .7rem; }
+.ht-status { display: inline-flex; min-height: 27px; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid #cbd5e1; border-radius: 999px; background: #f8fafc; color: #475569; font-size: .67rem; font-weight: 850; white-space: nowrap; }
+.ht-status.reserva { border-color: #b8d4ef; background: #eef6fd; color: #1d5a9e; }
+.ht-status.em-servico { border-color: #b8dec9; background: #eef9f3; color: #23754f; }
+.ht-status.manutencao { border-color: #efd3a9; background: #fff7eb; color: #a05c10; }
+.ht-status.recolhido { border-color: #d4c5e6; background: #f6f1fb; color: #694694; }
+.ht-status.baixado { border-color: #ecc1c5; background: #fff1f2; color: #a8323d; }
+.ht-table-actions-header { min-width: 190px; }
+.ht-table-actions { display: flex; min-width: 190px; align-items: center; justify-content: flex-end; gap: 7px; white-space: nowrap; }
+.ht-table-actions > button { min-width: 66px !important; min-height: 35px !important; padding: 0 11px !important; border-radius: 8px !important; font-size: .72rem !important; font-weight: 800 !important; }
+.ht-table-empty { display: flex; min-height: 150px; align-items: center; justify-content: center; padding: 26px; background: #fafbfd; color: #6d798a; font-size: .85rem; font-weight: 750; text-align: center; }
+@media (max-width: 760px) {
+  .ht-table { min-width: 1040px; }
   .ht-table th,
-  .ht-table td {
-    padding: 11px;
-  }
+  .ht-table td { padding: 11px; }
+}
 
-  .ht-table-actions-header,
-  .ht-table-actions {
-    min-width: 260px;
-  }
+/* Ações alinhadas ao padrão visual do módulo Armas, sem alterar o card/tabela. */
+.ht-table-actions > button:first-child {
+  border: 1px solid #1d5a9e !important;
+  background: #ffffff !important;
+  color: #1d5a9e !important;
+  box-shadow: none !important;
+}
 
-  .ht-table-actions > button {
-    min-height: 40px !important;
-    padding: 0 12px !important;
-  }
+.ht-table-actions > button:first-child:hover {
+  border-color: #17477f !important;
+  background: #eef5fc !important;
+  color: #17477f !important;
 }

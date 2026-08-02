@@ -5,6 +5,15 @@ import {
   desativarPatrimonioPorReferencia
 } from './patrimoniosService'
 
+import {
+  MODULOS_MANUTENCAO,
+  registrarManutencao
+} from './manutencoesService'
+
+import {
+  criarNotificacaoParaPerfil
+} from './notificacoesService'
+
 const TABLE = 'sigmo_hts'
 
 function normalizarTexto(valor) {
@@ -210,6 +219,7 @@ function definirLocalPatrimonial(ht) {
 
 export async function listarHTs({
   filtros = {},
+  escopo = null,
   pagina = 1,
   limite = 20,
   sortBy = 'criado_em',
@@ -231,6 +241,21 @@ export async function listarHTs({
       nullsFirst: false
     })
     .range(inicio, fim)
+
+  const escopoNormalizado =
+    normalizarMaiusculo(escopo)
+
+  if (escopoNormalizado === 'SVDD') {
+    // O filtro é aplicado no banco antes da paginação. Assim, a tabela, o total
+    // de registros e a quantidade de páginas não incluem HTs do P4.
+    query = query.or(
+      [
+        'local_atual.ilike.%SVDD%',
+        'local_atual.ilike.%SERVICO DE DIA%',
+        'local_atual.ilike.%SERVIÇO DE DIA%'
+      ].join(',')
+    )
+  }
 
   const pesquisa =
     limparPesquisa(
@@ -785,3 +810,170 @@ export async function sincronizarHTsComPatrimonios(
 
   return htsNormalizados.length
 }
+
+async function buscarPatrimonioCentralHT(htId) {
+  const { data, error } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id')
+    .eq('tipo', 'ht')
+    .eq('referencia_id', htId)
+    .maybeSingle()
+
+  if (error) throw error
+
+  return data
+}
+
+async function notificarP4EntradaManutencao({ ht, manutencao, user }) {
+  const identificacao = ht.patrimonio || ht.numero_serie || 'HT'
+  const perfis = ['ADMINISTRADOR']
+
+  for (const perfil of perfis) {
+    try {
+      await criarNotificacaoParaPerfil({
+        perfil,
+        titulo: 'HT enviado para manutenção',
+        mensagem: `${identificacao} foi encaminhado para manutenção e aguarda acompanhamento do P4.`,
+        tipo: 'PATRIMONIO',
+        modulo: 'HT',
+        prioridade: 'ALTA',
+        link: 'manutencoes',
+        metadata: {
+          modulo: 'HT',
+          ht_id: ht.id,
+          manutencao_id: manutencao?.id || null,
+          patrimonio: ht.patrimonio || null,
+          numero_serie: ht.numero_serie || null,
+          registrado_por: user?.nome || user?.nome_guerra || user?.email || null
+        }
+      })
+    } catch (error) {
+      console.warn(`HT enviado, mas não foi possível notificar o perfil ${perfil}:`, error)
+    }
+  }
+}
+
+export async function enviarHTParaManutencao({
+  htId,
+  tipoNovidade = 'MANUTENÇÃO CORRETIVA',
+  descricao = null,
+  observacoes = null,
+  foto = null,
+  fotos = [],
+  user = null
+}) {
+  if (!htId) {
+    throw new Error('HT não informado para manutenção.')
+  }
+
+  const ht = await buscarHTPorId(htId)
+
+  if (ht.ativo === false || ht.status_operacional === 'BAIXADO') {
+    throw new Error('Um HT baixado ou inativo não pode ser enviado para manutenção.')
+  }
+
+  if (ht.status_operacional === 'MANUTENCAO') {
+    throw new Error('Este HT já está em manutenção.')
+  }
+
+  if (!normalizarTexto(descricao)) {
+    throw new Error('Informe a descrição da novidade ou do defeito.')
+  }
+
+  const patrimonio = await buscarPatrimonioCentralHT(ht.id)
+  const estadoAnterior = {
+    status_operacional: ht.status_operacional,
+    local_atual: ht.local_atual,
+    equipe_vinculada: ht.equipe_vinculada,
+    viatura_vinculada: ht.viatura_vinculada
+  }
+
+  let htAtualizado = null
+
+  try {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .update({
+        status_operacional: 'MANUTENCAO',
+        local_atual: 'MANUTENÇÃO',
+        equipe_vinculada: null,
+        viatura_vinculada: null
+      })
+      .eq('id', ht.id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    htAtualizado = normalizarHT(data)
+
+    await criarOuAtualizarPatrimonio({
+      tipo: 'ht',
+      referencia_id: htAtualizado.id,
+      dados: htAtualizado,
+      user,
+      local_atual: 'MANUTENÇÃO',
+      companhia_atual: htAtualizado.unidade || ''
+    })
+
+    const manutencao = await registrarManutencao({
+      modulo: MODULOS_MANUTENCAO.HT,
+      tipoMaterial: 'HT',
+      referenciaId: htAtualizado.id,
+      patrimonioId: patrimonio?.id || null,
+      quantidade: 1,
+      tipoNovidade,
+      descricao,
+      observacoes: [
+        normalizarTexto(observacoes),
+        `STATUS ANTERIOR: ${estadoAnterior.status_operacional || 'NÃO INFORMADO'}`,
+        `LOCAL ANTERIOR: ${estadoAnterior.local_atual || 'NÃO INFORMADO'}`
+      ].filter(Boolean).join(' | '),
+      origem: estadoAnterior.local_atual || 'P4',
+      destino: 'MANUTENCAO',
+      foto,
+      fotos,
+      user
+    })
+
+    await notificarP4EntradaManutencao({
+      ht: htAtualizado,
+      manutencao,
+      user
+    })
+
+    return {
+      ht: htAtualizado,
+      manutencao
+    }
+  } catch (error) {
+    if (htAtualizado) {
+      try {
+        const { data: restaurado, error: rollbackError } = await supabase
+          .from(TABLE)
+          .update(estadoAnterior)
+          .eq('id', ht.id)
+          .select()
+          .single()
+
+        if (rollbackError) throw rollbackError
+
+        const htRestaurado = normalizarHT(restaurado)
+
+        await criarOuAtualizarPatrimonio({
+          tipo: 'ht',
+          referencia_id: htRestaurado.id,
+          dados: htRestaurado,
+          user,
+          local_atual: definirLocalPatrimonial(htRestaurado),
+          companhia_atual: htRestaurado.unidade || ''
+        })
+      } catch (rollbackError) {
+        console.error('Erro ao desfazer envio do HT para manutenção:', rollbackError)
+      }
+    }
+
+    throw error
+  }
+}
+

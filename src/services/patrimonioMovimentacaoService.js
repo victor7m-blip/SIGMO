@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { normalizarLocalPatrimonial } from '../utils/patrimonioLocalUtils'
 
 const TABELA_PATRIMONIOS =
   'sigmo_patrimonios'
@@ -1390,9 +1391,9 @@ const tipoNormalizado =
     )
 
   const localDestinoNormalizado =
-    normalizarUpper(
+    normalizarLocalPatrimonial(
       localDestino
-    )
+    ) || null
 
   const companhiaDestinoNormalizada =
     normalizarUpper(
@@ -1464,7 +1465,7 @@ const tipoNormalizado =
         guardiaoOrigem,
 
       fallback:
-        normalizarUpper(
+        normalizarLocalPatrimonial(
           patrimonio.local_atual
         ) ||
         'ORIGEM'
@@ -1613,9 +1614,9 @@ const tipoNormalizado =
       statusNovoNormalizado,
 
     local_origem:
-      normalizarUpper(
+      normalizarLocalPatrimonial(
         patrimonio.local_atual
-      ),
+      ) || null,
 
     local_destino:
       localDestinoEstruturado.nome,

@@ -1,0 +1,192 @@
+.patrimonio-wizard {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.patrimonio-wizard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.patrimonio-wizard-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.patrimonio-wizard-header p {
+  margin: 6px 0 0;
+  opacity: 0.75;
+}
+
+.patrimonio-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.patrimonio-steps div {
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.55;
+}
+
+.patrimonio-steps div.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.16);
+  font-weight: 700;
+}
+
+.patrimonio-card {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 20px;
+}
+
+.patrimonio-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.patrimonio-form-grid label,
+.patrimonio-observacoes,
+.foto-upload-box label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.patrimonio-form-grid input,
+.patrimonio-form-grid select,
+.patrimonio-observacoes textarea,
+.foto-upload-box input {
+  border: 0;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 15px;
+}
+
+.patrimonio-extra-fields {
+  margin-top: 16px;
+}
+
+.patrimonio-observacoes {
+  margin-top: 16px;
+}
+
+.patrimonio-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.patrimonio-actions.between {
+  justify-content: space-between;
+}
+
+.btn-primary,
+.btn-secondary {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #ffffff;
+  color: #111111;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-error {
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  background: rgba(255, 0, 0, 0.18);
+  color: #ffdede;
+  font-weight: 700;
+}
+
+.form-alert {
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  background: rgba(255, 200, 0, 0.18);
+}
+
+.foto-upload-box {
+  margin-bottom: 20px;
+}
+
+.patrimonio-fotos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.patrimonio-foto {
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.patrimonio-foto img {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  display: block;
+}
+
+.patrimonio-foto button {
+  width: 100%;
+  border: 0;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.empty-message {
+  opacity: 0.7;
+}
+
+.patrimonio-resumo {
+  display: grid;
+  gap: 8px;
+}
+
+@media (max-width: 800px) {
+  .patrimonio-wizard {
+    padding: 14px;
+  }
+
+  .patrimonio-wizard-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .patrimonio-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .patrimonio-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

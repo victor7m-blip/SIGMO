@@ -99,7 +99,7 @@ if (!manutencao) return null
   <h3>Ocorrência</h3>
 
   <p>
-    <strong>{manutencao.tipo_ocorrencia || 'NÃO INFORMADO'}</strong>
+    <strong>{manutencao.tipo_ocorrencia || manutencao.tipo_novidade || 'NÃO INFORMADO'}</strong>
   </p>
 
   <p style={{marginTop:'8px'}}>
@@ -110,7 +110,7 @@ if (!manutencao) return null
   <h3>Providência</h3>
 
   <p>
-    {manutencao.providencia || 'MANUTENÇÃO'}
+    {manutencao.providencia || manutencao.destino || 'MANUTENÇÃO'}
   </p>
 </section>   
             <div><span>Módulo</span><strong>{manutencao.modulo || 'OUTROS'}</strong></div>
@@ -156,7 +156,11 @@ if (!manutencao) return null
               disabled={salvando}
               onClick={() => onConcluir(observacoes)}
             >
-              {salvando ? 'Salvando...' : 'Concluir manutenção'}
+              {salvando
+                ? 'Salvando...'
+                : manutencao.modulo === 'HT'
+                  ? 'Aprovar saída da manutenção'
+                  : 'Concluir manutenção'}
             </button>
           </footer>
         )}
