@@ -487,3 +487,137 @@
     min-height: 248px;
   }
 }
+
+/* Visão simplificada para USUÁRIO e USUARIO EXTERNO */
+.meus-materiais-page {
+  min-height: 100%;
+  padding: 22px;
+  background: #f4f7fb;
+}
+
+.meus-materiais-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 28px 30px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #071b36 0%, #0b3c73 58%, #0b64b8 100%);
+  color: #fff;
+  box-shadow: 0 18px 40px rgba(7, 27, 54, 0.2);
+}
+
+.meus-materiais-hero span,
+.meus-materiais-kicker {
+  display: block;
+  color: #70c4ff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.15px;
+}
+
+.meus-materiais-hero h1 {
+  margin: 7px 0 0;
+  font-size: clamp(25px, 3vw, 36px);
+}
+
+.meus-materiais-hero p {
+  max-width: 720px;
+  margin: 9px 0 0;
+  color: #d8eaff;
+  line-height: 1.55;
+}
+
+.meus-materiais-hero button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.meus-materiais-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.meus-materiais-card,
+.meus-materiais-vazio {
+  padding: 22px;
+  border: 1px solid #dce5ef;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 35, 60, 0.06);
+}
+
+.meus-materiais-card h2 {
+  margin: 7px 0 18px;
+  color: #0b2a4d;
+  font-size: 19px;
+}
+
+.meus-materiais-card dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.meus-materiais-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid #e4ebf2;
+}
+
+.meus-materiais-card dt {
+  color: #718197;
+}
+
+.meus-materiais-card dd {
+  margin: 0;
+  color: #173a5e;
+  font-weight: 800;
+  text-align: right;
+}
+
+.meus-materiais-vazio {
+  margin-top: 18px;
+  color: #52667e;
+  text-align: center;
+}
+
+.meus-materiais-vazio strong {
+  color: #173a5e;
+  font-size: 17px;
+}
+
+.meus-materiais-erro {
+  margin-top: 16px;
+  padding: 13px 15px;
+  border: 1px solid #f2b8b5;
+  border-radius: 10px;
+  background: #fff0ef;
+  color: #a12620;
+  font-weight: 750;
+}
+
+@media (max-width: 760px) {
+  .meus-materiais-page {
+    padding: 12px;
+  }
+
+  .meus-materiais-hero {
+    flex-direction: column;
+  }
+
+  .meus-materiais-hero button {
+    width: 100%;
+  }
+}

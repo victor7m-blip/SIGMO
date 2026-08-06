@@ -19,6 +19,14 @@ import {
   buscarUltimaRelease
 } from '../services/releasesService'
 
+import {
+  solicitarRecuperacaoPin
+} from '../services/recuperacaoSenhaService'
+
+import {
+  concluirTrocaObrigatoriaPin
+} from '../services/credenciaisService'
+
 import backgroundDesktop from '../assets/SIGMO_01_Login.png'
 import backgroundMobile from '../assets/SIGMO_01_Login_Mobile.png'
 
@@ -81,6 +89,62 @@ export default function Login({
     releaseAberta,
     setReleaseAberta
   ] = useState(false)
+
+  const [
+    recuperacaoAberta,
+    setRecuperacaoAberta
+  ] = useState(false)
+
+  const [
+    reRecuperacao,
+    setReRecuperacao
+  ] = useState('')
+
+  const [
+    reResponsavel,
+    setReResponsavel
+  ] = useState('')
+
+  const [
+    recuperacaoLoading,
+    setRecuperacaoLoading
+  ] = useState(false)
+
+  const [
+    recuperacaoErro,
+    setRecuperacaoErro
+  ] = useState('')
+
+  const [
+    recuperacaoSucesso,
+    setRecuperacaoSucesso
+  ] = useState('')
+
+
+  const [
+    trocaPendente,
+    setTrocaPendente
+  ] = useState(null)
+
+  const [
+    novoPin,
+    setNovoPin
+  ] = useState('')
+
+  const [
+    confirmarNovoPin,
+    setConfirmarNovoPin
+  ] = useState('')
+
+  const [
+    trocaLoading,
+    setTrocaLoading
+  ] = useState(false)
+
+  const [
+    trocaErro,
+    setTrocaErro
+  ] = useState('')
 
   useEffect(() => {
     function updateBackground() {
@@ -150,6 +214,141 @@ export default function Login({
         6
       )
     )
+  }
+
+  function abrirRecuperacao() {
+    setReRecuperacao(re)
+    setReResponsavel('')
+    setRecuperacaoErro('')
+    setRecuperacaoSucesso('')
+    setRecuperacaoAberta(true)
+  }
+
+  function fecharRecuperacao() {
+    if (recuperacaoLoading) {
+      return
+    }
+
+    setRecuperacaoAberta(false)
+    setRecuperacaoErro('')
+    setRecuperacaoSucesso('')
+  }
+
+  async function handleSolicitarRecuperacao(event) {
+    event.preventDefault()
+
+    setRecuperacaoErro('')
+    setRecuperacaoSucesso('')
+    setRecuperacaoLoading(true)
+
+    try {
+      const resultado =
+        await solicitarRecuperacaoPin({
+          reSolicitante:
+            reRecuperacao,
+          reResponsavel
+        })
+
+      const nomeResponsavel =
+        resultado?.responsavel_nome
+
+      setRecuperacaoSucesso(
+        nomeResponsavel
+          ? `Solicitação encaminhada para ${nomeResponsavel}.`
+          : 'Solicitação encaminhada com sucesso.'
+      )
+    } catch (err) {
+      console.error(
+        'Erro ao solicitar recuperação de PIN:',
+        err
+      )
+
+      setRecuperacaoErro(
+        err?.message ||
+        'Não foi possível registrar a solicitação.'
+      )
+    } finally {
+      setRecuperacaoLoading(false)
+    }
+  }
+
+  async function handleTrocaObrigatoria(event) {
+    event.preventDefault()
+
+    setTrocaErro('')
+
+    const pinNovoLimpo =
+      limparNumero(novoPin, 6)
+
+    const confirmacaoLimpa =
+      limparNumero(confirmarNovoPin, 6)
+
+    if (
+      pinNovoLimpo.length !== 6 ||
+      confirmacaoLimpa.length !== 6
+    ) {
+      setTrocaErro(
+        'O novo PIN deve ter exatamente 6 números.'
+      )
+      return
+    }
+
+    if (pinNovoLimpo !== confirmacaoLimpa) {
+      setTrocaErro(
+        'A confirmação não corresponde ao novo PIN.'
+      )
+      return
+    }
+
+    if (pinNovoLimpo === trocaPendente?.pinTemporario) {
+      setTrocaErro(
+        'Escolha um PIN diferente do PIN temporário.'
+      )
+      return
+    }
+
+    setTrocaLoading(true)
+
+    try {
+      await concluirTrocaObrigatoriaPin({
+        usuarioId: trocaPendente.usuarioId,
+        novoPin: pinNovoLimpo
+      })
+
+      const sessionUser = {
+        ...trocaPendente.sessionUser,
+        exige_troca: false
+      }
+
+      try {
+        await registerAudit(
+          'ALTERAR_PIN',
+          'Usuário definiu um novo PIN após recuperação de acesso.',
+          sessionUser,
+          'Login'
+        )
+      } catch (auditError) {
+        console.error(
+          'Erro ao registrar auditoria da troca de PIN:',
+          auditError
+        )
+      }
+
+      saveSession(sessionUser)
+      onLogin(sessionUser)
+    } catch (err) {
+      console.error(
+        'Erro ao concluir troca obrigatória de PIN:',
+        err
+      )
+
+      setTrocaErro(
+        err?.message ||
+        'Não foi possível alterar o PIN.'
+      )
+    } finally {
+      setTrocaLoading(false)
+    }
   }
 
   async function handleLogin(event) {
@@ -279,7 +478,23 @@ export default function Login({
           usuario.ativo,
 
         user_id:
-          usuario.id
+          usuario.id,
+
+        exige_troca:
+          Boolean(usuario.exige_troca)
+      }
+
+      if (usuario.exige_troca) {
+        setTrocaPendente({
+          usuarioId: usuario.id,
+          pinTemporario: pinLimpo,
+          sessionUser
+        })
+
+        setNovoPin('')
+        setConfirmarNovoPin('')
+        setTrocaErro('')
+        return
       }
 
       try {
@@ -312,6 +527,143 @@ export default function Login({
     } finally {
       setLoading(false)
     }
+  }
+
+  if (trocaPendente) {
+    return (
+      <div
+        className="login-page"
+        style={{
+          backgroundImage:
+            `url(${background})`,
+          backgroundSize:
+            'contain',
+          backgroundPosition:
+            'center center',
+          backgroundRepeat:
+            'no-repeat',
+          backgroundColor:
+            '#030913'
+        }}
+      >
+        <section
+          className="login-card"
+          style={{
+            width: 'min(430px, calc(100% - 32px))'
+          }}
+        >
+          <div
+            style={{
+              marginBottom: '22px',
+              textAlign: 'center'
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                marginBottom: '8px',
+                color: '#4db7ff',
+                fontSize: '11px',
+                fontWeight: 900,
+                letterSpacing: '1.2px'
+              }}
+            >
+              SEGURANÇA DE ACESSO
+            </span>
+
+            <h2
+              style={{
+                margin: '0 0 8px',
+                color: '#ffffff',
+                fontSize: '24px'
+              }}
+            >
+              Troca obrigatória de PIN
+            </h2>
+
+            <p
+              style={{
+                margin: 0,
+                color: '#cbd5e1',
+                fontSize: '13px',
+                lineHeight: 1.55
+              }}
+            >
+              O PIN usado no acesso é temporário. Defina um novo PIN para continuar no SIGMO.
+            </p>
+          </div>
+
+          <form
+            onSubmit={handleTrocaObrigatoria}
+            autoComplete="off"
+          >
+            <label>Novo PIN</label>
+            <input
+              name="sigmo_novo_pin"
+              type="password"
+              value={novoPin}
+              onChange={(event) =>
+                setNovoPin(
+                  limparNumero(event.target.value, 6)
+                )
+              }
+              placeholder="Digite 6 números"
+              maxLength={6}
+              inputMode="numeric"
+              autoComplete="new-password"
+              autoFocus
+            />
+
+            <label>Confirmar novo PIN</label>
+            <input
+              name="sigmo_confirmar_novo_pin"
+              type="password"
+              value={confirmarNovoPin}
+              onChange={(event) =>
+                setConfirmarNovoPin(
+                  limparNumero(event.target.value, 6)
+                )
+              }
+              placeholder="Repita o novo PIN"
+              maxLength={6}
+              inputMode="numeric"
+              autoComplete="new-password"
+            />
+
+            {trocaErro && (
+              <div className="error">
+                {trocaErro}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={trocaLoading}
+              style={{
+                display: 'block',
+                width: '100%',
+                height: '48px',
+                marginTop: '20px',
+                border: 'none',
+                borderRadius: '8px',
+                background: '#075eea',
+                color: '#ffffff',
+                fontSize: '16px',
+                fontWeight: 800,
+                cursor: trocaLoading
+                  ? 'not-allowed'
+                  : 'pointer',
+                opacity: trocaLoading ? 0.75 : 1
+              }}
+            >
+              {trocaLoading
+                ? 'Alterando PIN...'
+                : 'Alterar PIN e continuar'}
+            </button>
+          </form>
+        </section>
+      </div>
+    )
   }
 
   return (
@@ -423,6 +775,55 @@ export default function Login({
           </button>
         </form>
 
+        <button
+          type="button"
+          onClick={abrirRecuperacao}
+          disabled={loading}
+          style={{
+            width:
+              '100%',
+
+            marginTop:
+              '12px',
+
+            padding:
+              '9px 12px',
+
+            border:
+              'none',
+
+            background:
+              'transparent',
+
+            color:
+              '#8ecbff',
+
+            fontSize:
+              '13px',
+
+            fontWeight:
+              700,
+
+            textDecoration:
+              'underline',
+
+            textUnderlineOffset:
+              '3px',
+
+            cursor:
+              loading
+                ? 'not-allowed'
+                : 'pointer',
+
+            opacity:
+              loading
+                ? 0.6
+                : 1
+          }}
+        >
+          Esqueci meu PIN
+        </button>
+
         {release && (
           <button
             type="button"
@@ -516,6 +917,423 @@ export default function Login({
           </button>
         )}
       </section>
+
+      {recuperacaoAberta && (
+        <div
+          onClick={fecharRecuperacao}
+          style={{
+            position:
+              'fixed',
+
+            inset:
+              0,
+
+            zIndex:
+              9998,
+
+            display:
+              'flex',
+
+            alignItems:
+              'center',
+
+            justifyContent:
+              'center',
+
+            padding:
+              '24px',
+
+            background:
+              'rgba(2, 8, 23, 0.82)',
+
+            backdropFilter:
+              'blur(5px)'
+          }}
+        >
+          <section
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            style={{
+              width:
+                'min(460px, 100%)',
+
+              padding:
+                '26px',
+
+              border:
+                '1px solid rgba(77, 183, 255, 0.25)',
+
+              borderRadius:
+                '18px',
+
+              background:
+                'linear-gradient(145deg, #071a35 0%, #031022 100%)',
+
+              boxShadow:
+                '0 30px 90px rgba(0, 0, 0, 0.48)'
+            }}
+          >
+            <span
+              style={{
+                display:
+                  'block',
+
+                color:
+                  '#4db7ff',
+
+                fontSize:
+                  '11px',
+
+                fontWeight:
+                  900,
+
+                letterSpacing:
+                  '1px'
+              }}
+            >
+              RECUPERAÇÃO DE ACESSO
+            </span>
+
+            <h2
+              style={{
+                margin:
+                  '8px 0 8px',
+
+                color:
+                  '#ffffff',
+
+                fontSize:
+                  '22px'
+              }}
+            >
+              Esqueci meu PIN
+            </h2>
+
+            <p
+              style={{
+                margin:
+                  '0 0 20px',
+
+                color:
+                  '#b8c7dc',
+
+                fontSize:
+                  '13px',
+
+                lineHeight:
+                  1.55
+              }}
+            >
+              Informe o seu RE e o RE do responsável que receberá a solicitação. Nesta etapa, nenhum PIN será alterado automaticamente.
+            </p>
+
+            <form
+              onSubmit={handleSolicitarRecuperacao}
+              autoComplete="off"
+            >
+              <label
+                style={{
+                  display:
+                    'block',
+
+                  marginBottom:
+                    '7px',
+
+                  color:
+                    '#e7eef8',
+
+                  fontSize:
+                    '13px',
+
+                  fontWeight:
+                    800
+                }}
+              >
+                Seu RE
+              </label>
+
+              <input
+                type="text"
+                value={reRecuperacao}
+                onChange={(event) =>
+                  setReRecuperacao(
+                    limparNumero(
+                      event.target.value,
+                      6
+                    )
+                  )
+                }
+                placeholder="Digite o seu RE"
+                maxLength={6}
+                inputMode="numeric"
+                disabled={
+                  recuperacaoLoading ||
+                  Boolean(recuperacaoSucesso)
+                }
+                style={{
+                  boxSizing:
+                    'border-box',
+
+                  width:
+                    '100%',
+
+                  height:
+                    '46px',
+
+                  padding:
+                    '0 13px',
+
+                  border:
+                    '1px solid rgba(142, 203, 255, 0.28)',
+
+                  borderRadius:
+                    '9px',
+
+                  outline:
+                    'none',
+
+                  background:
+                    'rgba(255, 255, 255, 0.08)',
+
+                  color:
+                    '#ffffff',
+
+                  fontSize:
+                    '15px'
+                }}
+              />
+
+              <label
+                style={{
+                  display:
+                    'block',
+
+                  margin:
+                    '16px 0 7px',
+
+                  color:
+                    '#e7eef8',
+
+                  fontSize:
+                    '13px',
+
+                  fontWeight:
+                    800
+                }}
+              >
+                RE do responsável
+              </label>
+
+              <input
+                type="text"
+                value={reResponsavel}
+                onChange={(event) =>
+                  setReResponsavel(
+                    limparNumero(
+                      event.target.value,
+                      6
+                    )
+                  )
+                }
+                placeholder="Digite o RE do responsável"
+                maxLength={6}
+                inputMode="numeric"
+                disabled={
+                  recuperacaoLoading ||
+                  Boolean(recuperacaoSucesso)
+                }
+                style={{
+                  boxSizing:
+                    'border-box',
+
+                  width:
+                    '100%',
+
+                  height:
+                    '46px',
+
+                  padding:
+                    '0 13px',
+
+                  border:
+                    '1px solid rgba(142, 203, 255, 0.28)',
+
+                  borderRadius:
+                    '9px',
+
+                  outline:
+                    'none',
+
+                  background:
+                    'rgba(255, 255, 255, 0.08)',
+
+                  color:
+                    '#ffffff',
+
+                  fontSize:
+                    '15px'
+                }}
+              />
+
+              {recuperacaoErro && (
+                <div
+                  style={{
+                    marginTop:
+                      '15px',
+
+                    padding:
+                      '11px 12px',
+
+                    border:
+                      '1px solid rgba(248, 113, 113, 0.35)',
+
+                    borderRadius:
+                      '9px',
+
+                    background:
+                      'rgba(127, 29, 29, 0.28)',
+
+                    color:
+                      '#fecaca',
+
+                    fontSize:
+                      '13px'
+                  }}
+                >
+                  {recuperacaoErro}
+                </div>
+              )}
+
+              {recuperacaoSucesso && (
+                <div
+                  style={{
+                    marginTop:
+                      '15px',
+
+                    padding:
+                      '11px 12px',
+
+                    border:
+                      '1px solid rgba(52, 211, 153, 0.35)',
+
+                    borderRadius:
+                      '9px',
+
+                    background:
+                      'rgba(6, 78, 59, 0.35)',
+
+                    color:
+                      '#a7f3d0',
+
+                    fontSize:
+                      '13px',
+
+                    lineHeight:
+                      1.5
+                  }}
+                >
+                  {recuperacaoSucesso}
+                  <br />
+                  Procure o responsável pessoalmente para concluir a recuperação.
+                </div>
+              )}
+
+              <div
+                style={{
+                  display:
+                    'grid',
+
+                  gridTemplateColumns:
+                    recuperacaoSucesso
+                      ? '1fr'
+                      : '1fr 1fr',
+
+                  gap:
+                    '10px',
+
+                  marginTop:
+                    '20px'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={fecharRecuperacao}
+                  disabled={recuperacaoLoading}
+                  style={{
+                    minHeight:
+                      '44px',
+
+                    border:
+                      '1px solid rgba(255, 255, 255, 0.18)',
+
+                    borderRadius:
+                      '9px',
+
+                    background:
+                      'rgba(255, 255, 255, 0.07)',
+
+                    color:
+                      '#ffffff',
+
+                    fontWeight:
+                      800,
+
+                    cursor:
+                      recuperacaoLoading
+                        ? 'not-allowed'
+                        : 'pointer'
+                  }}
+                >
+                  {recuperacaoSucesso
+                    ? 'Fechar'
+                    : 'Cancelar'}
+                </button>
+
+                {!recuperacaoSucesso && (
+                  <button
+                    type="submit"
+                    disabled={recuperacaoLoading}
+                    style={{
+                      minHeight:
+                        '44px',
+
+                      border:
+                        'none',
+
+                      borderRadius:
+                        '9px',
+
+                      background:
+                        '#075eea',
+
+                      color:
+                        '#ffffff',
+
+                      fontWeight:
+                        800,
+
+                      cursor:
+                        recuperacaoLoading
+                          ? 'not-allowed'
+                          : 'pointer',
+
+                      opacity:
+                        recuperacaoLoading
+                          ? 0.72
+                          : 1
+                    }}
+                  >
+                    {recuperacaoLoading
+                      ? 'Enviando...'
+                      : 'Solicitar recuperação'}
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
 
       {releaseAberta && release && (
         <div

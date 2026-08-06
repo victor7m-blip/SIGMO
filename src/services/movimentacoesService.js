@@ -386,7 +386,7 @@ export async function listarMovimentacoes(
 ) {
   let query = supabase
     .from(
-      'sigmo_patrimonio_movimentacoes'
+      'sigmo_movimentacoes'
     )
     .select('*')
     .order(
@@ -448,7 +448,7 @@ export async function buscarMovimentacaoPorId(
     error: movimentacaoError
   } = await supabase
     .from(
-      'sigmo_patrimonio_movimentacoes'
+      'sigmo_movimentacoes'
     )
     .select('*')
     .eq('id', id)
@@ -482,12 +482,38 @@ export async function buscarMovimentacaoPorId(
     )
   }
 
+  const [aprovacoesResult, recebimentosResult] = await Promise.all([
+    supabase
+      .from('sigmo_movimentacao_aprovacoes')
+      .select('*')
+      .eq('movimentacao_id', id)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('sigmo_movimentacao_recebimentos')
+      .select('*')
+      .eq('movimentacao_id', id)
+      .order('created_at', { ascending: true })
+  ])
+
+  if (aprovacoesResult.error) {
+    console.warn(
+      'Não foi possível carregar as aprovações da movimentação:',
+      aprovacoesResult.error
+    )
+  }
+
+  if (recebimentosResult.error) {
+    console.warn(
+      'Não foi possível carregar os recebimentos da movimentação:',
+      recebimentosResult.error
+    )
+  }
+
   return {
     ...movimentacao,
-    itens:
-      itens ?? [],
-    aprovacoes: [],
-    recebimentos: []
+    itens: itens ?? [],
+    aprovacoes: aprovacoesResult.data ?? [],
+    recebimentos: recebimentosResult.data ?? []
   }
 }
 

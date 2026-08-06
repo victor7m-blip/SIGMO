@@ -20,6 +20,9 @@ import {
 import PolicialFotos from './PolicialFotos'
 
 const initialForm = {
+  tipo_cadastro: 'POLICIAL_27_BPM',
+  orgao_origem: 'POLÍCIA MILITAR DO ESTADO DE SÃO PAULO',
+  unidade_origem: '27º BPM/M',
   nome: '',
   nome_guerra: '',
   re: '',
@@ -76,13 +79,21 @@ const pelotoes = [
   'ADM'
 ]
 
+const tiposCadastro = [
+  { valor: 'POLICIAL_27_BPM', label: 'Policial do 27º BPM/M' },
+  { valor: 'POLICIAL_OUTRA_OPM', label: 'Policial de outra OPM' },
+  { valor: 'OUTRO_ORGAO', label: 'Integrante de outro órgão' },
+  { valor: 'CIVIL_AUTORIZADO', label: 'Civil autorizado' }
+]
+
 const perfis = [
   'ADMINISTRADOR',
   'P4',
   'COMANDANTE DE CIA',
   'ENCARREGADO DO SVDD',
   'AUXILIAR DO SVDD',
-  'USUÁRIO'
+  'USUÁRIO',
+  'USUARIO EXTERNO'
 ]
 
 const situacoes = [
@@ -95,6 +106,9 @@ const situacoes = [
 ]
 
 const CAMPOS_AUDITAVEIS = [
+  { campo: 'tipo_cadastro', label: 'Tipo de cadastro' },
+  { campo: 'orgao_origem', label: 'Órgão de origem' },
+  { campo: 'unidade_origem', label: 'Unidade de origem' },
   {
     campo: 'nome',
     label: 'Nome completo'
@@ -285,7 +299,13 @@ function gerarQrCodePolicial() {
 }
 
 function montarPayload(form) {
+  const tipoCadastro = upper(form.tipo_cadastro || 'POLICIAL_27_BPM').trim()
+  const externo = tipoCadastro !== 'POLICIAL_27_BPM'
+
   const payload = {
+    tipo_cadastro: tipoCadastro,
+    orgao_origem: upper(form.orgao_origem).trim(),
+    unidade_origem: upper(form.unidade_origem).trim(),
     nome:
       upper(form.nome).trim(),
 
@@ -302,25 +322,13 @@ function montarPayload(form) {
         form.posto_graduacao
       ).trim(),
 
-    companhia:
-      upper(
-        form.companhia
-      ).trim(),
+    companhia: externo ? '' : upper(form.companhia).trim(),
 
-    pelotao:
-      upper(
-        form.pelotao
-      ).trim(),
+    pelotao: externo ? '' : upper(form.pelotao).trim(),
 
-    equipe:
-      upper(
-        form.equipe
-      ).trim(),
+    equipe: externo ? '' : upper(form.equipe).trim(),
 
-    funcao:
-      upper(
-        form.funcao
-      ).trim(),
+    funcao: externo ? '' : upper(form.funcao).trim(),
 
     telefone:
       maskTelefone(
@@ -338,10 +346,7 @@ function montarPayload(form) {
         form.rg
       ).trim(),
 
-    perfil:
-      upper(
-        form.perfil
-      ).trim(),
+    perfil: externo ? 'USUARIO EXTERNO' : upper(form.perfil).trim(),
 
     situacao:
       upper(
@@ -376,10 +381,13 @@ function transformarPolicialEmForm(
   policial
 ) {
   if (!policial) {
-    return initialForm
+    return { ...initialForm }
   }
 
   return {
+    tipo_cadastro: upper(policial.tipo_cadastro || 'POLICIAL_27_BPM'),
+    orgao_origem: upper(policial.orgao_origem || 'POLÍCIA MILITAR DO ESTADO DE SÃO PAULO'),
+    unidade_origem: upper(policial.unidade_origem || '27º BPM/M'),
     nome:
       upper(
         policial.nome
@@ -494,7 +502,7 @@ function montarIdentificacaoPolicial(
       dados?.nome_guerra ||
       dados?.nome
     ) ||
-    'POLICIAL'
+    'USUÁRIO'
 
   const re =
     normalizarValorComparacao(
@@ -711,7 +719,7 @@ function PinTemporarioModal({
         </span>
 
         <h2>
-          Policial cadastrado
+          Cadastro concluído
         </h2>
 
         <p>
@@ -721,7 +729,7 @@ function PinTemporarioModal({
 
         <div className="policial-pin-identificacao">
           <span>
-            Policial
+            Pessoa
           </span>
 
           <strong>
@@ -778,7 +786,7 @@ function PinTemporarioModal({
               onConcluir
             }
           >
-            Concluir cadastro
+            Concluir
           </button>
         </div>
       </section>
@@ -831,6 +839,12 @@ export default function PolicialForm({
       .trim()
       .toUpperCase()
 
+  const usuarioEhAuxiliar =
+    ['AUXILIAR DO SVDD', 'AUXILIAR SVDD'].includes(perfilUsuario)
+
+  const cadastroExterno =
+    form.tipo_cadastro !== 'POLICIAL_27_BPM'
+
   const usuarioPolicialId =
     user?.policial_id ||
     user?.id_policial ||
@@ -865,8 +879,8 @@ export default function PolicialForm({
       )
     )
 
-  const usarFluxoSolicitacao =
-    perfilUsuario === 'USUÁRIO' &&
+  const somenteCadastroProprio =
+    ['USUÁRIO', 'USUARIO EXTERNO'].includes(perfilUsuario) &&
     editandoProprioCadastro
 
   const policialId =
@@ -885,13 +899,19 @@ export default function PolicialForm({
     setErro('')
     setSucesso('')
 
-    setForm(
-      transformarPolicialEmForm(
-        policialEditando
-      )
-    )
+    const proximoForm = transformarPolicialEmForm(policialEditando)
+
+    if (!policialEditando && usuarioEhAuxiliar) {
+      proximoForm.tipo_cadastro = 'POLICIAL_OUTRA_OPM'
+      proximoForm.orgao_origem = 'POLÍCIA MILITAR DO ESTADO DE SÃO PAULO'
+      proximoForm.unidade_origem = ''
+      proximoForm.perfil = 'USUARIO EXTERNO'
+    }
+
+    setForm(proximoForm)
   }, [
-    policialEditando
+    policialEditando,
+    usuarioEhAuxiliar
   ])
 
   function handleChange(
@@ -901,6 +921,35 @@ export default function PolicialForm({
       name,
       value
     } = event.target
+
+    if (
+      somenteCadastroProprio &&
+      !['nome_guerra', 'telefone', 'email', 'pelotao'].includes(name)
+    ) {
+      return
+    }
+
+    if (name === 'tipo_cadastro') {
+      const tipo = upper(value)
+      const externo = tipo !== 'POLICIAL_27_BPM'
+
+      setForm((prev) => ({
+        ...prev,
+        tipo_cadastro: tipo,
+        perfil: externo ? 'USUARIO EXTERNO' : (prev.perfil === 'USUARIO EXTERNO' ? 'USUÁRIO' : prev.perfil),
+        orgao_origem: tipo === 'POLICIAL_27_BPM'
+          ? 'POLÍCIA MILITAR DO ESTADO DE SÃO PAULO'
+          : prev.orgao_origem,
+        unidade_origem: tipo === 'POLICIAL_27_BPM'
+          ? '27º BPM/M'
+          : (prev.unidade_origem === '27º BPM/M' ? '' : prev.unidade_origem),
+        companhia: externo ? '' : prev.companhia,
+        pelotao: externo ? '' : prev.pelotao,
+        equipe: externo ? '' : prev.equipe,
+        funcao: externo ? '' : prev.funcao
+      }))
+      return
+    }
 
     if (name === 're') {
       setForm(
@@ -1003,6 +1052,26 @@ export default function PolicialForm({
   function validarPayload(
     payload
   ) {
+    if (!payload.tipo_cadastro) {
+      throw new Error('Informe o tipo de cadastro.')
+    }
+
+    if (payload.tipo_cadastro !== 'POLICIAL_27_BPM') {
+      if (!payload.orgao_origem) {
+        throw new Error('Informe o órgão de origem.')
+      }
+      if (!payload.unidade_origem) {
+        throw new Error('Informe a unidade de origem.')
+      }
+      if (payload.perfil !== 'USUARIO EXTERNO') {
+        throw new Error('O cadastro externo deve usar o perfil USUARIO EXTERNO.')
+      }
+    }
+
+    if (usuarioEhAuxiliar && payload.tipo_cadastro === 'POLICIAL_27_BPM') {
+      throw new Error('O Auxiliar do SVDD pode cadastrar somente público externo.')
+    }
+
     if (!payload.nome) {
       throw new Error(
         'Informe o nome do policial.'
@@ -1085,46 +1154,81 @@ export default function PolicialForm({
 
         let policialAtualizado
 
-        if (usarFluxoSolicitacao) {
-          await criarSolicitacao({
-            policialId:
+        if (somenteCadastroProprio) {
+          const alterouPelotao =
+            String(payload.pelotao || '') !==
+            String(dadosAnteriores.pelotao || '')
+
+          const payloadDireto = {
+            ...dadosAnteriores,
+            nome_guerra: payload.nome_guerra,
+            telefone: payload.telefone,
+            email: payload.email,
+            pelotao: dadosAnteriores.pelotao
+          }
+
+          const alteracoesDiretas = compararAlteracoes(
+            dadosAnteriores,
+            payloadDireto
+          )
+
+          let cadastroAtual = policialEditando
+
+          if (alteracoesDiretas.length > 0) {
+            cadastroAtual = await atualizarPolicial(
               policialEditando.id,
+              payloadDireto,
+              user
+            )
 
-            solicitadoPor:
-              policialEditando.id,
+            await registrarAuditoriaSegura({
+              acao: 'ATUALIZAR_PROPRIO_CADASTRO',
+              descricao: montarDescricaoAtualizacao({
+                user,
+                anterior: dadosAnteriores,
+                atual: payloadDireto,
+                alteracoes: alteracoesDiretas
+              }),
+              modulo: 'Policiais',
+              severidade: 'Informativo'
+            })
+          }
 
-            dadosAtuais:
-              policialEditando,
+          if (alterouPelotao) {
+            await criarSolicitacao({
+              policialId: policialEditando.id,
+              solicitadoPor: policialEditando.id,
+              dadosAtuais: cadastroAtual,
+              dadosNovos: {
+                ...payloadDireto,
+                pelotao: payload.pelotao
+              }
+            })
 
-            dadosNovos:
-              payload
-          })
+            await registrarAuditoriaSegura({
+              acao: 'SOLICITACAO_CADASTRAL',
+              descricao:
+                `${obterNomeUsuario(user)} solicitou alteração de pelotão.`,
+              modulo: 'Policiais',
+              severidade: 'Informativo'
+            })
+          }
 
-          await registrarAuditoriaSegura({
-            acao:
-              'SOLICITACAO_CADASTRAL',
-
-            descricao:
-              `${obterNomeUsuario(user)} solicitou alteração cadastral.`,
-
-            modulo:
-              'Policiais',
-
-            severidade:
-              'Informativo'
-          })
+          setForm(
+            transformarPolicialEmForm(cadastroAtual)
+          )
 
           setSucesso(
-            'Solicitação enviada para aprovação.'
+            alterouPelotao
+              ? 'Dados permitidos atualizados. A alteração de pelotão foi enviada para aprovação.'
+              : alteracoesDiretas.length > 0
+                ? 'Cadastro atualizado com sucesso.'
+                : 'Nenhuma alteração foi identificada.'
           )
 
-          onSaved?.(
-            policialEditando,
-            {
-              manterAberto: true
-            }
-          )
-
+          onSaved?.(cadastroAtual, {
+            manterAberto: true
+          })
           return
         }
 
@@ -1245,7 +1349,14 @@ export default function PolicialForm({
 
     setPinTemporario('')
     setPolicialCriado(null)
-    setForm(initialForm)
+    setForm(usuarioEhAuxiliar
+      ? {
+          ...initialForm,
+          tipo_cadastro: 'POLICIAL_OUTRA_OPM',
+          unidade_origem: '',
+          perfil: 'USUARIO EXTERNO'
+        }
+      : initialForm)
 
     onSaved?.(
       resultado
@@ -1264,12 +1375,12 @@ export default function PolicialForm({
           <div>
             <h3>
               {isEditing
-                ? 'Editar policial'
-                : 'Cadastrar policial'}
+                ? 'Editar cadastro'
+                : 'Cadastrar pessoa'}
             </h3>
 
             <p>
-              Preencha os dados funcionais e administrativos do policial.
+              Preencha os dados de identificação, origem e acesso ao SIGMO.
             </p>
           </div>
 
@@ -1316,6 +1427,54 @@ export default function PolicialForm({
         )}
 
         <div className="form-grid">
+          <label className="form-wide">
+            Tipo de cadastro
+
+            <select
+              name="tipo_cadastro"
+              value={form.tipo_cadastro}
+              onChange={handleChange}
+              disabled={somenteCadastroProprio || (usuarioEhAuxiliar && !cadastroExterno)}
+              required
+            >
+              {tiposCadastro
+                .filter((item) => !usuarioEhAuxiliar || item.valor !== 'POLICIAL_27_BPM')
+                .map((item) => (
+                  <option key={item.valor} value={item.valor}>
+                    {item.label}
+                  </option>
+                ))}
+            </select>
+          </label>
+
+          {cadastroExterno && (
+            <>
+              <label>
+                Órgão de origem
+                <input
+                  name="orgao_origem"
+                  value={form.orgao_origem}
+                  onChange={handleChange}
+                  placeholder="EX.: POLÍCIA MILITAR"
+                  required
+                
+              disabled={somenteCadastroProprio}/>
+              </label>
+
+              <label>
+                Unidade de origem
+                <input
+                  name="unidade_origem"
+                  value={form.unidade_origem}
+                  onChange={handleChange}
+                  placeholder="EX.: 10º BPM/M - 2ª CIA"
+                  required
+                
+              disabled={somenteCadastroProprio}/>
+              </label>
+            </>
+          )}
+
           <label>
             Nome completo
 
@@ -1328,7 +1487,8 @@ export default function PolicialForm({
                 handleChange
               }
               required
-            />
+            
+              disabled={somenteCadastroProprio}/>
           </label>
 
           <label>
@@ -1360,7 +1520,8 @@ export default function PolicialForm({
               placeholder="123456-A"
               maxLength={8}
               required
-            />
+            
+              disabled={somenteCadastroProprio}/>
           </label>
 
           <label>
@@ -1374,6 +1535,7 @@ export default function PolicialForm({
               onChange={
                 handleChange
               }
+              disabled={somenteCadastroProprio}
             >
               <option value="">
                 SELECIONE
@@ -1391,6 +1553,8 @@ export default function PolicialForm({
               )}
             </select>
           </label>
+          {!cadastroExterno && (
+            <>
                   <label>
             Companhia
 
@@ -1402,6 +1566,7 @@ export default function PolicialForm({
               onChange={
                 handleChange
               }
+              disabled={somenteCadastroProprio}
             >
               <option value="">
                 SELECIONE
@@ -1460,7 +1625,8 @@ export default function PolicialForm({
               onChange={
                 handleChange
               }
-            />
+            
+              disabled={somenteCadastroProprio}/>
           </label>
 
           <label>
@@ -1474,8 +1640,12 @@ export default function PolicialForm({
               onChange={
                 handleChange
               }
-            />
+            
+              disabled={somenteCadastroProprio}/>
           </label>
+
+            </>
+          )}
 
           <label>
             Telefone
@@ -1523,7 +1693,8 @@ export default function PolicialForm({
               inputMode="numeric"
               placeholder="111.111.111-11"
               maxLength={14}
-            />
+            
+              disabled={somenteCadastroProprio}/>
           </label>
 
           <label>
@@ -1537,7 +1708,8 @@ export default function PolicialForm({
               onChange={
                 handleChange
               }
-            />
+            
+              disabled={somenteCadastroProprio}/>
           </label>
 
           <label>
@@ -1545,12 +1717,10 @@ export default function PolicialForm({
 
             <select
               name="perfil"
-              value={
-                form.perfil
-              }
-              onChange={
-                handleChange
-              }
+              value={form.perfil}
+              onChange={handleChange}
+              disabled={somenteCadastroProprio || cadastroExterno}
+              required
             >
               <option value="">
                 SELECIONE
@@ -1580,6 +1750,7 @@ export default function PolicialForm({
               onChange={
                 handleChange
               }
+              disabled={somenteCadastroProprio}
             >
               {situacoes.map(
                 (item) => (
@@ -1607,10 +1778,11 @@ export default function PolicialForm({
               handleChange
             }
             rows={4}
-          />
+          
+              disabled={somenteCadastroProprio}/>
         </label>
 
-        {isEditing && (
+        {isEditing && !somenteCadastroProprio && (
           <PolicialFotos
             policialId={
               policialId

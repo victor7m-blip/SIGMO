@@ -307,14 +307,7 @@ function registroDisponivel({
     return true
   }
 
-  return [
-    'COFRE DO SVDD',
-    'SVDD',
-    'SERVIÇO DE DIA',
-    'SERVICO DE DIA'
-  ].some((local) =>
-    localNormalizado.includes(local)
-  )
+  return statusPermitido
 }
 
 async function buscarReferencias({
@@ -746,6 +739,52 @@ export async function listarPatrimoniosParaEntrega({
     ...estoquesQuantidade,
     ...patrimoniosIndividuais
   ]
+
+const origem = normalizarTexto(origemLocal)
+
+itens = itens.filter((item) => {
+  if (item.controla_quantidade) {
+    return true
+  }
+
+  const local = normalizarTexto(item.local_atual)
+  const status = normalizarTexto(item.status)
+
+  // Nunca entregar itens que já estão cautelados,
+  // em carga ou indisponíveis.
+  if (
+    [
+      'CAUTELADO',
+      'CARGA',
+      'EM SERVIÇO',
+      'EM_SERVICO',
+      'MANUTENÇÃO',
+      'MANUTENCAO',
+      'BAIXADO',
+      'APREENDIDO'
+    ].includes(status)
+  ) {
+    return false
+  }
+
+  // Visão do SVDD
+  if (origem.includes('SVDD')) {
+    return (
+      local.includes('COFRE DO SVDD') ||
+      local === 'SVDD'
+    )
+  }
+
+  // Visão do P4
+  if (origem.includes('P4')) {
+    return (
+      local.includes('DEPÓSITO DO P4') ||
+      local.includes('DEPOSITO DO P4')
+    )
+  }
+
+  return true
+})
 
   if (apenasDisponiveis) {
     itens = itens.filter(

@@ -5,10 +5,6 @@ import {
 } from 'react'
 
 import './Policiais.css'
-import './styles/policiaisForm.css'
-import './styles/policiaisHeader.css'
-import './styles/policiaisModal.css'
-import './styles/policiaisTable.css'
 import './components/policialViewModal.css'
 
 import PolicialForm from './components/PolicialForm'
@@ -67,7 +63,8 @@ const perfis = [
   'COMANDANTE DE CIA',
   'ENCARREGADO DO SVDD',
   'AUXILIAR DO SVDD',
-  'USUÁRIO'
+  'USUÁRIO',
+  'USUARIO EXTERNO'
 ]
 
 const companhias = [

@@ -131,39 +131,46 @@ export default function PolicialTable({
         policialParaExcluir.id
       )
 
-      await registerAudit(
-        'DELETE',
-        `Policial excluído: ${
-          policialParaExcluir.posto_graduacao ||
-          ''
-        } ${
-          policialParaExcluir.nome_guerra ||
-          'não informado'
-        } - RE ${
-          policialParaExcluir.re ||
-          'não informado'
-        }.`,
-        user,
-        'Policiais',
-        'Crítico'
-      )
+      const policialExcluido =
+        policialParaExcluir
 
-      onDeleted(
-        policialParaExcluir.id
+      onDeleted?.(
+        policialExcluido.id
       )
 
       setPolicialParaExcluir(
         null
       )
+
+      try {
+        await registerAudit(
+          'EXCLUIR_POLICIAL',
+          `Policial excluído: ${
+            policialExcluido.posto_graduacao ||
+            ''
+          } ${
+            policialExcluido.nome_guerra ||
+            'não informado'
+          } - RE ${
+            policialExcluido.re ||
+            'não informado'
+          }.`,
+          user,
+          'Policiais',
+          'Crítico'
+        )
+      } catch (auditError) {
+        console.error(
+          'O policial foi excluído, mas não foi possível registrar a auditoria:',
+          auditError
+        )
+      }
     } catch (error) {
       console.error(error)
 
       alert(
-        JSON.stringify(
-          error,
-          null,
-          2
-        )
+        error?.message ||
+        'Não foi possível excluir o policial.'
       )
     } finally {
       setExcluindo(false)

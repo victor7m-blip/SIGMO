@@ -163,13 +163,33 @@ function estaNoP4(arma) {
   const status = obterStatusArma(arma)
   const local = obterLocalArma(arma)
 
-  return (
-    status === 'RESERVA' ||
-    status === 'RECOLHIDO' ||
+  // A localização física prevalece sobre o status.
+  // Uma arma em RESERVA no COFRE DO SVDD não pode
+  // aparecer simultaneamente no P4.
+  if (estaNoSVDD(arma)) {
+    return false
+  }
+
+  if (
     local.includes('P4') ||
+    local.includes('DEPOSITO') ||
     local.includes('RESERVA') ||
-    local.includes('DEPOSITO')
-  )
+    local.includes('GUARDA DO QUARTEL')
+  ) {
+    return true
+  }
+
+  // Status é usado somente como compatibilidade para
+  // registros antigos que ainda não possuem local definido.
+  if (!local) {
+    return (
+      status === 'RESERVA' ||
+      status === 'ATIVO' ||
+      status === 'DISPONIVEL'
+    )
+  }
+
+  return false
 }
 
 function estaNoSVDD(arma) {
@@ -179,6 +199,22 @@ function estaNoSVDD(arma) {
     local.includes('SVDD') ||
     local.includes('SERVICO DE DIA') ||
     local.includes('COFRE DO SVDD')
+  )
+}
+
+function armaPertenceAoEscopoSVDD(arma) {
+  if (
+    normalizarTexto(arma?.propriedade) === 'PARTICULAR' ||
+    estaEmCarga(arma)
+  ) {
+    return false
+  }
+
+  return (
+    estaNoSVDD(arma) ||
+    estaCautelada(arma) ||
+    estaEmManutencao(arma) ||
+    estaNaoLocalizada(arma)
   )
 }
 
@@ -505,14 +541,28 @@ export default function Armas({ user, onAbrirPolicial }) {
 
       const resultado = await listarArmas({
         filtros: filtrosService,
-        pagina,
-        limite: LIMITE,
+        pagina: ehPerfilSVDD ? 1 : pagina,
+        limite: ehPerfilSVDD ? LIMITE_RESUMO : LIMITE,
         sortBy,
         sortDirection
       })
 
-      setArmas(resultado.data || [])
-      setTotal(resultado.total || 0)
+      const listaRecebida = resultado.data || []
+
+      if (ehPerfilSVDD) {
+        const listaVisivel = listaRecebida.filter(
+          armaPertenceAoEscopoSVDD
+        )
+
+        const inicio = (pagina - 1) * LIMITE
+        const fim = inicio + LIMITE
+
+        setArmas(listaVisivel.slice(inicio, fim))
+        setTotal(listaVisivel.length)
+      } else {
+        setArmas(listaRecebida)
+        setTotal(resultado.total || 0)
+      }
     } catch (error) {
       console.error(error)
 
@@ -527,7 +577,8 @@ export default function Armas({ user, onAbrirPolicial }) {
     filtros,
     pagina,
     sortBy,
-    sortDirection
+    sortDirection,
+    ehPerfilSVDD
   ])
 
   useEffect(() => {
@@ -567,14 +618,22 @@ export default function Armas({ user, onAbrirPolicial }) {
         sortDirection: 'desc'
       })
 
-      setArmasResumo(resultado.data || [])
+      const listaRecebida = resultado.data || []
+
+      setArmasResumo(
+        ehPerfilSVDD
+          ? listaRecebida.filter(
+              armaPertenceAoEscopoSVDD
+            )
+          : listaRecebida
+      )
     } catch (error) {
       console.error('Erro ao carregar resumo de armas:', error)
       setArmasResumo([])
     } finally {
       setLoadingResumo(false)
     }
-  }, [])
+  }, [ehPerfilSVDD])
 
   useEffect(() => {
     carregarResumo()
@@ -1589,14 +1648,16 @@ setFotoSelecionadaVisualizacao(
             onClick={resumo.svdd.total ? () => abrirPainelResumo('SVDD', 'Armas no Cofre do SVDD', 'Armamento atualmente sob guarda do Serviço de Dia.') : undefined}
             onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('SVDD', 'Cofre do SVDD', 'Armamento atualmente sob guarda do Serviço de Dia.', detalhe)}
           />
-          <ArmaResumoCard
-            titulo="Carga permanente"
-            detalhes={detalhesEspecies(resumo.carga)}
-            descricao="Vinculadas permanentemente a policiais"
-            destaque="azul"
-            onClick={resumo.carga.total ? () => abrirPainelResumo('CARGA', 'Carga permanente', 'Armas vinculadas permanentemente a policiais.') : undefined}
-            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('CARGA', 'Carga permanente', 'Armas vinculadas permanentemente a policiais.', detalhe)}
-          />
+          {!ehPerfilSVDD && (
+            <ArmaResumoCard
+              titulo="Carga permanente"
+              detalhes={detalhesEspecies(resumo.carga)}
+              descricao="Vinculadas permanentemente a policiais"
+              destaque="azul"
+              onClick={resumo.carga.total ? () => abrirPainelResumo('CARGA', 'Carga permanente', 'Armas vinculadas permanentemente a policiais.') : undefined}
+              onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('CARGA', 'Carga permanente', 'Armas vinculadas permanentemente a policiais.', detalhe)}
+            />
+          )}
           <ArmaResumoCard
             titulo="Cautelas ativas"
             detalhes={detalhesEspecies(resumo.cautelas)}

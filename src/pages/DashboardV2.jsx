@@ -16,9 +16,15 @@ import brasaoPM from '../assets/unidade/brasao-pm-sp.jpg'
 import useDashboard from '../hooks/useDashboard'
 import useDashboardVitrine from '../hooks/useDashboardVitrine'
 import {
+  ehUsuario,
   obterRotaInicial,
   podeAcessarRota
 } from '../services/permissionService'
+import {
+  listarCautelasAguardandoUsuario,
+  listarDevolucoesPendentesUsuario,
+  listarMateriaisEmServicoUsuario
+} from '../services/cautelasUsuarioService'
 import Locais from './Locais/Locais'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
@@ -29,6 +35,7 @@ import Tonfas from './Tonfas/Tonfas'
 import Municoes from './Municoes/Municoes'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
+import CautelasUsuario from './CautelasUsuario/CautelasUsuario'
 import TransferirMaterial from './TransferirMaterial/TransferirMaterial'
 import BaixarMaterial from './BaixarMaterial/BaixarMaterial'
 import CentralOperacional from './CentralOperacional'
@@ -63,6 +70,10 @@ function numero(valor) {
   return new Intl.NumberFormat(
     'pt-BR'
   ).format(Number(valor) || 0)
+}
+
+function obterQuantidadeMaterial(item) {
+  return Number(item?.quantidade || 1) || 1
 }
 
 function dataHora(valor) {
@@ -469,7 +480,7 @@ function PainelDashboard({
   } = dashboard
 
   const vitrine =
-    useDashboardVitrine()
+    useDashboardVitrine(user)
 
   const [agora, setAgora] =
     useState(() => new Date())
@@ -504,15 +515,12 @@ function PainelDashboard({
     Number(vitrine.tonfas.svdd || 0)
 
   const emUsoIntegrado =
-    Number(vitrine.armas.carga || 0) +
-    Number(
-      vitrine.armas.cautelas ||
-        0
-    ) +
-    Number(
-      vitrine.tonfas.emServico ||
-        0
-    )
+  Number(
+    vitrine.armas.cautelas || 0
+  ) +
+  Number(
+    vitrine.tonfas.emServico || 0
+  )
 
   const manutencaoIntegrada =
     Number(
@@ -1171,7 +1179,7 @@ function PainelDashboard({
             </button>
           </div>
 
-          <div className="sigmo-command-movements">
+          <div className="sigmo-command-movements sigmo-command-scroll">
             {timeline.length ? (
               timeline
                 .slice(0, 5)
@@ -1481,6 +1489,151 @@ function PainelDashboard({
   )
 }
 
+
+function PainelUsuario({ user, onNavegar }) {
+  const [dados, setDados] = useState({
+    aguardando: [],
+    materiais: [],
+    devolucoes: []
+  })
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    let ativo = true
+
+    async function carregar() {
+      try {
+        setLoading(true)
+        setErro('')
+        const [aguardando, materiais, devolucoes] = await Promise.all([
+          listarCautelasAguardandoUsuario(user),
+          listarMateriaisEmServicoUsuario(user),
+          listarDevolucoesPendentesUsuario(user)
+        ])
+
+        if (ativo) {
+          setDados({
+            aguardando: aguardando || [],
+            materiais: materiais || [],
+            devolucoes: devolucoes || []
+          })
+        }
+      } catch (error) {
+        if (ativo) {
+          setErro(error?.message || 'Não foi possível carregar seu painel.')
+        }
+      } finally {
+        if (ativo) setLoading(false)
+      }
+    }
+
+    carregar()
+    return () => { ativo = false }
+  }, [user])
+
+  const totalMateriais = dados.materiais.reduce(
+  (total, item) =>
+    total + obterQuantidadeMaterial(item),
+  0
+)
+
+  return (
+    <main className="sigmo-command-dashboard">
+      <header className="sigmo-command-header">
+        <div>
+          <h1>Painel Operacional</h1>
+          <p>Suas cautelas, cargas e movimentações patrimoniais.</p>
+        </div>
+      </header>
+
+      {erro && <div className="sigmo-command-error">{erro}</div>}
+
+      <section className="sigmo-command-kpi-strip">
+        <KpiStrip
+          icon="⬆"
+          tone="blue"
+          label="Aguardando recebimento"
+          value={dados.aguardando.length}
+          detail="carrinhos pendentes"
+        />
+        <KpiStrip
+          icon="▰"
+          tone="yellow"
+          label="Cautelas ativas"
+          value={totalMateriais}
+          detail="materiais sob sua responsabilidade"
+        />
+        <KpiStrip
+          icon="↩"
+          tone="purple"
+          label="Devoluções pendentes"
+          value={dados.devolucoes.length}
+          detail="aguardando aceite do SVDD"
+        />
+      </section>
+
+      <section className="sigmo-command-bottom-grid">
+        <article className="sigmo-command-panel">
+          <div className="sigmo-command-section-title">
+            <h2>Minhas operações</h2>
+          </div>
+          <div className="sigmo-command-shortcuts">
+            <button type="button" onClick={() => onNavegar('receber-material')}>
+              <DashboardIcon tone="blue">⬆</DashboardIcon>
+              <span>Receber Material</span>
+            </button>
+            <button type="button" onClick={() => onNavegar('devolver-material')}>
+              <DashboardIcon tone="purple">↩</DashboardIcon>
+              <span>Devolver Materiais</span>
+            </button>
+            <button type="button" onClick={() => onNavegar('policiais')}>
+              <DashboardIcon tone="cyan">●</DashboardIcon>
+              <span>Cadastro</span>
+            </button>
+          </div>
+        </article>
+
+        <article className="sigmo-command-panel">
+          <div className="sigmo-command-section-title">
+            <h2>Materiais sob sua responsabilidade</h2>
+          </div>
+          {loading ? (
+            <div className="sigmo-command-empty">Carregando...</div>
+          ) : dados.materiais.length === 0 ? (
+            <div className="sigmo-command-empty">
+              Nenhum material cautelado no momento.
+            </div>
+          ) : (
+            <div className="sigmo-command-movements">
+              {dados.materiais.map((item, index) => (
+                <div className="sigmo-command-movement" key={item.id || index}>
+                  <DashboardIcon tone="yellow">▰</DashboardIcon>
+                  <div className="sigmo-command-movement-copy">
+                    <strong>
+  {item.descricao || item.tipo || 'Material'}
+
+  {String(item?.tipo || '')
+    .trim()
+    .toLowerCase() === 'tonfa'
+    ? ` — Qtd. ${obterQuantidadeMaterial(item)}`
+    : ''}
+</strong>
+                    <span>{item.numero_patrimonio || item.patrimonio || item.id}</span>
+                  </div>
+                  <em className="sigmo-command-badge sigmo-command-badge-cautela">
+                    Cautela ativa
+                  </em>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
+    </main>
+  )
+}
+
 export default function DashboardV2({
   user,
   onLogout
@@ -1505,8 +1658,30 @@ export default function DashboardV2({
 })
 
   const [policialAbrirRe, setPolicialAbrirRe] = useState('')
+  const [avisoRecebimento, setAvisoRecebimento] = useState(0)
+  const [avisoVerificado, setAvisoVerificado] = useState(false)
 
   const dashboard = useDashboard()
+
+  useEffect(() => {
+    if (!ehUsuario(user) || avisoVerificado) return
+
+    let ativo = true
+    listarCautelasAguardandoUsuario(user)
+      .then((lista) => {
+        if (ativo && Array.isArray(lista) && lista.length > 0) {
+          setAvisoRecebimento(lista.length)
+        }
+      })
+      .catch((error) => {
+        console.warn('Não foi possível verificar materiais pendentes:', error)
+      })
+      .finally(() => {
+        if (ativo) setAvisoVerificado(true)
+      })
+
+    return () => { ativo = false }
+  }, [user, avisoVerificado])
 
   function setRoute(novaRota) {
   const rotaSolicitada =
@@ -1578,6 +1753,15 @@ useEffect(() => {
 
   function renderPage() {
     if (route === 'dashboard') {
+      if (ehUsuario(user)) {
+        return (
+          <PainelUsuario
+            user={user}
+            onNavegar={setRoute}
+          />
+        )
+      }
+
       return (
         <PainelDashboard
           user={user}
@@ -1616,6 +1800,19 @@ useEffect(() => {
     }
 
    if (route === 'receber-material') {
+  if (ehUsuario(user)) {
+    return (
+      <CautelasUsuario
+        user={user}
+        modo="receber"
+        onConcluido={() => {
+          setAvisoRecebimento(0)
+          dashboard.atualizar()
+        }}
+      />
+    )
+  }
+
   return (
     <ReceberMaterial
       user={user}
@@ -1626,6 +1823,18 @@ useEffect(() => {
     />
   )
 }
+
+    if (route === 'devolver-material') {
+      return (
+        <CautelasUsuario
+          user={user}
+          modo="devolver"
+          onConcluido={() => {
+            dashboard.atualizar()
+          }}
+        />
+      )
+    }
 
     if (route === 'transferir-material') {
       return (
@@ -1738,13 +1947,65 @@ if (route === 'tonfas') {
   }
 
   return (
-    <AppShell
-      user={user}
-      route={route}
-      setRoute={setRoute}
-      onLogout={onLogout}
-    >
-      {renderPage()}
-    </AppShell>
+    <>
+      <AppShell
+        user={user}
+        route={route}
+        setRoute={setRoute}
+        onLogout={onLogout}
+      >
+        {renderPage()}
+      </AppShell>
+
+      {avisoRecebimento > 0 && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          display: 'grid',
+          placeItems: 'center',
+          padding: 24,
+          background: 'rgba(3, 15, 32, .72)'
+        }}>
+          <section style={{
+            width: 'min(460px, 100%)',
+            borderRadius: 22,
+            padding: 28,
+            color: '#fff',
+            background: 'linear-gradient(135deg, #071d39 0%, #0b3f73 100%)',
+            boxShadow: '0 28px 70px rgba(0,0,0,.35)'
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.12em' }}>
+              MATERIAL AGUARDANDO RECEBIMENTO
+            </span>
+            <h2 style={{ margin: '10px 0 8px' }}>
+              Você possui {avisoRecebimento} carrinho(s) para receber
+            </h2>
+            <p style={{ opacity: .86, lineHeight: 1.5 }}>
+              Confira os materiais pagos pelo SVDD e confirme o recebimento do carrinho completo.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
+              <button
+                type="button"
+                onClick={() => setAvisoRecebimento(0)}
+                style={{ padding: '11px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,.35)', background: 'transparent', color: '#fff' }}
+              >
+                Depois
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAvisoRecebimento(0)
+                  setRoute('receber-material')
+                }}
+                style={{ padding: '11px 16px', borderRadius: 10, border: 0, background: '#fff', color: '#0b315a', fontWeight: 800 }}
+              >
+                Receber agora
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
   )
 }

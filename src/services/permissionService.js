@@ -4,7 +4,8 @@ export const PERFIS = {
   COMANDANTE_CIA: 'COMANDANTE DE CIA',
   ENCARREGADO_SVDD: 'ENCARREGADO DO SVDD',
   AUXILIAR_SVDD: 'AUXILIAR DO SVDD',
-  USUARIO: 'USUÁRIO'
+  USUARIO: 'USUÁRIO',
+  USUARIO_EXTERNO: 'USUARIO EXTERNO'
 }
 
 export const ROTAS = {
@@ -13,6 +14,7 @@ export const ROTAS = {
   MANUTENCOES: 'manutencoes',
   PAGAR_MATERIAL: 'pagar-material',
   RECEBER_MATERIAL: 'receber-material',
+  DEVOLVER_MATERIAL: 'devolver-material',
   TRANSFERIR_MATERIAL: 'transferir-material',
   BAIXAR_MATERIAL: 'baixar-material',
   MATERIAIS: 'materiais',
@@ -77,7 +79,9 @@ export function normalizarPerfil(perfil) {
     USUARIO:
       PERFIS.USUARIO,
     OPERADOR:
-      PERFIS.USUARIO
+      PERFIS.USUARIO,
+    'USUARIO EXTERNO': PERFIS.USUARIO_EXTERNO,
+    'USUÁRIO EXTERNO': PERFIS.USUARIO_EXTERNO
   }
 
   return aliases[valor] || valor
@@ -202,10 +206,15 @@ export function ehAuxiliar(user) {
   )
 }
 
+export function ehUsuarioExterno(user) {
+  return perfilEh(user, PERFIS.USUARIO_EXTERNO)
+}
+
 export function ehUsuario(user) {
   return perfilEh(
     user,
-    PERFIS.USUARIO
+    PERFIS.USUARIO,
+    PERFIS.USUARIO_EXTERNO
   )
 }
 
@@ -220,9 +229,85 @@ export function possuiAdministracaoCia(
   )
 }
 
+const GRADUACOES_SARGENTO_OU_SUPERIOR = [
+  '3 SGT PM',
+  '3 SARGENTO',
+  '2 SGT PM',
+  '2 SARGENTO',
+  '1 SGT PM',
+  '1 SARGENTO',
+  'SUBTEN PM',
+  'SUBTENENTE PM',
+  'SUBTENENTE',
+  'ASP OF PM',
+  'ASPIRANTE A OFICIAL PM',
+  'ASPIRANTE',
+  '2 TEN PM',
+  '2 TENENTE PM',
+  '1 TEN PM',
+  '1 TENENTE PM',
+  'CAP PM',
+  'CAPITAO PM',
+  'MAJ PM',
+  'MAJOR PM',
+  'TEN CEL PM',
+  'TENENTE CORONEL PM',
+  'CEL PM',
+  'CORONEL PM'
+]
+
+function normalizarPostoGraduacao(valor) {
+  return removerAcentos(valor)
+    .trim()
+    .toUpperCase()
+    .replace(/[º°]/g, '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+export function possuiGraduacaoSargentoOuSuperior(user) {
+  const graduacao = normalizarPostoGraduacao(
+    user?.posto_graduacao ||
+    user?.postoGraduacao ||
+    user?.graduacao ||
+    ''
+  )
+
+  return GRADUACOES_SARGENTO_OU_SUPERIOR.includes(
+    graduacao
+  )
+}
+
+export function podeGerenciarSolicitacoesCadastrais(user) {
+  return perfilEh(
+    user,
+    PERFIS.ADMINISTRADOR,
+    PERFIS.COMANDANTE_CIA,
+    PERFIS.ENCARREGADO_SVDD
+  )
+}
+
+export function podeAcessarRecuperacaoPin(user) {
+  if (!user || ehAuxiliar(user)) {
+    return false
+  }
+
+  return (
+    perfilEh(
+      user,
+      PERFIS.ADMINISTRADOR,
+      PERFIS.P4,
+      PERFIS.COMANDANTE_CIA,
+      PERFIS.ENCARREGADO_SVDD
+    ) ||
+    possuiGraduacaoSargentoOuSuperior(user)
+  )
+}
+
 const ROTAS_USUARIO = [
+  ROTAS.DASHBOARD,
   ROTAS.RECEBER_MATERIAL,
-  ROTAS.MATERIAIS,
+  ROTAS.DEVOLVER_MATERIAL,
   ROTAS.POLICIAIS
 ]
 
@@ -251,10 +336,8 @@ const ROTAS_P4 = [
 const ROTAS_AUXILIAR = [
   ROTAS.DASHBOARD,
   ROTAS.CENTRAL_OPERACIONAL,
-  ROTAS.MANUTENCOES,
   ROTAS.PAGAR_MATERIAL,
   ROTAS.RECEBER_MATERIAL,
-  ROTAS.TRANSFERIR_MATERIAL,
   ROTAS.MATERIAIS,
   ROTAS.POLICIAIS,
   ROTAS.ARMAS,
@@ -270,6 +353,8 @@ const ROTAS_AUXILIAR = [
 
 const ROTAS_ENCARREGADO = [
   ...ROTAS_AUXILIAR,
+  ROTAS.MANUTENCOES,
+  ROTAS.TRANSFERIR_MATERIAL,
   ROTAS.BAIXAR_MATERIAL,
   ROTAS.RELATORIOS,
   ROTAS.AUDITORIA,
@@ -289,6 +374,9 @@ const ROTAS_ADMINISTRADOR = [
 
 const ROTAS_POR_PERFIL = {
   [PERFIS.USUARIO]:
+    ROTAS_USUARIO,
+
+  [PERFIS.USUARIO_EXTERNO]:
     ROTAS_USUARIO,
 
   [PERFIS.P4]:
@@ -311,10 +399,23 @@ export function obterRotasPermitidas(user) {
   const perfil =
     obterPerfilEfetivo(user)
 
-  return (
+  const rotasBase =
     ROTAS_POR_PERFIL[perfil] ||
     ROTAS_USUARIO
-  )
+
+  if (
+    podeAcessarRecuperacaoPin(user) &&
+    !rotasBase.includes(
+      ROTAS.SOLICITACOES_CADASTRAIS
+    )
+  ) {
+    return [
+      ...rotasBase,
+      ROTAS.SOLICITACOES_CADASTRAIS
+    ]
+  }
+
+  return rotasBase
 }
 
 export function podeAcessarRota(
@@ -330,7 +431,7 @@ export function podeAcessarRota(
 
 export function obterRotaInicial(user) {
   if (ehUsuario(user)) {
-    return ROTAS.POLICIAIS
+    return ROTAS.DASHBOARD
   }
 
   return ROTAS.DASHBOARD
@@ -366,9 +467,15 @@ export function podeVisualizarPoliciais(
 export function podeCadastrarPolicial(
   user
 ) {
-  return possuiAdministracaoCia(
-    user
-  )
+  return possuiAdministracaoCia(user) || ehAuxiliar(user)
+}
+
+export function podeCadastrarPolicialInterno(user) {
+  return possuiAdministracaoCia(user)
+}
+
+export function podeCadastrarUsuarioExterno(user) {
+  return possuiAdministracaoCia(user) || ehAuxiliar(user)
 }
 
 export function podePesquisarOutrosPoliciais(

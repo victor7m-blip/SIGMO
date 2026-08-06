@@ -1,3 +1,16 @@
+import {
+  useEffect,
+  useState
+} from 'react'
+
+import {
+  listarMateriaisEmServicoUsuario
+} from '../../services/cautelasUsuarioService'
+
+import {
+  ehUsuario
+} from '../../services/permissionService'
+
 import './Materiais.css'
 
 const categorias = [
@@ -123,10 +136,152 @@ const atalhos = [
   }
 ]
 
+function obterDescricaoUsuario(item) {
+  return (
+    item?.descricao ||
+    item?.nome ||
+    item?.tipo ||
+    item?.categoria ||
+    'Material operacional'
+  )
+}
+
+function obterIdentificacaoUsuario(item) {
+  return (
+    item?.numero_patrimonio ||
+    item?.patrimonio ||
+    item?.identificador ||
+    item?.numero_serie ||
+    item?.codigo ||
+    item?.id ||
+    'Sem identificação'
+  )
+}
+
+function MateriaisUsuario({ user, onNavegar }) {
+  const [materiais, setMateriais] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    let ativo = true
+
+    async function carregar() {
+      try {
+        setLoading(true)
+        setErro('')
+
+        const data =
+          await listarMateriaisEmServicoUsuario(user)
+
+        if (ativo) {
+          setMateriais(data || [])
+        }
+      } catch (error) {
+        if (ativo) {
+          setErro(
+            error?.message ||
+            'Não foi possível carregar seus materiais.'
+          )
+        }
+      } finally {
+        if (ativo) {
+          setLoading(false)
+        }
+      }
+    }
+
+    carregar()
+
+    return () => {
+      ativo = false
+    }
+  }, [user])
+
+  return (
+    <main className="meus-materiais-page">
+      <header className="meus-materiais-hero">
+        <div>
+          <span>RESPONSABILIDADE INDIVIDUAL</span>
+          <h1>Meus materiais</h1>
+          <p>
+            Consulte somente os materiais que estão cautelados para você neste momento.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onNavegar?.('receber-material')}
+        >
+          Gerenciar cautela
+        </button>
+      </header>
+
+      {erro && (
+        <div className="meus-materiais-erro">
+          {erro}
+        </div>
+      )}
+
+      {loading ? (
+        <section className="meus-materiais-vazio">
+          Carregando materiais...
+        </section>
+      ) : materiais.length === 0 ? (
+        <section className="meus-materiais-vazio">
+          <strong>
+            Nenhum material está cautelado para você no momento.
+          </strong>
+          <p>
+            Carrinhos pagos pelo SVDD devem ser aceitos em Receber cautela.
+          </p>
+        </section>
+      ) : (
+        <section className="meus-materiais-grid">
+          {materiais.map((item) => (
+            <article
+              key={item.id}
+              className="meus-materiais-card"
+            >
+              <span className="meus-materiais-kicker">
+                EM SERVIÇO
+              </span>
+              <h2>{obterDescricaoUsuario(item)}</h2>
+              <dl>
+                <div>
+                  <dt>Identificação</dt>
+                  <dd>{obterIdentificacaoUsuario(item)}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{item.status || 'CAUTELADO'}</dd>
+                </div>
+                <div>
+                  <dt>Quantidade</dt>
+                  <dd>{Number(item.quantidade || 1)}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </section>
+      )}
+    </main>
+  )
+}
+
 export default function Materiais({
   user,
   onNavegar
 }) {
+
+  if (ehUsuario(user)) {
+    return (
+      <MateriaisUsuario
+        user={user}
+        onNavegar={onNavegar}
+      />
+    )
+  }
 
   function abrirCategoria(categoria) {
   console.log('Categoria clicada:', categoria)

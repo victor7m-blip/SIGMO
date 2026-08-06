@@ -5,6 +5,11 @@ import {
 } from 'react'
 
 import {
+  obterPerfilEfetivo,
+  PERFIS
+} from '../services/permissionService'
+
+import {
   listarArmas
 } from '../services/armasService'
 
@@ -42,15 +47,15 @@ function localArma(arma) {
 
 function resumirArmas(lista) {
   const resumo = {
-    total: lista.length,
-    p4: 0,
-    svdd: 0,
-    carga: 0,
-    cautelas: 0,
-    manutencao: 0,
-    naoLocalizadas: 0,
-    particulares: 0
-  }
+    total: 0,
+    p4:0,
+    svdd:0,
+    carga:0,
+    cautelas:0,
+    manutencao:0,
+    naoLocalizadas:0,
+    particulares:0
+}
 
   lista.forEach((arma) => {
     const status =
@@ -132,7 +137,16 @@ function resumirArmas(lista) {
     resumo.naoLocalizadas += 1
   })
 
-  return resumo
+  resumo.total =
+    resumo.p4 +
+    resumo.svdd +
+    resumo.carga +
+    resumo.cautelas +
+    resumo.manutencao +
+    resumo.naoLocalizadas +
+    resumo.particulares
+
+return resumo
 }
 
 function quantidade(item) {
@@ -234,6 +248,267 @@ function resumirTonfas(lista) {
   }
 }
 
+function obterPolicialId(user) {
+  return (
+    user?.policial_id ||
+    user?.id_policial ||
+    user?.policial?.id ||
+    null
+  )
+}
+
+function armaPertenceAoUsuario(
+  arma,
+  user
+) {
+  const policialId =
+    obterPolicialId(user)
+
+  if (!policialId) {
+    return false
+  }
+
+  return [
+    arma?.carga_policial_id,
+    arma?.proprietario_policial_id,
+    arma?.responsavel_atual_id,
+    arma?.recebedor_id
+  ].some(
+    (id) =>
+      id &&
+      String(id) ===
+        String(policialId)
+  )
+}
+
+function filtrarArmasPorPerfil(
+  lista,
+  user
+) {
+  const perfil =
+    obterPerfilEfetivo(user)
+
+  if (
+    perfil ===
+      PERFIS.ADMINISTRADOR ||
+    perfil ===
+      PERFIS.COMANDANTE_CIA
+  ) {
+    return lista
+  }
+
+  if (perfil === PERFIS.P4) {
+    return lista.filter(
+      (arma) => {
+        const status =
+          statusArma(arma)
+
+        const local =
+          localArma(arma)
+
+        return (
+          (
+            status === 'RESERVA' ||
+            status === 'ATIVO' ||
+            status === 'RECOLHIDO'
+          ) &&
+          (
+            local.includes('P4') ||
+            local.includes('DEPOSITO') ||
+            local.includes('RESERVA') ||
+            local === ''
+          )
+        )
+      }
+    )
+  }
+
+  if (
+    perfil ===
+      PERFIS.ENCARREGADO_SVDD ||
+    perfil ===
+      PERFIS.AUXILIAR_SVDD
+  ) {
+    return lista.filter((arma) => {
+      const status =
+        statusArma(arma)
+
+      const local =
+        localArma(arma)
+
+      const particular =
+        normalizar(
+          arma?.propriedade
+        ) === 'PARTICULAR'
+
+      const cargaPermanente =
+        status === 'CARGA' ||
+        Boolean(
+          arma?.carga_policial_id
+        )
+
+      if (
+        particular ||
+        cargaPermanente
+      ) {
+        return false
+      }
+
+      if (
+        local.includes('SVDD') ||
+        local.includes(
+          'SERVICO DE DIA'
+        )
+      ) {
+        return true
+      }
+
+      if (
+        status.includes('CAUTELA') ||
+        local.includes('CAUTELA')
+      ) {
+        return true
+      }
+
+      if (
+        status.includes(
+          'MANUTENCAO'
+        ) ||
+        local.includes(
+          'MANUTENCAO'
+        )
+      ) {
+        return true
+      }
+
+      return false
+    })
+  }
+
+  if (
+    perfil === PERFIS.USUARIO ||
+    perfil ===
+      PERFIS.USUARIO_EXTERNO
+  ) {
+    return lista.filter(
+      (arma) =>
+        armaPertenceAoUsuario(
+          arma,
+          user
+        )
+    )
+  }
+
+  return lista
+}
+
+function ajustarTonfasPorPerfil(
+  resumo,
+  user
+) {
+  const perfil =
+    obterPerfilEfetivo(user)
+
+  if (
+    perfil ===
+      PERFIS.ADMINISTRADOR ||
+    perfil ===
+      PERFIS.COMANDANTE_CIA
+  ) {
+    return resumo
+  }
+
+  if (perfil === PERFIS.P4) {
+    return {
+      ...resumo,
+      geral: {
+        ...resumo.geral,
+        total:
+          resumo.geral.p4,
+        svdd: 0,
+        emServico: 0,
+        manutencao: 0
+      },
+      tonfasDetalhe: {
+        ...resumo.tonfasDetalhe,
+        total:
+          resumo.tonfasDetalhe.p4,
+        svdd: 0,
+        emServico: 0,
+        manutencao: 0
+      },
+      cassetetesDetalhe: {
+        ...resumo.cassetetesDetalhe,
+        total:
+          resumo.cassetetesDetalhe.p4,
+        svdd: 0,
+        emServico: 0,
+        manutencao: 0
+      }
+    }
+  }
+
+  if (
+    perfil ===
+      PERFIS.ENCARREGADO_SVDD ||
+    perfil ===
+      PERFIS.AUXILIAR_SVDD
+  ) {
+    const ajustarDetalhe =
+      (detalhe) => ({
+        ...detalhe,
+
+        total:
+          Number(
+            detalhe.svdd || 0
+          ) +
+          Number(
+            detalhe.emServico || 0
+          ) +
+          Number(
+            detalhe.manutencao || 0
+          ),
+
+        p4: 0
+      })
+
+    const tonfasDetalhe =
+      ajustarDetalhe(
+        resumo.tonfasDetalhe
+      )
+
+    const cassetetesDetalhe =
+      ajustarDetalhe(
+        resumo.cassetetesDetalhe
+      )
+
+    return {
+      ...resumo,
+
+      geral: {
+        ...resumo.geral,
+
+        total:
+          tonfasDetalhe.total +
+          cassetetesDetalhe.total,
+
+        p4: 0,
+
+        tonfas:
+          tonfasDetalhe.total,
+
+        cassetetes:
+          cassetetesDetalhe.total
+      },
+
+      tonfasDetalhe,
+      cassetetesDetalhe
+    }
+  }
+
+  return resumo
+}
+
 const INICIAL = {
   armas: {
     total: 0,
@@ -270,7 +545,9 @@ const INICIAL = {
   }
 }
 
-export default function useDashboardVitrine() {
+export default function useDashboardVitrine(
+  user
+) {
   const [dados, setDados] =
     useState(INICIAL)
 
@@ -300,26 +577,40 @@ export default function useDashboardVitrine() {
           })
         ])
 
-        const tonfasResumo =
-          resumirTonfas(
-            tonfasResultado?.data ||
-              []
-          )
+        const armasFiltradas =
+  filtrarArmasPorPerfil(
+    armasResultado?.data || [],
+    user
+  )
 
-        setDados({
-          armas: resumirArmas(
-            armasResultado?.data ||
-              []
-          ),
-          tonfas:
-            tonfasResumo.geral,
-          tonfasDetalhe:
-            tonfasResumo
-              .tonfasDetalhe,
-          cassetetesDetalhe:
-            tonfasResumo
-              .cassetetesDetalhe
-        })
+const tonfasResumoOriginal =
+  resumirTonfas(
+    tonfasResultado?.data || []
+  )
+
+const tonfasResumo =
+  ajustarTonfasPorPerfil(
+    tonfasResumoOriginal,
+    user
+  )
+
+setDados({
+  armas:
+    resumirArmas(
+      armasFiltradas
+    ),
+
+  tonfas:
+    tonfasResumo.geral,
+
+  tonfasDetalhe:
+    tonfasResumo
+      .tonfasDetalhe,
+
+  cassetetesDetalhe:
+    tonfasResumo
+      .cassetetesDetalhe
+})
       } catch (error) {
         console.error(
           'Erro ao carregar vitrine do dashboard:',
@@ -333,7 +624,7 @@ export default function useDashboardVitrine() {
       } finally {
         setLoading(false)
       }
-    }, [])
+    }, [user])
 
   useEffect(() => {
     atualizar()

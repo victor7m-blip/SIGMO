@@ -57,7 +57,7 @@ export default function RecebedorCard({
 
         if (!encontrado) {
           setPolicial(null)
-          setErro('Policial não encontrado.')
+          setErro('Pessoa não encontrada no cadastro.')
           onSelecionado?.(null)
           return
         }
@@ -135,11 +135,15 @@ export default function RecebedorCard({
             </div>
 
             <div>
-              {policial.companhia}
+              {policial.tipo_cadastro === 'POLICIAL_27_BPM'
+                ? policial.companhia
+                : policial.orgao_origem}
             </div>
 
             <div>
-              {policial.pelotao}
+              {policial.tipo_cadastro === 'POLICIAL_27_BPM'
+                ? policial.pelotao
+                : policial.unidade_origem}
             </div>
 
             <small>

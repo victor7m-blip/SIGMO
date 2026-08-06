@@ -9,8 +9,8 @@ import {
 } from 'qrcode.react'
 
 import {
-  supabase
-} from '../../../services/supabaseClient'
+  obterPolicialPorId
+} from '../../../services/policiaisService'
 
 import './policialViewModal.css'
 
@@ -35,30 +35,24 @@ export default function PolicialViewModal({
   useEffect(() => {
     setPolicialAtual(policial)
 
+    let ativo = true
+
     async function carregarPolicialAtualizado() {
       if (!policial?.id) {
         return
       }
 
       try {
-        const {
-          data,
-          error
-        } = await supabase
-          .from('policiais')
-          .select('*')
-          .eq(
-            'id',
+        const dados =
+          await obterPolicialPorId(
             policial.id
           )
-          .maybeSingle()
 
-        if (error) {
-          throw error
-        }
-
-        if (data) {
-          setPolicialAtual(data)
+        if (
+          ativo &&
+          dados
+        ) {
+          setPolicialAtual(dados)
         }
       } catch (error) {
         console.error(
@@ -69,6 +63,10 @@ export default function PolicialViewModal({
     }
 
     carregarPolicialAtualizado()
+
+    return () => {
+      ativo = false
+    }
   }, [policial])
 
   const fotoPrincipal =
@@ -124,22 +122,7 @@ export default function PolicialViewModal({
 
   const qrValue =
     policialAtual.qr_code ||
-    JSON.stringify({
-      modulo:
-        'POLICIAIS',
-
-      id:
-        policialAtual.id,
-
-      nome:
-        policialAtual.nome,
-
-      nome_guerra:
-        policialAtual.nome_guerra,
-
-      re:
-        policialAtual.re
-    })
+    `SIGMO-POLICIAL-${policialAtual.id}`
 
   return (
     <div className={`policial-modal-overlay${modoLateral ? ' policial-modal-overlay-lateral' : ''}`}>

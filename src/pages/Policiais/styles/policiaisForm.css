@@ -524,3 +524,14 @@
     width: 100%;
   }
 }
+/* Usuário externo */
+.policial-form .form-wide {
+  grid-column: 1 / -1;
+}
+
+.policial-form select:disabled,
+.policial-form input:disabled {
+  cursor: not-allowed;
+  background: #eef2f7;
+  color: #475467;
+}

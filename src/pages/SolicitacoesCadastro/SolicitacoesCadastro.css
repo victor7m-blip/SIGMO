@@ -953,3 +953,574 @@
     width: 100%;
   }
 }
+/* =========================================================
+   RECUPERAÇÃO DE PIN
+========================================================= */
+
+.solicitacoes-subtitulo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 26px 0 16px;
+}
+
+.solicitacoes-subtitulo:first-of-type {
+  margin-top: 0;
+}
+
+.solicitacoes-subtitulo span {
+  display: block;
+  margin-bottom: 5px;
+  color: #075eea;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.solicitacoes-subtitulo h2 {
+  margin: 0;
+  color: #0b1f38;
+  font-size: 22px;
+}
+
+.solicitacoes-subtitulo p {
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: 14px;
+}
+
+.solicitacoes-subtitulo .btn-secondary {
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #344054;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.recuperacoes-pin-bloco {
+  margin-bottom: 30px;
+}
+
+.recuperacoes-pin-resumo {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recuperacoes-pin-filtros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.recuperacoes-pin-filtros label {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.recuperacoes-pin-filtros select {
+  min-width: 190px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+}
+
+.recuperacoes-pin-lista {
+  display: grid;
+  gap: 14px;
+}
+
+.recuperacao-pin-card {
+  padding: 18px;
+  border: 1px solid #e4e7ec;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+}
+
+.recuperacao-pin-card-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.recuperacao-pin-tipo {
+  display: block;
+  margin-bottom: 5px;
+  color: #075eea;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.recuperacao-pin-card h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 17px;
+}
+
+.recuperacao-pin-card-topo p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.recuperacao-pin-detalhes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.recuperacao-pin-detalhes span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 13px;
+}
+
+.recuperacao-pin-detalhes strong {
+  color: #344054;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.recuperacao-pin-observacao {
+  margin: 14px 0 0;
+  color: #475467;
+  font-size: 13px;
+}
+
+.recuperacao-pin-proxima-etapa {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid #b2ddff;
+  border-radius: 10px;
+  background: #eff8ff;
+  color: #175cd3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .solicitacoes-subtitulo,
+  .recuperacao-pin-card-topo {
+    flex-direction: column;
+  }
+
+  .solicitacoes-subtitulo .btn-secondary,
+  .recuperacoes-pin-filtros select {
+    width: 100%;
+  }
+
+  .recuperacoes-pin-filtros {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recuperacao-pin-detalhes,
+  .recuperacoes-pin-resumo {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   RECUPERAÇÃO DE PIN — APROVAÇÃO E CREDENCIAL
+========================================================= */
+
+.recuperacao-pin-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e4e7ec;
+}
+
+.recuperacao-pin-btn {
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.18s, opacity 0.18s, background 0.18s;
+}
+
+.recuperacao-pin-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.recuperacao-pin-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.recuperacao-pin-btn-aprovar {
+  border: 1px solid #075eea;
+  background: #075eea;
+  color: #ffffff;
+}
+
+.recuperacao-pin-btn-aprovar:hover:not(:disabled) {
+  background: #064fc6;
+}
+
+.recuperacao-pin-btn-reprovar {
+  border: 1px solid #d92d20;
+  background: #ffffff;
+  color: #b42318;
+}
+
+.recuperacao-pin-btn-reprovar:hover:not(:disabled) {
+  background: #fef3f2;
+}
+
+.recuperacao-pin-btn-cancelar {
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  color: #344054;
+}
+
+.recuperacao-pin-modal-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(2, 8, 23, 0.76);
+  backdrop-filter: blur(5px);
+}
+
+.recuperacao-pin-modal {
+  width: min(500px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 30px 90px rgba(2, 8, 23, 0.45);
+}
+
+.recuperacao-pin-modal-kicker {
+  display: block;
+  color: #075eea;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.recuperacao-pin-modal-kicker-alerta {
+  color: #b42318;
+}
+
+.recuperacao-pin-modal h3 {
+  margin: 8px 0 8px;
+  color: #0b1f38;
+  font-size: 24px;
+}
+
+.recuperacao-pin-modal p {
+  margin: 0;
+  color: #667085;
+  line-height: 1.55;
+}
+
+.recuperacao-pin-modal textarea {
+  width: 100%;
+  min-height: 110px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  resize: vertical;
+  border: 1px solid #d0d5dd;
+  border-radius: 11px;
+  outline: none;
+  color: #101828;
+  font: inherit;
+}
+
+.recuperacao-pin-modal textarea:focus {
+  border-color: #075eea;
+  box-shadow: 0 0 0 3px rgba(7, 94, 234, 0.12);
+}
+
+.recuperacao-pin-modal-aviso {
+  margin-top: 18px;
+  padding: 13px 14px;
+  border: 1px solid #fedf89;
+  border-radius: 11px;
+  background: #fffaeb;
+  color: #93370d;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.recuperacao-pin-modal-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.recuperacao-pin-credencial {
+  text-align: center;
+}
+
+.recuperacao-pin-identificacao {
+  display: grid;
+  gap: 4px;
+  margin-top: 18px;
+  color: #101828;
+}
+
+.recuperacao-pin-identificacao span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.recuperacao-pin-codigo {
+  margin: 22px 0 12px;
+  padding: 18px;
+  border: 2px dashed #84adff;
+  border-radius: 16px;
+  background: #eff4ff;
+  color: #073b98;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: clamp(34px, 9vw, 52px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  user-select: all;
+}
+
+.recuperacao-pin-copiar {
+  min-height: 40px;
+  padding: 9px 15px;
+  border: 1px solid #84adff;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #075eea;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.recuperacao-pin-validade {
+  margin-top: 14px !important;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.recuperacao-pin-concluir {
+  width: 100%;
+  margin-top: 20px;
+}
+
+@media (max-width: 640px) {
+  .recuperacao-pin-acoes,
+  .recuperacao-pin-modal-acoes {
+    flex-direction: column-reverse;
+  }
+
+  .recuperacao-pin-btn {
+    width: 100%;
+  }
+
+  .recuperacao-pin-modal {
+    padding: 22px;
+  }
+}
+
+/* =========================================================
+   PADRÃO VISUAL SIGMO — CABEÇALHO AZUL EM DEGRADÊ
+   Aplicado em 02/08/2026
+========================================================= */
+
+.solicitacoes-page {
+  min-width: 0;
+}
+
+.solicitacoes-header {
+  position: relative;
+  min-height: 148px;
+  margin: 0 0 22px;
+  padding: 26px 30px;
+  overflow: hidden;
+  border: 1px solid rgba(46, 123, 211, 0.22);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 82% 20%, rgba(37, 99, 235, 0.26), transparent 36%),
+    linear-gradient(135deg, #071f3d 0%, #082b55 54%, #0a3970 100%);
+  box-shadow: 0 14px 34px rgba(7, 31, 61, 0.16);
+}
+
+.solicitacoes-header::after {
+  position: absolute;
+  right: -110px;
+  bottom: -155px;
+  width: 390px;
+  height: 260px;
+  border: 1px solid rgba(96, 165, 250, 0.13);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+  transform: rotate(-8deg);
+}
+
+.solicitacoes-header > div {
+  position: relative;
+  z-index: 1;
+  max-width: 780px;
+}
+
+.solicitacoes-kicker {
+  margin-bottom: 7px;
+  color: #65b7ff;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.solicitacoes-header h1 {
+  color: #ffffff;
+  font-size: clamp(30px, 3vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.solicitacoes-header p {
+  max-width: 760px;
+  margin-top: 7px;
+  color: #d8e7f8;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Títulos das seções no mesmo padrão dos demais módulos */
+.solicitacoes-subtitulo {
+  align-items: center;
+  margin: 28px 0 16px;
+}
+
+.solicitacoes-subtitulo:first-of-type {
+  margin-top: 0;
+}
+
+.solicitacoes-subtitulo span {
+  color: #0b63ce;
+  font-weight: 900;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.solicitacoes-subtitulo h2 {
+  color: #0b1f38;
+  font-size: 23px;
+  letter-spacing: -0.015em;
+}
+
+.solicitacoes-subtitulo p {
+  color: #667085;
+}
+
+.solicitacoes-subtitulo .btn-secondary {
+  min-height: 44px;
+  padding: 10px 17px;
+  border-color: #b8c6d9;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #18324e;
+  box-shadow: 0 3px 9px rgba(15, 44, 76, 0.06);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.solicitacoes-subtitulo .btn-secondary:hover:not(:disabled) {
+  border-color: #1f6fbd;
+  background: #f4f8fc;
+  color: #0b5fb8;
+  box-shadow: 0 7px 16px rgba(15, 74, 134, 0.11);
+  transform: translateY(-1px);
+}
+
+/* Cards de resumo alinhados ao padrão patrimonial */
+.solicitacoes-resumo > div {
+  border-color: #dbe4ee;
+  border-radius: 15px;
+  box-shadow: 0 7px 18px rgba(15, 44, 76, 0.07);
+}
+
+.solicitacoes-resumo > div::before {
+  height: 4px;
+  background: linear-gradient(90deg, #1266bf, #2ca4e8);
+}
+
+.solicitacoes-resumo span {
+  color: #43546a;
+}
+
+.solicitacoes-resumo strong {
+  color: #071f3d;
+}
+
+.solicitacoes-resumo small {
+  color: #7c8ca3;
+}
+
+.solicitacoes-panel {
+  border-color: #dbe4ee;
+  box-shadow: 0 8px 22px rgba(15, 44, 76, 0.07);
+}
+
+.recuperacao-pin-card {
+  border-color: #dbe4ee;
+  box-shadow: 0 5px 14px rgba(15, 44, 76, 0.06);
+}
+
+.recuperacao-pin-card:hover {
+  border-color: #bdd2e7;
+  box-shadow: 0 8px 20px rgba(15, 74, 134, 0.09);
+}
+
+.recuperacao-pin-tipo {
+  color: #0b63ce;
+}
+
+@media (max-width: 760px) {
+  .solicitacoes-header {
+    min-height: 0;
+    padding: 22px 20px;
+    border-radius: 16px;
+  }
+
+  .solicitacoes-header h1 {
+    font-size: 30px;
+  }
+
+  .solicitacoes-header p {
+    font-size: 14px;
+  }
+}

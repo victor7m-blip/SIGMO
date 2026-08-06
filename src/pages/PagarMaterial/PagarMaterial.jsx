@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { supabase } from '../../services/supabaseClient'
+
 import QrScanner from '../../components/QrScanner/QrScanner'
 
 import {
@@ -7,7 +9,6 @@ import {
 } from '../../services/movimentacaoEngine'
 
 import {
-  cautelarTonfaParaPolicial,
   devolverTonfaDoSvddAoP4,
   distribuirTonfaParaSvdd
 } from '../../services/tonfasService'
@@ -111,6 +112,68 @@ function destinoAutomatico(tipo, origem) {
   if (tipo === TIPO_ENTREGA) return 'CARGA PERMANENTE'
   if (tipo === TIPO_TRANSFERENCIA && origem === ORIGEM_P4) return DESTINO_SVDD
   return ''
+}
+
+
+async function resolverPatrimonioIdItem(item) {
+  if (item?.patrimonio_id) {
+    return item.patrimonio_id
+  }
+
+  if (!item?.controla_quantidade || !item?.tonfa_id) {
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id')
+    .eq('tipo', 'tonfa')
+    .eq('referencia_id', item.tonfa_id)
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (!data?.id) {
+    throw new Error(
+      `O registro patrimonial de ${item.descricao || item.categoria || 'Tonfa/Cassetete'} não foi encontrado.`
+    )
+  }
+
+  return data.id
+}
+
+async function prepararItensPendentes(itens) {
+  const preparados = []
+
+  for (const item of itens) {
+    const patrimonioId =
+      await resolverPatrimonioIdItem(item)
+
+    if (!patrimonioId) {
+      throw new Error(
+        `Não foi possível identificar o patrimônio de ${item.descricao || item.patrimonio || 'um dos itens selecionados'}.`
+      )
+    }
+
+    preparados.push({
+      ...item,
+      patrimonio_id: patrimonioId,
+      quantidade: Number(item.quantidade || 1),
+      observacao: item.controla_quantidade
+        ? JSON.stringify({
+            tipo_registro: 'TONFA_QUANTIDADE',
+            tonfa_id: item.tonfa_id,
+            categoria: item.categoria,
+            quantidade: Number(item.quantidade || 1)
+          })
+        : item.observacao || ''
+    })
+  }
+
+  return preparados
 }
 
 export default function PagarMaterial({
@@ -269,160 +332,119 @@ export default function PagarMaterial({
   }
 
   async function confirmarEntrega() {
-  if (exigePolicial && !policialRecebedor) {
-    setErro('Informe um RE válido.')
-    return
-  }
-
-  if (itensSelecionados.length === 0) {
-    setErro('Adicione pelo menos um material.')
-    return
-  }
-
-  try {
-    setSalvando(true)
-    setErro('')
-    setMensagem('')
-
-    const itensQuantidade =
-      itensSelecionados.filter(
-        (item) => item.controla_quantidade
-      )
-
-    const itensIndividuais =
-      itensSelecionados.filter(
-        (item) => !item.controla_quantidade
-      )
-
-    /*
-     * TONFAS / CASSETETES
-     */
-
-    for (const item of itensQuantidade) {
-      const quantidade =
-        Number(item.quantidade || 1)
-
-      if (
-        tipoMovimentacao ===
-        TIPO_CAUTELA
-      ) {
-        console.log('RE digitado:', reRecebedor)
-console.log('Policial:', policialRecebedor)
-        await cautelarTonfaParaPolicial({
-          tonfaId:
-            item.tonfa_id,
-
-          policial: {
-  ...policialRecebedor,
-  re: String(
-    policialRecebedor?.re ||
-    reRecebedor
-  )
-    .replace(/\D/g, '')
-    .slice(0, 6)
-},
-
-          quantidade,
-
-          observacoes,
-
-          user
-        })
-      }
-
-      else if (
-        tipoMovimentacao ===
-        TIPO_TRANSFERENCIA_P4
-      ) {
-        await devolverTonfaDoSvddAoP4({
-          tonfaId:
-            item.tonfa_id,
-
-          quantidade,
-
-          observacoes,
-
-          user
-        })
-      }
-
-      else if (
-        tipoMovimentacao ===
-        TIPO_TRANSFERENCIA
-      ) {
-        await distribuirTonfaParaSvdd({
-          tonfaId:
-            item.tonfa_id,
-
-          quantidade,
-
-          observacoes,
-
-          user
-        })
-      }
+    if (exigePolicial && !policialRecebedor) {
+      setErro('Informe um RE válido.')
+      return
     }
 
-    /*
-     * ARMAS
-     * HT
-     * TPD
-     * TASER
-     * ETC
-     */
-
-    if (itensIndividuais.length > 0) {
-      await criarMovimentacaoCompleta({
-        tipo:
-          tipoMovimentacao,
-
-        origemLocal:
-          localOrigem,
-
-        destinoLocal:
-          localDestino,
-
-        solicitante:
-          user,
-
-        recebedor:
-          exigePolicial
-            ? policialRecebedor
-            : null,
-
-        observacoes,
-
-        itens:
-          itensIndividuais,
-
-        aprovarAutomaticamente:
-          true
-      })
+    if (itensSelecionados.length === 0) {
+      setErro('Adicione pelo menos um material.')
+      return
     }
 
-    setMensagem(
-      'Movimentação registrada com sucesso.'
-    )
+    try {
+      setSalvando(true)
+      setErro('')
+      setMensagem('')
 
-    setItensSelecionados([])
-    setObservacoes('')
-    setAtualizarPesquisaEm(
-      Date.now()
-    )
+      const movimentacaoParaUsuario =
+        tipoMovimentacao === TIPO_CAUTELA ||
+        tipoMovimentacao === TIPO_ENTREGA
 
-    onConcluido?.()
+      if (movimentacaoParaUsuario) {
+        const itensPendentes =
+          await prepararItensPendentes(
+            itensSelecionados
+          )
 
-  } catch (error) {
-    console.error(error)
+        await criarMovimentacaoCompleta({
+          tipo: tipoMovimentacao,
+          origemLocal: localOrigem,
+          destinoLocal: localDestino,
+          solicitante: user,
+          recebedor: policialRecebedor,
+          observacoes,
+          itens: itensPendentes,
+          aprovarAutomaticamente: false
+        })
 
-    setErro(
-      error?.message ||
-      'Não foi possível registrar a movimentação.'
-    )
-  } finally {
-    setSalvando(false)
+        setMensagem(
+          'Carrinho pago com sucesso. Os materiais permanecerão na origem até o usuário confirmar o recebimento.'
+        )
+      } else {
+        const itensQuantidade =
+          itensSelecionados.filter(
+            (item) => item.controla_quantidade
+          )
+
+        const itensIndividuais =
+          itensSelecionados.filter(
+            (item) => !item.controla_quantidade
+          )
+
+        for (const item of itensQuantidade) {
+          const quantidade =
+            Number(item.quantidade || 1)
+
+          if (
+            tipoMovimentacao ===
+            TIPO_TRANSFERENCIA_P4
+          ) {
+            await devolverTonfaDoSvddAoP4({
+              tonfaId: item.tonfa_id,
+              quantidade,
+              observacoes,
+              user
+            })
+          } else if (
+            tipoMovimentacao ===
+            TIPO_TRANSFERENCIA
+          ) {
+            await distribuirTonfaParaSvdd({
+              tonfaId: item.tonfa_id,
+              quantidade,
+              observacoes,
+              user
+            })
+          }
+        }
+
+        if (itensIndividuais.length > 0) {
+          await criarMovimentacaoCompleta({
+            tipo: tipoMovimentacao,
+            origemLocal: localOrigem,
+            destinoLocal: localDestino,
+            solicitante: user,
+            recebedor: exigePolicial
+              ? policialRecebedor
+              : null,
+            observacoes,
+            itens: itensIndividuais,
+            aprovarAutomaticamente: true
+          })
+        }
+
+        setMensagem(
+          'Movimentação registrada com sucesso.'
+        )
+      }
+
+      setItensSelecionados([])
+      setObservacoes('')
+      setAtualizarPesquisaEm(Date.now())
+
+      onConcluido?.()
+    } catch (error) {
+      console.error(error)
+
+      setErro(
+        error?.message ||
+        'Não foi possível registrar a movimentação.'
+      )
+    } finally {
+      setSalvando(false)
+    }
   }
-}
 
   return (
     <main className="pagar-material-page">

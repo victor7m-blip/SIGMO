@@ -693,11 +693,11 @@
 
 .sigmo-command-movement {
   display: grid;
-  grid-template-columns: 34px minmax(0,1fr) auto;
+  grid-template-columns: 38px minmax(0,1fr) auto;
   align-items: center;
-  gap: 9px;
-  min-height: 50px;
-  padding: 6px 2px;
+  gap: 10px;
+  min-height: 72px;
+  padding: 12px 4px;
   border-bottom: 1px solid rgba(93,142,194,.14);
 }
 
@@ -726,13 +726,20 @@
 
 .sigmo-command-movement-copy strong {
   color: #fff;
-  font-size: .6rem;
+  font-size: .64rem;
+  line-height: 1.25;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
 }
 
 .sigmo-command-movement-copy span {
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--dash-muted);
-  font-size: .5rem;
+  font-size: .54rem;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 .sigmo-command-badge {
@@ -1333,3 +1340,22 @@
   }
 }
 
+.sigmo-command-scroll {
+    max-height: 540px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+}
+
+.sigmo-command-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sigmo-command-scroll::-webkit-scrollbar-thumb {
+    background: rgba(77,145,255,.45);
+    border-radius: 20px;
+}
+
+.sigmo-command-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}

@@ -16,7 +16,8 @@ function normalizarStatus(status) {
 
   if (
     valor === 'DISPONÍVEL' ||
-    valor === 'DISPONIVEL'
+    valor === 'DISPONIVEL' ||
+    valor === 'ATIVO'
   ) {
     return 'RESERVA'
   }
@@ -41,173 +42,10 @@ function normalizarArma(arma) {
   }
 }
 
-
-async function enriquecerArmasComResponsabilidadePatrimonial(armas = []) {
-  const lista = Array.isArray(armas) ? armas : []
-  const referencias = lista
-    .map((arma) => arma?.id)
-    .filter(Boolean)
-
-  if (!referencias.length) return lista
-
-  const { data, error } = await supabase
-    .from('sigmo_patrimonios')
-    .select('id, referencia_id, responsavel_atual_id, responsavel_atual_nome, local_atual, status, dados')
-    .eq('tipo', 'arma')
-    .eq('ativo', true)
-    .in('referencia_id', referencias)
-
-  if (error) {
-    console.error('Erro ao carregar responsabilidade patrimonial das armas:', error)
-    return lista
-  }
-
-  const patrimonios = data || []
-
-  const porReferencia = new Map(
-    patrimonios.map((item) => [String(item.referencia_id), item])
-  )
-
-  const patrimonioIds = patrimonios
-    .map((item) => item?.id)
-    .filter(Boolean)
-
-  let movimentosPorPatrimonio = new Map()
-
-  if (patrimonioIds.length) {
-    const { data: movimentos, error: erroMovimentos } = await supabase
-      .from('sigmo_patrimonio_movimentacoes')
-      .select('*')
-      .in('patrimonio_id', patrimonioIds)
-      .in('tipo_movimentacao', [
-        'CARGA_PERMANENTE',
-        'CAUTELA_SERVICO',
-        'CAUTELA'
-      ])
-      .order('created_at', { ascending: false })
-
-    if (erroMovimentos) {
-      console.error(
-        'Erro ao carregar movimentações de carga/cautela das armas:',
-        erroMovimentos
-      )
-    } else {
-      movimentosPorPatrimonio = new Map()
-
-      for (const movimento of movimentos || []) {
-        const chave = String(movimento?.patrimonio_id || '')
-        if (chave && !movimentosPorPatrimonio.has(chave)) {
-          movimentosPorPatrimonio.set(chave, movimento)
-        }
-      }
-    }
-  }
-
-  return lista.map((arma) => {
-    const patrimonio = porReferencia.get(String(arma.id))
-    if (!patrimonio) return arma
-
-    const dados = patrimonio.dados || {}
-    const movimento = movimentosPorPatrimonio.get(String(patrimonio.id)) || null
-    const dadosMovimento = movimento?.dados || movimento?.metadata || {}
-
-    const responsavelNome =
-      patrimonio.responsavel_atual_nome ||
-      dados.carga_policial_nome ||
-      dados.responsavel_nome ||
-      dadosMovimento.carga_policial_nome ||
-      dadosMovimento.policial_nome ||
-      dadosMovimento.responsavel_nome ||
-      arma.responsavel_nome ||
-      null
-
-    const responsavelRe =
-      dados.carga_policial_re ||
-      dados.responsavel_re ||
-      dadosMovimento.carga_policial_re ||
-      dadosMovimento.policial_re ||
-      dadosMovimento.responsavel_re ||
-      arma.responsavel_re ||
-      null
-
-    return {
-      ...arma,
-      responsavel_atual_id:
-        patrimonio.responsavel_atual_id ||
-        arma.responsavel_atual_id ||
-        null,
-      responsavel_atual_nome: responsavelNome,
-      responsavel_nome: responsavelNome,
-      responsavel_re: responsavelRe,
-      carga_policial_nome:
-        dados.carga_policial_nome || responsavelNome,
-      carga_policial_re:
-        dados.carga_policial_re || responsavelRe,
-      local_atual:
-        patrimonio.local_atual ||
-        arma.local_atual ||
-        null,
-      status_patrimonial:
-        patrimonio.status ||
-        null,
-      vinculo_patrimonial_tipo:
-        movimento?.tipo_movimentacao ||
-        movimento?.tipo ||
-        null,
-      vinculo_patrimonial_em:
-        movimento?.created_at ||
-        movimento?.criado_em ||
-        movimento?.data_movimentacao ||
-        null
-    }
-  })
-}
-
 function limparPesquisa(valor) {
   return String(valor || '')
     .trim()
     .replace(/[%(),]/g, '')
-}
-
-
-async function buscarReferenciasPorResponsavel(pesquisa) {
-  const termo = limparPesquisa(pesquisa)
-  if (!termo) return []
-
-  const { data, error } = await supabase
-    .from('sigmo_patrimonios')
-    .select('referencia_id, responsavel_atual_nome, dados')
-    .eq('tipo', 'arma')
-    .eq('ativo', true)
-
-  if (error) {
-    console.error('Erro ao pesquisar responsável patrimonial das armas:', error)
-    return []
-  }
-
-  const termoNormalizado = termo.toLocaleLowerCase('pt-BR')
-
-  return (data || [])
-    .filter((item) => {
-      const dados = item?.dados || {}
-      const valores = [
-        item?.responsavel_atual_nome,
-        dados?.carga_policial_nome,
-        dados?.carga_policial_re,
-        dados?.responsavel_nome,
-        dados?.responsavel_re,
-        dados?.policial_nome,
-        dados?.policial_re
-      ]
-
-      return valores.some((valor) =>
-        String(valor || '')
-          .toLocaleLowerCase('pt-BR')
-          .includes(termoNormalizado)
-      )
-    })
-    .map((item) => item?.referencia_id)
-    .filter(Boolean)
 }
 
 export async function listarArmas({
@@ -245,30 +83,18 @@ export async function listarArmas({
     limparPesquisa(filtros.pesquisa)
 
   if (pesquisa) {
-    // O responsável atual de uma arma pode estar somente na Engine Patrimonial
-    // (sigmo_patrimonios), e não nos campos legados proprietario_* da sigmo_armas.
-    // Primeiro localizamos as armas pelo nome/RE do responsável e depois juntamos
-    // essas referências à pesquisa normal da tabela de armas.
-    const referenciasResponsavel = await buscarReferenciasPorResponsavel(pesquisa)
-
-    const condicoesPesquisa = [
-      `patrimonio.ilike.%${pesquisa}%`,
-      `numero_serie.ilike.%${pesquisa}%`,
-      `qr_code.ilike.%${pesquisa}%`,
-      `especie.ilike.%${pesquisa}%`,
-      `marca.ilike.%${pesquisa}%`,
-      `modelo.ilike.%${pesquisa}%`,
-      `proprietario_re.ilike.%${pesquisa}%`,
-      `proprietario_nome.ilike.%${pesquisa}%`
-    ]
-
-    if (referenciasResponsavel.length) {
-      condicoesPesquisa.push(
-        `id.in.(${referenciasResponsavel.join(',')})`
-      )
-    }
-
-    query = query.or(condicoesPesquisa.join(','))
+    query = query.or(
+      [
+        `patrimonio.ilike.%${pesquisa}%`,
+        `numero_serie.ilike.%${pesquisa}%`,
+        `qr_code.ilike.%${pesquisa}%`,
+        `especie.ilike.%${pesquisa}%`,
+        `marca.ilike.%${pesquisa}%`,
+        `modelo.ilike.%${pesquisa}%`,
+        `proprietario_re.ilike.%${pesquisa}%`,
+        `proprietario_nome.ilike.%${pesquisa}%`
+      ].join(',')
+    )
   }
 
   if (filtros.patrimonio?.trim()) {
@@ -353,36 +179,33 @@ export async function listarArmas({
 
   if (error) throw error
 
-  const armasNormalizadas = (data ?? []).map(normalizarArma)
-  const armasEnriquecidas = await enriquecerArmasComResponsabilidadePatrimonial(
-    armasNormalizadas
-  )
-
   return {
-    data: armasEnriquecidas,
+    data: (data ?? []).map(
+      normalizarArma
+    ),
+
     total: count ?? 0
   }
 }
 
-
 export async function buscarArmaPorId(id) {
-  if (!id) return null
+  if (!id) {
+    throw new Error('ID da arma não informado.')
+  }
 
   const { data, error } = await supabase
     .from(TABLE)
     .select('*')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error) throw error
 
-  if (!data) return null
+  if (!data) {
+    throw new Error('Arma não encontrada.')
+  }
 
-  const [armaEnriquecida] = await enriquecerArmasComResponsabilidadePatrimonial([
-    normalizarArma(data)
-  ])
-
-  return armaEnriquecida || null
+  return normalizarArma(data)
 }
 
 async function buscarValoresUnicos(
