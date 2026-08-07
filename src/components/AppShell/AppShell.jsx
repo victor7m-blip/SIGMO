@@ -46,6 +46,13 @@ const menuItems = [
     label: 'Receber Material',
     icon: '⬆'
   },
+
+{
+  key: 'devolver-material',
+  label: 'Devolver Material',
+  icon: '↩'
+},
+
   {
     key: 'materiais',
     label: 'Materiais',
@@ -136,10 +143,24 @@ export default function AppShell({
   const perfilEfetivo =
     obterPerfilEfetivo(user)
 
-  const perfilTemporario =
-    possuiPerfilTemporarioAtivo(
-      user
-    )
+    console.log('Perfil efetivo:', perfilEfetivo)
+    console.log('User:', user)
+
+    
+const perfilNormalizado =
+  String(perfilEfetivo || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+const ehUsuarioComum =
+  perfilNormalizado === 'USUARIO'
+
+const perfilTemporario =
+  possuiPerfilTemporarioAtivo(
+    user
+  )
 
   useEffect(() => {
     setMobileMenuOpen(false)
@@ -285,6 +306,12 @@ export default function AppShell({
                 route ===
                 item.key
 
+              const labelExibido =
+              item.key === 'policiais' &&
+              ehUsuarioComum
+              ? 'Cadastro'
+              : item.label
+
               return (
                 <button
                   type="button"
@@ -313,8 +340,8 @@ export default function AppShell({
                   </span>
 
                   <span className="app-menu-label">
-                    {item.label}
-                  </span>
+                  {labelExibido}
+                 </span>
                 </button>
               )
             }
