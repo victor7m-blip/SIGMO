@@ -284,3 +284,174 @@
     width: 100%;
   }
 }
+
+/* Sprint 7.6.12 — seleção de itens para devolução */
+.cautela-usuario-selecao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 76, 129, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 76, 129, 0.05);
+}
+
+.cautela-usuario-selecao-topo label,
+.cautela-usuario-item-selecao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.cautela-usuario-selecao-topo input[type='checkbox'],
+.cautela-usuario-item-selecao input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.cautela-usuario-item-selecao {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sprint 7.6.12 — carrinho de devolução no padrão Pagar Material */
+.cautela-usuario-item {
+  min-height: 58px;
+}
+
+.cautela-usuario-item.is-selecionado {
+  border-color: #bbd3f4;
+  background: #f3f8ff;
+}
+
+.cautela-usuario-carrinho {
+  margin-top: 20px;
+}
+
+.cautela-usuario-carrinho h3 {
+  margin: 0 0 11px;
+  color: #344054;
+  font-size: 14px;
+}
+
+.cautela-usuario-carrinho-vazio {
+  padding: 22px 12px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 10px;
+  color: #98a2b3;
+  font-size: 13px;
+  text-align: center;
+}
+
+.cautela-usuario-carrinho-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 11px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.cautela-usuario-carrinho-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.cautela-usuario-carrinho-info > strong,
+.cautela-usuario-carrinho-info > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cautela-usuario-carrinho-info > strong {
+  color: #101828;
+  font-size: 12px;
+}
+
+.cautela-usuario-carrinho-info > span {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.cautela-usuario-carrinho-quantidade {
+  display: grid;
+  grid-template-columns: 88px 82px;
+  gap: 6px 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.cautela-usuario-carrinho-quantidade > span {
+  margin: 0;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.cautela-usuario-carrinho-quantidade input {
+  width: 82px;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: #101828;
+  font: inherit;
+  font-weight: 800;
+  box-sizing: border-box;
+}
+
+.cautela-usuario-carrinho-quantidade input:focus {
+  border-color: #075eea;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(7, 94, 234, 0.12);
+}
+
+.cautela-usuario-carrinho-quantidade small {
+  grid-column: 1 / -1;
+  color: #98a2b3;
+  font-size: 10px;
+}
+
+.cautela-usuario-carrinho-remover {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: #fee4e2;
+  color: #b42318;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.cautela-usuario-carrinho-remover:hover {
+  background: #fecaca;
+}
+
+@media (max-width: 760px) {
+  .cautela-usuario-carrinho-quantidade {
+    grid-template-columns: 82px 82px;
+  }
+}
+
+/* Sprint 7.6.12 — Receber Material no mesmo padrão do carrinho */
+.cautela-usuario-card > .cautela-usuario-carrinho {
+  padding-top: 4px;
+  border-top: 1px solid #eef2f6;
+}
+
+.cautela-usuario-carrinho + .cautela-usuario-primary {
+  margin-top: 14px;
+}
+

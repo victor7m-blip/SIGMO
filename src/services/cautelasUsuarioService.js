@@ -16,6 +16,10 @@ import {
   devolverTonfaDoPolicialAoSvdd
 } from './tonfasService'
 
+import {
+  listarTonfasEmServico
+} from './tonfasMovimentacoesService'
+
 function normalizar(valor) {
   return String(valor ?? '')
     .trim()
@@ -138,7 +142,114 @@ export async function listarMateriaisEmServicoUsuario(
     )
   }
 
-  return listarMinhaCautela(policialId)
+  const policialRe = obterRePolicial(user)
+
+  const [
+    patrimoniosIndividuais,
+    quantitativosEmServico
+  ] = await Promise.all([
+    listarMinhaCautela(policialId),
+    listarTonfasEmServico({
+      re: policialRe,
+      policialId
+    })
+  ])
+
+  // Tonfa e Cassetete usam um patrimônio agregado por estoque.
+  // Esse registro central não deve ser usado como se fosse um item
+  // individual da cautela, porque a responsabilidade real está em
+  // sigmo_tonfas_movimentacoes.
+  const individuais = (patrimoniosIndividuais || []).filter(
+    (item) => normalizar(item?.tipo) !== 'tonfa'
+  )
+
+  const quantitativosAtivos =
+    (quantitativosEmServico || []).filter(
+      (item) => Number(item?.saldo ?? item?.quantidade ?? 0) > 0
+    )
+
+  if (quantitativosAtivos.length === 0) {
+    return individuais
+  }
+
+  const tonfaIds = [
+    ...new Set(
+      quantitativosAtivos
+        .map((item) => item?.tonfa_id || item?.referencia_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  let patrimoniosQuantitativos = []
+
+  if (tonfaIds.length > 0) {
+    const {
+      data,
+      error
+    } = await supabase
+      .from('sigmo_patrimonios')
+      .select('id, tipo, referencia_id, descricao, ativo')
+      .eq('tipo', 'tonfa')
+      .eq('ativo', true)
+      .in('referencia_id', tonfaIds)
+
+    if (error) {
+      throw error
+    }
+
+    patrimoniosQuantitativos = data || []
+  }
+
+  const patrimonioPorReferencia = new Map(
+    patrimoniosQuantitativos.map((patrimonio) => [
+      String(patrimonio.referencia_id),
+      patrimonio
+    ])
+  )
+
+  const quantitativos = quantitativosAtivos
+    .map((item) => {
+      const tonfaId =
+        item?.tonfa_id ||
+        item?.referencia_id ||
+        null
+
+      const patrimonio = patrimonioPorReferencia.get(
+        String(tonfaId || '')
+      )
+
+      if (!patrimonio?.id) {
+        console.warn(
+          'Cautela quantitativa sem patrimônio central correspondente:',
+          item
+        )
+        return null
+      }
+
+      return {
+        ...item,
+        patrimonio_id: patrimonio.id,
+        referencia_id: tonfaId,
+        descricao:
+          item?.descricao ||
+          patrimonio?.descricao ||
+          item?.tipo ||
+          item?.categoria ||
+          'TONFA/CASSETETE',
+        quantidade: Number(
+          item?.saldo ??
+          item?.quantidade ??
+          1
+        ) || 1
+      }
+    })
+    .filter(Boolean)
+
+  return [
+    ...individuais,
+    ...quantitativos
+  ]
 }
 
 export async function listarDevolucoesPendentesUsuario(
@@ -504,14 +615,40 @@ export async function solicitarDevolucaoCautela({
   }
 
   const itensMovimentacao = itens
-    .map((item) => ({
-      id: item?.id,
-      patrimonio_id:
-        item?.patrimonio_id ||
-        item?.id,
-      quantidade:
-        Number(item?.quantidade || 1) || 1
-    }))
+    .map((item) => {
+      const quantitativo =
+        item?.tipo_registro ===
+        'TONFA_QUANTIDADE'
+
+      const observacaoQuantitativo = quantitativo
+        ? JSON.stringify({
+            tipo_registro:
+              'TONFA_QUANTIDADE',
+            movimentacao_tonfa_id:
+              item?.movimentacao_tonfa_id ||
+              null,
+            tonfa_id:
+              item?.tonfa_id ||
+              item?.referencia_id ||
+              null,
+            tipo_material:
+              item?.tipo ||
+              item?.categoria ||
+              null
+          })
+        : item?.observacao || ''
+
+      return {
+        id: item?.id,
+        patrimonio_id:
+          item?.patrimonio_id ||
+          item?.id,
+        quantidade:
+          Number(item?.quantidade || 1) || 1,
+        observacao:
+          observacaoQuantitativo
+      }
+    })
     .filter((item) => item.patrimonio_id)
 
   if (itensMovimentacao.length === 0) {
@@ -530,7 +667,7 @@ export async function solicitarDevolucaoCautela({
     },
     recebedor: null,
     observacoes:
-      'DEVOLUÇÃO INTEGRAL SOLICITADA PELO USUÁRIO.',
+      'DEVOLUÇÃO DOS MATERIAIS SELECIONADOS PELO USUÁRIO.',
     itens: itensMovimentacao,
     aprovarAutomaticamente: false
   })

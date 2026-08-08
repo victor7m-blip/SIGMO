@@ -1,0 +1,38 @@
+SIGMO — Sprint 7.6.12 — Devolução seletiva de materiais
+
+ANTES DE TESTAR O FRONT-END
+1. Abra o Supabase SQL Editor.
+2. Execute o arquivo:
+   supabase/sql/sprint_7_6_12_devolucao_seletiva.sql
+3. Depois inicie o SIGMO normalmente.
+
+O QUE FOI ALTERADO
+- Usuário comum: a tela "Devolver materiais" agora permite marcar somente os itens desejados.
+- A movimentação DEVOLUCAO continua sendo criada pela Engine Patrimonial existente.
+- SVDD: ao informar o RE, se existir DEVOLUCAO pendente, a tela mostra somente os itens daquela movimentação.
+- Se não existir DEVOLUCAO pendente, o Receber Material mantém o comportamento anterior e lista a carga do RE.
+- Itens individuais continuam sendo recebidos por recebimentoService.js.
+- Tonfas/Cassetetes continuam sendo recebidos por receberCautelaTonfa().
+- A nova RPC sigmo_confirmar_itens_devolucao apenas encerra os itens/documento da devolução depois do recebimento operacional; ela não movimenta patrimônio e não altera saldo.
+
+ARQUIVOS ALTERADOS/CRIADOS
+- src/pages/CautelasUsuario/CautelasUsuario.jsx
+- src/pages/CautelasUsuario/CautelasUsuario.css
+- src/pages/ReceberMaterial/ReceberMaterial.jsx
+- src/services/cautelasUsuarioService.js
+- src/services/devolucoesPendentesService.js (novo)
+- supabase/sql/sprint_7_6_12_devolucao_seletiva.sql (novo)
+
+TESTE RECOMENDADO
+1. Usuário com pelo menos 3 materiais em cautela.
+2. Em "Devolver materiais", marcar apenas 1 item individual.
+3. Confirmar que sigmo_movimentacao_itens contém apenas o item selecionado.
+4. Logar como SVDD e abrir Receber Material.
+5. Informar o RE do policial.
+6. Confirmar que aparece apenas o item solicitado para devolução.
+7. Receber o item.
+8. Confirmir que o item recebido voltou ao local de retorno e que os outros materiais continuam vinculados ao policial.
+9. Repetir com Tonfa/Cassetete em teste separado.
+
+OBSERVAÇÃO
+A alteração não implementa devolução parcial de QUANTIDADE dentro de uma mesma cautela quantitativa além do que a tela de Receber Material já suporta. O objetivo desta sprint é selecionar quais registros/materiais entram na devolução, sem devolver automaticamente toda a carga do RE.

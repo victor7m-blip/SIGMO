@@ -85,6 +85,22 @@ function cautelaVencida(item) {
   )
 }
 
+function quantidadeEmServico(item) {
+  if (item?.saldo != null) {
+    return Number(item.saldo)
+  }
+
+  if (item?.quantidade_em_servico != null) {
+    return Number(item.quantidade_em_servico)
+  }
+
+  if (item?.quantidade_total != null && item?.quantidade_devolvida != null) {
+    return Number(item.quantidade_total) - Number(item.quantidade_devolvida)
+  }
+
+  return quantidadeEmServico(item)
+}
+
 export default function TonfaCautelasModal({
   aberto,
   onClose,
@@ -208,66 +224,47 @@ export default function TonfaCautelasModal({
     ])
 
   const resumo =
-    useMemo(() => {
-      return {
-        total:
-          cautelas.reduce(
-            (
-              total,
-              item
-            ) =>
+  useMemo(() => {
+    return {
+      total:
+        cautelas.reduce(
+          (total, item) =>
+            total +
+            quantidadeEmServico(item),
+          0
+        ),
+
+      tonfas:
+        cautelas
+          .filter(
+            (item) =>
+              normalizarTexto(
+                item.tipo_material
+              ) === 'TONFA'
+          )
+          .reduce(
+            (total, item) =>
               total +
-              Number(
-                item.quantidade ||
-                0
-              ),
+              quantidadeEmServico(item),
             0
           ),
 
-        tonfas:
-          cautelas
-            .filter(
-              (item) =>
-                normalizarTexto(
-                  item.tipo_material
-                ) === 'TONFA'
-            )
-            .reduce(
-              (
-                total,
-                item
-              ) =>
-                total +
-                Number(
-                  item.quantidade ||
-                  0
-                ),
-              0
-            ),
-
-        cassetetes:
-          cautelas
-            .filter(
-              (item) =>
-                normalizarTexto(
-                  item.tipo_material
-                ) ===
-                'CASSETETE'
-            )
-            .reduce(
-              (
-                total,
-                item
-              ) =>
-                total +
-                Number(
-                  item.quantidade ||
-                  0
-                ),
-              0
-            )
-      }
-    }, [cautelas])
+      cassetetes:
+        cautelas
+          .filter(
+            (item) =>
+              normalizarTexto(
+                item.tipo_material
+              ) === 'CASSETETE'
+          )
+          .reduce(
+            (total, item) =>
+              total +
+              quantidadeEmServico(item),
+            0
+          )
+    }
+  }, [cautelas])
 
   if (!aberto) {
     return null
@@ -500,7 +497,7 @@ export default function TonfaCautelasModal({
 
                         <strong>
                           {
-                            item.quantidade
+                            quantidadeEmServico(item)
                           }
                         </strong>
                       </div>

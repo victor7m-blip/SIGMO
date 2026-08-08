@@ -7,10 +7,6 @@ import {
 } from 'react'
 
 import {
-  listarPatrimoniosResponsavel
-} from '../../services/responsabilidadeService'
-
-import {
   listarTonfasEmServico
 } from '../../services/tonfasMovimentacoesService'
 
@@ -22,6 +18,11 @@ import {
   receberMateriais,
   LOCAL_RETORNO_PADRAO
 } from '../../services/recebimentoService'
+
+import {
+  buscarDevolucaoPendentePolicial,
+  confirmarItensDevolucao
+} from '../../services/devolucoesPendentesService'
 
 import RecebedorCard from '../PagarMaterial/components/RecebedorCard'
 import CarrinhoMateriais from '../PagarMaterial/components/CarrinhoMateriais'
@@ -213,6 +214,11 @@ export default function ReceberMaterial({
     patrimonios,
     setPatrimonios
   ] = useState([])
+
+  const [
+    devolucaoPendente,
+    setDevolucaoPendente
+  ] = useState(null)
 
   const [
     itensSelecionados,
@@ -409,45 +415,165 @@ export default function ReceberMaterial({
         ) {
           setPatrimonios([])
           setItensSelecionados([])
+          setDevolucaoPendente(null)
           return
         }
 
         try {
           setCarregandoCarga(true)
           setErro('')
-          setMensagem('')
 
-          const [
-            patrimoniosIndividuais,
-            tonfasEmServico
-          ] = await Promise.all([
-            listarPatrimoniosResponsavel({
-              re: reEntregador,
-              nome: nomeEntregador
-            }),
+          const policialId =
+            policialEntregador?.id ||
+            policialEntregador?.policial_id ||
+            null
 
-            listarTonfasEmServico({
-              re: reEntregador,
-              policialId:
-                policialEntregador?.id ||
-                policialEntregador?.policial_id ||
-                null
+          const devolucao =
+            await buscarDevolucaoPendentePolicial({
+              policialId
             })
-          ])
 
-          const lista = [
-            ...(patrimoniosIndividuais ?? []),
-            ...(tonfasEmServico ?? [])
-          ].map(normalizarItem)
-
-          setPatrimonios(lista)
-          setItensSelecionados([])
-
-          if (lista.length === 0) {
-            setMensagem(
-              'Nenhum patrimônio está vinculado a este policial.'
-            )
+          if (!devolucao?.id) {
+            setDevolucaoPendente(null)
+            setPatrimonios([])
+            setItensSelecionados([])
+            setMensagem('Nenhuma devolução pendente para este policial.')
+            return
           }
+
+          const tonfasEmServico =
+            await listarTonfasEmServico({
+              re: reEntregador,
+              policialId
+            })
+
+          const quantitativos =
+            (tonfasEmServico ?? []).map(normalizarItem)
+
+          if (devolucao?.id) {
+            const itensPendentes =
+              Array.isArray(devolucao.itens)
+                ? devolucao.itens
+                : []
+
+            const lista = []
+            const tonfasUsadas = new Set()
+
+            for (const itemMov of itensPendentes) {
+              const patrimonio = itemMov?.patrimonio || {}
+              const patrimonioId =
+                itemMov?.patrimonio_id ||
+                patrimonio?.id ||
+                null
+
+              const tipoPatrimonio =
+                normalizarTexto(
+                  patrimonio?.tipo ||
+                  itemMov?.tipo_patrimonio ||
+                  ''
+                )
+
+              if (tipoPatrimonio === 'TONFA') {
+                const tonfaId =
+                  patrimonio?.referencia_id ||
+                  null
+
+                const candidato = quantitativos.find(
+                  (item) =>
+                    String(item?.tonfa_id || item?.referencia_id || '') ===
+                      String(tonfaId || '') &&
+                    !tonfasUsadas.has(
+                      String(item?.movimentacao_tonfa_id || item?.id)
+                    )
+                )
+
+                if (candidato) {
+                  tonfasUsadas.add(
+                    String(candidato?.movimentacao_tonfa_id || candidato?.id)
+                  )
+
+                  lista.push({
+                    ...candidato,
+                    quantidade: Math.min(
+                      Number(candidato?.quantidade || 1),
+                      Math.max(1, Number(itemMov?.quantidade || 1))
+                    ),
+                    devolucao_movimentacao_id: devolucao.id,
+                    devolucao_item_id: itemMov.id
+                  })
+                }
+
+                continue
+              }
+
+              lista.push(
+                normalizarItem({
+                  ...patrimonio,
+                  id:
+                    patrimonio?.id ||
+                    patrimonioId,
+                  patrimonio_id:
+                    patrimonioId,
+                  referencia_id:
+                    patrimonio?.referencia_id ||
+                    null,
+                  patrimonio:
+                    patrimonio?.identificador ||
+                    patrimonio?.numero_patrimonio ||
+                    patrimonio?.patrimonio ||
+                    patrimonio?.numero_serie ||
+                    patrimonio?.referencia_id ||
+                    patrimonioId,
+                  descricao:
+                    patrimonio?.descricao ||
+                    itemMov?.descricao ||
+                    'PATRIMÔNIO',
+                  categoria:
+                    patrimonio?.tipo ||
+                    itemMov?.tipo_patrimonio ||
+                    'PATRIMÔNIO',
+                  modulo:
+                    patrimonio?.tipo ||
+                    itemMov?.tipo_patrimonio ||
+                    'PATRIMÔNIO',
+                  local_origem: null,
+                  local_atual:
+                    patrimonio?.local_atual ||
+                    'CAUTELA INDIVIDUAL',
+                  status:
+                    patrimonio?.status ||
+                    'EM SERVIÇO',
+                  quantidade:
+                    Math.max(
+                      1,
+                      Number(itemMov?.quantidade || 1) || 1
+                    ),
+                  devolucao_movimentacao_id:
+                    devolucao.id,
+                  devolucao_item_id:
+                    itemMov.id
+                })
+              )
+            }
+
+            setDevolucaoPendente(devolucao)
+            setPatrimonios(lista)
+            setItensSelecionados([])
+
+            if (lista.length === 0) {
+              setMensagem(
+                'Existe uma devolução pendente, mas os itens não puderam ser conciliados com a carga atual. Atualize a tela e confira a movimentação.'
+              )
+            } else {
+              setMensagem(
+                `Devolução pendente localizada: ${lista.length} item(ns) apresentado(s) pelo usuário.`
+              )
+            }
+
+            return
+          }
+
+
         } catch (error) {
           console.error(
             'Erro ao carregar carga patrimonial:',
@@ -456,6 +582,7 @@ export default function ReceberMaterial({
 
           setPatrimonios([])
           setItensSelecionados([])
+          setDevolucaoPendente(null)
 
           setErro(
             error?.message ||
@@ -544,6 +671,7 @@ export default function ReceberMaterial({
     setPolicialEntregador(null)
     setPatrimonios([])
     setItensSelecionados([])
+    setDevolucaoPendente(null)
     setBusca('')
     setErro('')
     setMensagem('')
@@ -558,6 +686,7 @@ export default function ReceberMaterial({
 
     setPatrimonios([])
     setItensSelecionados([])
+    setDevolucaoPendente(null)
     setBusca('')
     setErro('')
     setMensagem('')
@@ -584,7 +713,7 @@ export default function ReceberMaterial({
     ...listaAtual,
     {
       ...item,
-      quantidade_receber: 1
+      quantidade_receber: Number(item.quantidade || 1)
     }
   ])
 
@@ -638,9 +767,10 @@ function alterarQuantidade(id, valor) {
     }
 
     setItensSelecionados(
-      patrimonios.map(
-        normalizarItem
-      )
+      patrimonios.map((item) => ({
+        ...item,
+        quantidade_receber: Number(item.quantidade || 1)
+      }))
     )
   }
 
@@ -649,6 +779,7 @@ function alterarQuantidade(id, valor) {
     setPolicialEntregador(null)
     setPatrimonios([])
     setItensSelecionados([])
+    setDevolucaoPendente(null)
     setBusca('')
     setDocumento('')
     setObservacoes('')
@@ -888,6 +1019,34 @@ async function confirmarRecebimento() {
       })
     }
 
+    let resultadoDevolucao = null
+
+    if (devolucaoPendente?.id) {
+      const itemIdsDevolucao = [
+        ...new Set(
+          itensSelecionados
+            .map((item) => item?.devolucao_item_id)
+            .filter(Boolean)
+        )
+      ]
+
+      if (itemIdsDevolucao.length > 0) {
+        resultadoDevolucao =
+          await confirmarItensDevolucao({
+            movimentacaoId: devolucaoPendente.id,
+            itemIds: itemIdsDevolucao,
+            user,
+            observacao:
+              normalizarTexto(observacoes) ||
+              'ITENS DA DEVOLUÇÃO RECEBIDOS PELO SVDD.'
+          })
+
+        if (resultadoDevolucao?.finalizada) {
+          setDevolucaoPendente(null)
+        }
+      }
+    }
+
     const totalRecebido =
       itensIndividuais.length +
       itensTonfa.length
@@ -905,85 +1064,42 @@ async function confirmarRecebimento() {
       resultados: [
         ...resultadosIndividuais,
         ...resultadosTonfas
-      ]
+      ],
+
+      devolucao:
+        resultadoDevolucao
     }
 
     setMensagem(
-      `${totalRecebido} ${
-        totalRecebido === 1
-          ? 'registro recebido'
-          : 'registros recebidos'
-      } com sucesso.`
+      resultadoDevolucao?.finalizada
+        ? `Devolução concluída. ${totalRecebido} ${
+            totalRecebido === 1
+              ? 'registro recebido'
+              : 'registros recebidos'
+          } com sucesso.`
+        : `${totalRecebido} ${
+            totalRecebido === 1
+              ? 'registro recebido'
+              : 'registros recebidos'
+          } com sucesso.`
     )
 
-    const saldosTonfas =
-  new Map(
-    resultadosTonfas.map(
-      ({ item, resultado }) => [
-        criarChaveItem(item),
-        Number(
-          resultado
-            ?.movimentacao_tonfa
-            ?.saldo || 0
+    const chavesItensRecebidos =
+      new Set(
+        itensSelecionados.map(
+          criarChaveItem
         )
-      ]
+      )
+
+    setPatrimonios(
+      (listaAtual) =>
+        listaAtual.filter(
+          (item) =>
+            !chavesItensRecebidos.has(
+              criarChaveItem(item)
+            )
+        )
     )
-  )
-
-const idsIndividuaisRecebidos =
-  new Set(
-    itensIndividuais.map(
-      criarChaveItem
-    )
-  )
-
-setPatrimonios(
-  (listaAtual) =>
-    listaAtual
-      .map((item) => {
-        const chave =
-          criarChaveItem(item)
-
-        if (
-          idsIndividuaisRecebidos.has(
-            chave
-          )
-        ) {
-          return null
-        }
-
-        if (
-          item?.tipo_registro ===
-            'TONFA_QUANTIDADE' &&
-          saldosTonfas.has(chave)
-        ) {
-          const saldoRestante =
-            saldosTonfas.get(chave)
-
-          if (
-            saldoRestante <= 0
-          ) {
-            return null
-          }
-
-          return {
-            ...item,
-
-            quantidade:
-              saldoRestante,
-
-            saldo:
-              saldoRestante,
-
-            quantidade_receber:
-              1
-          }
-        }
-
-        return item
-      })
-      .filter(Boolean)
-)
 
     setItensSelecionados([])
     setBusca('')
@@ -1157,6 +1273,12 @@ setPatrimonios(
               </label>
             </div>
           </section>
+
+          {devolucaoPendente?.id && (
+            <div className="pagar-material-feedback pagar-material-feedback-success">
+              DEVOLUÇÃO PENDENTE LOCALIZADA • somente os itens selecionados pelo usuário estão sendo exibidos.
+            </div>
+          )}
 
           <section className="pagar-material-card">
             <div className="pagar-material-card-header">
