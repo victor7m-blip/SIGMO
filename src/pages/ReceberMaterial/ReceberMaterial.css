@@ -83,3 +83,10 @@
     width: 100%;
   }
 }
+
+/* Novidade individual no carrinho */
+.pagar-material-summary-card
+.pagar-material-selected {
+  width: 100%;
+}
+

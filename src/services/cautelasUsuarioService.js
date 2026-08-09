@@ -20,6 +20,9 @@ import {
   listarTonfasEmServico
 } from './tonfasMovimentacoesService'
 
+const NOVIDADES_FOTOS_BUCKET = 'novidades-fotos'
+const TAMANHO_MAXIMO_FOTO = 5 * 1024 * 1024
+
 function normalizar(valor) {
   return String(valor ?? '')
     .trim()
@@ -28,6 +31,460 @@ function normalizar(valor) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+
+function normalizarMaiusculo(valor) {
+  return String(valor ?? '')
+    .trim()
+    .toUpperCase()
+}
+
+function ehArquivo(valor) {
+  return (
+    valor &&
+    typeof valor === 'object' &&
+    typeof valor.arrayBuffer === 'function' &&
+    typeof valor.name === 'string'
+  )
+}
+
+function extensaoArquivo(arquivo) {
+  const nome = String(arquivo?.name ?? '')
+  const partes = nome.split('.')
+
+  if (partes.length > 1) {
+    return (
+      partes
+        .pop()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '') ||
+      'jpg'
+    )
+  }
+
+  const tipo = String(arquivo?.type ?? '').toLowerCase()
+
+  if (tipo.includes('png')) return 'png'
+  if (tipo.includes('webp')) return 'webp'
+  if (tipo.includes('gif')) return 'gif'
+
+  return 'jpg'
+}
+
+function gerarIdentificador() {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random()
+    .toString(16)
+    .slice(2)}`
+}
+
+function nomeUsuario(user) {
+  return (
+    user?.nome ||
+    user?.nome_guerra ||
+    user?.nome_completo ||
+    user?.email ||
+    'USUÁRIO SIGMO'
+  )
+}
+
+function lerObjetoObservacao(valor) {
+  if (!valor) return {}
+
+  if (typeof valor === 'object') {
+    return valor
+  }
+
+  try {
+    return JSON.parse(valor)
+  } catch {
+    return {
+      texto_original: String(valor)
+    }
+  }
+}
+
+async function prepararNovidadeRecebimento({
+  novidade,
+  user
+}) {
+  if (
+    !novidade ||
+    typeof novidade !== 'object'
+  ) {
+    return null
+  }
+
+  const tipo = normalizarMaiusculo(
+    novidade.tipo
+  )
+
+  const descricao = normalizarMaiusculo(
+    novidade.descricao
+  )
+
+  const possuiFotos =
+    Array.isArray(novidade.fotos) &&
+    novidade.fotos.length > 0
+
+  if (!tipo && !descricao && !possuiFotos) {
+    return null
+  }
+
+  if (!tipo) {
+    throw new Error(
+      'Selecione o tipo da novidade.'
+    )
+  }
+
+  if (!descricao) {
+    throw new Error(
+      'Descreva a novidade registrada.'
+    )
+  }
+
+  const arquivos = (
+    Array.isArray(novidade.fotos)
+      ? novidade.fotos
+      : []
+  ).filter(ehArquivo)
+
+  const fotosEnviadas = []
+
+  if (arquivos.length > 0) {
+    const data = new Date()
+      .toISOString()
+      .slice(0, 10)
+
+    const usuario = String(
+      user?.id || 'usuario-sem-id'
+    ).replace(/[^a-zA-Z0-9_-]/g, '-')
+
+    const lote = gerarIdentificador()
+
+    for (
+      let indice = 0;
+      indice < arquivos.length;
+      indice += 1
+    ) {
+      const arquivo = arquivos[indice]
+
+      if (
+        arquivo.type &&
+        !String(arquivo.type)
+          .toLowerCase()
+          .startsWith('image/')
+      ) {
+        throw new Error(
+          `O arquivo "${arquivo.name}" não é uma imagem válida.`
+        )
+      }
+
+      if (
+        Number(arquivo.size || 0) >
+        TAMANHO_MAXIMO_FOTO
+      ) {
+        throw new Error(
+          `A foto "${arquivo.name}" ultrapassa o limite de 5 MB.`
+        )
+      }
+
+      const extensao = extensaoArquivo(
+        arquivo
+      )
+
+      const caminho = [
+        data,
+        usuario,
+        'recebimento-usuario',
+        lote,
+        `${String(indice + 1).padStart(2, '0')}-${gerarIdentificador()}.${extensao}`
+      ].join('/')
+
+      const { error } =
+        await supabase.storage
+          .from(NOVIDADES_FOTOS_BUCKET)
+          .upload(caminho, arquivo, {
+            cacheControl: '3600',
+            contentType:
+              arquivo.type || 'image/jpeg',
+            upsert: false
+          })
+
+      if (error) {
+        throw new Error(
+          `Não foi possível enviar a foto "${arquivo.name}": ${error.message}`
+        )
+      }
+
+      const { data: urlData } =
+        supabase.storage
+          .from(NOVIDADES_FOTOS_BUCKET)
+          .getPublicUrl(caminho)
+
+      fotosEnviadas.push({
+        url: urlData?.publicUrl || null,
+        caminho,
+        bucket: NOVIDADES_FOTOS_BUCKET,
+        nome_original: arquivo.name,
+        tipo: arquivo.type || null,
+        tamanho: Number(arquivo.size || 0),
+        ordem: indice + 1,
+        principal: indice === 0
+      })
+    }
+  }
+
+  return {
+    tipo,
+    descricao,
+    providencia:
+      normalizarMaiusculo(
+        novidade.providencia || 'ANALISE'
+      ),
+    quantidade_afetada:
+      Math.max(
+        1,
+        Number(
+          novidade.quantidade_afetada || 1
+        ) || 1
+      ),
+    status: 'PENDENTE',
+    origem: 'RECEBIMENTO PELO USUÁRIO',
+    registrada_em:
+      new Date().toISOString(),
+    registrada_por_id:
+      user?.id || null,
+    registrada_por_nome:
+      normalizarMaiusculo(
+        nomeUsuario(user)
+      ),
+    fotos: fotosEnviadas,
+    foto:
+      fotosEnviadas[0]?.url || null,
+    quantidade_fotos:
+      fotosEnviadas.length
+  }
+}
+
+
+
+function obterTipoPatrimonioNovidade({
+  patrimonio,
+  item,
+  observacao
+}) {
+  const candidatos = [
+    observacao?.categoria,
+    observacao?.tipo_material,
+    item?.categoria,
+    item?.tipo_patrimonio,
+    patrimonio?.tipo
+  ]
+
+  for (const candidato of candidatos) {
+    const valor =
+      normalizarMaiusculo(candidato)
+
+    if (valor) {
+      if (
+        valor === 'TONFA' &&
+        normalizarMaiusculo(
+          patrimonio?.descricao
+        ).includes('CASSETETE')
+      ) {
+        return 'CASSETETE'
+      }
+
+      return valor
+    }
+  }
+
+  const descricao =
+    normalizarMaiusculo(
+      patrimonio?.descricao ||
+      item?.descricao
+    )
+
+  if (descricao.includes('CASSETETE')) {
+    return 'CASSETETE'
+  }
+
+  if (descricao.includes('TONFA')) {
+    return 'TONFA'
+  }
+
+  return 'MATERIAL'
+}
+
+function montarDescricaoNovidadeOficial({
+  novidade,
+  tipoPatrimonio,
+  quantidadeRecebida = 1
+}) {
+  const partes = [
+    novidade?.descricao
+  ]
+
+  if (
+    ['TONFA', 'CASSETETE'].includes(
+      tipoPatrimonio
+    )
+  ) {
+    partes.push(
+      `QUANTIDADE AFETADA: ${
+        Math.max(
+          1,
+          Math.min(
+            Number(
+              novidade?.quantidade_afetada ||
+              1
+            ) || 1,
+            Math.max(
+              1,
+              Number(
+                quantidadeRecebida
+              ) || 1
+            )
+          )
+        )
+      }`
+    )
+  }
+
+  if (novidade?.providencia) {
+    partes.push(
+      `PROVIDÊNCIA SUGERIDA: ${
+        normalizarMaiusculo(
+          novidade.providencia
+        )
+      }`
+    )
+  }
+
+  if (
+    Array.isArray(novidade?.fotos) &&
+    novidade.fotos.length > 0
+  ) {
+    partes.push(
+      `FOTOS ANEXADAS: ${
+        novidade.fotos.length
+      }`
+    )
+  }
+
+  return partes
+    .filter(Boolean)
+    .join(' | ')
+}
+
+async function registrarNovidadeOficial({
+  patrimonio,
+  item,
+  observacao,
+  novidade,
+  quantidadeRecebida = 1,
+  user
+}) {
+  if (
+    !patrimonio?.id ||
+    !novidade
+  ) {
+    return null
+  }
+
+  const tipoPatrimonio =
+    obterTipoPatrimonioNovidade({
+      patrimonio,
+      item,
+      observacao
+    })
+
+  const titulo =
+    normalizarMaiusculo(
+      novidade.tipo ||
+      'NOVIDADE NO RECEBIMENTO'
+    )
+
+  const descricao =
+    montarDescricaoNovidadeOficial({
+      novidade,
+      tipoPatrimonio,
+      quantidadeRecebida
+    })
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_registrar_patrimonio_novidade',
+    {
+      p_patrimonio_id:
+        patrimonio.id,
+
+      p_tipo_patrimonio:
+        tipoPatrimonio,
+
+      p_titulo:
+        titulo,
+
+      p_descricao:
+        descricao || null,
+
+      p_gravidade:
+        'baixa',
+
+      p_registrado_por_id:
+        user?.id ||
+        obterPolicialId(user) ||
+        null,
+
+      p_registrado_por_nome:
+        normalizarMaiusculo(
+          nomeUsuario(user)
+        ) || null
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      `Não foi possível registrar a novidade patrimonial: ${error.message}`
+    )
+  }
+
+  const novidadeId =
+    Array.isArray(data)
+      ? (
+          data[0]?.id ||
+          data[0]?.sigmo_registrar_patrimonio_novidade ||
+          data[0] ||
+          null
+        )
+      : (
+          data?.id ||
+          data?.sigmo_registrar_patrimonio_novidade ||
+          data ||
+          null
+        )
+
+  return novidadeId
+    ? {
+        id: novidadeId,
+        patrimonio_id:
+          patrimonio.id,
+        tipo_patrimonio:
+          tipoPatrimonio,
+        titulo,
+        status:
+          'registrada'
+      }
+    : null
+}
 
 function obterRePolicial(user) {
   return String(
@@ -353,6 +810,8 @@ export async function confirmarRecebimentoCautela({
   }
 
   const itensQuantitativos = []
+  const itensIndividuaisComNovidade = []
+  const itensObservacaoAlterados = []
 
   for (const item of movimentacao.itens || []) {
     const patrimonio =
@@ -360,15 +819,22 @@ export async function confirmarRecebimentoCautela({
         String(item?.patrimonio_id)
       )
 
-    let observacao = {}
+    const observacao =
+      lerObjetoObservacao(
+        item?.observacao
+      )
 
-    try {
-      observacao = item?.observacao
-        ? JSON.parse(item.observacao)
-        : {}
-    } catch {
-      observacao = {}
-    }
+    const selecao =
+      selecoesPorItem.get(
+        String(item?.id)
+      )
+
+    const novidadePreparada =
+      await prepararNovidadeRecebimento({
+        novidade:
+          selecao?.novidade || null,
+        user
+      })
 
     const ehTonfa =
       normalizar(patrimonio?.tipo) === 'tonfa' ||
@@ -377,6 +843,20 @@ export async function confirmarRecebimentoCautela({
         'tonfa_quantidade'
 
     if (!ehTonfa) {
+      if (novidadePreparada) {
+        itensIndividuaisComNovidade.push({
+          item,
+          observacaoOriginal:
+            item?.observacao || '',
+          observacaoAtualizada:
+            JSON.stringify({
+              ...observacao,
+              novidade_recebimento:
+                novidadePreparada
+            })
+        })
+      }
+
       continue
     }
 
@@ -401,11 +881,6 @@ export async function confirmarRecebimentoCautela({
         Number(item?.quantidade || 1) || 1
       )
 
-    const selecao =
-      selecoesPorItem.get(
-        String(item?.id)
-      )
-
     const quantidadeReceber =
       Math.max(
         1,
@@ -428,7 +903,10 @@ export async function confirmarRecebimentoCautela({
         quantidadeEnviada -
         quantidadeReceber,
       observacaoOriginal:
-        item?.observacao || ''
+        item?.observacao || '',
+      observacaoObjetoOriginal:
+        observacao,
+      novidadePreparada
     })
   }
 
@@ -450,10 +928,66 @@ export async function confirmarRecebimentoCautela({
 
   const processados = []
   const itensMovimentacaoAlterados = []
+  const novidadesOficiaisCriadas = []
 
   try {
+    for (
+      const registro of
+      itensIndividuaisComNovidade
+    ) {
+      const { error } = await supabase
+        .from('sigmo_movimentacao_itens')
+        .update({
+          observacao:
+            registro.observacaoAtualizada
+        })
+        .eq('id', registro.item.id)
+
+      if (error) throw error
+
+      itensObservacaoAlterados.push(
+        registro
+      )
+
+      const patrimonio =
+        patrimoniosPorId.get(
+          String(
+            registro.item?.patrimonio_id
+          )
+        )
+
+      const novidade =
+        await registrarNovidadeOficial({
+          patrimonio,
+          item:
+            registro.item,
+          observacao:
+            lerObjetoObservacao(
+              registro.observacaoOriginal
+            ),
+          novidade:
+            lerObjetoObservacao(
+              registro.observacaoAtualizada
+            )?.novidade_recebimento ||
+            null,
+          quantidadeRecebida:
+            Number(
+              registro.item?.quantidade ||
+              1
+            ) || 1,
+          user
+        })
+
+      if (novidade?.id) {
+        novidadesOficiaisCriadas.push(
+          novidade.id
+        )
+      }
+    }
+
     for (const registro of itensQuantitativos) {
       const observacaoAtualizada = {
+        ...registro.observacaoObjetoOriginal,
         tipo_registro:
           'TONFA_QUANTIDADE',
         tonfa_id:
@@ -465,7 +999,12 @@ export async function confirmarRecebimentoCautela({
         saldo_nao_recebido:
           registro.saldoNaoRecebido,
         recebimento_parcial:
-          registro.saldoNaoRecebido > 0
+          registro.saldoNaoRecebido > 0,
+        novidade_recebimento:
+          registro.novidadePreparada ||
+          registro.observacaoObjetoOriginal
+            ?.novidade_recebimento ||
+          null
       }
 
       const {
@@ -490,6 +1029,29 @@ export async function confirmarRecebimentoCautela({
         registro
       )
 
+      if (registro.novidadePreparada) {
+        const novidade =
+          await registrarNovidadeOficial({
+            patrimonio:
+              registro.patrimonio,
+            item:
+              registro.item,
+            observacao:
+              registro.observacaoObjetoOriginal,
+            novidade:
+              registro.novidadePreparada,
+            quantidadeRecebida:
+              registro.quantidadeReceber,
+            user
+          })
+
+        if (novidade?.id) {
+          novidadesOficiaisCriadas.push(
+            novidade.id
+          )
+        }
+      }
+
       await cautelarTonfaParaPolicial({
         tonfaId:
           registro.tonfaId,
@@ -497,9 +1059,16 @@ export async function confirmarRecebimentoCautela({
         quantidade:
           registro.quantidadeReceber,
         observacoes:
-          registro.saldoNaoRecebido > 0
-            ? `RECEBIMENTO PARCIAL PELO USUÁRIO. ENVIADO: ${registro.quantidadeEnviada}. RECEBIDO: ${registro.quantidadeReceber}. SALDO MANTIDO NO SVDD: ${registro.saldoNaoRecebido}.`
-            : 'CARRINHO RECEBIDO INTEGRALMENTE PELO USUÁRIO.',
+          [
+            registro.saldoNaoRecebido > 0
+              ? `RECEBIMENTO PARCIAL PELO USUÁRIO. ENVIADO: ${registro.quantidadeEnviada}. RECEBIDO: ${registro.quantidadeReceber}. SALDO MANTIDO NO SVDD: ${registro.saldoNaoRecebido}.`
+              : 'CARRINHO RECEBIDO INTEGRALMENTE PELO USUÁRIO.',
+            registro.novidadePreparada
+              ? `NOVIDADE RELATADA NO RECEBIMENTO: ${registro.novidadePreparada.tipo} - ${registro.novidadePreparada.descricao} | QUANTIDADE AFETADA: ${registro.novidadePreparada.quantidade_afetada}`
+              : ''
+          ]
+            .filter(Boolean)
+            .join(' | '),
         user
       })
 
@@ -547,12 +1116,21 @@ export async function confirmarRecebimentoCautela({
         totalQuantitativoRecebido,
       total_mantido_svdd:
         totalMantidoSvdd,
+      novidades_registradas:
+        novidadesOficiaisCriadas.length,
       mensagem:
         totalMantidoSvdd > 0
           ? `Recebimento parcial concluído. ${totalQuantitativoRecebido} unidade(s) recebida(s) e ${totalMantidoSvdd} unidade(s) mantida(s) no Cofre do SVDD.`
           : 'Cautela recebida com sucesso. Os materiais já estão sob sua responsabilidade.'
     }
   } catch (error) {
+    if (novidadesOficiaisCriadas.length > 0) {
+      console.warn(
+        'O recebimento falhou após o registro de novidade patrimonial. As novidades já registradas foram mantidas para auditoria:',
+        novidadesOficiaisCriadas
+      )
+    }
+
     for (const registro of [...processados].reverse()) {
       try {
         await devolverTonfaDoPolicialAoSvdd({
@@ -568,6 +1146,26 @@ export async function confirmarRecebimentoCautela({
       } catch (rollbackError) {
         console.error(
           'Falha ao restaurar saldo quantitativo após erro no recebimento:',
+          rollbackError
+        )
+      }
+    }
+
+    for (
+      const registro of
+      [...itensObservacaoAlterados].reverse()
+    ) {
+      try {
+        await supabase
+          .from('sigmo_movimentacao_itens')
+          .update({
+            observacao:
+              registro.observacaoOriginal
+          })
+          .eq('id', registro.item.id)
+      } catch (rollbackError) {
+        console.error(
+          'Falha ao restaurar novidade do item após erro no recebimento:',
           rollbackError
         )
       }

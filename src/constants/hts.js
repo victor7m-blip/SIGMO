@@ -55,7 +55,7 @@ export const MODELOS_HT = [
 
 export const LOCAIS_HT = [
   'COFRE DO SVDD',
-  'COFRE P4',
+  'COFRE DO P4',
   'EM SERVICO',
   'MANUTENCAO',
   'OUTRO'

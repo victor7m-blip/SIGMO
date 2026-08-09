@@ -790,3 +790,90 @@ export async function sincronizarTPDsComPatrimonios(
 
   return tpdsNormalizados.length
 }
+
+export async function obterResumoTPDs() {
+  const {
+    data,
+    error
+  } = await supabase
+    .from(TABLE)
+    .select(
+      'id, status_operacional, local_atual, ativo'
+    )
+    .eq('ativo', true)
+
+  if (error) throw error
+
+  const itens =
+    (data || []).map(
+      normalizarTPD
+    )
+
+  const resumo = {
+    total: itens.length,
+    cofreSvdd: 0,
+    cautelasAtivas: 0,
+    manutencao: 0,
+    recolhidos: 0,
+    baixados: 0,
+    outros: 0
+  }
+
+  for (const item of itens) {
+    const status =
+      normalizarStatus(
+        item?.status_operacional
+      )
+
+    const local =
+      normalizarMaiusculo(
+        item?.local_atual
+      )
+
+    if (
+      status === 'BAIXADO'
+    ) {
+      resumo.baixados += 1
+      continue
+    }
+
+    if (
+      status === 'MANUTENCAO'
+    ) {
+      resumo.manutencao += 1
+      continue
+    }
+
+    if (
+      status === 'RECOLHIDO'
+    ) {
+      resumo.recolhidos += 1
+      continue
+    }
+
+    if (
+      status === 'EM_SERVICO' ||
+      local.includes('CAUTELA') ||
+      local.includes('SERVIÇO') ||
+      local.includes('SERVICO')
+    ) {
+      resumo.cautelasAtivas += 1
+      continue
+    }
+
+    if (
+      status === 'RESERVA' &&
+      (
+        local.includes('SVDD') ||
+        local.includes('COFRE')
+      )
+    ) {
+      resumo.cofreSvdd += 1
+      continue
+    }
+
+    resumo.outros += 1
+  }
+
+  return resumo
+}

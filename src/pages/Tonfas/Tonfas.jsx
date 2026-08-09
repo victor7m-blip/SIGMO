@@ -1951,22 +1951,6 @@ async function finalizarMovimentacao(resultado) {
             />
 
             <CardResumo
-              titulo="Em serviço"
-              detalhes={[
-                {
-                  titulo: 'Tonfas',
-                  valor: resumoSVDD.emServico.tonfas
-                },
-                {
-                  titulo: 'Cassetetes',
-                  valor: resumoSVDD.emServico.cassetetes
-                }
-              ]}
-              destaque="amarelo"
-              onClick={() => setCautelasModalAberto(true)}
-            />
-
-            <CardResumo
               titulo="Cautelas ativas"
               detalhes={[
                 {

@@ -40,7 +40,8 @@ const STATUS_HT_COM_NAO_LOCALIZADO = [
 export default function HTDados({
   form,
   onChange,
-  disabled = false
+  disabled = false,
+  user
 }) {
   const emServico =
     form.status_operacional ===
@@ -54,9 +55,28 @@ export default function HTDados({
     form.status_operacional ===
     'RECOLHIDO'
 
-  const baixado =
-    form.status_operacional ===
-    'BAIXADO'
+    const baixado =
+  form.status_operacional ===
+  'BAIXADO'
+
+  const perfil =
+    String(user?.perfil || '')
+      .trim()
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+       const ehSVDD =
+    perfil === 'SVDD' ||
+    perfil === 'ENCARREGADO SVDD' ||
+    perfil === 'ENCARREGADO DO SVDD' ||
+    perfil === 'AUXILIAR SVDD' ||
+    perfil === 'AUXILIAR DO SVDD'
+
+const locaisDisponiveis =
+  ehSVDD
+    ? ['COFRE DO SVDD']
+    : LOCAIS_HT
 
   function handleCampoPadronizado(event) {
     const {
@@ -247,7 +267,7 @@ export default function HTDados({
             value={form.local_atual}
             onChange={onChange}
             disabled={disabled}
-            options={LOCAIS_HT}
+            options={locaisDisponiveis}
           />
 
           <SigmoSelect

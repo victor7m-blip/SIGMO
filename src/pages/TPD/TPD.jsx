@@ -15,7 +15,8 @@ import TPDTable from './components/TPDTable'
 
 import {
   excluirTPD,
-  listarTPDs
+  listarTPDs,
+  obterResumoTPDs
 } from '../../services/tpdsService'
 
 import {
@@ -34,6 +35,16 @@ export default function TPD({ user }) {
   const [pagina, setPagina] = useState(1)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
+
+  const [resumo, setResumo] = useState({
+    total: 0,
+    cofreSvdd: 0,
+    cautelasAtivas: 0,
+    manutencao: 0,
+    recolhidos: 0,
+    baixados: 0,
+    outros: 0
+  })
 
   const [formAberto, setFormAberto] = useState(false)
   const [tpdEditando, setTPDEditando] = useState(null)
@@ -59,6 +70,30 @@ export default function TPD({ user }) {
     () => Math.max(1, Math.ceil(total / LIMITE)),
     [total]
   )
+
+  const carregarResumo = useCallback(async () => {
+    try {
+      const dados =
+        await obterResumoTPDs()
+
+      setResumo(
+        dados || {
+          total: 0,
+          cofreSvdd: 0,
+          cautelasAtivas: 0,
+          manutencao: 0,
+          recolhidos: 0,
+          baixados: 0,
+          outros: 0
+        }
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao carregar resumo dos TPDs:',
+        error
+      )
+    }
+  }, [])
 
   const carregarTPDs = useCallback(async () => {
     try {
@@ -102,6 +137,10 @@ export default function TPD({ user }) {
   useEffect(() => {
     carregarTPDs()
   }, [carregarTPDs])
+
+  useEffect(() => {
+    carregarResumo()
+  }, [carregarResumo])
 
   function handleFiltroChange(event) {
     const { name, value } = event.target
@@ -199,7 +238,10 @@ export default function TPD({ user }) {
 
   async function handleSaved() {
     fecharFormulario()
-    await carregarTPDs()
+    await Promise.all([
+      carregarTPDs(),
+      carregarResumo()
+    ])
   }
 
   async function handleExcluir(tpd) {
@@ -216,7 +258,10 @@ export default function TPD({ user }) {
 
     try {
       await excluirTPD(tpd.id, user)
-      await carregarTPDs()
+      await Promise.all([
+        carregarTPDs(),
+        carregarResumo()
+      ])
     } catch (error) {
       window.alert(
         error.message ||
@@ -252,6 +297,126 @@ export default function TPD({ user }) {
       : option.label
   }
 
+  const distribuicao = [
+    {
+      chave: 'cofreSvdd',
+      label: 'Cofre do SVDD',
+      valor: resumo.cofreSvdd,
+      classe: 'azul'
+    },
+    {
+      chave: 'cautelasAtivas',
+      label: 'Cautelas ativas',
+      valor: resumo.cautelasAtivas,
+      classe: 'amarelo'
+    },
+    {
+      chave: 'manutencao',
+      label: 'Manutenção',
+      valor: resumo.manutencao,
+      classe: 'laranja'
+    },
+    {
+      chave: 'recolhidos',
+      label: 'Recolhidos',
+      valor: resumo.recolhidos,
+      classe: 'roxo'
+    },
+    {
+      chave: 'outros',
+      label: 'Outras situações',
+      valor: resumo.outros,
+      classe: 'cinza'
+    }
+  ]
+
+  const totalGrafico =
+    Math.max(
+      1,
+      distribuicao.reduce(
+        (soma, item) =>
+          soma + Number(item.valor || 0),
+        0
+      )
+    )
+
+  let acumuladoGrafico = 0
+
+  const coresGrafico = {
+    azul: '#1677d2',
+    amarelo: '#e4ad13',
+    laranja: '#e47c15',
+    roxo: '#7450c8',
+    cinza: '#8796a8'
+  }
+
+  const gradienteRosca =
+    distribuicao
+      .filter(
+        (item) =>
+          Number(item.valor || 0) > 0
+      )
+      .map((item) => {
+        const inicio =
+          acumuladoGrafico
+
+        acumuladoGrafico +=
+          (
+            Number(item.valor || 0) /
+            totalGrafico
+          ) * 100
+
+        return `${coresGrafico[item.classe]} ${inicio}% ${acumuladoGrafico}%`
+      })
+      .join(', ') ||
+    '#d8e3ef 0% 100%'
+
+  function filtrarPorResumo(chave) {
+    setPagina(1)
+
+    if (chave === 'cofreSvdd') {
+      setFiltros((prev) => ({
+        ...prev,
+        status_operacional: 'RESERVA',
+        pesquisa: 'COFRE DO SVDD'
+      }))
+      return
+    }
+
+    if (chave === 'cautelasAtivas') {
+      setFiltros((prev) => ({
+        ...prev,
+        status_operacional: 'EM_SERVICO',
+        pesquisa: ''
+      }))
+      return
+    }
+
+    if (chave === 'manutencao') {
+      setFiltros((prev) => ({
+        ...prev,
+        status_operacional: 'MANUTENCAO',
+        pesquisa: ''
+      }))
+      return
+    }
+
+    if (chave === 'recolhidos') {
+      setFiltros((prev) => ({
+        ...prev,
+        status_operacional: 'RECOLHIDO',
+        pesquisa: ''
+      }))
+      return
+    }
+
+    setFiltros((prev) => ({
+      ...prev,
+      status_operacional: '',
+      pesquisa: ''
+    }))
+  }
+
   return (
     <main className="tpd-page">
       <header className="tpd-header">
@@ -277,7 +442,149 @@ export default function TPD({ user }) {
         </button>
       </header>
 
-        {erro && (
+      <section className="tpd-resumo-grid">
+        <article className="tpd-resumo-card tpd-resumo-total">
+          <small>Carga patrimonial</small>
+          <strong>{resumo.total}</strong>
+          <span>Total de TPDs cadastrados</span>
+        </article>
+
+        <article className="tpd-resumo-card">
+          <small>TPDs</small>
+          <strong>{resumo.total}</strong>
+          <span>Equipamentos ativos</span>
+        </article>
+
+        <article className="tpd-resumo-card">
+          <small>Em manutenção</small>
+          <strong>{resumo.manutencao}</strong>
+          <span>Equipamentos indisponíveis</span>
+        </article>
+      </section>
+
+      <section className="tpd-distribuicao">
+        <div className="tpd-section-title">
+          <div>
+            <span>DISTRIBUIÇÃO ATUAL</span>
+            <h2>Onde estão os TPDs</h2>
+          </div>
+        </div>
+
+        <div className="tpd-distribuicao-cards">
+          {distribuicao.map((item) => (
+            <button
+              type="button"
+              key={item.chave}
+              className={`tpd-local-card tpd-local-${item.classe}`}
+              onClick={() =>
+                filtrarPorResumo(item.chave)
+              }
+            >
+              <span>{item.label}</span>
+              <strong>{item.valor}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="tpd-graficos-grid">
+        <article className="tpd-grafico-card">
+          <div className="tpd-grafico-titulo">
+            <span>DISTRIBUIÇÃO</span>
+            <h3>TPDs por situação</h3>
+          </div>
+
+          <div className="tpd-rosca-layout">
+            <div
+              className="tpd-rosca"
+              style={{
+                background:
+                  `conic-gradient(${gradienteRosca})`
+              }}
+            >
+              <div>
+                <strong>{resumo.total}</strong>
+                <small>TOTAL</small>
+              </div>
+            </div>
+
+            <div className="tpd-legenda">
+              {distribuicao.map((item) => {
+                const percentual =
+                  resumo.total > 0
+                    ? (
+                        Number(item.valor || 0) /
+                        resumo.total
+                      ) * 100
+                    : 0
+
+                return (
+                  <div
+                    key={item.chave}
+                    className="tpd-legenda-linha"
+                  >
+                    <i
+                      className={`tpd-cor tpd-cor-${item.classe}`}
+                    />
+                    <span>{item.label}</span>
+                    <b>{item.valor}</b>
+                    <small>
+                      {percentual.toLocaleString(
+                        'pt-BR',
+                        {
+                          maximumFractionDigits: 1
+                        }
+                      )}%
+                    </small>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </article>
+
+        <article className="tpd-grafico-card">
+          <div className="tpd-grafico-titulo">
+            <span>COMPARATIVO</span>
+            <h3>TPDs por local</h3>
+          </div>
+
+          <div className="tpd-barras">
+            {distribuicao.map((item) => {
+              const percentual =
+                resumo.total > 0
+                  ? (
+                      Number(item.valor || 0) /
+                      resumo.total
+                    ) * 100
+                  : 0
+
+              return (
+                <div
+                  key={item.chave}
+                  className="tpd-barra-linha"
+                >
+                  <span>{item.label}</span>
+
+                  <div className="tpd-barra-trilho">
+                    <i
+                      className={`tpd-barra-preenchimento tpd-barra-${item.classe}`}
+                      style={{
+                        width:
+                          `${percentual}%`
+                      }}
+                    />
+                  </div>
+
+                  <b>{item.valor}</b>
+                </div>
+              )
+            })}
+          </div>
+        </article>
+      </section>
+
+      {erro && (
         <div className="tpd-alert-error">
           {erro}
         </div>
@@ -727,17 +1034,36 @@ function TPDDetalhesModal({
                 !erroFotos &&
                 fotoSelecionada && (
                   <>
-                    <img
-                      src={
-                        fotoSelecionada.url
-                      }
-                      alt={
-                        tpd.patrimonio ||
-                        tpd.numero_serie ||
-                        'TPD'
-                      }
-                      className="tpd-modal-photo"
-                    />
+                    <div className="tpd-modal-foto-destaque">
+  <img
+    src={fotoSelecionada.url}
+    alt={`Foto do TPD ${
+      tpd.patrimonio ||
+      tpd.numero_serie ||
+      ''
+    }`}
+  />
+
+  {fotoSelecionada.principal && (
+    <span className="tpd-modal-selo-principal">
+      Foto principal
+    </span>
+  )}
+
+  <button
+    type="button"
+    className="tpd-modal-ampliar"
+    onClick={() =>
+      window.open(
+        fotoSelecionada.url,
+        '_blank',
+        'noopener,noreferrer'
+      )
+    }
+  >
+    Ampliar
+  </button>
+</div>
 
                     {fotosDisponiveis.length >
                       1 && (
@@ -845,7 +1171,7 @@ function TPDDetalhesModal({
             Editar
           </button>
         </footer>
-      </section>
+        </section>
     </div>
   )
 }

@@ -14,6 +14,7 @@ import {
 } from '../../services/cautelasUsuarioService'
 
 import './CautelasUsuario.css'
+import './CautelasUsuarioNovidades.css'
 
 function formatarData(valor) {
   if (!valor) return 'Não informada'
@@ -137,36 +138,6 @@ function chaveQuantidadeDevolucao(item) {
   return `DEVOLUCAO:${chaveItemEstavel(item)}`
 }
 
-function ItensMovimentacao({
-  movimentacaoId = '',
-  itens = []
-}) {
-  if (!Array.isArray(itens) || itens.length === 0) {
-    return (
-      <p className="cautela-usuario-vazio-item">
-        Os itens deste carrinho não puderam ser detalhados.
-      </p>
-    )
-  }
-
-  return (
-    <div className="cautela-usuario-itens">
-      {itens.map((item, index) => (
-        <article
-          key={item?.id || item?.patrimonio_id || index}
-          className="cautela-usuario-item"
-        >
-          <div className="cautela-usuario-item-identificacao">
-            <strong>{obterDescricao(item)}</strong>
-            <span>{obterIdentificacao(item)}</span>
-          </div>
-
-          <b>Qtd. {quantidadeEnviada(item)}</b>
-        </article>
-      ))}
-    </div>
-  )
-}
 
 export default function CautelasUsuario({
   user,
@@ -179,6 +150,7 @@ export default function CautelasUsuario({
   const [quantidadesDevolver, setQuantidadesDevolver] = useState({})
   const [devolucoes, setDevolucoes] = useState([])
   const [quantidadesReceber, setQuantidadesReceber] = useState({})
+  const [novidadesRecebimento, setNovidadesRecebimento] = useState({})
   const [loading, setLoading] = useState(true)
   const [processando, setProcessando] = useState('')
   const [erro, setErro] = useState('')
@@ -503,6 +475,329 @@ function alterarQuantidadeDevolver(
   }))
 }
 
+  function obterNovidadeRecebimento(chave) {
+    return (
+      novidadesRecebimento[chave] ||
+      null
+    )
+  }
+
+  function alternarNovidadeRecebimento(chave) {
+    setNovidadesRecebimento(
+      (estadoAtual) => {
+        const atual =
+          estadoAtual[chave]
+
+        if (!atual) {
+          return {
+            ...estadoAtual,
+            [chave]: {
+              aberta: true,
+              tipo: '',
+              descricao: '',
+              providencia: 'ANALISE',
+              quantidade_afetada: 1,
+              fotos: [],
+              previews: []
+            }
+          }
+        }
+
+        return {
+          ...estadoAtual,
+          [chave]: {
+            ...atual,
+            aberta: !atual.aberta
+          }
+        }
+      }
+    )
+
+    setErro('')
+    setMensagem('')
+  }
+
+  function alterarNovidadeRecebimento(
+    chave,
+    campo,
+    valor,
+    quantidadeMaxima = 1
+  ) {
+    setNovidadesRecebimento(
+      (estadoAtual) => {
+        const atual =
+          estadoAtual[chave] || {
+            aberta: true,
+            tipo: '',
+            descricao: '',
+            providencia: 'ANALISE',
+            quantidade_afetada: 1,
+            fotos: [],
+            previews: []
+          }
+
+        let novoValor = valor
+
+        if (
+          campo === 'tipo' ||
+          campo === 'descricao' ||
+          campo === 'providencia'
+        ) {
+          novoValor = String(
+            valor || ''
+          ).toUpperCase()
+        }
+
+        if (
+          campo === 'quantidade_afetada'
+        ) {
+          const maxima = Math.max(
+            1,
+            Number(quantidadeMaxima) || 1
+          )
+
+          novoValor = Math.max(
+            1,
+            Math.min(
+              Number(valor) || 1,
+              maxima
+            )
+          )
+        }
+
+        return {
+          ...estadoAtual,
+          [chave]: {
+            ...atual,
+            [campo]: novoValor
+          }
+        }
+      }
+    )
+  }
+
+  function selecionarFotosNovidadeRecebimento(
+    chave,
+    event
+  ) {
+    const arquivos = Array.from(
+      event.target.files || []
+    )
+
+    event.target.value = ''
+
+    if (arquivos.length === 0) {
+      return
+    }
+
+    const limiteBytes =
+      5 * 1024 * 1024
+
+    if (
+      arquivos.some(
+        (arquivo) =>
+          !arquivo.type.startsWith(
+            'image/'
+          )
+      )
+    ) {
+      setErro(
+        'Selecione somente arquivos de imagem.'
+      )
+      return
+    }
+
+    if (
+      arquivos.some(
+        (arquivo) =>
+          arquivo.size > limiteBytes
+      )
+    ) {
+      setErro(
+        'Cada foto deve possuir no máximo 5 MB.'
+      )
+      return
+    }
+
+    const novosPreviews =
+      arquivos.map(
+        (arquivo, indice) => ({
+          id: `${Date.now()}-${indice}-${arquivo.name}`,
+          url:
+            URL.createObjectURL(
+              arquivo
+            ),
+          nome: arquivo.name
+        })
+      )
+
+    setNovidadesRecebimento(
+      (estadoAtual) => {
+        const atual =
+          estadoAtual[chave] || {
+            aberta: true,
+            tipo: '',
+            descricao: '',
+            providencia: 'ANALISE',
+            quantidade_afetada: 1,
+            fotos: [],
+            previews: []
+          }
+
+        return {
+          ...estadoAtual,
+          [chave]: {
+            ...atual,
+            aberta: true,
+            fotos: [
+              ...(atual.fotos || []),
+              ...arquivos
+            ],
+            previews: [
+              ...(atual.previews || []),
+              ...novosPreviews
+            ]
+          }
+        }
+      }
+    )
+
+    setErro('')
+  }
+
+  function removerFotoNovidadeRecebimento(
+    chave,
+    indice
+  ) {
+    setNovidadesRecebimento(
+      (estadoAtual) => {
+        const atual =
+          estadoAtual[chave]
+
+        if (!atual) {
+          return estadoAtual
+        }
+
+        const previews = [
+          ...(atual.previews || [])
+        ]
+
+        const preview =
+          previews[indice]
+
+        if (preview?.url) {
+          URL.revokeObjectURL(
+            preview.url
+          )
+        }
+
+        previews.splice(indice, 1)
+
+        const fotos = [
+          ...(atual.fotos || [])
+        ]
+
+        fotos.splice(indice, 1)
+
+        return {
+          ...estadoAtual,
+          [chave]: {
+            ...atual,
+            fotos,
+            previews
+          }
+        }
+      }
+    )
+  }
+
+  function removerNovidadeRecebimento(chave) {
+    setNovidadesRecebimento(
+      (estadoAtual) => {
+        const atual =
+          estadoAtual[chave]
+
+        ;(atual?.previews || []).forEach(
+          (preview) => {
+            if (preview?.url) {
+              URL.revokeObjectURL(
+                preview.url
+              )
+            }
+          }
+        )
+
+        const proximo = {
+          ...estadoAtual
+        }
+
+        delete proximo[chave]
+
+        return proximo
+      }
+    )
+  }
+
+  function novidadeParaEnvio(
+    chave,
+    quantidadeMaxima = 1
+  ) {
+    const novidade =
+      novidadesRecebimento[chave]
+
+    if (!novidade) {
+      return null
+    }
+
+    const possuiConteudo = Boolean(
+      novidade.tipo ||
+      novidade.descricao ||
+      (novidade.fotos || []).length
+    )
+
+    if (!possuiConteudo) {
+      return null
+    }
+
+    return {
+      tipo:
+        String(novidade.tipo || '')
+          .trim()
+          .toUpperCase(),
+      descricao:
+        String(
+          novidade.descricao || ''
+        )
+          .trim()
+          .toUpperCase(),
+      providencia:
+        String(
+          novidade.providencia ||
+          'ANALISE'
+        )
+          .trim()
+          .toUpperCase(),
+      quantidade_afetada:
+        Math.max(
+          1,
+          Math.min(
+            Number(
+              novidade.quantidade_afetada ||
+              1
+            ),
+            Math.max(
+              1,
+              Number(
+                quantidadeMaxima
+              ) || 1
+            )
+          )
+        ),
+      fotos:
+        novidade.fotos || []
+    }
+  }
+
   function alterarQuantidadeReceber(
     chave,
     valor,
@@ -550,7 +845,23 @@ function alterarQuantidadeDevolver(
                 )
               )
             : enviada,
-          quantitativo
+          quantitativo,
+          novidade:
+            novidadeParaEnvio(
+              chave,
+              quantitativo
+                ? Math.max(
+                    1,
+                    Math.min(
+                      Number(
+                        quantidadesReceber[chave] ??
+                        enviada
+                      ) || 1,
+                      enviada
+                    )
+                  )
+                : enviada
+            )
         }
       }
     )
@@ -585,6 +896,26 @@ function alterarQuantidadeDevolver(
     const itensRecebimento =
       prepararItensRecebimento(movimentacao)
 
+    for (const item of itensRecebimento) {
+      if (!item.novidade) {
+        continue
+      }
+
+      if (!item.novidade.tipo) {
+        setErro(
+          'Selecione o tipo de todas as novidades registradas.'
+        )
+        return
+      }
+
+      if (!item.novidade.descricao) {
+        setErro(
+          'Descreva todas as novidades registradas.'
+        )
+        return
+      }
+    }
+
     const quantitativosParciais = itensRecebimento.filter(
       (item) =>
         item.quantitativo &&
@@ -616,6 +947,39 @@ function alterarQuantidadeDevolver(
           (quantitativosParciais.length > 0
             ? 'Recebimento parcial concluído. As quantidades não recebidas permaneceram no Cofre do SVDD.'
             : 'Cautela recebida com sucesso. Os materiais já estão sob sua responsabilidade.')
+      )
+
+      setNovidadesRecebimento(
+        (estadoAtual) => {
+          const proximo = {
+            ...estadoAtual
+          }
+
+          ;(
+            movimentacao?.itens || []
+          ).forEach((item) => {
+            const chave =
+              chaveQuantidadeRecebimento(
+                movimentacao.id,
+                item
+              )
+
+            ;(
+              proximo[chave]
+                ?.previews || []
+            ).forEach((preview) => {
+              if (preview?.url) {
+                URL.revokeObjectURL(
+                  preview.url
+                )
+              }
+            })
+
+            delete proximo[chave]
+          })
+
+          return proximo
+        }
       )
 
       await carregar()
@@ -990,11 +1354,7 @@ function alterarQuantidadeDevolver(
                   </small>
                 </div>
 
-                <ItensMovimentacao
-                  movimentacaoId={movimentacao.id}
-                  itens={movimentacao.itens}
-                />
-
+                
                 <div className="cautela-usuario-carrinho">
                   <h3>Materiais para recebimento</h3>
 
@@ -1065,6 +1425,237 @@ function alterarQuantidadeDevolver(
                                     Quantidade enviada pelo SVDD: {enviada}
                                   </small>
                                 </label>
+                              )}
+
+                              <div className="cautela-usuario-novidade-acoes">
+                                <button
+                                  type="button"
+                                  className="cautela-usuario-novidade-botao"
+                                  onClick={() =>
+                                    alternarNovidadeRecebimento(
+                                      chave
+                                    )
+                                  }
+                                >
+                                  {obterNovidadeRecebimento(chave)
+                                    ? obterNovidadeRecebimento(chave)?.aberta
+                                      ? 'Fechar novidade'
+                                      : 'Editar novidade'
+                                    : 'Registrar novidade'}
+                                </button>
+
+                                {obterNovidadeRecebimento(chave) && (
+                                  <>
+                                    <span className="cautela-usuario-novidade-ok">
+                                      ✓ Novidade registrada
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      className="cautela-usuario-novidade-remover"
+                                      onClick={() =>
+                                        removerNovidadeRecebimento(
+                                          chave
+                                        )
+                                      }
+                                    >
+                                      Remover
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+
+                              {obterNovidadeRecebimento(chave)?.aberta && (
+                                <div className="cautela-usuario-novidade-card">
+                                  <div className="cautela-usuario-novidade-titulo">
+                                    <span>REGISTRO DE NOVIDADE</span>
+                                    <strong>
+                                      {obterDescricao(item)}
+                                    </strong>
+                                  </div>
+
+                                  <div className="cautela-usuario-novidade-grid">
+                                    <label>
+                                      Tipo
+
+                                      <select
+                                        value={
+                                          obterNovidadeRecebimento(chave)?.tipo ||
+                                          ''
+                                        }
+                                        onChange={(event) =>
+                                          alterarNovidadeRecebimento(
+                                            chave,
+                                            'tipo',
+                                            event.target.value,
+                                            quantidadeReceber
+                                          )
+                                        }
+                                      >
+                                        <option value="">
+                                          SELECIONE
+                                        </option>
+                                        <option value="AVARIA">
+                                          AVARIA
+                                        </option>
+                                        <option value="DEFEITO">
+                                          DEFEITO
+                                        </option>
+                                        <option value="MANUTENCAO_PREVENTIVA">
+                                          MANUTENÇÃO PREVENTIVA
+                                        </option>
+                                        <option value="LIMPEZA">
+                                          LIMPEZA NECESSÁRIA
+                                        </option>
+                                        <option value="EXTRAVIO_ACESSORIO">
+                                          EXTRAVIO DE ACESSÓRIO
+                                        </option>
+                                        <option value="OUTRO">
+                                          OUTRO
+                                        </option>
+                                      </select>
+                                    </label>
+
+                                    <label>
+                                      Providência sugerida
+
+                                      <select
+                                        value={
+                                          obterNovidadeRecebimento(chave)?.providencia ||
+                                          'ANALISE'
+                                        }
+                                        onChange={(event) =>
+                                          alterarNovidadeRecebimento(
+                                            chave,
+                                            'providencia',
+                                            event.target.value,
+                                            quantidadeReceber
+                                          )
+                                        }
+                                      >
+                                        <option value="ANALISE">
+                                          ANÁLISE PELO SVDD/P4
+                                        </option>
+                                        <option value="MANUTENCAO">
+                                          MANUTENÇÃO
+                                        </option>
+                                        <option value="BAIXA">
+                                          AVALIAR BAIXA
+                                        </option>
+                                      </select>
+                                    </label>
+
+                                    {quantitativo && (
+                                      <label>
+                                        Quantidade com novidade
+
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max={quantidadeReceber}
+                                          value={
+                                            obterNovidadeRecebimento(chave)
+                                              ?.quantidade_afetada ||
+                                            1
+                                          }
+                                          onChange={(event) =>
+                                            alterarNovidadeRecebimento(
+                                              chave,
+                                              'quantidade_afetada',
+                                              event.target.value,
+                                              quantidadeReceber
+                                            )
+                                          }
+                                        />
+                                      </label>
+                                    )}
+
+                                    <label className="cautela-usuario-novidade-full">
+                                      Descrição
+
+                                      <textarea
+                                        value={
+                                          obterNovidadeRecebimento(chave)
+                                            ?.descricao ||
+                                          ''
+                                        }
+                                        onChange={(event) =>
+                                          alterarNovidadeRecebimento(
+                                            chave,
+                                            'descricao',
+                                            event.target.value,
+                                            quantidadeReceber
+                                          )
+                                        }
+                                        placeholder="DESCREVA O QUE FOI CONSTATADO NA CONFERÊNCIA"
+                                      />
+                                    </label>
+
+                                    <label className="cautela-usuario-novidade-full">
+                                      Fotos
+
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        multiple
+                                        onChange={(event) =>
+                                          selecionarFotosNovidadeRecebimento(
+                                            chave,
+                                            event
+                                          )
+                                        }
+                                      />
+
+                                      <small>
+                                        Cada foto pode ter no máximo 5 MB.
+                                      </small>
+                                    </label>
+                                  </div>
+
+                                  {(obterNovidadeRecebimento(chave)?.previews || [])
+                                    .length > 0 && (
+                                    <div className="cautela-usuario-novidade-fotos">
+                                      {(obterNovidadeRecebimento(chave)?.previews || [])
+                                        .map((preview, indice) => (
+                                          <article
+                                            key={preview.id}
+                                            className="cautela-usuario-novidade-foto"
+                                          >
+                                            <a
+                                              href={preview.url}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              title="Ampliar foto"
+                                            >
+                                              <img
+                                                src={preview.url}
+                                                alt={`Foto ${indice + 1} da novidade`}
+                                              />
+                                            </a>
+
+                                            <div>
+                                              <span>
+                                                Foto {indice + 1}
+                                              </span>
+
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  removerFotoNovidadeRecebimento(
+                                                    chave,
+                                                    indice
+                                                  )
+                                                }
+                                              >
+                                                Remover
+                                              </button>
+                                            </div>
+                                          </article>
+                                        ))}
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </article>

@@ -15,6 +15,11 @@ import {
 } from '../../services/tonfasService'
 
 import {
+  listarEntregasHTAtivas,
+  receberDevolucaoHT
+} from '../../services/htsOperacoesService'
+
+import {
   receberMateriais,
   LOCAL_RETORNO_PADRAO
 } from '../../services/recebimentoService'
@@ -197,15 +202,6 @@ export default function ReceberMaterial({
   ] = useState('')
 
   const [
-    fotosNovidade,
-    setFotosNovidade
-  ] = useState([])
-
-  const [
-    previewsFotosNovidade,
-    setPreviewsFotosNovidade
-  ] = useState([])
-  const [
     policialEntregador,
     setPolicialEntregador
   ] = useState(null)
@@ -240,25 +236,6 @@ export default function ReceberMaterial({
     setObservacoes
   ] = useState('')
 
-  const [
-    registrarNovidade,
-    setRegistrarNovidade
-  ] = useState(false)
-
-  const [
-    tipoNovidade,
-    setTipoNovidade
-  ] = useState('')
-
-  const [
-    descricaoNovidade,
-    setDescricaoNovidade
-  ] = useState('')
-
-  const [
-    providenciaNovidade,
-    setProvidenciaNovidade
-  ] = useState('COFRE')
 
   const [
     localRetorno,
@@ -291,120 +268,6 @@ export default function ReceberMaterial({
     obterNomePolicial(
       policialEntregador
     )
-
-  function limparFotosNovidade() {
-    previewsFotosNovidade.forEach(
-      (preview) => {
-        if (preview?.url) {
-          URL.revokeObjectURL(
-            preview.url
-          )
-        }
-      }
-    )
-
-    setFotosNovidade([])
-    setPreviewsFotosNovidade([])
-  }
-
-  function selecionarFotoNovidade(event) {
-    const arquivos = Array.from(
-      event.target.files || []
-    )
-
-    event.target.value = ''
-
-    if (arquivos.length === 0) {
-      return
-    }
-
-    const limiteBytes =
-      5 * 1024 * 1024
-
-    const arquivosInvalidos =
-      arquivos.filter(
-        (arquivo) =>
-          !arquivo.type.startsWith(
-            'image/'
-          )
-      )
-
-    if (arquivosInvalidos.length > 0) {
-      setErro(
-        'Selecione somente arquivos de imagem.'
-      )
-      return
-    }
-
-    const arquivosGrandes =
-      arquivos.filter(
-        (arquivo) =>
-          arquivo.size > limiteBytes
-      )
-
-    if (arquivosGrandes.length > 0) {
-      setErro(
-        'Cada foto deve possuir no máximo 5 MB.'
-      )
-      return
-    }
-
-    const novosPreviews =
-      arquivos.map(
-        (arquivo, indice) => ({
-          id: `${Date.now()}-${indice}-${arquivo.name}`,
-          nome: arquivo.name,
-          url: URL.createObjectURL(
-            arquivo
-          )
-        })
-      )
-
-    setFotosNovidade(
-      (listaAtual) => [
-        ...listaAtual,
-        ...arquivos
-      ]
-    )
-
-    setPreviewsFotosNovidade(
-      (listaAtual) => [
-        ...listaAtual,
-        ...novosPreviews
-      ]
-    )
-
-    setErro('')
-    setMensagem('')
-  }
-
-  function removerFotoNovidade(indice) {
-    setPreviewsFotosNovidade(
-      (listaAtual) => {
-        const preview =
-          listaAtual[indice]
-
-        if (preview?.url) {
-          URL.revokeObjectURL(
-            preview.url
-          )
-        }
-
-        return listaAtual.filter(
-          (_, posicao) =>
-            posicao !== indice
-        )
-      }
-    )
-
-    setFotosNovidade(
-      (listaAtual) =>
-        listaAtual.filter(
-          (_, posicao) =>
-            posicao !== indice
-        )
-    )
-  }
 
   const carregarCargaPatrimonial =
     useCallback(
@@ -605,20 +468,6 @@ export default function ReceberMaterial({
     carregarCargaPatrimonial
   ])
 
-  useEffect(() => {
-    return () => {
-      previewsFotosNovidade.forEach(
-        (preview) => {
-          if (preview?.url) {
-            URL.revokeObjectURL(
-              preview.url
-            )
-          }
-        }
-      )
-    }
-  }, [previewsFotosNovidade])
-
   const patrimoniosFiltrados =
     useMemo(() => {
       const termo =
@@ -662,6 +511,387 @@ export default function ReceberMaterial({
             criarChaveItem(item)
         )
     )
+
+  function chaveItemPorId(item) {
+    return String(
+      item?.id ||
+      item?.patrimonio_id ||
+      item?.referencia_id ||
+      ''
+    )
+  }
+
+  function atualizarItemSelecionado(
+    itemId,
+    atualizador
+  ) {
+    setItensSelecionados(
+      (listaAtual) =>
+        listaAtual.map((item) => {
+          if (
+            chaveItemPorId(item) !==
+            String(itemId)
+          ) {
+            return item
+          }
+
+          return atualizador(item)
+        })
+    )
+  }
+
+  function alternarNovidadeItem(itemId) {
+    atualizarItemSelecionado(
+      itemId,
+      (item) => ({
+        ...item,
+
+        novidade_aberta:
+          !item.novidade_aberta,
+
+        novidade:
+          item.novidade || {
+            tipo: '',
+            descricao: '',
+            providencia: 'COFRE',
+            quantidade_afetada: 1,
+            fotos: [],
+            previews: []
+          }
+      })
+    )
+
+    setErro('')
+    setMensagem('')
+  }
+
+  function alterarNovidadeItem(
+    itemId,
+    campo,
+    valor
+  ) {
+    atualizarItemSelecionado(
+      itemId,
+      (item) => {
+        const novidadeAtual =
+          item.novidade || {
+            tipo: '',
+            descricao: '',
+            providencia: 'COFRE',
+            quantidade_afetada: 1,
+            fotos: [],
+            previews: []
+          }
+
+        let novoValor = valor
+
+        if (
+          campo === 'tipo' ||
+          campo === 'providencia' ||
+          campo === 'descricao'
+        ) {
+          novoValor =
+            normalizarTexto(valor)
+        }
+
+        if (
+          campo === 'quantidade_afetada'
+        ) {
+          const maximo =
+            Math.max(
+              1,
+              Number(
+                item.quantidade_receber ??
+                item.quantidade ??
+                1
+              )
+            )
+
+          novoValor =
+            Math.max(
+              1,
+              Math.min(
+                Number(valor) || 1,
+                maximo
+              )
+            )
+        }
+
+        return {
+          ...item,
+
+          novidade: {
+            ...novidadeAtual,
+            [campo]: novoValor
+          }
+        }
+      }
+    )
+
+    setErro('')
+    setMensagem('')
+  }
+
+  function selecionarFotosNovidadeItem(
+    itemId,
+    event
+  ) {
+    const arquivos =
+      Array.from(
+        event.target.files ||
+        []
+      )
+
+    event.target.value = ''
+
+    if (arquivos.length === 0) {
+      return
+    }
+
+    const limiteBytes =
+      5 * 1024 * 1024
+
+    if (
+      arquivos.some(
+        (arquivo) =>
+          !arquivo.type.startsWith(
+            'image/'
+          )
+      )
+    ) {
+      setErro(
+        'Selecione somente arquivos de imagem.'
+      )
+      return
+    }
+
+    if (
+      arquivos.some(
+        (arquivo) =>
+          arquivo.size >
+          limiteBytes
+      )
+    ) {
+      setErro(
+        'Cada foto deve possuir no máximo 5 MB.'
+      )
+      return
+    }
+
+    const novosPreviews =
+      arquivos.map(
+        (arquivo, indice) => ({
+          id: `${Date.now()}-${indice}-${arquivo.name}`,
+          nome: arquivo.name,
+          url:
+            URL.createObjectURL(
+              arquivo
+            )
+        })
+      )
+
+    atualizarItemSelecionado(
+      itemId,
+      (item) => ({
+        ...item,
+
+        novidade: {
+          ...(item.novidade || {
+            tipo: '',
+            descricao: '',
+            providencia: 'COFRE',
+            quantidade_afetada: 1
+          }),
+
+          fotos: [
+            ...(
+              item.novidade?.fotos ||
+              []
+            ),
+            ...arquivos
+          ],
+
+          previews: [
+            ...(
+              item.novidade?.previews ||
+              []
+            ),
+            ...novosPreviews
+          ]
+        }
+      })
+    )
+
+    setErro('')
+    setMensagem('')
+  }
+
+  function removerFotoNovidadeItem(
+    itemId,
+    indice
+  ) {
+    atualizarItemSelecionado(
+      itemId,
+      (item) => {
+        const previews = [
+          ...(
+            item.novidade?.previews ||
+            []
+          )
+        ]
+
+        const preview =
+          previews[indice]
+
+        if (preview?.url) {
+          URL.revokeObjectURL(
+            preview.url
+          )
+        }
+
+        previews.splice(
+          indice,
+          1
+        )
+
+        const fotos = [
+          ...(
+            item.novidade?.fotos ||
+            []
+          )
+        ]
+
+        fotos.splice(
+          indice,
+          1
+        )
+
+        return {
+          ...item,
+
+          novidade: {
+            ...(item.novidade || {}),
+            fotos,
+            previews
+          }
+        }
+      }
+    )
+  }
+
+  function removerNovidadeItem(
+    itemId
+  ) {
+    atualizarItemSelecionado(
+      itemId,
+      (item) => {
+        ;(
+          item.novidade?.previews ||
+          []
+        ).forEach((preview) => {
+          if (preview?.url) {
+            URL.revokeObjectURL(
+              preview.url
+            )
+          }
+        })
+
+        const {
+          novidade,
+          novidade_aberta,
+          ...restante
+        } = item
+
+        return restante
+      }
+    )
+
+    setErro('')
+    setMensagem('')
+  }
+
+  function prepararNovidadeItem(
+    item
+  ) {
+    const novidade =
+      item?.novidade
+
+    if (!novidade) {
+      return null
+    }
+
+    const possuiConteudo =
+      Boolean(
+        novidade.tipo ||
+        novidade.descricao ||
+        (
+          novidade.fotos ||
+          []
+        ).length
+      )
+
+    if (!possuiConteudo) {
+      return null
+    }
+
+    return {
+      tipo:
+        normalizarTexto(
+          novidade.tipo
+        ),
+
+      descricao:
+        normalizarTexto(
+          novidade.descricao
+        ),
+
+      providencia:
+        normalizarTexto(
+          novidade.providencia ||
+          'COFRE'
+        ),
+
+      quantidade_afetada:
+        item?.tipo_registro ===
+          'TONFA_QUANTIDADE'
+          ? Math.max(
+              1,
+              Math.min(
+                Number(
+                  novidade.quantidade_afetada ||
+                  1
+                ),
+                Number(
+                  item.quantidade_receber ||
+                  item.quantidade ||
+                  1
+                )
+              )
+            )
+          : 1,
+
+      status:
+        'PENDENTE',
+
+      registrada_em:
+        new Date().toISOString(),
+
+      registrada_por_id:
+        user?.id || null,
+
+      registrada_por_nome:
+        normalizarTexto(
+          obterNomeUsuario(user)
+        ),
+
+      fotos:
+        novidade.fotos || [],
+
+      foto:
+        novidade.fotos?.[0] ||
+        null
+    }
+  }
 
   function alterarRe(valor) {
     const re =
@@ -775,6 +1005,21 @@ function alterarQuantidade(id, valor) {
   }
 
   function limpar() {
+    itensSelecionados.forEach(
+      (item) => {
+        ;(
+          item.novidade?.previews ||
+          []
+        ).forEach((preview) => {
+          if (preview?.url) {
+            URL.revokeObjectURL(
+              preview.url
+            )
+          }
+        })
+      }
+    )
+
     setReEntregador('')
     setPolicialEntregador(null)
     setPatrimonios([])
@@ -783,14 +1028,9 @@ function alterarQuantidade(id, valor) {
     setBusca('')
     setDocumento('')
     setObservacoes('')
-    setRegistrarNovidade(false)
-    setTipoNovidade('')
-    setDescricaoNovidade('')
-    setProvidenciaNovidade('COFRE')
     setLocalRetorno(
       LOCAL_RETORNO_PADRAO
     )
-    limparFotosNovidade()
     setErro('')
     setMensagem('')
   }
@@ -828,24 +1068,27 @@ async function confirmarRecebimento() {
     return
   }
 
-  if (
-    registrarNovidade &&
-    !tipoNovidade
-  ) {
-    setErro(
-      'Selecione o tipo da novidade.'
-    )
-    return
-  }
+  for (const item of itensSelecionados) {
+    const novidade =
+      prepararNovidadeItem(item)
 
-  if (
-    registrarNovidade &&
-    !descricaoNovidade.trim()
-  ) {
-    setErro(
-      'Descreva a novidade registrada.'
-    )
-    return
+    if (!novidade) {
+      continue
+    }
+
+    if (!novidade.tipo) {
+      setErro(
+        `Selecione o tipo da novidade de ${obterIdentificador(item)}.`
+      )
+      return
+    }
+
+    if (!novidade.descricao) {
+      setErro(
+        `Descreva a novidade de ${obterIdentificador(item)}.`
+      )
+      return
+    }
   }
 
   recebimentoEmAndamento.current = true
@@ -855,47 +1098,6 @@ async function confirmarRecebimento() {
     setErro('')
     setMensagem('')
 
-      const novidadeRecebimento =
-      registrarNovidade
-        ? {
-            tipo:
-              normalizarTexto(
-                tipoNovidade
-              ),
-
-            descricao:
-              normalizarTexto(
-                descricaoNovidade
-              ),
-
-            providencia:
-              normalizarTexto(
-                providenciaNovidade
-              ),
-
-            status:
-              'PENDENTE',
-
-            registrada_em:
-              new Date().toISOString(),
-
-            registrada_por_id:
-              user?.id || null,
-
-            registrada_por_nome:
-              normalizarTexto(
-                obterNomeUsuario(user)
-              ),
-
-            fotos:
-              fotosNovidade,
-
-            foto:
-              fotosNovidade[0] ||
-              null
-          }
-        : null
-
     const itensTonfa =
       itensSelecionados.filter(
         (item) =>
@@ -903,56 +1105,203 @@ async function confirmarRecebimento() {
           'TONFA_QUANTIDADE'
       )
 
+    const entregasHTAtivas =
+      await listarEntregasHTAtivas()
+
+    function localizarMovimentacaoHT(item) {
+      const referenciaItem =
+        String(
+          item?.referencia_id ||
+          ''
+        )
+
+      const patrimonioItem =
+        String(
+          item?.patrimonio_id ||
+          item?.id ||
+          ''
+        )
+
+      return (
+        (entregasHTAtivas || []).find(
+          (mov) => {
+            const dados =
+              mov?.dados ||
+              mov?.metadata?.dados_engine ||
+              {}
+
+            const referenciaMov =
+              String(
+                dados?.ht_id ||
+                dados?.referencia_id ||
+                mov?.metadata?.patrimonio?.referencia_id ||
+                ''
+              )
+
+            const patrimonioMov =
+              String(
+                mov?.patrimonio_id ||
+                mov?.patrimonioId ||
+                ''
+              )
+
+            return (
+              (
+                referenciaItem &&
+                referenciaMov ===
+                  referenciaItem
+              ) ||
+              (
+                patrimonioItem &&
+                patrimonioMov ===
+                  patrimonioItem
+              )
+            )
+          }
+        ) || null
+      )
+    }
+
+    const itensHT =
+      itensSelecionados.filter(
+        (item) =>
+          item?.tipo_registro !==
+            'TONFA_QUANTIDADE' &&
+          Boolean(
+            localizarMovimentacaoHT(item)
+          )
+      )
+
+    const chavesHT =
+      new Set(
+        itensHT.map(
+          criarChaveItem
+        )
+      )
+
     const itensIndividuais =
       itensSelecionados.filter(
         (item) =>
           item?.tipo_registro !==
-          'TONFA_QUANTIDADE'
+            'TONFA_QUANTIDADE' &&
+          !chavesHT.has(
+            criarChaveItem(item)
+          )
       )
 
     const resultadosIndividuais = []
+    const resultadosHT = []
 
     if (
-      itensIndividuais.length > 0
+      itensHT.length > 0
     ) {
-      const resultado =
-        await receberMateriais({
-          itens:
-            itensIndividuais,
+      const movimentacoesHT = []
 
-          entregadorRE:
-            reEntregador,
+      for (const item of itensHT) {
+        const movimentacao =
+          localizarMovimentacaoHT(item)
 
-          entregadorNome:
-            nomeEntregador,
+        if (!movimentacao?.id) {
+          throw new Error(
+            `A cautela ativa do HT ${obterIdentificador(item)} não foi localizada. Atualize a tela e tente novamente.`
+          )
+        }
 
-          localDestino:
+        movimentacoesHT.push(
+          movimentacao
+        )
+      }
+
+      const recebidosHT =
+        await receberDevolucaoHT({
+          movimentacoes:
+            movimentacoesHT,
+
+          destinoCodigo:
+            'SVDD',
+
+          observacoes:
             normalizarTexto(
-              localRetorno
-            ),
+              [
+                observacoes,
+                ...itensHT
+                  .map((item) => {
+                    const novidade =
+                      prepararNovidadeItem(
+                        item
+                      )
 
-          documento:
-            normalizarTexto(
-              documento
-            ),
-
-          observacao:
-            normalizarTexto(
-              observacoes
-            ),
-
-          novidade:
-            novidadeRecebimento,
+                    return novidade
+                      ? `NOVIDADE ${obterIdentificador(item)}: ${novidade.tipo} - ${novidade.descricao} | PROVIDÊNCIA: ${novidade.providencia}`
+                      : ''
+                  })
+                  .filter(Boolean)
+              ]
+                .filter(Boolean)
+                .join(' | ')
+            ) ||
+            'DEVOLUÇÃO DE HT RECEBIDA PELO SVDD.',
 
           user
         })
 
-      resultadosIndividuais.push(
+      resultadosHT.push(
         ...(
-          resultado?.resultados ||
-          []
+          recebidosHT || []
         )
       )
+    }
+
+    if (
+      itensIndividuais.length > 0
+    ) {
+      for (
+        const item of
+        itensIndividuais
+      ) {
+        const novidadeItem =
+          prepararNovidadeItem(
+            item
+          )
+
+        const resultado =
+          await receberMateriais({
+            itens: [item],
+
+            entregadorRE:
+              reEntregador,
+
+            entregadorNome:
+              nomeEntregador,
+
+            localDestino:
+              normalizarTexto(
+                localRetorno
+              ),
+
+            documento:
+              normalizarTexto(
+                documento
+              ),
+
+            observacao:
+              normalizarTexto(
+                observacoes
+              ),
+
+            novidade:
+              novidadeItem,
+
+            user
+          })
+
+        resultadosIndividuais.push(
+          ...(
+            resultado?.resultados ||
+            []
+          )
+        )
+      }
     }
 
     const resultadosTonfas = []
@@ -969,14 +1318,16 @@ async function confirmarRecebimento() {
       item.quantidade_receber || 1,
 
     providencia:
-      providenciaNovidade,
+      prepararNovidadeItem(item)
+        ?.providencia ||
+      'COFRE',
 
     observacoes:
       normalizarTexto(
         [
           observacoes,
-          novidadeRecebimento
-            ? `NOVIDADE: ${novidadeRecebimento.tipo} - ${novidadeRecebimento.descricao} | PROVIDÊNCIA: ${novidadeRecebimento.providencia}`
+          prepararNovidadeItem(item)
+            ? `NOVIDADE: ${prepararNovidadeItem(item).tipo} - ${prepararNovidadeItem(item).descricao} | PROVIDÊNCIA: ${prepararNovidadeItem(item).providencia} | QUANTIDADE AFETADA: ${prepararNovidadeItem(item).quantidade_afetada}`
             : ''
         ]
           .filter(Boolean)
@@ -984,26 +1335,16 @@ async function confirmarRecebimento() {
       ),
 
     novidade:
-      registrarNovidade
+      prepararNovidadeItem(item)
         ? {
-            tipo:
-              tipoNovidade,
-
-            descricao:
-              descricaoNovidade,
-
-            fotos:
-              fotosNovidade,
-
-            foto:
-              fotosNovidade[0] ||
-              null,
+            ...prepararNovidadeItem(item),
 
             origem:
               'CAUTELA INDIVIDUAL',
 
             destino:
-              providenciaNovidade,
+              prepararNovidadeItem(item)
+                .providencia,
 
             policial:
               policialEntregador
@@ -1049,6 +1390,7 @@ async function confirmarRecebimento() {
 
     const totalRecebido =
       itensIndividuais.length +
+      itensHT.length +
       itensTonfa.length
 
     const resultadoFinal = {
@@ -1058,11 +1400,15 @@ async function confirmarRecebimento() {
       total_individuais:
         itensIndividuais.length,
 
+      total_ht:
+        itensHT.length,
+
       total_quantitativos:
         itensTonfa.length,
 
       resultados: [
         ...resultadosIndividuais,
+        ...resultadosHT,
         ...resultadosTonfas
       ],
 
@@ -1101,15 +1447,25 @@ async function confirmarRecebimento() {
         )
     )
 
+    itensSelecionados.forEach(
+      (item) => {
+        ;(
+          item.novidade?.previews ||
+          []
+        ).forEach((preview) => {
+          if (preview?.url) {
+            URL.revokeObjectURL(
+              preview.url
+            )
+          }
+        })
+      }
+    )
+
     setItensSelecionados([])
     setBusca('')
     setDocumento('')
     setObservacoes('')
-    setRegistrarNovidade(false)
-    setTipoNovidade('')
-    setDescricaoNovidade('')
-    setProvidenciaNovidade('COFRE')
-    limparFotosNovidade()
     
 
     onConcluido?.(
@@ -1563,185 +1919,31 @@ async function confirmarRecebimento() {
             </div>
 
             <CarrinhoMateriais
-  itens={
-    itensSelecionados
-  }
-  onRemover={
-    removerItem
-  }
-  onQuantidadeChange={
-    alterarQuantidade
-  }
-/>
-
-            <div className="pagar-material-novidade">
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontWeight: 700
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={
-                    registrarNovidade
-                  }
-                  onChange={(event) => {
-                    const marcado =
-                      event.target.checked
-
-                    setRegistrarNovidade(
-                      marcado
-                    )
-
-                    if (!marcado) {
-                      setTipoNovidade('')
-                      setDescricaoNovidade('')
-                      setProvidenciaNovidade('COFRE')
-                      limparFotosNovidade()
-                    }
-                  }}
-                />
-
-                Registrar novidade neste recebimento
-              </label>
-
-               
-
-              {registrarNovidade && (
-                <div
-                  className="pagar-material-form-grid"
-                  style={{
-                    marginTop: '16px'
-                  }}
-                >
-                  <label>
-                    Tipo da novidade
-
-                    <select
-                      value={tipoNovidade}
-                      onChange={(event) =>
-                        setTipoNovidade(
-                          event.target.value
-                        )
-                      }
-                    >
-                      <option value="">
-                        SELECIONE
-                      </option>
-                      <option value="AVARIA">
-                        AVARIA
-                      </option>
-                      <option value="DEFEITO">
-                        DEFEITO
-                      </option>
-                      <option value="MANUTENCAO_PREVENTIVA">
-                        MANUTENÇÃO PREVENTIVA
-                      </option>
-                      <option value="LIMPEZA">
-                        LIMPEZA NECESSÁRIA
-                      </option>
-                      <option value="EXTRAVIO_ACESSORIO">
-                        EXTRAVIO DE ACESSÓRIO
-                      </option>
-                      <option value="OUTRO">
-                        OUTRO
-                      </option>
-                    </select>
-                  </label>
-
-                  <label>
-                    Providência
-
-                    <select
-                      value={
-                        providenciaNovidade
-                      }
-                      onChange={(event) =>
-                        setProvidenciaNovidade(
-                          event.target.value
-                        )
-                      }
-                    >
-                      <option value="COFRE">
-                        RETORNAR AO COFRE
-                      </option>
-                      <option value="MANUTENCAO">
-                        ENVIAR PARA MANUTENÇÃO
-                      </option>
-                      <option value="BAIXA">
-                        SOLICITAR BAIXA PATRIMONIAL
-                      </option>
-                    </select>
-                  </label>
-
-                  <label className="pagar-material-field-full">
-                    Descrição da novidade
-
-                    <textarea
-                      value={
-                        descricaoNovidade
-                      }
-                      onChange={(event) =>
-                        setDescricaoNovidade(
-                          event.target.value.toUpperCase()
-                        )
-                      }
-                      placeholder="DESCREVA A AVARIA, DEFEITO OU OUTRA SITUAÇÃO ENCONTRADA"
-                    />
-                  </label>
-
-                  <label className="pagar-material-field-full">
-                    Fotos da novidade
-
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      multiple
-                      onChange={
-                        selecionarFotoNovidade
-                      }
-                    />
-
-                    <small>
-                      Tire fotos ou selecione várias imagens. Cada arquivo pode ter no máximo 5 MB.
-                    </small>
-
-                    {previewsFotosNovidade.length > 0 && (
-                      <div className="pagar-material-photo-preview">
-                        {previewsFotosNovidade.map(
-                          (preview, indice) => (
-                            <div
-                              className="pagar-material-photo-item"
-                              key={preview.id}
-                            >
-                              <img
-                                src={preview.url}
-                                alt={`Pré-visualização ${indice + 1} da novidade`}
-                              />
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removerFotoNovidade(
-                                    indice
-                                  )
-                                }
-                              >
-                                Remover foto
-                              </button>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    )}
-                  </label>
-                </div>
-              )}
-            </div>
+              itens={
+                itensSelecionados
+              }
+              onRemover={
+                removerItem
+              }
+              onQuantidadeChange={
+                alterarQuantidade
+              }
+              onAlternarNovidade={
+                alternarNovidadeItem
+              }
+              onNovidadeChange={
+                alterarNovidadeItem
+              }
+              onSelecionarFotosNovidade={
+                selecionarFotosNovidadeItem
+              }
+              onRemoverFotoNovidade={
+                removerFotoNovidadeItem
+              }
+              onRemoverNovidade={
+                removerNovidadeItem
+              }
+            />
 
             <div className="pagar-material-actions">
               <button

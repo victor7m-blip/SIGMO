@@ -194,3 +194,54 @@
     padding: 0 12px !important;
   }
 }
+
+/* Sprint 7.6.12 — rolagem da tabela sempre acessível */
+.tpd-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  max-height: min(62vh, 680px);
+  overflow: auto;
+  border-radius: 0;
+  border-right: 0;
+  border-left: 0;
+  scrollbar-gutter: stable both-edges;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tpd-table {
+  width: max-content;
+  min-width: 1280px;
+}
+
+.tpd-table thead th {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  background: #f8fafc;
+  box-shadow:
+    0 1px 0 #dbe3ee;
+}
+
+.tpd-table-wrapper::-webkit-scrollbar {
+  width: 11px;
+  height: 13px;
+}
+
+.tpd-table-wrapper::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background:
+    #8ba7c5;
+  background-clip: padding-box;
+}
+
+.tpd-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background:
+    #6288ad;
+  background-clip: padding-box;
+}
+
+.tpd-table-wrapper::-webkit-scrollbar-track {
+  background: #edf2f7;
+}
+
