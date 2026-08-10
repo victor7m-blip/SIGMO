@@ -37,6 +37,8 @@ const ESTADO_INICIAL = {
 
   timeline: [],
 
+  novidades: [],
+
   atualizadoEm: null
 }
 
@@ -89,6 +91,9 @@ export default function useDashboard() {
 
         timeline:
           resultado?.timeline ?? [],
+
+        novidades:
+          resultado?.novidades ?? [],
 
         atualizadoEm:
           resultado?.atualizadoEm ??

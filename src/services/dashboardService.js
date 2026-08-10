@@ -10,6 +10,9 @@ const PATRIMONIOS_TABLE =
 const MOVIMENTACOES_TABLE =
   'sigmo_patrimonio_movimentacoes'
 
+const NOVIDADES_TABLE =
+  'sigmo_patrimonio_novidades'
+
 const TABELAS_REFERENCIA = {
   arma: 'sigmo_armas',
   armas: 'sigmo_armas',
@@ -229,6 +232,38 @@ async function contarMovimentacoesPorTipo(
   }
 
   return count ?? 0
+}
+
+export async function listarNovidadesPatrimoniais({
+  limite = 8
+} = {}) {
+  const limiteSeguro = Math.max(
+    1,
+    Math.min(
+      Number(limite) || 8,
+      50
+    )
+  )
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(NOVIDADES_TABLE)
+    .select('*')
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
+    .limit(limiteSeguro)
+
+  if (error) {
+    throw error
+  }
+
+  return data ?? []
 }
 
 async function listarTotaisPorModulo() {
@@ -657,7 +692,8 @@ export async function carregarDashboardPatrimonial() {
     transferencias,
     baixas,
     totaisPorModulo,
-    timeline
+    timeline,
+    novidades
   ] = await Promise.all([
     contarPatrimonios(),
 
@@ -699,6 +735,10 @@ export async function carregarDashboardPatrimonial() {
 
     listarTimeline({
       limite: 12
+    }),
+
+    listarNovidadesPatrimoniais({
+      limite: 8
     })
   ])
 
@@ -742,6 +782,7 @@ export async function carregarDashboardPatrimonial() {
 
     totaisPorModulo,
     timeline,
+    novidades,
 
     atualizadoEm:
       new Date().toISOString()

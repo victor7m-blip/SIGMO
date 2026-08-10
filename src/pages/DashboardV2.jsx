@@ -464,6 +464,122 @@ function MovimentoLinha({
   )
 }
 
+function classeGravidade(gravidade) {
+  const valor = String(gravidade || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+
+  if (
+    valor.includes('CRIT') ||
+    valor.includes('ALTA') ||
+    valor.includes('URGENT')
+  ) {
+    return 'red'
+  }
+
+  if (
+    valor.includes('MEDIA') ||
+    valor.includes('MODERAD')
+  ) {
+    return 'yellow'
+  }
+
+  if (valor.includes('BAIXA')) {
+    return 'blue'
+  }
+
+  return 'purple'
+}
+
+function NovidadeLinha({ item, onClick }) {
+  const tipo =
+    item?.tipo_patrimonio ||
+    item?.tipo ||
+    'Patrimônio'
+
+  const titulo =
+    item?.titulo ||
+    'Novidade patrimonial'
+
+  const descricao =
+    item?.descricao ||
+    item?.providencia ||
+    item?.observacao ||
+    ''
+
+  const gravidade =
+    item?.gravidade ||
+    item?.prioridade ||
+    ''
+
+  const status =
+    item?.status ||
+    'Registrada'
+
+  const autor =
+    item?.registrado_por_nome ||
+    item?.autor_nome ||
+    item?.registrado_por ||
+    ''
+
+  const tone =
+    classeGravidade(gravidade)
+
+  return (
+    <div
+      className="sigmo-command-movement"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick?.()
+        }
+      }}
+      style={{ cursor: 'pointer' }}
+      title="Clique para ver os detalhes"
+    >
+      <DashboardIcon tone={tone}>
+        {obterIniciais(tipo)}
+      </DashboardIcon>
+
+      <div className="sigmo-command-movement-copy">
+        <strong>
+          {tipo} · {titulo}
+        </strong>
+
+        {descricao && (
+          <span>{descricao}</span>
+        )}
+
+        <span>
+          {autor
+            ? `${autor} · `
+            : ''}
+          {dataHora(item?.created_at)}
+        </span>
+      </div>
+
+      <em
+        className={`sigmo-command-badge sigmo-command-badge-${
+          tone === 'red'
+            ? 'baixa'
+            : tone === 'yellow'
+            ? 'cautela'
+            : tone === 'blue'
+            ? 'transferencia'
+            : 'padrao'
+        }`}
+      >
+        {gravidade || status}
+      </em>
+    </div>
+  )
+}
+
 function PainelDashboard({
   user,
   dashboard,
@@ -473,6 +589,7 @@ function PainelDashboard({
     cards,
     movimentacoes,
     timeline,
+    novidades,
     atualizadoEm,
     loading,
     erro,
@@ -484,6 +601,11 @@ function PainelDashboard({
 
   const [agora, setAgora] =
     useState(() => new Date())
+
+  const [
+    novidadeSelecionada,
+    setNovidadeSelecionada
+  ] = useState(null)
 
   useEffect(() => {
     const timer = window.setInterval(
@@ -1164,6 +1286,56 @@ function PainelDashboard({
         <article className="sigmo-command-panel">
           <div className="sigmo-command-section-title">
             <h2>
+              Novidades patrimoniais
+            </h2>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar(
+                  'central-operacional'
+                )
+              }
+            >
+              Ver todas
+            </button>
+          </div>
+
+          <div className="sigmo-command-movements sigmo-command-scroll">
+            {novidades?.length ? (
+              novidades
+                .slice(0, 5)
+                .map(
+                  (
+                    item,
+                    index
+                  ) => (
+                    <NovidadeLinha
+                      key={
+                        item.id ||
+                        index
+                      }
+                      item={item}
+                      onClick={() =>
+                        setNovidadeSelecionada(
+                          item
+                        )
+                      }
+                    />
+                  )
+                )
+            ) : (
+              <div className="sigmo-command-empty">
+                Nenhuma novidade
+                patrimonial recente.
+              </div>
+            )}
+          </div>
+        </article>
+
+        <article className="sigmo-command-panel">
+          <div className="sigmo-command-section-title">
+            <h2>
               Últimas movimentações
             </h2>
 
@@ -1425,6 +1597,116 @@ function PainelDashboard({
         </article>
       </section>
 
+      {novidadeSelecionada && (
+        <div
+          role="presentation"
+          onClick={() =>
+            setNovidadeSelecionada(null)
+          }
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9998,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 24,
+            background: 'rgba(3, 15, 32, .72)'
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Detalhes da novidade patrimonial"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            style={{
+              width: 'min(620px, 100%)',
+              border: '1px solid rgba(77, 163, 255, .35)',
+              borderRadius: 22,
+              padding: 26,
+              color: '#fff',
+              background: 'linear-gradient(135deg, #071d39 0%, #0b315a 100%)',
+              boxShadow: '0 28px 70px rgba(0,0,0,.4)'
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 16
+            }}>
+              <div>
+                <span style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  letterSpacing: '.12em',
+                  opacity: .75
+                }}>
+                  NOVIDADE PATRIMONIAL
+                </span>
+                <h2 style={{ margin: '8px 0 0' }}>
+                  {novidadeSelecionada.tipo_patrimonio || 'Patrimônio'} · {novidadeSelecionada.titulo || 'Novidade'}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setNovidadeSelecionada(null)
+                }
+                style={{
+                  border: '1px solid rgba(255,255,255,.25)',
+                  borderRadius: 10,
+                  padding: '8px 12px',
+                  color: '#fff',
+                  background: 'transparent',
+                  cursor: 'pointer'
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gap: 14,
+              marginTop: 22
+            }}>
+              <div>
+                <small style={{ opacity: .65 }}>Descrição</small>
+                <div style={{ marginTop: 4, lineHeight: 1.5 }}>
+                  {novidadeSelecionada.descricao || 'Sem descrição.'}
+                </div>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 12
+              }}>
+                <div>
+                  <small style={{ opacity: .65 }}>Gravidade</small>
+                  <div>{novidadeSelecionada.gravidade || 'Não informada'}</div>
+                </div>
+                <div>
+                  <small style={{ opacity: .65 }}>Status</small>
+                  <div>{novidadeSelecionada.status || 'Registrada'}</div>
+                </div>
+                <div>
+                  <small style={{ opacity: .65 }}>Registrado por</small>
+                  <div>{novidadeSelecionada.registrado_por_nome || 'Não informado'}</div>
+                </div>
+                <div>
+                  <small style={{ opacity: .65 }}>Data / hora</small>
+                  <div>{dataHora(novidadeSelecionada.created_at)}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
       <section className="sigmo-command-roadmap">
         <div className="sigmo-command-section-title">
           <h2>
@@ -1498,6 +1780,7 @@ function PainelUsuario({ user, onNavegar }) {
   })
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
+  const [materialSelecionado, setMaterialSelecionado] = useState(null)
 
   useEffect(() => {
     let ativo = true
@@ -1606,30 +1889,171 @@ function PainelUsuario({ user, onNavegar }) {
             </div>
           ) : (
             <div className="sigmo-command-movements">
-              {dados.materiais.map((item, index) => (
-                <div className="sigmo-command-movement" key={item.id || index}>
-                  <DashboardIcon tone="yellow">▰</DashboardIcon>
-                  <div className="sigmo-command-movement-copy">
-                    <strong>
-  {item.descricao || item.tipo || 'Material'}
+              {dados.materiais.map((item, index) => {
+                const identificacao =
+                  item.numero_patrimonio ||
+                  item.patrimonio ||
+                  item.numero_serie ||
+                  item.modelo ||
+                  ''
 
-  {String(item?.tipo || '')
-    .trim()
-    .toLowerCase() === 'tonfa'
-    ? ` — Qtd. ${obterQuantidadeMaterial(item)}`
-    : ''}
-</strong>
-                    <span>{item.numero_patrimonio || item.patrimonio || item.id}</span>
-                  </div>
-                  <em className="sigmo-command-badge sigmo-command-badge-cautela">
-                    Cautela ativa
-                  </em>
-                </div>
-              ))}
+                return (
+                  <button
+                    type="button"
+                    className="sigmo-command-movement"
+                    key={item.id || index}
+                    onClick={() => setMaterialSelecionado(item)}
+                    style={{
+                      width: '100%',
+                      border: 0,
+                      padding: 0,
+                      background: 'transparent',
+                      color: 'inherit',
+                      textAlign: 'left',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <DashboardIcon tone="yellow">▰</DashboardIcon>
+                    <div className="sigmo-command-movement-copy">
+                      <strong>
+                        {item.descricao || item.tipo || 'Material'}
+
+                        {String(item?.tipo || '')
+                          .trim()
+                          .toLowerCase() === 'tonfa'
+                          ? ` — Qtd. ${obterQuantidadeMaterial(item)}`
+                          : ''}
+                      </strong>
+
+                      {identificacao && (
+                        <span>{identificacao}</span>
+                      )}
+                    </div>
+                    <em className="sigmo-command-badge sigmo-command-badge-cautela">
+                      Cautela ativa
+                    </em>
+                  </button>
+                )
+              })}
             </div>
           )}
         </article>
       </section>
+
+      {materialSelecionado && (
+        <div
+          onClick={() => setMaterialSelecionado(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9998,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 24,
+            background: 'rgba(3, 15, 32, .72)'
+          }}
+        >
+          <section
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(620px, 100%)',
+              border: '1px solid #2a6fb3',
+              borderRadius: 22,
+              padding: 26,
+              color: '#fff',
+              background: 'linear-gradient(135deg, #071d39 0%, #0b3f73 100%)',
+              boxShadow: '0 28px 70px rgba(0,0,0,.35)'
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 16,
+              alignItems: 'flex-start'
+            }}>
+              <div>
+                <span style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  letterSpacing: '.12em',
+                  opacity: .78
+                }}>
+                  MATERIAL SOB RESPONSABILIDADE
+                </span>
+                <h2 style={{ margin: '8px 0 0' }}>
+                  {materialSelecionado.descricao ||
+                    materialSelecionado.tipo ||
+                    'Material'}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMaterialSelecionado(null)}
+                style={{
+                  padding: '9px 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,.35)',
+                  background: 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 18,
+              marginTop: 24
+            }}>
+              <div>
+                <small style={{ opacity: .72 }}>Tipo</small>
+                <strong style={{ display: 'block', marginTop: 4 }}>
+                  {materialSelecionado.tipo || 'Material'}
+                </strong>
+              </div>
+
+              <div>
+                <small style={{ opacity: .72 }}>Situação</small>
+                <strong style={{ display: 'block', marginTop: 4 }}>
+                  Cautela ativa
+                </strong>
+              </div>
+
+              <div>
+                <small style={{ opacity: .72 }}>Patrimônio / identificação</small>
+                <strong style={{ display: 'block', marginTop: 4 }}>
+                  {materialSelecionado.numero_patrimonio ||
+                    materialSelecionado.patrimonio ||
+                    materialSelecionado.numero_serie ||
+                    'Não informado'}
+                </strong>
+              </div>
+
+              <div>
+                <small style={{ opacity: .72 }}>Quantidade</small>
+                <strong style={{ display: 'block', marginTop: 4 }}>
+                  {obterQuantidadeMaterial(materialSelecionado)}
+                </strong>
+              </div>
+
+              {(materialSelecionado.modelo || materialSelecionado.descricao) && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <small style={{ opacity: .72 }}>Descrição / modelo</small>
+                  <strong style={{ display: 'block', marginTop: 4 }}>
+                    {materialSelecionado.modelo ||
+                      materialSelecionado.descricao}
+                  </strong>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }

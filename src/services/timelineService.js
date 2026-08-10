@@ -21,6 +21,19 @@ function upper(valor) {
   return texto(valor).toUpperCase()
 }
 
+function ehUuid(valor) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    texto(valor)
+  )
+}
+
+function valorHumano(valor) {
+  const resultado = texto(valor)
+  return resultado && !ehUuid(resultado)
+    ? resultado
+    : ''
+}
+
 function objeto(valor) {
   if (!valor) return {}
   if (typeof valor === 'object') return valor
@@ -87,18 +100,18 @@ function obterNomeItem(item) {
   const dados = objeto(item?.dados)
 
   return (
-    dados.patrimonio ||
-    dados.numero_patrimonio ||
-    dados.nome ||
-    dados.descricao ||
-    dados.numero_serie ||
-    dados.modelo ||
-    item?.patrimonio ||
-    item?.numero_patrimonio ||
-    item?.referencia_id ||
-    item?.patrimonio_id ||
-    item?.lote_id ||
-    'PATRIMÔNIO'
+    valorHumano(dados.patrimonio) ||
+    valorHumano(dados.numero_patrimonio) ||
+    valorHumano(dados.nome) ||
+    valorHumano(dados.descricao) ||
+    valorHumano(dados.numero_serie) ||
+    valorHumano(dados.modelo) ||
+    valorHumano(item?.patrimonio) ||
+    valorHumano(item?.numero_patrimonio) ||
+    valorHumano(dados.tipo_patrimonio) ||
+    valorHumano(item?.tipo_patrimonio) ||
+    valorHumano(dados.categoria) ||
+    'material'
   )
 }
 
@@ -136,55 +149,98 @@ function obterRecebedor(item) {
   const dados = objeto(item?.dados)
 
   return (
-    item?.recebedor_nome ||
-    item?.responsavel_nome ||
-    item?.recebedor_re ||
-    item?.responsavel_re ||
-    dados.recebedor_nome ||
-    dados.policial_nome ||
-    dados.recebedor_re ||
-    dados.policial_re ||
-    'RECEBEDOR'
+    valorHumano(item?.recebedor_nome) ||
+    valorHumano(item?.responsavel_nome) ||
+    valorHumano(dados.recebedor_nome) ||
+    valorHumano(dados.policial_nome) ||
+    valorHumano(item?.recebedor_re) ||
+    valorHumano(item?.responsavel_re) ||
+    valorHumano(dados.recebedor_re) ||
+    valorHumano(dados.policial_re) ||
+    ''
   )
 }
 
 export function gerarDescricaoTimeline(item) {
   const nome = obterNomeItem(item)
+  const recebedor = obterRecebedor(item)
 
   switch (tipoEvento(item)) {
     case 'RECEBIMENTO':
-      return `recebeu o material ${nome}`
+      return nome === 'material'
+        ? 'recebeu material'
+        : `recebeu ${nome}`
     case 'TRANSFERENCIA':
-      return `transferiu ${nome} para ${obterDestino(item)}`
+      return nome === 'material'
+        ? `transferiu material para ${obterDestino(item)}`
+        : `transferiu ${nome} para ${obterDestino(item)}`
     case 'CAUTELA':
     case 'CAUTELA_SERVICO':
-      return `cautelou ${nome} para ${obterRecebedor(item)}`
+      if (recebedor) {
+        return nome === 'material'
+          ? `cautelou material para ${recebedor}`
+          : `cautelou ${nome} para ${recebedor}`
+      }
+      return nome === 'material'
+        ? 'registrou uma cautela de material'
+        : `registrou uma cautela de ${nome}`
     case 'CARGA_PERMANENTE':
-      return `pagou ${nome} como carga permanente para ${obterRecebedor(item)}`
+      if (recebedor) {
+        return nome === 'material'
+          ? `pagou material como carga permanente para ${recebedor}`
+          : `pagou ${nome} como carga permanente para ${recebedor}`
+      }
+      return 'registrou uma carga permanente'
     case 'DEVOLUCAO':
-      return `registrou a devolução de ${nome}`
+      return nome === 'material'
+        ? 'registrou uma devolução de material'
+        : `registrou a devolução de ${nome}`
     case 'RECOLHIMENTO':
-      return `recolheu ${nome}`
+      return nome === 'material'
+        ? 'recolheu material'
+        : `recolheu ${nome}`
     case 'BAIXA':
-      return `baixou ${nome}`
+      return nome === 'material'
+        ? 'baixou material'
+        : `baixou ${nome}`
     case 'CADASTRO':
-      return `cadastrou ${nome}`
+      return nome === 'material'
+        ? 'cadastrou material'
+        : `cadastrou ${nome}`
     case 'EDICAO':
-      return `alterou os dados de ${nome}`
+      return nome === 'material'
+        ? 'alterou dados patrimoniais'
+        : `alterou os dados de ${nome}`
     case 'FOTO_ADICIONADA':
-      return `adicionou uma foto em ${nome}`
+      return nome === 'material'
+        ? 'adicionou uma foto ao patrimônio'
+        : `adicionou uma foto em ${nome}`
     case 'FOTO_REMOVIDA':
-      return `removeu uma foto de ${nome}`
+      return nome === 'material'
+        ? 'removeu uma foto do patrimônio'
+        : `removeu uma foto de ${nome}`
     case 'QR_CODE_GERADO':
     case 'QRCODE_GERADO':
-      return `gerou o QR Code de ${nome}`
+      return nome === 'material'
+        ? 'gerou o QR Code do patrimônio'
+        : `gerou o QR Code de ${nome}`
     case 'ETIQUETA_IMPRESSA':
-      return `imprimiu a etiqueta de ${nome}`
+      return nome === 'material'
+        ? 'imprimiu uma etiqueta patrimonial'
+        : `imprimiu a etiqueta de ${nome}`
     case 'EXCLUSAO':
-      return `excluiu ${nome}`
-    default:
-      return texto(item?.descricao || item?.titulo) ||
-        `registrou uma movimentação em ${nome}`
+      return nome === 'material'
+        ? 'excluiu um registro patrimonial'
+        : `excluiu ${nome}`
+    default: {
+      const descricao = texto(item?.descricao || item?.titulo)
+      if (descricao && !descricao.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)) {
+        return descricao
+      }
+      return nome === 'material'
+        ? 'registrou uma movimentação patrimonial'
+        : `registrou uma movimentação em ${nome}`
+    }
   }
 }
 
