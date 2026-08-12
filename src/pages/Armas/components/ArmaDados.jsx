@@ -51,7 +51,8 @@ function formatarReCompleto(valor) {
 export default function ArmaDados({
   form,
   onChange,
-  disabled = false
+  disabled = false,
+  statusOperacionalProtegido = false
 }) {
   const [buscandoPolicial, setBuscandoPolicial] =
     useState(false)
@@ -85,6 +86,25 @@ export default function ArmaDados({
 
   const armaEmCarga =
     form.status === 'CARGA'
+
+  const statusProtegidos =
+    new Set(['CARGA', 'CAUTELADO'])
+
+  const statusDisponiveis =
+    STATUS_ARMAS.filter((status) => {
+      if (!statusProtegidos.has(status)) {
+        return true
+      }
+
+      return (
+        statusOperacionalProtegido &&
+        status === form.status
+      )
+    })
+
+  const camposCargaBloqueados =
+    disabled ||
+    statusOperacionalProtegido
 
   useEffect(() => {
     if (!armaEmCarga) {
@@ -669,10 +689,18 @@ export default function ArmaDados({
             name="status"
             value={form.status}
             onChange={onChange}
-            disabled={disabled}
-            options={STATUS_ARMAS}
+            disabled={
+              disabled ||
+              statusOperacionalProtegido
+            }
+            options={statusDisponiveis}
           />
         </PatrimonioFormGrid>
+
+        <div className="arma-dados-aviso">
+          CARGA e CAUTELADO são situações controladas pela Engine Patrimonial.
+          Use Pagar/Receber Material para movimentar armas para policiais.
+        </div>
       </section>
 
       {armaEmCarga && (
@@ -718,8 +746,8 @@ export default function ArmaDados({
                 inputMode="numeric"
                 maxLength={6}
                 required
-                disabled={disabled}
-                placeholder="Digite os 6 números do RE"
+                disabled={camposCargaBloqueados}
+                placeholder="Carga permanente controlada pela Engine"
               />
 
               {buscandoPolicial && (

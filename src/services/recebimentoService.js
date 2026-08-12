@@ -119,6 +119,10 @@ function limparDadosResponsabilidade(dados) {
   delete atualizados.recebedor_nome
   delete atualizados.policial_nome
 
+  delete atualizados.carga_policial_re
+  delete atualizados.carga_policial_nome
+  delete atualizados.guardiao_atual
+
   return atualizados
 }
 
@@ -524,13 +528,19 @@ async function atualizarPatrimonioCentral({
 
   const payload = {
     status:
-      STATUS_PATRIMONIO.ATIVO,
+      'RESERVA',
 
     local_atual:
       maiusculo(localDestino),
 
     companhia_atual:
       maiusculo(unidadeDestino),
+
+    responsavel_atual_id:
+      null,
+
+    responsavel_atual_nome:
+      null,
 
     dados
   }
@@ -574,10 +584,31 @@ async function atualizarRegistroReferencia({
   if (tabela === 'sigmo_armas') {
     payload = {
       status:
-        STATUS_PATRIMONIO.ATIVO,
+        'RESERVA',
 
       local_atual:
-        maiusculo(localDestino)
+        maiusculo(localDestino),
+
+      carga_policial_id:
+        null,
+
+      carga_policial_re:
+        null,
+
+      carga_policial_nome:
+        null,
+
+      carga_policial_posto_graduacao:
+        null,
+
+      carga_policial_companhia:
+        null,
+
+      carga_policial_pelotao:
+        null,
+
+      carga_policial_funcao:
+        null
     }
   } else if (
     tabela === 'sigmo_materiais'
@@ -718,7 +749,7 @@ export async function receberMaterial({
         TIPOS_MOVIMENTACAO.RECEBIMENTO,
 
       statusNovo:
-        STATUS_PATRIMONIO.ATIVO,
+        'RESERVA',
 
       localDestino,
 

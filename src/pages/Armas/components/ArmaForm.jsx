@@ -102,6 +102,20 @@ export default function ArmaForm({
   const armaAtual =
     armaSalva || armaEditando
 
+  const statusOriginal =
+    String(
+      armaEditando?.status_operacional ||
+      armaEditando?.status ||
+      ''
+    )
+      .trim()
+      .toUpperCase()
+
+  const statusOperacionalProtegido =
+    ['CARGA', 'CAUTELADO'].includes(
+      statusOriginal
+    )
+
     const carregarFotos = useCallback(async () => {
     if (!armaAtual?.id) {
       setFotos([])
@@ -319,6 +333,18 @@ export default function ArmaForm({
           value || 'RESERVA'
         ).toUpperCase()
 
+      if (
+        String(form.propriedade || 'PMESP')
+          .toUpperCase() === 'PMESP' &&
+        ['CARGA', 'CAUTELADO'].includes(status) &&
+        status !== statusOriginal
+      ) {
+        setErro(
+          'CARGA e CAUTELADO são controlados pela Engine Patrimonial. Use Pagar/Receber Material.'
+        )
+        return
+      }
+
       setForm((prev) => {
         if (status !== 'CARGA') {
           return {
@@ -389,8 +415,29 @@ export default function ArmaForm({
       const armaEmCarga =
         status === 'CARGA'
 
+      const propriedadePMESP =
+        String(
+          form.propriedade || 'PMESP'
+        )
+          .trim()
+          .toUpperCase() === 'PMESP'
+
+      if (
+        propriedadePMESP &&
+        ['CARGA', 'CAUTELADO'].includes(status) &&
+        (
+          !isEditing ||
+          status !== statusOriginal
+        )
+      ) {
+        throw new Error(
+          'CARGA e CAUTELADO são controlados pela Engine Patrimonial. Use Pagar/Receber Material.'
+        )
+      }
+
       if (
         armaEmCarga &&
+        !statusOperacionalProtegido &&
         !form.carga_policial_id
       ) {
         throw new Error(
@@ -422,6 +469,40 @@ export default function ArmaForm({
         (referenciaQr
           ? `SIGMO-ARMA-${referenciaQr}`
           : null)
+
+      const cargaOriginal = {
+        carga_policial_id:
+          armaEditando?.carga_policial_id ||
+          null,
+
+        carga_policial_re:
+          armaEditando?.carga_policial_re ||
+          null,
+
+        carga_policial_nome:
+          armaEditando?.carga_policial_nome ||
+          null,
+
+        carga_policial_posto_graduacao:
+          armaEditando
+            ?.carga_policial_posto_graduacao ||
+          null,
+
+        carga_policial_companhia:
+          armaEditando
+            ?.carga_policial_companhia ||
+          null,
+
+        carga_policial_pelotao:
+          armaEditando
+            ?.carga_policial_pelotao ||
+          null,
+
+        carga_policial_funcao:
+          armaEditando
+            ?.carga_policial_funcao ||
+          null
+      }
 
       const payload = {
         ...form,
@@ -488,49 +569,59 @@ export default function ArmaForm({
           null,
 
         carga_policial_id:
-          armaEmCarga
-            ? form.carga_policial_id
-            : null,
+          statusOperacionalProtegido
+            ? cargaOriginal.carga_policial_id
+            : armaEmCarga
+              ? form.carga_policial_id
+              : null,
 
         carga_policial_re:
-          armaEmCarga
-            ? form.carga_policial_re ||
-              null
-            : null,
+          statusOperacionalProtegido
+            ? cargaOriginal.carga_policial_re
+            : armaEmCarga
+              ? form.carga_policial_re || null
+              : null,
 
         carga_policial_nome:
-          armaEmCarga
-            ? form.carga_policial_nome ||
-              null
-            : null,
+          statusOperacionalProtegido
+            ? cargaOriginal.carga_policial_nome
+            : armaEmCarga
+              ? form.carga_policial_nome || null
+              : null,
 
         carga_policial_posto_graduacao:
-          armaEmCarga
-            ? form
-                .carga_policial_posto_graduacao ||
-              null
-            : null,
+          statusOperacionalProtegido
+            ? cargaOriginal
+                .carga_policial_posto_graduacao
+            : armaEmCarga
+              ? form
+                  .carga_policial_posto_graduacao ||
+                null
+              : null,
 
         carga_policial_companhia:
-          armaEmCarga
-            ? form
-                .carga_policial_companhia ||
-              null
-            : null,
+          statusOperacionalProtegido
+            ? cargaOriginal.carga_policial_companhia
+            : armaEmCarga
+              ? form.carga_policial_companhia ||
+                null
+              : null,
 
         carga_policial_pelotao:
-          armaEmCarga
-            ? form
-                .carga_policial_pelotao ||
-              null
-            : null,
+          statusOperacionalProtegido
+            ? cargaOriginal.carga_policial_pelotao
+            : armaEmCarga
+              ? form.carga_policial_pelotao ||
+                null
+              : null,
 
         carga_policial_funcao:
-          armaEmCarga
-            ? form
-                .carga_policial_funcao ||
-              null
-            : null
+          statusOperacionalProtegido
+            ? cargaOriginal.carga_policial_funcao
+            : armaEmCarga
+              ? form.carga_policial_funcao ||
+                null
+              : null
       }
 
       if (
@@ -731,6 +822,9 @@ export default function ArmaForm({
               form={form}
               onChange={handleChange}
               disabled={saving}
+              statusOperacionalProtegido={
+                statusOperacionalProtegido
+              }
             />
 
             <div className="arma-form-actions">

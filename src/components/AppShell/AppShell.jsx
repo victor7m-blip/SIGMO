@@ -64,6 +64,11 @@ const menuItems = [
     icon: '●'
   },
   {
+    key: 'carga-pessoal',
+    label: 'Carga Pessoal',
+    icon: '▣'
+  },
+  {
   key: 'solicitacoes-cadastrais',
   label: 'Solicitações Cadastrais',
   icon: '☷'

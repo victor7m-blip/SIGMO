@@ -20,6 +20,15 @@ import {
   listarTonfasEmServico
 } from './tonfasMovimentacoesService'
 
+import {
+  registrarManutencao,
+  MODULOS_MANUTENCAO
+} from './manutencoesService'
+
+import {
+  criarNotificacaoParaPerfil
+} from './notificacoesService'
+
 const NOVIDADES_FOTOS_BUCKET = 'novidades-fotos'
 const TAMANHO_MAXIMO_FOTO = 5 * 1024 * 1024
 
@@ -383,6 +392,80 @@ function montarDescricaoNovidadeOficial({
     .join(' | ')
 }
 
+async function registrarFotosNovidadeOficial({
+  novidadeId,
+  novidade
+}) {
+  if (
+    !novidadeId ||
+    !Array.isArray(novidade?.fotos) ||
+    novidade.fotos.length === 0
+  ) {
+    return []
+  }
+
+  const registros =
+    novidade.fotos
+      .filter((foto) => foto?.url)
+      .map((foto, indice) => ({
+        novidade_id:
+          novidadeId,
+
+        foto_url:
+          foto.url,
+
+        foto_caminho:
+          foto.caminho ||
+          null,
+
+        nome_original:
+          foto.nome_original ||
+          null,
+
+        tipo_arquivo:
+          foto.tipo ||
+          null,
+
+        tamanho_bytes:
+          Number(
+            foto.tamanho ||
+            0
+          ) || null,
+
+        principal:
+          foto.principal === true ||
+          indice === 0,
+
+        ordem:
+          Number(
+            foto.ordem ||
+            indice + 1
+          ) || indice + 1
+      }))
+
+  if (registros.length === 0) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(
+      'sigmo_patrimonio_novidades_fotos'
+    )
+    .insert(registros)
+    .select()
+
+  if (error) {
+    throw new Error(
+      `A novidade foi registrada, mas não foi possível vincular as fotos: ${error.message}`
+    )
+  }
+
+  return data || []
+}
+
 async function registrarNovidadeOficial({
   patrimonio,
   item,
@@ -472,18 +555,210 @@ async function registrarNovidadeOficial({
           null
         )
 
-  return novidadeId
-    ? {
-        id: novidadeId,
-        patrimonio_id:
-          patrimonio.id,
-        tipo_patrimonio:
-          tipoPatrimonio,
-        titulo,
-        status:
-          'registrada'
-      }
-    : null
+  if (!novidadeId) {
+    return null
+  }
+
+  const fotos =
+    await registrarFotosNovidadeOficial({
+      novidadeId,
+      novidade
+    })
+
+  return {
+    id: novidadeId,
+    patrimonio_id:
+      patrimonio.id,
+    tipo_patrimonio:
+      tipoPatrimonio,
+    titulo,
+    status:
+      'registrada',
+    fotos
+  }
+}
+
+async function notificarNovidadePatrimonial({
+  novidadeOficial,
+  novidade,
+  patrimonio,
+  item,
+  user
+}) {
+  if (!novidadeOficial?.id || !patrimonio?.id || !novidade) {
+    return []
+  }
+
+  const tipoPatrimonio =
+    novidadeOficial?.tipo_patrimonio ||
+    obterTipoPatrimonioNovidade({
+      patrimonio,
+      item,
+      observacao:
+        lerObjetoObservacao(
+          item?.observacao
+        )
+    })
+
+  const descricaoMaterial =
+    normalizarMaiusculo(
+      patrimonio?.descricao ||
+      item?.descricao ||
+      tipoPatrimonio ||
+      'MATERIAL'
+    )
+
+  const tipoNovidade =
+    normalizarMaiusculo(
+      novidade?.tipo ||
+      novidadeOficial?.titulo ||
+      'NOVIDADE'
+    )
+
+  const providencia =
+    normalizarMaiusculo(
+      novidade?.providencia ||
+      'ANALISE'
+    )
+
+  const descricao =
+    normalizarMaiusculo(
+      novidade?.descricao
+    )
+
+  const policialNome =
+    normalizarMaiusculo(
+      nomeUsuario(user)
+    )
+
+  const policialRe =
+    obterRePolicial(user)
+
+  const mensagem = [
+    `${policialNome}${policialRe ? ` (RE ${policialRe})` : ''} registrou uma novidade em ${descricaoMaterial}.`,
+    `TIPO: ${tipoNovidade}.`,
+    descricao
+      ? `DESCRIÇÃO: ${descricao}.`
+      : '',
+    `PROVIDÊNCIA SUGERIDA: ${providencia}.`,
+    'O material pode permanecer com o usuário até avaliação do setor responsável.'
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const payloadBase = {
+    titulo:
+      'NOVIDADE PATRIMONIAL REGISTRADA',
+    mensagem,
+    tipo: 'ALERTA',
+    modulo: 'PATRIMONIO',
+    prioridade: 'ALTA',
+    link: '/central-operacional',
+    metadata: {
+      origem:
+        'RECEBIMENTO PELO USUÁRIO',
+      novidade_id:
+        novidadeOficial.id,
+      patrimonio_id:
+        patrimonio.id,
+      referencia_id:
+        patrimonio?.referencia_id ||
+        null,
+      tipo_patrimonio:
+        tipoPatrimonio,
+      tipo_novidade:
+        tipoNovidade,
+      providencia,
+      descricao,
+      policial_id:
+        obterPolicialId(user),
+      policial_re:
+        policialRe || null,
+      policial_nome:
+        policialNome
+    }
+  }
+
+  return Promise.all([
+    criarNotificacaoParaPerfil({
+      perfil:
+        'ENCARREGADO DO SVDD',
+      ...payloadBase
+    }),
+    criarNotificacaoParaPerfil({
+      perfil: 'P4',
+      ...payloadBase
+    })
+  ])
+}
+
+function novidadeSolicitaManutencao(novidade) {
+  return (
+    normalizarMaiusculo(
+      novidade?.providencia ||
+      novidade?.destino
+    ) === 'MANUTENCAO'
+  )
+}
+
+function obterModuloManutencao(tipoPatrimonio) {
+  const tipo =
+    normalizarMaiusculo(tipoPatrimonio)
+
+  if (tipo === 'ARMA' || tipo === 'ARMAS') {
+    return MODULOS_MANUTENCAO.ARMAS
+  }
+
+  if (
+    tipo === 'TONFA' ||
+    tipo === 'TONFAS' ||
+    tipo === 'CASSETETE' ||
+    tipo === 'CASSETETES'
+  ) {
+    return MODULOS_MANUTENCAO.TONFAS
+  }
+
+  if (tipo === 'HT' || tipo === 'HTS') {
+    return MODULOS_MANUTENCAO.HT
+  }
+
+  if (tipo === 'TPD' || tipo === 'TPDS') {
+    return MODULOS_MANUTENCAO.TPD
+  }
+
+  if (tipo === 'TASER' || tipo === 'TASERS') {
+    return MODULOS_MANUTENCAO.TASER
+  }
+
+  if (tipo === 'COLETE' || tipo === 'COLETES') {
+    return MODULOS_MANUTENCAO.COLETE
+  }
+
+  if (
+    tipo === 'MUNICAO' ||
+    tipo === 'MUNICOES' ||
+    tipo === 'MUNIÇÃO' ||
+    tipo === 'MUNIÇÕES'
+  ) {
+    return MODULOS_MANUTENCAO.MUNICAO
+  }
+
+  return MODULOS_MANUTENCAO.OUTROS
+}
+
+function obterArquivosNovidadeOriginal(novidade) {
+  if (!novidade || typeof novidade !== 'object') {
+    return []
+  }
+
+  return [
+    ...(Array.isArray(novidade.fotos)
+      ? novidade.fotos
+      : []),
+    ...(novidade.foto
+      ? [novidade.foto]
+      : [])
+  ].filter(ehArquivo)
 }
 
 function obterRePolicial(user) {
@@ -503,6 +778,32 @@ function obterPolicialId(user) {
     user?.id_policial ||
     user?.id ||
     null
+  )
+}
+
+function ehCargaPermanente(item) {
+  const dados =
+    lerObjetoObservacao(
+      item?.dados
+    )
+
+  const status =
+    normalizarMaiusculo(
+      item?.status ||
+      item?.status_operacional ||
+      dados?.status ||
+      dados?.status_operacional
+    )
+
+  const local =
+    normalizarMaiusculo(
+      item?.local_atual ||
+      dados?.local_atual
+    )
+
+  return (
+    status === 'CARGA' ||
+    local === 'CARGA PERMANENTE'
   )
 }
 
@@ -577,7 +878,10 @@ export async function listarCautelasAguardandoUsuario(
     .from('sigmo_movimentacoes')
     .select('*')
     .eq('recebedor_id', policialId)
-    .eq('tipo_movimentacao', 'CAUTELA')
+    .in(
+      'tipo_movimentacao',
+      ['CAUTELA', 'ENTREGA']
+    )
     .eq('status', 'aguardando_recebimento')
     .order('created_at', { ascending: false })
 
@@ -617,7 +921,9 @@ export async function listarMateriaisEmServicoUsuario(
   // individual da cautela, porque a responsabilidade real está em
   // sigmo_tonfas_movimentacoes.
   const individuais = (patrimoniosIndividuais || []).filter(
-    (item) => normalizar(item?.tipo) !== 'tonfa'
+    (item) =>
+      normalizar(item?.tipo) !== 'tonfa' &&
+      !ehCargaPermanente(item)
   )
 
   const quantitativosAtivos =
@@ -737,6 +1043,207 @@ export async function listarDevolucoesPendentesUsuario(
   )
 }
 
+
+async function sincronizarCargaPermanenteRecebida({
+  movimentacao,
+  patrimoniosPorId,
+  policial
+}) {
+  const individuais =
+    (movimentacao?.itens || [])
+      .map((item) =>
+        patrimoniosPorId.get(
+          String(item?.patrimonio_id)
+        )
+      )
+      .filter(Boolean)
+      .filter(
+        (patrimonio) =>
+          normalizar(patrimonio?.tipo) !== 'tonfa'
+      )
+
+  for (const patrimonio of individuais) {
+    const dadosAtuais =
+      lerObjetoObservacao(
+        patrimonio?.dados
+      )
+
+    const rePolicial =
+      policial?.re ||
+      policial?.policial_re ||
+      null
+
+    const nomePolicial =
+      nomeUsuario(policial)
+
+    const { error } = await supabase
+      .from('sigmo_patrimonios')
+      .update({
+        status: 'CARGA',
+        local_atual: 'CARGA PERMANENTE',
+        responsavel_atual_id:
+          policial?.id || null,
+        responsavel_atual_nome:
+          nomePolicial,
+        dados: {
+          ...dadosAtuais,
+          status: 'CARGA',
+          status_operacional: 'CARGA',
+          local_atual:
+            'CARGA PERMANENTE',
+          carga_policial_id:
+            policial?.id || null,
+          carga_policial_re:
+            rePolicial,
+          carga_policial_nome:
+            nomePolicial,
+          guardiao_atual: {
+            tipo: 'POLICIAL',
+            id:
+              policial?.id || null,
+            re:
+              rePolicial,
+            nome:
+              nomePolicial
+          }
+        }
+      })
+      .eq('id', patrimonio.id)
+
+    if (error) {
+      throw error
+    }
+
+    if (
+      normalizar(patrimonio?.tipo) === 'arma' &&
+      patrimonio?.referencia_id
+    ) {
+      const {
+        error: armaError
+      } = await supabase
+        .from('sigmo_armas')
+        .update({
+          status: 'CARGA',
+          local_atual:
+            'CARGA PERMANENTE',
+          carga_policial_id:
+            policial?.id || null,
+          carga_policial_re:
+            rePolicial,
+          carga_policial_nome:
+            nomePolicial
+        })
+        .eq(
+          'id',
+          patrimonio.referencia_id
+        )
+
+      if (armaError) {
+        throw armaError
+      }
+    }
+  }
+}
+
+async function sincronizarCautelaIndividualRecebida({
+  movimentacao,
+  patrimoniosPorId,
+  policial
+}) {
+  const individuais =
+    (movimentacao?.itens || [])
+      .map((item) =>
+        patrimoniosPorId.get(
+          String(item?.patrimonio_id)
+        )
+      )
+      .filter(Boolean)
+      .filter(
+        (patrimonio) =>
+          normalizar(patrimonio?.tipo) !== 'tonfa'
+      )
+
+  for (const patrimonio of individuais) {
+    const dadosAtuais =
+      lerObjetoObservacao(
+        patrimonio?.dados
+      )
+
+    const { error } = await supabase
+      .from('sigmo_patrimonios')
+      .update({
+        status: 'CAUTELADO',
+        local_atual: 'CAUTELA INDIVIDUAL',
+        responsavel_atual_id:
+          policial?.id || null,
+        responsavel_atual_nome:
+          nomeUsuario(policial),
+        dados: {
+          ...dadosAtuais,
+          carga_policial_re:
+            policial?.re ||
+            policial?.policial_re ||
+            null,
+          carga_policial_nome:
+            nomeUsuario(policial),
+          guardiao_atual: {
+            tipo: 'POLICIAL',
+            id:
+              policial?.id || null,
+            re:
+              policial?.re ||
+              policial?.policial_re ||
+              null,
+            nome:
+              nomeUsuario(policial)
+          }
+        }
+      })
+      .eq('id', patrimonio.id)
+
+    if (error) {
+      throw error
+    }
+
+    if (
+      normalizar(patrimonio?.tipo) === 'arma' &&
+      patrimonio?.referencia_id
+    ) {
+      const rePolicial =
+        policial?.re ||
+        policial?.policial_re ||
+        null
+
+      const nomePolicial =
+        nomeUsuario(policial)
+
+      const {
+        error: armaError
+      } = await supabase
+        .from('sigmo_armas')
+        .update({
+          status: 'CAUTELADO',
+          local_atual:
+            'CAUTELA INDIVIDUAL',
+          carga_policial_id:
+            policial?.id || null,
+          carga_policial_re:
+            rePolicial,
+          carga_policial_nome:
+            nomePolicial
+        })
+        .eq(
+          'id',
+          patrimonio.referencia_id
+        )
+
+      if (armaError) {
+        throw armaError
+      }
+    }
+  }
+}
+
 export async function confirmarRecebimentoCautela({
   movimentacaoId,
   itens = [],
@@ -767,6 +1274,22 @@ export async function confirmarRecebimentoCautela({
     )
   }
 
+  const tipoMovimentacao =
+    normalizarMaiusculo(
+      movimentacao?.tipo_movimentacao ||
+      movimentacao?.tipo
+    )
+
+  const destinoMovimentacao =
+    normalizarMaiusculo(
+      movimentacao?.destino_local
+    )
+
+  const entregaCargaPermanente =
+    tipoMovimentacao === 'ENTREGA' &&
+    destinoMovimentacao ===
+      'CARGA PERMANENTE'
+
   const selecoesPorItem = new Map(
     (Array.isArray(itens) ? itens : [])
       .filter((item) => item?.itemId)
@@ -792,7 +1315,7 @@ export async function confirmarRecebimentoCautela({
       error: patrimoniosError
     } = await supabase
       .from('sigmo_patrimonios')
-      .select('id, tipo, referencia_id, descricao')
+      .select('id, tipo, referencia_id, descricao, status, local_atual, responsavel_atual_id, responsavel_atual_nome, dados')
       .in('id', patrimonioIds)
 
     if (patrimoniosError) {
@@ -846,6 +1369,8 @@ export async function confirmarRecebimentoCautela({
       if (novidadePreparada) {
         itensIndividuaisComNovidade.push({
           item,
+          novidadeOriginal:
+            selecao?.novidade || null,
           observacaoOriginal:
             item?.observacao || '',
           observacaoAtualizada:
@@ -906,8 +1431,19 @@ export async function confirmarRecebimentoCautela({
         item?.observacao || '',
       observacaoObjetoOriginal:
         observacao,
+      novidadeOriginal:
+        selecao?.novidade || null,
       novidadePreparada
     })
+  }
+
+  if (
+    entregaCargaPermanente &&
+    itensQuantitativos.length > 0
+  ) {
+    throw new Error(
+      'Carga permanente quantitativa ainda não está habilitada neste fluxo.'
+    )
   }
 
   const policialRe = obterRePolicial(user)
@@ -929,6 +1465,7 @@ export async function confirmarRecebimentoCautela({
   const processados = []
   const itensMovimentacaoAlterados = []
   const novidadesOficiaisCriadas = []
+  const manutencoesCriadas = []
 
   try {
     for (
@@ -982,6 +1519,20 @@ export async function confirmarRecebimentoCautela({
         novidadesOficiaisCriadas.push(
           novidade.id
         )
+
+        await notificarNovidadePatrimonial({
+          novidadeOficial:
+            novidade,
+          novidade:
+            lerObjetoObservacao(
+              registro.observacaoAtualizada
+            )?.novidade_recebimento ||
+            null,
+          patrimonio,
+          item:
+            registro.item,
+          user
+        })
       }
     }
 
@@ -1049,6 +1600,18 @@ export async function confirmarRecebimentoCautela({
           novidadesOficiaisCriadas.push(
             novidade.id
           )
+
+          await notificarNovidadePatrimonial({
+            novidadeOficial:
+              novidade,
+            novidade:
+              registro.novidadePreparada,
+            patrimonio:
+              registro.patrimonio,
+            item:
+              registro.item,
+            user
+          })
         }
       }
 
@@ -1092,6 +1655,162 @@ export async function confirmarRecebimentoCautela({
           : 'CARRINHO RECEBIDO INTEGRALMENTE PELO USUÁRIO.'
     })
 
+    // A RPC finaliza a movimentação. Em seguida, sincronizamos
+    // o estado operacional conforme o tipo de recebimento.
+    if (entregaCargaPermanente) {
+      await sincronizarCargaPermanenteRecebida({
+        movimentacao,
+        patrimoniosPorId,
+        policial
+      })
+    } else {
+      await sincronizarCautelaIndividualRecebida({
+        movimentacao,
+        patrimoniosPorId,
+        policial
+      })
+    }
+
+    const registrosParaManutencao = [
+      ...itensIndividuaisComNovidade.map(
+        (registro) => ({
+          item: registro.item,
+          patrimonio:
+            patrimoniosPorId.get(
+              String(
+                registro.item?.patrimonio_id
+              )
+            ),
+          novidade:
+            lerObjetoObservacao(
+              registro.observacaoAtualizada
+            )?.novidade_recebimento ||
+            null,
+          novidadeOriginal:
+            registro.novidadeOriginal,
+          quantidade:
+            Number(
+              registro.item?.quantidade ||
+              1
+            ) || 1
+        })
+      ),
+      ...itensQuantitativos.map(
+        (registro) => ({
+          item: registro.item,
+          patrimonio:
+            registro.patrimonio,
+          novidade:
+            registro.novidadePreparada,
+          novidadeOriginal:
+            registro.novidadeOriginal,
+          quantidade:
+            registro.quantidadeReceber
+        })
+      )
+    ].filter(
+      (registro) =>
+        registro.patrimonio?.id &&
+        novidadeSolicitaManutencao(
+          registro.novidade
+        )
+    )
+
+    for (
+      const registro of
+      registrosParaManutencao
+    ) {
+      const tipoPatrimonio =
+        obterTipoPatrimonioNovidade({
+          patrimonio:
+            registro.patrimonio,
+          item:
+            registro.item,
+          observacao:
+            lerObjetoObservacao(
+              registro.item?.observacao
+            )
+        })
+
+      const arquivos =
+        obterArquivosNovidadeOriginal(
+          registro.novidadeOriginal
+        )
+
+      const manutencao =
+        await registrarManutencao({
+          modulo:
+            obterModuloManutencao(
+              tipoPatrimonio
+            ),
+
+          tipoMaterial:
+            tipoPatrimonio ||
+            registro.patrimonio?.tipo ||
+            'MATERIAL',
+
+          referenciaId:
+            registro.patrimonio
+              ?.referencia_id ||
+            registro.patrimonio?.id,
+
+          patrimonioId:
+            registro.patrimonio?.id ||
+            null,
+
+          movimentacaoId:
+            movimentacaoId,
+
+          quantidade:
+            Math.max(
+              1,
+              Number(
+                registro.quantidade ||
+                1
+              ) || 1
+            ),
+
+          tipoNovidade:
+            registro.novidade?.tipo ||
+            'DEVOLVIDO COM NOVIDADE',
+
+          descricao:
+            registro.novidade
+              ?.descricao ||
+            'Material encaminhado para manutenção no recebimento.',
+
+          observacoes:
+            `NOVIDADE REGISTRADA NO RECEBIMENTO. PROVIDÊNCIA: MANUTENCAO.`,
+
+          origem:
+            movimentacao?.origem_local ||
+            'CAUTELA INDIVIDUAL',
+
+          destino:
+            'MANUTENCAO',
+
+          policial: {
+            id:
+              policial?.id || null,
+            re:
+              policial?.re || null,
+            nome:
+              nomeUsuario(policial)
+          },
+
+          fotos:
+            arquivos,
+
+          user
+        })
+
+      if (manutencao?.id) {
+        manutencoesCriadas.push(
+          manutencao.id
+        )
+      }
+    }
+
     const totalQuantitativoRecebido =
       itensQuantitativos.reduce(
         (total, item) =>
@@ -1118,10 +1837,14 @@ export async function confirmarRecebimentoCautela({
         totalMantidoSvdd,
       novidades_registradas:
         novidadesOficiaisCriadas.length,
+      manutencoes_registradas:
+        manutencoesCriadas.length,
       mensagem:
-        totalMantidoSvdd > 0
-          ? `Recebimento parcial concluído. ${totalQuantitativoRecebido} unidade(s) recebida(s) e ${totalMantidoSvdd} unidade(s) mantida(s) no Cofre do SVDD.`
-          : 'Cautela recebida com sucesso. Os materiais já estão sob sua responsabilidade.'
+        entregaCargaPermanente
+          ? 'Carga permanente recebida com sucesso. O material foi vinculado ao seu cadastro funcional.'
+          : totalMantidoSvdd > 0
+            ? `Recebimento parcial concluído. ${totalQuantitativoRecebido} unidade(s) recebida(s) e ${totalMantidoSvdd} unidade(s) mantida(s) no Cofre do SVDD.`
+            : 'Cautela recebida com sucesso. Os materiais já estão sob sua responsabilidade.'
     }
   } catch (error) {
     if (novidadesOficiaisCriadas.length > 0) {
@@ -1194,6 +1917,86 @@ export async function confirmarRecebimentoCautela({
   }
 }
 
+
+async function obterDestinoDevolucaoPatrimonio({
+  patrimonioId,
+  policialId
+}) {
+  if (!patrimonioId) {
+    return null
+  }
+
+  const {
+    data: itensMovimentacao,
+    error: itensError
+  } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select('movimentacao_id, created_at')
+    .eq('patrimonio_id', patrimonioId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (itensError) {
+    throw itensError
+  }
+
+  const movimentacaoIds = [
+    ...new Set(
+      (itensMovimentacao || [])
+        .map((item) => item?.movimentacao_id)
+        .filter(Boolean)
+    )
+  ]
+
+  if (movimentacaoIds.length === 0) {
+    return null
+  }
+
+  let query = supabase
+    .from('sigmo_movimentacoes')
+    .select('id, tipo_movimentacao, status, origem_local, recebedor_id, created_at')
+    .in('id', movimentacaoIds)
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .eq('status', 'finalizada')
+
+  if (policialId) {
+    query = query.eq('recebedor_id', policialId)
+  }
+
+  query = query
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const {
+    data: cautelas,
+    error: cautelasError
+  } = await query
+
+  if (cautelasError) {
+    throw cautelasError
+  }
+
+  const origem = normalizarMaiusculo(
+    cautelas?.[0]?.origem_local
+  )
+
+  if (
+    origem.includes('P4') ||
+    origem.includes('DEPÓSITO DO P4') ||
+    origem.includes('DEPOSITO DO P4') ||
+    origem.includes('GUARDA DO P4') ||
+    origem.includes('COFRE DO P4')
+  ) {
+    return 'DEPÓSITO DO P4'
+  }
+
+  if (origem.includes('SVDD')) {
+    return 'COFRE DO SVDD'
+  }
+
+  return null
+}
+
 export async function solicitarDevolucaoCautela({
   user,
   itens = []
@@ -1212,61 +2015,112 @@ export async function solicitarDevolucaoCautela({
     )
   }
 
-  const itensMovimentacao = itens
-    .map((item) => {
-      const quantitativo =
-        item?.tipo_registro ===
-        'TONFA_QUANTIDADE'
+  const gruposPorDestino = new Map()
 
-      const observacaoQuantitativo = quantitativo
-        ? JSON.stringify({
-            tipo_registro:
-              'TONFA_QUANTIDADE',
-            movimentacao_tonfa_id:
-              item?.movimentacao_tonfa_id ||
-              null,
-            tonfa_id:
-              item?.tonfa_id ||
-              item?.referencia_id ||
-              null,
-            tipo_material:
-              item?.tipo ||
-              item?.categoria ||
-              null
-          })
-        : item?.observacao || ''
+  for (const item of itens) {
+    const quantitativo =
+      item?.tipo_registro ===
+      'TONFA_QUANTIDADE'
 
-      return {
-        id: item?.id,
-        patrimonio_id:
-          item?.patrimonio_id ||
-          item?.id,
-        quantidade:
-          Number(item?.quantidade || 1) || 1,
-        observacao:
-          observacaoQuantitativo
-      }
-    })
-    .filter((item) => item.patrimonio_id)
+    const patrimonioId =
+      item?.patrimonio_id ||
+      item?.id ||
+      null
 
-  if (itensMovimentacao.length === 0) {
+    if (!patrimonioId) {
+      continue
+    }
+
+    const destinoLocal = quantitativo
+      ? 'COFRE DO SVDD'
+      : await obterDestinoDevolucaoPatrimonio({
+          patrimonioId,
+          policialId
+        })
+
+    if (!destinoLocal) {
+      throw new Error(
+        `Não foi possível identificar o setor de origem da cautela de ${item?.descricao || item?.numero_serie || 'um dos materiais selecionados'}. A devolução não foi criada para evitar encaminhamento incorreto.`
+      )
+    }
+
+    const observacaoQuantitativo = quantitativo
+      ? JSON.stringify({
+          tipo_registro:
+            'TONFA_QUANTIDADE',
+          movimentacao_tonfa_id:
+            item?.movimentacao_tonfa_id ||
+            null,
+          tonfa_id:
+            item?.tonfa_id ||
+            item?.referencia_id ||
+            null,
+          tipo_material:
+            item?.tipo ||
+            item?.categoria ||
+            null
+        })
+      : item?.observacao || ''
+
+    const itemMovimentacao = {
+      id: item?.id,
+      patrimonio_id: patrimonioId,
+      quantidade:
+        Number(item?.quantidade || 1) || 1,
+      observacao:
+        observacaoQuantitativo
+    }
+
+    if (!gruposPorDestino.has(destinoLocal)) {
+      gruposPorDestino.set(
+        destinoLocal,
+        []
+      )
+    }
+
+    gruposPorDestino
+      .get(destinoLocal)
+      .push(itemMovimentacao)
+  }
+
+  if (gruposPorDestino.size === 0) {
     throw new Error(
       'Os materiais não possuem identificação patrimonial válida.'
     )
   }
 
-  return criarMovimentacaoCompleta({
-    tipo: 'DEVOLUCAO',
-    origemLocal: 'CAUTELA INDIVIDUAL',
-    destinoLocal: 'COFRE DO SVDD',
-    solicitante: {
-      ...user,
-      id: policialId
-    },
-    recebedor: null,
-    observacoes:
-      'DEVOLUÇÃO DOS MATERIAIS SELECIONADOS PELO USUÁRIO.',
-    itens: itensMovimentacao,
-    aprovarAutomaticamente: false
-  })
+  const movimentacoesCriadas = []
+
+  for (const [destinoLocal, itensMovimentacao] of gruposPorDestino) {
+    const resultado =
+      await criarMovimentacaoCompleta({
+        tipo: 'DEVOLUCAO',
+        origemLocal:
+          'CAUTELA INDIVIDUAL',
+        destinoLocal,
+        solicitante: {
+          ...user,
+          id: policialId
+        },
+        recebedor: null,
+        observacoes:
+          `DEVOLUÇÃO DOS MATERIAIS SELECIONADOS PELO USUÁRIO PARA ${destinoLocal}.`,
+        itens: itensMovimentacao,
+        aprovarAutomaticamente: false
+      })
+
+    movimentacoesCriadas.push({
+      destinoLocal,
+      ...resultado
+    })
+  }
+
+  return {
+    sucesso: true,
+    movimentacoes:
+      movimentacoesCriadas,
+    destinos: [
+      ...gruposPorDestino.keys()
+    ]
+  }
 }

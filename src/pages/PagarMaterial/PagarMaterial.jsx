@@ -342,6 +342,34 @@ export default function PagarMaterial({
       return
     }
 
+    const possuiArma = itensSelecionados.some(
+      (item) =>
+        String(item?.modulo || '').trim().toUpperCase() === 'ARMA' ||
+        String(item?.tabela_origem || '').trim().toLowerCase() === 'sigmo_armas'
+    )
+
+    if (
+      possuiArma &&
+      tipoMovimentacao === TIPO_ENTREGA &&
+      policialRecebedor?.arma_somente_cautela
+    ) {
+      setErro(
+        'Este policial possui restrição de armamento: somente cautela. Não é permitido entregar arma como carga permanente.'
+      )
+      return
+    }
+
+    if (
+      possuiArma &&
+      tipoMovimentacao === TIPO_CAUTELA &&
+      policialRecebedor?.arma_sem_cautela
+    ) {
+      setErro(
+        'Este policial possui restrição de armamento: sem cautela de arma. Não é permitido cautelar arma para este policial.'
+      )
+      return
+    }
+
     try {
       setSalvando(true)
       setErro('')

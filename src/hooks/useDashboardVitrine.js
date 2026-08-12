@@ -298,29 +298,10 @@ function filtrarArmasPorPerfil(
   }
 
   if (perfil === PERFIS.P4) {
-    return lista.filter(
-      (arma) => {
-        const status =
-          statusArma(arma)
-
-        const local =
-          localArma(arma)
-
-        return (
-          (
-            status === 'RESERVA' ||
-            status === 'ATIVO' ||
-            status === 'RECOLHIDO'
-          ) &&
-          (
-            local.includes('P4') ||
-            local.includes('DEPOSITO') ||
-            local.includes('RESERVA') ||
-            local === ''
-          )
-        )
-      }
-    )
+    // O P4 é o gestor patrimonial da Companhia e precisa enxergar
+    // a distribuição completa: depósito, SVDD, cautelas, carga,
+    // manutenção e demais situações.
+    return lista
   }
 
   if (
@@ -419,33 +400,9 @@ function ajustarTonfasPorPerfil(
   }
 
   if (perfil === PERFIS.P4) {
-    return {
-      ...resumo,
-      geral: {
-        ...resumo.geral,
-        total:
-          resumo.geral.p4,
-        svdd: 0,
-        emServico: 0,
-        manutencao: 0
-      },
-      tonfasDetalhe: {
-        ...resumo.tonfasDetalhe,
-        total:
-          resumo.tonfasDetalhe.p4,
-        svdd: 0,
-        emServico: 0,
-        manutencao: 0
-      },
-      cassetetesDetalhe: {
-        ...resumo.cassetetesDetalhe,
-        total:
-          resumo.cassetetesDetalhe.p4,
-        svdd: 0,
-        emServico: 0,
-        manutencao: 0
-      }
-    }
+    // O P4 acompanha todo o ciclo patrimonial da Companhia.
+    // Mantém os saldos originais de P4, SVDD, em serviço e manutenção.
+    return resumo
   }
 
   if (

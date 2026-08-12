@@ -38,6 +38,8 @@ const initialForm = {
   perfil: '',
   situacao: 'ATIVO',
   observacoes: '',
+  arma_somente_cautela: false,
+  arma_sem_cautela: false,
   foto_url: '',
   qr_code: ''
 }
@@ -173,6 +175,14 @@ const CAMPOS_AUDITAVEIS = [
     campo: 'observacoes',
     label: 'Observações',
     ocultarValores: true
+  },
+  {
+    campo: 'arma_somente_cautela',
+    label: 'Arma: somente cautela'
+  },
+  {
+    campo: 'arma_sem_cautela',
+    label: 'Arma: sem cautela'
   }
 ]
 
@@ -359,6 +369,12 @@ function montarPayload(form) {
         form.observacoes
       ).trim(),
 
+    arma_somente_cautela:
+      Boolean(form.arma_somente_cautela),
+
+    arma_sem_cautela:
+      Boolean(form.arma_sem_cautela),
+
     foto_url:
       clean(
         form.foto_url
@@ -461,6 +477,12 @@ function transformarPolicialEmForm(
       upper(
         policial.observacoes
       ),
+
+    arma_somente_cautela:
+      Boolean(policial.arma_somente_cautela),
+
+    arma_sem_cautela:
+      Boolean(policial.arma_sem_cautela),
 
     foto_url:
       policial.foto_url || '',
@@ -919,13 +941,23 @@ export default function PolicialForm({
   ) {
     const {
       name,
-      value
+      value,
+      type,
+      checked
     } = event.target
 
     if (
       somenteCadastroProprio &&
       !['nome_guerra', 'telefone', 'email', 'pelotao'].includes(name)
     ) {
+      return
+    }
+
+    if (type === 'checkbox') {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked
+      }))
       return
     }
 
@@ -1781,6 +1813,32 @@ export default function PolicialForm({
           
               disabled={somenteCadastroProprio}/>
         </label>
+
+        {!somenteCadastroProprio && (
+          <div className="form-full">
+            <strong>Restrições de armamento</strong>
+
+            <label>
+              <input
+                type="checkbox"
+                name="arma_somente_cautela"
+                checked={Boolean(form.arma_somente_cautela)}
+                onChange={handleChange}
+              />
+              Somente cautela — não permite receber arma como carga permanente.
+            </label>
+
+            <label>
+              <input
+                type="checkbox"
+                name="arma_sem_cautela"
+                checked={Boolean(form.arma_sem_cautela)}
+                onChange={handleChange}
+              />
+              Sem cautela de arma — não permite receber arma em cautela.
+            </label>
+          </div>
+        )}
 
         {isEditing && !somenteCadastroProprio && (
           <PolicialFotos

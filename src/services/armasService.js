@@ -25,6 +25,23 @@ function normalizarStatus(status) {
   return valor
 }
 
+function statusControladoPelaEngine(status) {
+  return [
+    'CARGA',
+    'CAUTELADO'
+  ].includes(
+    normalizarStatus(status)
+  )
+}
+
+function propriedadePMESP(valor) {
+  return String(
+    valor || 'PMESP'
+  )
+    .trim()
+    .toUpperCase() === 'PMESP'
+}
+
 function normalizarArma(arma) {
   return {
     ...arma,
@@ -259,6 +276,17 @@ export async function cadastrarArma(
         payload.status
     )
 
+  if (
+    propriedadePMESP(payload.propriedade) &&
+    statusControladoPelaEngine(
+      statusNormalizado
+    )
+  ) {
+    throw new Error(
+      'CARGA e CAUTELADO são controlados pela Engine Patrimonial. Cadastre a arma em RESERVA e use Pagar/Receber Material.'
+    )
+  }
+
   const {
     data,
     error
@@ -335,10 +363,74 @@ export async function atualizarArma(
   payload,
   user = null
 ) {
-  const statusNormalizado =
+  const atual =
+    await buscarArmaPorId(id)
+
+  const statusAtual =
+    normalizarStatus(
+      atual.status_operacional ||
+      atual.status
+    )
+
+  const statusSolicitado =
     normalizarStatus(
       payload.status_operacional ||
-        payload.status
+      payload.status
+    )
+
+  const pmesp =
+    propriedadePMESP(
+      payload.propriedade ||
+      atual.propriedade
+    )
+
+  if (
+    pmesp &&
+    statusControladoPelaEngine(
+      statusSolicitado
+    ) &&
+    statusSolicitado !== statusAtual
+  ) {
+    throw new Error(
+      'CARGA e CAUTELADO são controlados pela Engine Patrimonial. Use Pagar/Receber Material.'
+    )
+  }
+
+  const operacaoProtegida =
+    pmesp &&
+    statusControladoPelaEngine(
+      statusAtual
+    )
+
+  const payloadSeguro =
+    operacaoProtegida
+      ? {
+          ...payload,
+          status:
+            atual.status,
+          status_operacional:
+            atual.status_operacional,
+          carga_policial_id:
+            atual.carga_policial_id,
+          carga_policial_re:
+            atual.carga_policial_re,
+          carga_policial_nome:
+            atual.carga_policial_nome,
+          carga_policial_posto_graduacao:
+            atual.carga_policial_posto_graduacao,
+          carga_policial_companhia:
+            atual.carga_policial_companhia,
+          carga_policial_pelotao:
+            atual.carga_policial_pelotao,
+          carga_policial_funcao:
+            atual.carga_policial_funcao
+        }
+      : payload
+
+  const statusNormalizado =
+    normalizarStatus(
+      payloadSeguro.status_operacional ||
+        payloadSeguro.status
     )
 
   const {
@@ -347,10 +439,11 @@ export async function atualizarArma(
   } = await supabase
     .from(TABLE)
     .update({
-      ...payload,
+      ...payloadSeguro,
 
       propriedade: String(
-        payload.propriedade ||
+        payloadSeguro.propriedade ||
+          atual.propriedade ||
           'PMESP'
       )
         .trim()
@@ -359,7 +452,9 @@ export async function atualizarArma(
       status: statusNormalizado,
 
       qr_code:
-        payload.qr_code || null
+        payloadSeguro.qr_code ||
+        atual.qr_code ||
+        null
     })
     .eq('id', id)
     .select()
@@ -456,3 +551,91 @@ export async function sincronizarArmasComPatrimonios(
 
   return armasNormalizadas.length
 }
+
+export async function finalizarDevolucaoCargaP4({
+  itens = []
+} = {}) {
+  const patrimonioIds = [
+    ...new Set(
+      (Array.isArray(itens) ? itens : [])
+        .map((item) => item?.patrimonio_id)
+        .filter(Boolean)
+    )
+  ]
+
+  if (patrimonioIds.length === 0) {
+    throw new Error(
+      'Nenhum patrimônio foi informado para finalizar a devolução ao P4.'
+    )
+  }
+
+  const {
+    data: patrimonios,
+    error: patrimonioError
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id, tipo, referencia_id')
+    .in('id', patrimonioIds)
+
+  if (patrimonioError) throw patrimonioError
+
+  const armas = (patrimonios || []).filter(
+    (patrimonio) =>
+      String(patrimonio?.tipo || '')
+        .trim()
+        .toUpperCase() === 'ARMA' &&
+      patrimonio?.referencia_id
+  )
+
+  if (armas.length === 0) {
+    return {
+      armasAtualizadas: 0
+    }
+  }
+
+  const armaIds = armas.map(
+    (patrimonio) => patrimonio.referencia_id
+  )
+
+  const {
+    error: armaError
+  } = await supabase
+    .from(TABLE)
+    .update({
+      status: 'RESERVA',
+      local_atual: 'GUARDA DO P4',
+      carga_policial_id: null,
+      carga_policial_re: null,
+      carga_policial_nome: null,
+      carga_policial_posto_graduacao: null,
+      carga_policial_companhia: null,
+      carga_policial_pelotao: null,
+      carga_policial_funcao: null
+    })
+    .in('id', armaIds)
+
+  if (armaError) throw armaError
+
+  const idsPatrimonioArmas = armas.map(
+    (patrimonio) => patrimonio.id
+  )
+
+  const {
+    error: sincronizacaoError
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .update({
+      status: 'RESERVA',
+      local_atual: 'DEPÓSITO DO P4'
+    })
+    .in('id', idsPatrimonioArmas)
+
+  if (sincronizacaoError) {
+    throw sincronizacaoError
+  }
+
+  return {
+    armasAtualizadas: armaIds.length
+  }
+}
+

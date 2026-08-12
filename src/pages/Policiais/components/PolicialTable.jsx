@@ -356,8 +356,50 @@ export default function PolicialTable({
                       </td>
 
                       <td data-label="Nome de guerra">
-                        {policial.nome_guerra ||
-                          '-'}
+                        <div>
+                          {policial.nome_guerra ||
+                            '-'}
+
+                          {(policial.arma_somente_cautela ||
+                            policial.arma_sem_cautela) && (
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '4px',
+                                marginTop: '5px'
+                              }}
+                            >
+                              {policial.arma_somente_cautela && (
+                                <small
+                                  style={{
+                                    padding: '2px 6px',
+                                    borderRadius: '999px',
+                                    background: '#e8f1ff',
+                                    color: '#174ea6',
+                                    fontWeight: 700
+                                  }}
+                                >
+                                  Somente cautela
+                                </small>
+                              )}
+
+                              {policial.arma_sem_cautela && (
+                                <small
+                                  style={{
+                                    padding: '2px 6px',
+                                    borderRadius: '999px',
+                                    background: '#fff3e0',
+                                    color: '#9a4d00',
+                                    fontWeight: 700
+                                  }}
+                                >
+                                  Sem cautela de arma
+                                </small>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       <td data-label="RE">

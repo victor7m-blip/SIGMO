@@ -10,12 +10,20 @@ import GaleriaFotos from './components/GaleriaFotos'
 import QRScanner from './components/QRScanner'
 import ResponsavelPanel from './components/ResponsavelPanel'
 import TimelinePatrimonio from './components/TimelinePatrimonio'
+import PainelOperacional from './components/PainelOperacional'
 
 import {
   carregarDashboardPatrimonial,
   listarCategoriasOperacionais,
   listarPatrimoniosCategoria
 } from '../../services/dashboardService'
+
+import { carregarCentralOperacional } from '../../services/centralOperacionalService'
+import { listarTonfas } from '../../services/tonfasService'
+import {
+  ehEncarregado,
+  ehAuxiliar
+} from '../../services/permissionService'
 
 function normalizarTexto(valor) {
   return String(valor ?? '').trim()
@@ -242,8 +250,133 @@ function normalizarCategoria(categoria) {
   }
 }
 
-function CentralOperacional() {
+
+function patrimonioPertenceAoSVDD(patrimonio) {
+  const dados = obterDadosPatrimonio(patrimonio)
+
+  const local = normalizarMaiusculo(
+    patrimonio?.local_atual ||
+    patrimonio?.local ||
+    dados?.local_atual ||
+    dados?.local ||
+    ''
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  const origem = normalizarMaiusculo(
+    patrimonio?.origem_local ||
+    patrimonio?.local_origem ||
+    dados?.origem_local ||
+    dados?.local_origem ||
+    ''
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  const status = normalizarMaiusculo(
+    patrimonio?.status_operacional ||
+    patrimonio?.status ||
+    dados?.status_operacional ||
+    dados?.status ||
+    ''
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  const localSVDD =
+    local.includes('SVDD') ||
+    local.includes('COFRE DO SVDD') ||
+    local.includes('SERVICO DE DIA')
+
+  const origemSVDD =
+    origem.includes('SVDD') ||
+    origem.includes('COFRE DO SVDD') ||
+    origem.includes('SERVICO DE DIA')
+
+  const foraDoCofreMasSobResponsabilidade =
+    origemSVDD &&
+    (
+      status.includes('CAUTELA') ||
+      status.includes('EM_SERVICO') ||
+      status.includes('EM SERVICO') ||
+      status.includes('MANUTENCAO') ||
+      local.includes('CAUTELA') ||
+      local.includes('MANUTENCAO')
+    )
+
+  return localSVDD || foraDoCofreMasSobResponsabilidade
+}
+
+function resumirCategoriaPorPatrimonios(categoria, patrimonios) {
+  const lista = (patrimonios ?? []).map(normalizarPatrimonio)
+
+  const comPolicial = lista.filter(
+    (item) => item.com_policial
+  ).length
+
+  const noCofre = lista.filter(
+    (item) => item.no_cofre
+  ).length
+
+  const semLocalizacao = lista.filter(
+    (item) =>
+      !item.com_policial &&
+      !item.no_cofre &&
+      normalizarMaiusculo(item.local_atual) === 'NÃO INFORMADO'
+  ).length
+
+  const divergencias = lista.filter(
+    (item) =>
+      item.divergencia === true ||
+      item.possui_divergencia === true
+  ).length
+
+  return normalizarCategoria({
+    ...categoria,
+    total: lista.length,
+    com_policial: comPolicial,
+    no_cofre: noCofre,
+    sem_localizacao: semLocalizacao,
+    divergencias
+  })
+}
+
+
+function resumoTonfasSVDD(lista = []) {
+  const linhas = Array.isArray(lista) ? lista : []
+
+  const somar = (campo) =>
+    linhas.reduce(
+      (total, item) =>
+        total + Number(item?.[campo] || 0),
+      0
+    )
+
+  const noCofre = somar('quantidade_svdd')
+  const emServico = somar('quantidade_em_servico')
+  const manutencao = somar('quantidade_manutencao')
+  const total = noCofre + emServico + manutencao
+
+  return normalizarCategoria({
+    tipo: 'tonfa',
+    categoria: 'TONFA / CASSETETE',
+    total,
+    com_policial: emServico,
+    no_cofre: noCofre,
+    sem_localizacao: 0,
+    divergencias: 0,
+    quantitativo: true
+  })
+}
+
+function CentralOperacional({ user }) {
+  const visaoSVDD =
+    ehEncarregado(user) ||
+    ehAuxiliar(user)
+
   const [dashboard, setDashboard] = useState(null)
+  const [operacional, setOperacional] = useState(null)
 
   const [categorias, setCategorias] = useState([])
 
@@ -293,19 +426,77 @@ function CentralOperacional() {
     try {
       const [
         dadosDashboard,
-        dadosCategorias
+        dadosCategorias,
+        dadosOperacionais
       ] = await Promise.all([
         carregarDashboardPatrimonial(),
-        listarCategoriasOperacionais()
+        listarCategoriasOperacionais(),
+        carregarCentralOperacional({ user })
       ])
 
       setDashboard(dadosDashboard)
+      setOperacional(dadosOperacionais)
 
-      setCategorias(
-        (dadosCategorias ?? []).map(
-          normalizarCategoria
+      if (visaoSVDD) {
+        const categoriasBase =
+          (dadosCategorias ?? []).map(
+            normalizarCategoria
+          )
+
+        const tonfasResultado =
+          await listarTonfas({
+            pagina: 1,
+            limite: 5000
+          })
+
+        const categoriaTonfas =
+          resumoTonfasSVDD(
+            tonfasResultado?.data || []
+          )
+
+        const categoriasComEscopo =
+          await Promise.all(
+            categoriasBase
+              .filter(
+                (categoria) =>
+                  categoria.tipo !== 'tonfa'
+              )
+              .map(
+                async (categoria) => {
+                  const lista =
+                    await listarPatrimoniosCategoria(
+                      categoria.tipo
+                    )
+
+                  const patrimoniosSVDD =
+                    (lista ?? []).filter(
+                      patrimonioPertenceAoSVDD
+                    )
+
+                  return resumirCategoriaPorPatrimonios(
+                    categoria,
+                    patrimoniosSVDD
+                  )
+                }
+              )
+          )
+
+        setCategorias(
+          [
+            ...categoriasComEscopo,
+            categoriaTonfas
+          ].filter(
+            (categoria) =>
+              Number(categoria.total || 0) > 0
+          )
         )
-      )
+      } else {
+        setCategorias(
+          (dadosCategorias ?? []).map(
+            normalizarCategoria
+          )
+        )
+      }
     } catch (error) {
       console.error(
         'Erro ao carregar Central Operacional:',
@@ -319,7 +510,7 @@ function CentralOperacional() {
     } finally {
       setCarregandoCentral(false)
     }
-  }, [])
+  }, [user, visaoSVDD])
 
   useEffect(() => {
     carregarCentral()
@@ -340,8 +531,16 @@ function CentralOperacional() {
             categoria.tipo
           )
 
+        const listaPerfil =
+          visaoSVDD &&
+          categoria.tipo !== 'tonfa'
+            ? (lista ?? []).filter(
+                patrimonioPertenceAoSVDD
+              )
+            : (lista ?? [])
+
         const patrimonios =
-          (lista ?? []).map(
+          listaPerfil.map(
             normalizarPatrimonio
           )
 
@@ -364,7 +563,7 @@ function CentralOperacional() {
         setCarregandoCategoria(false)
       }
     },
-    []
+    [visaoSVDD]
   )
 
   const voltarCategorias =
@@ -451,6 +650,36 @@ function CentralOperacional() {
         )
       )
     }, [patrimoniosCategoria])
+
+  const resumoGeral =
+    useMemo(() => {
+      return categorias.reduce(
+        (acc, categoria) => ({
+          total:
+            acc.total +
+            Number(categoria.total || 0),
+          com_policial:
+            acc.com_policial +
+            Number(categoria.com_policial || 0),
+          no_cofre:
+            acc.no_cofre +
+            Number(categoria.no_cofre || 0),
+          sem_localizacao:
+            acc.sem_localizacao +
+            Number(categoria.sem_localizacao || 0),
+          divergencias:
+            acc.divergencias +
+            Number(categoria.divergencias || 0)
+        }),
+        {
+          total: 0,
+          com_policial: 0,
+          no_cofre: 0,
+          sem_localizacao: 0,
+          divergencias: 0
+        }
+      )
+    }, [categorias])
 
   const resumo =
     useMemo(() => {
@@ -539,19 +768,30 @@ function CentralOperacional() {
         </div>
       ) : (
         <>
+          {!categoriaSelecionada && (
+            <PainelOperacional
+              dados={operacional}
+              carregando={carregandoCentral}
+              user={user}
+              onAtualizar={carregarCentral}
+            />
+          )}
+
           <CentralResumo
             resumo={
               categoriaSelecionada
                 ? resumo
-                : {
-                    total:
-                      dashboard?.cards
-                        ?.total ?? 0,
-                    com_policial: 0,
-                    no_cofre: 0,
-                    sem_localizacao: 0,
-                    divergencias: 0
-                  }
+                : visaoSVDD
+                  ? resumoGeral
+                  : {
+                      total:
+                        dashboard?.cards
+                          ?.total ?? 0,
+                      com_policial: 0,
+                      no_cofre: 0,
+                      sem_localizacao: 0,
+                      divergencias: 0
+                    }
             }
           />
 

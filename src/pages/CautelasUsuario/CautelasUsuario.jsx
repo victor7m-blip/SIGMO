@@ -540,12 +540,16 @@ function alterarQuantidadeDevolver(
 
         if (
           campo === 'tipo' ||
-          campo === 'descricao' ||
           campo === 'providencia'
         ) {
           novoValor = String(
             valor || ''
           ).toUpperCase()
+        }
+
+        if (campo === 'descricao') {
+          novoValor = String(valor ?? '')
+            .toUpperCase()
         }
 
         if (
@@ -1004,7 +1008,7 @@ function alterarQuantidadeDevolver(
 
   if (
     !window.confirm(
-      `Confirma a devolução de ${itensSelecionados.length} item(ns) ao SVDD? A responsabilidade só será encerrada após o aceite do SVDD.`
+      `Confirma a devolução de ${itensSelecionados.length} item(ns)? Cada material será encaminhado ao setor de origem da cautela. A responsabilidade só será encerrada após o aceite do setor responsável.`
     )
   ) {
     return
@@ -1045,7 +1049,7 @@ function alterarQuantidadeDevolver(
     })
 
     setMensagem(
-      'Solicitação de devolução enviada ao SVDD. Aguarde a conferência e o aceite do responsável.'
+      'Solicitação de devolução enviada ao setor responsável. Aguarde a conferência e o aceite.'
     )
 
     setItensSelecionados([])
@@ -1075,7 +1079,7 @@ function alterarQuantidadeDevolver(
           </h1>
           <p>
             {telaDevolucao
-              ? 'Selecione os materiais que serão apresentados ao SVDD. A baixa ocorrerá somente após a conferência física.'
+              ? 'Selecione os materiais que serão devolvidos. Cada item será encaminhado ao setor de origem da cautela e a baixa ocorrerá somente após a conferência física.'
               : 'Confira o carrinho pago pelo SVDD e escolha a quantidade dos materiais quantitativos.'}
           </p>
         </div>
@@ -1124,7 +1128,7 @@ function alterarQuantidadeDevolver(
         <section className="cautela-usuario-lista">
           {existeDevolucaoPendente && (
             <div className="cautela-usuario-alerta info">
-              Há material com devolução já encaminhada ao SVDD. Somente esses itens ficam bloqueados até a conferência; os demais continuam disponíveis para nova devolução.
+              Há material com devolução já encaminhada ao setor responsável. Somente esses itens ficam bloqueados até a conferência; os demais continuam disponíveis para nova devolução.
             </div>
           )}
 
@@ -1142,7 +1146,7 @@ function alterarQuantidadeDevolver(
                   <h2>Carrinho de devolução</h2>
                 </div>
                 <small>
-                  Conferência obrigatória pelo SVDD
+                  Conferência obrigatória pelo setor responsável
                 </small>
               </div>
 
@@ -1207,7 +1211,7 @@ function alterarQuantidadeDevolver(
 
             {bloqueado && (
               <small>
-                DEVOLUÇÃO JÁ ENCAMINHADA AO SVDD
+                DEVOLUÇÃO JÁ ENCAMINHADA
               </small>
             )}
           </div>
@@ -1315,7 +1319,7 @@ function alterarQuantidadeDevolver(
               >
                 {processando === 'devolucao'
                   ? 'Enviando...'
-                  : 'Enviar devolução ao SVDD'}
+                  : 'Enviar devolução'}
               </button>
             </article>
           )}
@@ -1514,6 +1518,18 @@ function alterarQuantidadeDevolver(
                                           OUTRO
                                         </option>
                                       </select>
+
+                                      {obterNovidadeRecebimento(chave)?.tipo && (
+                                        <small
+                                          style={{
+                                            display: 'block',
+                                            marginTop: 6,
+                                            lineHeight: 1.35
+                                          }}
+                                        >
+                                          Novidade selecionada. Confira a providência sugerida ao lado e altere se desejar.
+                                        </small>
+                                      )}
                                     </label>
 
                                     <label>

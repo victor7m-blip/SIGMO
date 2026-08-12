@@ -263,7 +263,103 @@ export async function listarNovidadesPatrimoniais({
     throw error
   }
 
-  return data ?? []
+  const novidades =
+    data ?? []
+
+  if (novidades.length === 0) {
+    return []
+  }
+
+  const novidadeIds =
+    novidades
+      .map((item) => item?.id)
+      .filter(Boolean)
+
+  const {
+    data: fotos,
+    error: fotosError
+  } = await supabase
+    .from(
+      'sigmo_patrimonio_novidades_fotos'
+    )
+    .select('*')
+    .in(
+      'novidade_id',
+      novidadeIds
+    )
+    .order(
+      'principal',
+      {
+        ascending: false
+      }
+    )
+    .order(
+      'ordem',
+      {
+        ascending: true
+      }
+    )
+    .order(
+      'created_at',
+      {
+        ascending: true
+      }
+    )
+
+  if (fotosError) {
+    console.warn(
+      'Não foi possível carregar as fotos das novidades patrimoniais:',
+      fotosError
+    )
+  }
+
+  const fotosPorNovidade =
+    new Map()
+
+  for (const foto of fotos ?? []) {
+    const chave =
+      String(
+        foto?.novidade_id ||
+        ''
+      )
+
+    if (!chave) {
+      continue
+    }
+
+    if (!fotosPorNovidade.has(chave)) {
+      fotosPorNovidade.set(
+        chave,
+        []
+      )
+    }
+
+    fotosPorNovidade
+      .get(chave)
+      .push(foto)
+  }
+
+  return novidades.map(
+    (item) => {
+      const fotosItem =
+        fotosPorNovidade.get(
+          String(item?.id || '')
+        ) || []
+
+      return {
+        ...item,
+        fotos:
+          fotosItem,
+        foto_url:
+          fotosItem.find(
+            (foto) =>
+              foto?.principal === true
+          )?.foto_url ||
+          fotosItem[0]?.foto_url ||
+          null
+      }
+    }
+  )
 }
 
 async function listarTotaisPorModulo() {

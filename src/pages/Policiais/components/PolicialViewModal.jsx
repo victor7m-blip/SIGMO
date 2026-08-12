@@ -290,6 +290,23 @@ export default function PolicialViewModal({
 
             <div className="policial-observacoes">
               <strong>
+                Restrições de armamento
+              </strong>
+
+              <p>
+                {policialAtual.arma_somente_cautela &&
+                policialAtual.arma_sem_cautela
+                  ? 'Somente cautela • Sem cautela de arma'
+                  : policialAtual.arma_somente_cautela
+                    ? 'Somente cautela'
+                    : policialAtual.arma_sem_cautela
+                      ? 'Sem cautela de arma'
+                      : 'Sem restrições de armamento.'}
+              </p>
+            </div>
+
+            <div className="policial-observacoes">
+              <strong>
                 Observações
               </strong>
 

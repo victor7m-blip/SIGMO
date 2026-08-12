@@ -6,6 +6,8 @@ import {
   useState
 } from 'react'
 
+import { supabase } from '../../services/supabaseClient'
+
 import {
   listarTonfasEmServico
 } from '../../services/tonfasMovimentacoesService'
@@ -39,6 +41,11 @@ function normalizarTexto(valor) {
   return String(valor ?? '')
     .trim()
     .toUpperCase()
+}
+
+function ehUuidValido(valor) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(String(valor ?? '').trim())
 }
 
 function somenteNumeros(valor) {
@@ -189,6 +196,106 @@ function normalizarItem(item) {
         1
       )
   }
+}
+
+
+async function buscarNovidadesPendentesPatrimonios(itens = []) {
+  const patrimonioIds = [
+    ...new Set(
+      (itens || [])
+        .map((item) => item?.patrimonio_id || item?.id)
+        .filter(ehUuidValido)
+        .map(String)
+    )
+  ]
+
+  if (patrimonioIds.length === 0) {
+    return new Map()
+  }
+
+  const { data: novidades, error } = await supabase
+    .from('sigmo_patrimonio_novidades')
+    .select('*')
+    .in('patrimonio_id', patrimonioIds)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.warn('Não foi possível carregar as novidades patrimoniais pendentes:', error)
+    return new Map()
+  }
+
+  const ids = (novidades || [])
+    .map((item) => item?.id)
+    .filter(Boolean)
+
+  let fotos = []
+
+  if (ids.length > 0) {
+    const { data: fotosData, error: fotosError } = await supabase
+      .from('sigmo_patrimonio_novidades_fotos')
+      .select('*')
+      .in('novidade_id', ids)
+      .order('principal', { ascending: false })
+      .order('ordem', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (fotosError) {
+      console.warn('Não foi possível carregar as fotos das novidades patrimoniais:', fotosError)
+    } else {
+      fotos = fotosData || []
+    }
+  }
+
+  const fotosPorNovidade = new Map()
+
+  for (const foto of fotos) {
+    const chave = String(foto?.novidade_id || '')
+    if (!chave) continue
+    if (!fotosPorNovidade.has(chave)) fotosPorNovidade.set(chave, [])
+    fotosPorNovidade.get(chave).push(foto)
+  }
+
+  const porPatrimonio = new Map()
+  const prioridades = [
+    'REGISTRADA',
+    'PENDENTE',
+    'EM ANALISE',
+    'EM_ANÁLISE',
+    'EM_ANALISE'
+  ]
+
+  for (const novidade of novidades || []) {
+    const chave = String(novidade?.patrimonio_id || '')
+    if (!chave) continue
+
+    const atual = porPatrimonio.get(chave)
+    const statusAtual =
+      normalizarTexto(atual?.status || '')
+    const statusNovo =
+      normalizarTexto(novidade?.status || '')
+
+    const novaEhPrioritaria =
+      prioridades.includes(statusNovo)
+    const atualEhPrioritaria =
+      prioridades.includes(statusAtual)
+
+    if (
+      atual &&
+      (
+        atualEhPrioritaria ||
+        !novaEhPrioritaria
+      )
+    ) {
+      continue
+    }
+
+    porPatrimonio.set(chave, {
+      ...novidade,
+      fotos: fotosPorNovidade.get(String(novidade?.id || '')) || []
+    })
+  }
+
+  return porPatrimonio
 }
 
 export default function ReceberMaterial({
@@ -419,17 +526,29 @@ export default function ReceberMaterial({
               )
             }
 
+            const novidadesPorPatrimonio =
+              await buscarNovidadesPendentesPatrimonios(lista)
+
+            const listaComNovidades =
+              lista.map((item) => ({
+                ...item,
+                novidade_pendente:
+                  novidadesPorPatrimonio.get(
+                    String(item?.patrimonio_id || item?.id || '')
+                  ) || null
+              }))
+
             setDevolucaoPendente(devolucao)
-            setPatrimonios(lista)
+            setPatrimonios(listaComNovidades)
             setItensSelecionados([])
 
-            if (lista.length === 0) {
+            if (listaComNovidades.length === 0) {
               setMensagem(
                 'Existe uma devolução pendente, mas os itens não puderam ser conciliados com a carga atual. Atualize a tela e confira a movimentação.'
               )
             } else {
               setMensagem(
-                `Devolução pendente localizada: ${lista.length} item(ns) apresentado(s) pelo usuário.`
+                `Devolução pendente localizada: ${listaComNovidades.length} item(ns) apresentado(s) pelo usuário.`
               )
             }
 
@@ -499,6 +618,17 @@ export default function ReceberMaterial({
       patrimonios
     ])
 
+  const possuiNovidadeSelecionada =
+    itensSelecionados.some(
+      (item) =>
+        Boolean(
+          String(
+            item?.novidade?.tipo ||
+            ''
+          ).trim()
+        )
+    )
+
   const todosSelecionados =
     patrimonios.length > 0 &&
     patrimonios.every(
@@ -553,7 +683,7 @@ export default function ReceberMaterial({
           item.novidade || {
             tipo: '',
             descricao: '',
-            providencia: 'COFRE',
+            providencia: '',
             quantidade_afetada: 1,
             fotos: [],
             previews: []
@@ -577,7 +707,7 @@ export default function ReceberMaterial({
           item.novidade || {
             tipo: '',
             descricao: '',
-            providencia: 'COFRE',
+            providencia: '',
             quantidade_afetada: 1,
             fotos: [],
             previews: []
@@ -587,11 +717,16 @@ export default function ReceberMaterial({
 
         if (
           campo === 'tipo' ||
-          campo === 'providencia' ||
-          campo === 'descricao'
+          campo === 'providencia'
         ) {
           novoValor =
             normalizarTexto(valor)
+        }
+
+        if (campo === 'descricao') {
+          novoValor =
+            String(valor ?? '')
+              .toUpperCase()
         }
 
         if (
@@ -835,6 +970,17 @@ export default function ReceberMaterial({
     }
 
     return {
+      novidade_id:
+        novidade.novidade_id ||
+        novidade.id ||
+        null,
+
+      existente:
+        Boolean(
+          novidade.existente ||
+          novidade.novidade_id
+        ),
+
       tipo:
         normalizarTexto(
           novidade.tipo
@@ -939,11 +1085,34 @@ export default function ReceberMaterial({
     return
   }
 
+  const novidadePendente =
+    item?.novidade_pendente || null
+
   setItensSelecionados((listaAtual) => [
     ...listaAtual,
     {
       ...item,
-      quantidade_receber: Number(item.quantidade || 1)
+      quantidade_receber: Number(item.quantidade || 1),
+      novidade_aberta:
+        Boolean(novidadePendente),
+      novidade:
+        novidadePendente?.id
+          ? {
+              id: novidadePendente.id,
+              novidade_id: novidadePendente.id,
+              existente: true,
+              tipo: normalizarTexto(
+                novidadePendente.titulo || ''
+              ),
+              descricao: normalizarTexto(
+                novidadePendente.descricao || ''
+              ),
+              providencia: '',
+              quantidade_afetada: 1,
+              fotos: [],
+              previews: []
+            }
+          : item?.novidade
     }
   ])
 
@@ -1069,6 +1238,16 @@ async function confirmarRecebimento() {
   }
 
   for (const item of itensSelecionados) {
+    if (
+      item?.novidade_pendente &&
+      !normalizarTexto(item?.novidade?.providencia)
+    ) {
+      setErro(
+        `O patrimônio ${obterIdentificador(item)} possui novidade registrada pelo usuário. Analise a ocorrência e selecione a providência antes de confirmar o recebimento.`
+      )
+      return
+    }
+
     const novidade =
       prepararNovidadeItem(item)
 
@@ -1586,13 +1765,9 @@ async function confirmarRecebimento() {
                   value={
                     localRetorno
                   }
-                  onChange={(event) =>
-                    setLocalRetorno(
-                      normalizarTexto(
-                        event.target.value
-                      )
-                    )
-                  }
+                  readOnly
+                  aria-readonly="true"
+                  title="O local de retorno é definido automaticamente pelo SIGMO."
                   placeholder="RESERVA DE MATERIAL"
                 />
               </label>
@@ -1797,6 +1972,62 @@ async function confirmarRecebimento() {
                             <td>
   {item.descricao}
 
+  {item?.novidade_pendente && (
+    <div
+      style={{
+        marginTop: '8px',
+        padding: '8px 10px',
+        border: '1px solid #f0b429',
+        borderRadius: '8px',
+        background: '#fff8e6'
+      }}
+    >
+      <strong style={{ display: 'block' }}>
+        NOVIDADE REGISTRADA PELO USUÁRIO
+      </strong>
+
+      <small style={{ display: 'block', marginTop: '3px' }}>
+        {normalizarTexto(item.novidade_pendente.titulo || 'NOVIDADE')}
+        {item.novidade_pendente.descricao
+          ? ` • ${normalizarTexto(item.novidade_pendente.descricao)}`
+          : ''}
+      </small>
+
+      {(item.novidade_pendente.fotos || []).length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '6px',
+            flexWrap: 'wrap',
+            marginTop: '7px'
+          }}
+        >
+          {item.novidade_pendente.fotos.map((foto) => (
+            <a
+              key={foto.id}
+              href={foto.foto_url}
+              target="_blank"
+              rel="noreferrer"
+              title="Ampliar foto da novidade"
+            >
+              <img
+                src={foto.foto_url}
+                alt="Foto da novidade"
+                style={{
+                  width: '58px',
+                  height: '58px',
+                  objectFit: 'cover',
+                  borderRadius: '7px',
+                  border: '1px solid #cbd5e1'
+                }}
+              />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+
   {item.tipo_registro ===
     'TONFA_QUANTIDADE' && (
     <small
@@ -1917,6 +2148,17 @@ async function confirmarRecebimento() {
                 </strong>
               </div>
             </div>
+
+            {possuiNovidadeSelecionada && (
+              <div
+                className="pagar-material-feedback pagar-material-feedback-success"
+                style={{
+                  marginBottom: '12px'
+                }}
+              >
+                Novidade selecionada. Se necessário, escolha também a providência correspondente antes de confirmar o recebimento.
+              </div>
+            )}
 
             <CarrinhoMateriais
               itens={

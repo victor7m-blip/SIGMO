@@ -54,6 +54,14 @@ export default function CarrinhoMateriais({
           const novidade =
             material.novidade || null
 
+          const novidadePendente =
+            material.novidade_pendente || null
+
+          const novidadeRegistrada =
+            Boolean(
+              novidadePendente?.id
+            )
+
           const novidadeAberta =
             Boolean(
               material.novidade_aberta
@@ -76,7 +84,7 @@ export default function CarrinhoMateriais({
                 material.id
               ].join('-')}
               className={`pagar-material-selected-item ${
-                novidade
+                novidadeRegistrada || novidade
                   ? 'has-novidade'
                   : ''
               }`}
@@ -152,7 +160,7 @@ export default function CarrinhoMateriais({
                   <button
                     type="button"
                     className={
-                      novidade
+                      novidadeRegistrada
                         ? 'pagar-material-novidade-btn is-registered'
                         : 'pagar-material-novidade-btn'
                     }
@@ -162,33 +170,33 @@ export default function CarrinhoMateriais({
                       )
                     }
                   >
-                    {novidade
-                      ? novidadeAberta
-                        ? 'Fechar novidade'
-                        : 'Editar novidade'
-                      : novidadeAberta
-                        ? 'Cancelar novidade'
-                        : 'Registrar novidade'}
+                    {novidadeAberta
+                      ? 'Fechar novidade'
+                      : novidadeRegistrada
+                        ? 'Analisar novidade'
+                        : novidade
+                          ? 'Editar novidade'
+                          : 'Registrar novidade'}
                   </button>
 
-                  {novidade && (
-                    <>
-                      <span className="pagar-material-novidade-ok">
-                        ✓ Novidade registrada
-                      </span>
+                  {novidadeRegistrada && (
+                    <span className="pagar-material-novidade-ok">
+                      ✓ Novidade registrada pelo usuário
+                    </span>
+                  )}
 
-                      <button
-                        type="button"
-                        className="pagar-material-novidade-remove"
-                        onClick={() =>
-                          onRemoverNovidade?.(
-                            material.id
-                          )
-                        }
-                      >
-                        Remover
-                      </button>
-                    </>
+                  {!novidadeRegistrada && novidade && (
+                    <button
+                      type="button"
+                      className="pagar-material-novidade-remove"
+                      onClick={() =>
+                        onRemoverNovidade?.(
+                          material.id
+                        )
+                      }
+                    >
+                      Remover
+                    </button>
                   )}
                 </div>
 
@@ -196,7 +204,9 @@ export default function CarrinhoMateriais({
                   <div className="pagar-material-novidade-card">
                     <div className="pagar-material-novidade-card-head">
                       <span>
-                        REGISTRO DE NOVIDADE
+                        {novidadeRegistrada
+                          ? 'NOVIDADE REGISTRADA PELO USUÁRIO'
+                          : 'REGISTRO DE NOVIDADE'}
                       </span>
 
                       <strong>
@@ -205,6 +215,17 @@ export default function CarrinhoMateriais({
                           'MATERIAL'}
                       </strong>
                     </div>
+
+                    {novidadeRegistrada && (
+                      <div
+                        className="pagar-material-feedback pagar-material-feedback-success"
+                        style={{
+                          marginBottom: '12px'
+                        }}
+                      >
+                        Ocorrência já registrada. Analise os dados abaixo e escolha a providência operacional.
+                      </div>
+                    )}
 
                     <div className="pagar-material-novidade-grid">
                       <label>
@@ -253,7 +274,7 @@ export default function CarrinhoMateriais({
                         <select
                           value={
                             novidade?.providencia ||
-                            'COFRE'
+                            ''
                           }
                           onChange={(event) =>
                             onNovidadeChange?.(
@@ -263,6 +284,9 @@ export default function CarrinhoMateriais({
                             )
                           }
                         >
+                          <option value="">
+                            SELECIONE A PROVIDÊNCIA
+                          </option>
                           <option value="COFRE">
                             RETORNAR AO COFRE
                           </option>
@@ -345,6 +369,54 @@ export default function CarrinhoMateriais({
                         </small>
                       </label>
                     </div>
+
+                    {Array.isArray(
+                      novidadePendente?.fotos
+                    ) &&
+                      novidadePendente.fotos.length >
+                        0 && (
+                      <div className="pagar-material-novidade-fotos">
+                        {novidadePendente.fotos.map(
+                          (
+                            foto,
+                            indice
+                          ) => (
+                            <article
+                              key={
+                                foto.id ||
+                                `${material.id}-existente-${indice}`
+                              }
+                              className="pagar-material-novidade-foto-card"
+                            >
+                              <a
+                                href={
+                                  foto.foto_url
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Ampliar foto registrada pelo usuário"
+                              >
+                                <img
+                                  src={
+                                    foto.foto_url
+                                  }
+                                  alt={`Foto ${
+                                    indice + 1
+                                  } da novidade registrada`}
+                                />
+                              </a>
+
+                              <div>
+                                <span>
+                                  Foto registrada{' '}
+                                  {indice + 1}
+                                </span>
+                              </div>
+                            </article>
+                          )
+                        )}
+                      </div>
+                    )}
 
                     {Array.isArray(
                       novidade?.previews

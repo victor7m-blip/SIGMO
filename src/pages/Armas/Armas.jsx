@@ -932,6 +932,13 @@ setFotoSelecionadaVisualizacao(
   }
 
   function abrirEdicao(arma) {
+    if (estaEmCarga(arma)) {
+      window.alert(
+        'Esta arma está vinculada como CARGA PERMANENTE e não pode ser editada enquanto permanecer em carga. Para alterar cadastro ou fotos, primeiro é necessário devolver a carga ao P4.'
+      )
+      return
+    }
+
     setArmaEditando(arma)
     setArmaVisualizando(null)
     setFormAberto(true)
@@ -948,6 +955,13 @@ setFotoSelecionadaVisualizacao(
   }
 
   async function handleExcluir(arma) {
+    if (estaEmCarga(arma)) {
+      window.alert(
+        'Esta arma está vinculada como CARGA PERMANENTE e não pode ser excluída enquanto permanecer em carga. Primeiro é necessário devolver a carga ao P4.'
+      )
+      return
+    }
+
     const identificacao =
       arma.patrimonio ||
       arma.numero_serie ||

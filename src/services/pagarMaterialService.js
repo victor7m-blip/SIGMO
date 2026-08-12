@@ -779,7 +779,10 @@ itens = itens.filter((item) => {
   if (origem.includes('P4')) {
     return (
       local.includes('DEPÓSITO DO P4') ||
-      local.includes('DEPOSITO DO P4')
+      local.includes('DEPOSITO DO P4') ||
+      local.includes('COFRE DO P4') ||
+      local.includes('GUARDA DO P4') ||
+      local === 'P4'
     )
   }
 

@@ -15,8 +15,11 @@ import brasaoPM from '../assets/unidade/brasao-pm-sp.jpg'
 
 import useDashboard from '../hooks/useDashboard'
 import useDashboardVitrine from '../hooks/useDashboardVitrine'
+import { listarCautelasAtivas } from '../services/tonfasMovimentacoesService'
 import {
   ehUsuario,
+  ehEncarregado,
+  ehAuxiliar,
   obterRotaInicial,
   podeAcessarRota
 } from '../services/permissionService'
@@ -25,16 +28,22 @@ import {
   listarDevolucoesPendentesUsuario,
   listarMateriaisEmServicoUsuario
 } from '../services/cautelasUsuarioService'
+import {
+  listarNotificacoes,
+  marcarComoLida
+} from '../services/notificacoesService'
 import Locais from './Locais/Locais'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
 import TPD from './TPD/TPD'
 import Policiais from './Policiais'
+import CargaPessoal from './CargaPessoal/CargaPessoal'
 import Taser from './Taser/Taser'
 import Tonfas from './Tonfas/Tonfas'
 import Municoes from './Municoes/Municoes'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
+import ReceberMaterialHibrido from './ReceberMaterial/ReceberMaterialHibrido'
 import CautelasUsuario from './CautelasUsuario/CautelasUsuario'
 import TransferirMaterial from './TransferirMaterial/TransferirMaterial'
 import BaixarMaterial from './BaixarMaterial/BaixarMaterial'
@@ -265,10 +274,26 @@ function KpiStrip({
   tone,
   label,
   value,
-  detail
+  detail,
+  onClick = null
 }) {
   return (
-    <article className="sigmo-command-kpi">
+    <article
+      className={`sigmo-command-kpi${onClick ? ' sigmo-command-kpi-clickable' : ''}`}
+      onClick={onClick || undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
+    >
       <DashboardIcon tone={tone}>
         {icon}
       </DashboardIcon>
@@ -607,6 +632,43 @@ function PainelDashboard({
     setNovidadeSelecionada
   ] = useState(null)
 
+  const [
+    materiaisEmServico,
+    setMateriaisEmServico
+  ] = useState([])
+
+  const [
+    modalEmServicoAberto,
+    setModalEmServicoAberto
+  ] = useState(false)
+
+  const [
+    carregandoEmServico,
+    setCarregandoEmServico
+  ] = useState(false)
+
+  async function abrirMateriaisEmServico() {
+    try {
+      setCarregandoEmServico(true)
+      const lista = await listarCautelasAtivas()
+      setMateriaisEmServico(
+        (lista || []).filter(
+          (item) => Number(item?.saldo ?? item?.quantidade ?? 0) > 0
+        )
+      )
+      setModalEmServicoAberto(true)
+    } catch (error) {
+      console.error(
+        'Erro ao carregar materiais em serviço:',
+        error
+      )
+      setMateriaisEmServico([])
+      setModalEmServicoAberto(true)
+    } finally {
+      setCarregandoEmServico(false)
+    }
+  }
+
   useEffect(() => {
     const timer = window.setInterval(
       () => setAgora(new Date()),
@@ -620,29 +682,48 @@ function PainelDashboard({
   const nomeUsuario =
     obterNomeUsuario(user)
 
+  const visaoSVDD =
+    ehEncarregado(user) ||
+    ehAuxiliar(user)
+
+  const armasSVDD =
+    Number(vitrine.armas.svdd || 0) +
+    Number(vitrine.armas.cautelas || 0) +
+    Number(vitrine.armas.manutencao || 0)
+
+  const tonfasSVDD =
+    Number(vitrine.tonfas.svdd || 0) +
+    Number(vitrine.tonfas.emServico || 0) +
+    Number(vitrine.tonfas.manutencao || 0)
+
+  const armasTotalVisivel =
+    visaoSVDD
+      ? armasSVDD
+      : Number(vitrine.armas.total || 0)
+
   const totalIntegrado =
-    Number(
-      vitrine.armas.total || 0
-    ) +
-    Number(
-      vitrine.tonfas.total || 0
-    )
+    visaoSVDD
+      ? armasSVDD + tonfasSVDD
+      : Number(vitrine.armas.total || 0) +
+        Number(vitrine.tonfas.total || 0)
 
   const p4Integrado =
-    Number(vitrine.armas.p4 || 0) +
-    Number(vitrine.tonfas.p4 || 0)
+    visaoSVDD
+      ? 0
+      : Number(vitrine.armas.p4 || 0) +
+        Number(vitrine.tonfas.p4 || 0)
 
   const svddIntegrado =
     Number(vitrine.armas.svdd || 0) +
     Number(vitrine.tonfas.svdd || 0)
 
   const emUsoIntegrado =
-  Number(
-    vitrine.armas.cautelas || 0
-  ) +
-  Number(
-    vitrine.tonfas.emServico || 0
-  )
+    Number(
+      vitrine.armas.cautelas || 0
+    ) +
+    Number(
+      vitrine.tonfas.emServico || 0
+    )
 
   const manutencaoIntegrada =
     Number(
@@ -655,11 +736,13 @@ function PainelDashboard({
     )
 
   const armasGrafico = [
-    {
-      label: 'P4',
-      value: vitrine.armas.p4,
-      tone: 'blue'
-    },
+    ...(!visaoSVDD
+      ? [{
+          label: 'P4',
+          value: vitrine.armas.p4,
+          tone: 'blue'
+        }]
+      : []),
     {
       label: 'SVDD',
       value: vitrine.armas.svdd,
@@ -696,13 +779,15 @@ function PainelDashboard({
   ]
 
   const tonfaGrafico = [
-    {
-      label: 'P4',
-      value:
-        vitrine.tonfasDetalhe?.p4 ||
-        0,
-      tone: 'blue'
-    },
+    ...(!visaoSVDD
+      ? [{
+          label: 'P4',
+          value:
+            vitrine.tonfasDetalhe?.p4 ||
+            0,
+          tone: 'blue'
+        }]
+      : []),
     {
       label: 'SVDD',
       value:
@@ -727,13 +812,15 @@ function PainelDashboard({
   ]
 
   const casseteteGrafico = [
-    {
-      label: 'P4',
-      value:
-        vitrine.cassetetesDetalhe
-          ?.p4 || 0,
-      tone: 'blue'
-    },
+    ...(!visaoSVDD
+      ? [{
+          label: 'P4',
+          value:
+            vitrine.cassetetesDetalhe
+              ?.p4 || 0,
+          tone: 'blue'
+        }]
+      : []),
     {
       label: 'SVDD',
       value:
@@ -849,17 +936,27 @@ function PainelDashboard({
         <KpiStrip
           icon="◇"
           tone="blue"
-          label="Patrimônio integrado"
+          label={
+            visaoSVDD
+              ? 'Patrimônio do SVDD'
+              : 'Patrimônio integrado'
+          }
           value={totalIntegrado}
-          detail="itens sob gestão"
+          detail={
+            visaoSVDD
+              ? 'itens sob responsabilidade do SVDD'
+              : 'itens sob gestão'
+          }
         />
-        <KpiStrip
-          icon="▣"
-          tone="cyan"
-          label="Depósito P4"
-          value={p4Integrado}
-          detail="itens disponíveis"
-        />
+        {!visaoSVDD && (
+          <KpiStrip
+            icon="▣"
+            tone="cyan"
+            label="Depósito P4"
+            value={p4Integrado}
+            detail="itens disponíveis"
+          />
+        )}
         <KpiStrip
           icon="▦"
           tone="purple"
@@ -873,6 +970,7 @@ function PainelDashboard({
           label="Em serviço"
           value={emUsoIntegrado}
           detail="itens em uso"
+          onClick={abrirMateriaisEmServico}
         />
         <KpiStrip
           icon="◆"
@@ -882,6 +980,57 @@ function PainelDashboard({
           detail="itens em manutenção"
         />
       </section>
+
+
+      {modalEmServicoAberto && (
+        <div
+          className="sigmo-command-service-modal-backdrop"
+          onClick={() => setModalEmServicoAberto(false)}
+        >
+          <section
+            className="sigmo-command-service-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span>EM SERVIÇO</span>
+                <h2>Materiais com policiais</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEmServicoAberto(false)}
+              >
+                Fechar
+              </button>
+            </header>
+
+            <div className="sigmo-command-service-modal-body">
+              {carregandoEmServico ? (
+                <p>Carregando...</p>
+              ) : materiaisEmServico.length === 0 ? (
+                <p>Nenhum material quantitativo em serviço.</p>
+              ) : (
+                materiaisEmServico.map((item) => (
+                  <article key={item.id}>
+                    <div>
+                      <strong>
+                        {item.tipo_material || item.tipo || 'MATERIAL'}
+                      </strong>
+                      <span>
+                        {item.policial_nome || 'Policial não identificado'}
+                        {item.policial_re ? ` · RE ${item.policial_re}` : ''}
+                      </span>
+                    </div>
+                    <b>
+                      {Number(item.saldo ?? item.quantidade ?? 0)} un.
+                    </b>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       <section className="sigmo-command-main-grid">
         <article className="sigmo-command-panel sigmo-command-arms">
@@ -895,7 +1044,7 @@ function PainelDashboard({
               <small>Total de armas</small>
               <strong>
                 {numero(
-                  vitrine.armas.total
+                  armasTotalVisivel
                 )}
               </strong>
             </div>
@@ -911,12 +1060,14 @@ function PainelDashboard({
           </div>
 
           <div className="sigmo-command-arm-summary">
-            <ArmaMiniCard
-              label="P4"
-              value={vitrine.armas.p4}
-              tone="blue"
-              icon="⌂"
-            />
+            {!visaoSVDD && (
+              <ArmaMiniCard
+                label="P4"
+                value={vitrine.armas.p4}
+                tone="blue"
+                icon="⌂"
+              />
+            )}
             <ArmaMiniCard
               label="SVDD"
               value={vitrine.armas.svdd}
@@ -975,7 +1126,7 @@ function PainelDashboard({
               <div className="sigmo-command-donut-block">
                 <Donut
                   total={
-                    vitrine.armas.total
+                    armasTotalVisivel
                   }
                   values={armasGrafico}
                 />
@@ -994,8 +1145,7 @@ function PainelDashboard({
                           item.value
                         }
                         total={
-                          vitrine.armas
-                            .total
+                          armasTotalVisivel
                         }
                         tone={
                           item.tone
@@ -1013,46 +1163,48 @@ function PainelDashboard({
               </h3>
 
               <div className="sigmo-command-bars">
-                <BarraHorizontal
-                  label="P4"
-                  value={vitrine.armas.p4}
-                  total={vitrine.armas.total}
-                  tone="blue"
-                />
+                {!visaoSVDD && (
+                  <BarraHorizontal
+                    label="P4"
+                    value={vitrine.armas.p4}
+                    total={armasTotalVisivel}
+                    tone="blue"
+                  />
+                )}
                 <BarraHorizontal
                   label="SVDD"
                   value={vitrine.armas.svdd}
-                  total={vitrine.armas.total}
+                  total={armasTotalVisivel}
                   tone="purple"
                 />
                 <BarraHorizontal
                   label="Carga permanente"
                   value={vitrine.armas.carga}
-                  total={vitrine.armas.total}
+                  total={armasTotalVisivel}
                   tone="green"
                 />
                 <BarraHorizontal
                   label="Cautelas ativas"
                   value={vitrine.armas.cautelas}
-                  total={vitrine.armas.total}
+                  total={armasTotalVisivel}
                   tone="yellow"
                 />
                 <BarraHorizontal
                   label="Particulares"
                   value={vitrine.armas.particulares}
-                  total={vitrine.armas.total}
+                  total={armasTotalVisivel}
                   tone="cyan"
                 />
                 <BarraHorizontal
                   label="Manutenção"
                   value={vitrine.armas.manutencao}
-                  total={vitrine.armas.total}
+                  total={armasTotalVisivel}
                   tone="orange"
                 />
                 <BarraHorizontal
                   label="Não localizadas"
                   value={vitrine.armas.naoLocalizadas}
-                  total={vitrine.armas.total}
+                  total={armasTotalVisivel}
                   tone="red"
                 />
               </div>
@@ -2084,6 +2236,8 @@ export default function DashboardV2({
   const [policialAbrirRe, setPolicialAbrirRe] = useState('')
   const [avisoRecebimento, setAvisoRecebimento] = useState(0)
   const [avisoVerificado, setAvisoVerificado] = useState(false)
+  const [avisoNotificacao, setAvisoNotificacao] = useState(null)
+  const [notificacaoVerificada, setNotificacaoVerificada] = useState(false)
 
   const dashboard = useDashboard()
 
@@ -2106,6 +2260,117 @@ export default function DashboardV2({
 
     return () => { ativo = false }
   }, [user, avisoVerificado])
+
+  useEffect(() => {
+    if (
+      ehUsuario(user) ||
+      notificacaoVerificada
+    ) {
+      return
+    }
+
+    const perfil =
+      String(
+        user?.perfil ||
+        user?.profile ||
+        ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (
+      perfil !== 'P4' &&
+      perfil !== 'ENCARREGADO DO SVDD'
+    ) {
+      setNotificacaoVerificada(true)
+      return
+    }
+
+    let ativo = true
+
+    listarNotificacoes({
+      usuarioId:
+        user?.id ||
+        user?.usuario_id ||
+        null,
+      policialId:
+        user?.policial_id ||
+        user?.policialId ||
+        null,
+      perfil,
+      apenasNaoLidas: true,
+      limite: 20
+    })
+      .then((lista) => {
+        if (!ativo) return
+
+        const notificacoes =
+          Array.isArray(lista)
+            ? lista
+            : []
+
+        const novidade =
+          notificacoes.find(
+            (item) =>
+              String(
+                item?.titulo || ''
+              )
+                .trim()
+                .toUpperCase() ===
+              'NOVIDADE PATRIMONIAL REGISTRADA'
+          )
+
+        if (novidade) {
+          setAvisoNotificacao(
+            novidade
+          )
+        }
+      })
+      .catch((error) => {
+        console.warn(
+          'Não foi possível verificar notificações patrimoniais:',
+          error
+        )
+      })
+      .finally(() => {
+        if (ativo) {
+          setNotificacaoVerificada(
+            true
+          )
+        }
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [
+    user,
+    notificacaoVerificada
+  ])
+
+  async function abrirNotificacaoNaCentral() {
+    const notificacao =
+      avisoNotificacao
+
+    setAvisoNotificacao(null)
+
+    if (notificacao?.id) {
+      try {
+        await marcarComoLida(
+          notificacao.id
+        )
+      } catch (error) {
+        console.warn(
+          'Não foi possível marcar a notificação como lida:',
+          error
+        )
+      }
+    }
+
+    setRoute(
+      'central-operacional'
+    )
+  }
 
   function setRoute(novaRota) {
   const rotaSolicitada =
@@ -2238,7 +2503,7 @@ useEffect(() => {
   }
 
   return (
-    <ReceberMaterial
+    <ReceberMaterialHibrido
       user={user}
       onVoltar={voltarDashboard}
       onConcluido={() => {
@@ -2330,6 +2595,14 @@ if (route === 'tonfas') {
       )
     }
 
+    if (route === 'carga-pessoal') {
+      return (
+        <CargaPessoal
+          user={user}
+        />
+      )
+    }
+
     if (route === 'municoes') {
       return <Municoes user={user} />
     }
@@ -2380,6 +2653,90 @@ if (route === 'tonfas') {
       >
         {renderPage()}
       </AppShell>
+
+      {avisoNotificacao && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 10000,
+          display: 'grid',
+          placeItems: 'center',
+          padding: 24,
+          background: 'rgba(3, 15, 32, .72)'
+        }}>
+          <section style={{
+            width: 'min(560px, 100%)',
+            borderRadius: 22,
+            padding: 28,
+            color: '#fff',
+            background: 'linear-gradient(135deg, #071d39 0%, #0b3f73 100%)',
+            boxShadow: '0 28px 70px rgba(0,0,0,.35)'
+          }}>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: '.12em'
+            }}>
+              ALERTA PATRIMONIAL
+            </span>
+
+            <h2 style={{
+              margin: '10px 0 8px'
+            }}>
+              {avisoNotificacao.titulo ||
+                'Novidade patrimonial registrada'}
+            </h2>
+
+            <p style={{
+              opacity: .9,
+              lineHeight: 1.55,
+              whiteSpace: 'pre-wrap'
+            }}>
+              {avisoNotificacao.mensagem}
+            </p>
+
+            <div style={{
+              display: 'flex',
+              gap: 10,
+              justifyContent: 'flex-end',
+              marginTop: 22
+            }}>
+              <button
+                type="button"
+                onClick={() =>
+                  setAvisoNotificacao(null)
+                }
+                style={{
+                  padding: '11px 16px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,.35)',
+                  background: 'transparent',
+                  color: '#fff'
+                }}
+              >
+                Depois
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  abrirNotificacaoNaCentral
+                }
+                style={{
+                  padding: '11px 16px',
+                  borderRadius: 10,
+                  border: 0,
+                  background: '#fff',
+                  color: '#0b315a',
+                  fontWeight: 800
+                }}
+              >
+                Ver na Central Operacional
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {avisoRecebimento > 0 && (
         <div style={{
