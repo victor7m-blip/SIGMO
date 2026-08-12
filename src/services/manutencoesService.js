@@ -658,15 +658,54 @@ export async function listarManutencoes({
   const termo = texto(pesquisa).replace(/[%(),]/g, '')
 
   if (termo) {
+    const referenciasEncontradas = new Set()
+
+    // Para ARMAS, o número de série fica em sigmo_armas,
+    // enquanto a manutenção guarda o id da arma em referencia_id.
+    const {
+      data: armasEncontradas,
+      error: armasError
+    } = await supabase
+      .from('sigmo_armas')
+      .select('id, numero_serie')
+      .ilike('numero_serie', `%${termo}%`)
+      .limit(100)
+
+    if (armasError) {
+      console.warn(
+        'Não foi possível pesquisar manutenções pelo número de série da arma:',
+        armasError
+      )
+    } else {
+      for (const arma of armasEncontradas || []) {
+        if (arma?.id) {
+          referenciasEncontradas.add(
+            String(arma.id)
+          )
+        }
+      }
+    }
+
+    const filtrosPesquisa = [
+      `tipo_material.ilike.%${termo}%`,
+      `tipo_novidade.ilike.%${termo}%`,
+      `descricao.ilike.%${termo}%`,
+      `observacoes.ilike.%${termo}%`,
+      `policial_nome.ilike.%${termo}%`,
+      `policial_re.ilike.%${termo}%`
+    ]
+
+    for (
+      const referenciaEncontrada of
+      referenciasEncontradas
+    ) {
+      filtrosPesquisa.push(
+        `referencia_id.eq.${referenciaEncontrada}`
+      )
+    }
+
     query = query.or(
-      [
-        `tipo_material.ilike.%${termo}%`,
-        `tipo_novidade.ilike.%${termo}%`,
-        `descricao.ilike.%${termo}%`,
-        `observacoes.ilike.%${termo}%`,
-        `policial_nome.ilike.%${termo}%`,
-        `policial_re.ilike.%${termo}%`
-      ].join(',')
+      filtrosPesquisa.join(',')
     )
   }
 
