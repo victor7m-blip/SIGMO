@@ -133,6 +133,11 @@ export default function AppShell({
     setMobileMenuOpen
   ] = useState(false)
 
+  const [
+    agora,
+    setAgora
+  ] = useState(() => Date.now())
+
   const menuPermitido = useMemo(
     () =>
       menuItems.filter(
@@ -166,6 +171,84 @@ const perfilTemporario =
   possuiPerfilTemporarioAtivo(
     user
   )
+
+const tempoRestanteTemporario =
+  useMemo(() => {
+    if (
+      !perfilTemporario ||
+      !user?.perfil_temporario_fim
+    ) {
+      return null
+    }
+
+    const fim =
+      new Date(
+        user.perfil_temporario_fim
+      ).getTime()
+
+    if (
+      !Number.isFinite(fim)
+    ) {
+      return null
+    }
+
+    const restante =
+      Math.max(
+        0,
+        fim - agora
+      )
+
+    const totalMinutos =
+      Math.ceil(
+        restante / 60000
+      )
+
+    const horas =
+      Math.floor(
+        totalMinutos / 60
+      )
+
+    const minutos =
+      totalMinutos % 60
+
+    return `${horas}h ${String(
+      minutos
+    ).padStart(2, '0')}min`
+  }, [
+    agora,
+    perfilTemporario,
+    user?.perfil_temporario_fim
+  ])
+
+  useEffect(() => {
+    if (
+      !perfilTemporario ||
+      !user?.perfil_temporario_fim
+    ) {
+      return undefined
+    }
+
+    setAgora(Date.now())
+
+    const intervalo =
+      window.setInterval(
+        () => {
+          setAgora(
+            Date.now()
+          )
+        },
+        30000
+      )
+
+    return () => {
+      window.clearInterval(
+        intervalo
+      )
+    }
+  }, [
+    perfilTemporario,
+    user?.perfil_temporario_fim
+  ])
 
   useEffect(() => {
     setMobileMenuOpen(false)
@@ -375,9 +458,17 @@ const perfilTemporario =
               </span>
 
               {perfilTemporario && (
-                <small>
-                  Perfil temporário ativo
-                </small>
+                <>
+                  <small>
+                    Perfil temporário ativo
+                  </small>
+
+                  {tempoRestanteTemporario && (
+                    <small>
+                      Restam {tempoRestanteTemporario}
+                    </small>
+                  )}
+                </>
               )}
             </div>
           </div>

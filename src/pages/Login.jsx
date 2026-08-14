@@ -27,6 +27,11 @@ import {
   concluirTrocaObrigatoriaPin
 } from '../services/credenciaisService'
 
+import {
+  obterPerfilTemporarioAtivo,
+  PERFIS_TEMPORARIOS
+} from '../features/perfisTemporarios/services/perfisTemporariosService'
+
 import backgroundDesktop from '../assets/SIGMO_01_Login.png'
 import backgroundMobile from '../assets/SIGMO_01_Login_Mobile.png'
 
@@ -449,6 +454,30 @@ export default function Login({
         return
       }
 
+      let perfilTemporarioAtivo = null
+
+      try {
+        perfilTemporarioAtivo =
+          await obterPerfilTemporarioAtivo({
+            policialRe:
+              policial.re,
+
+            perfil:
+              PERFIS_TEMPORARIOS
+                .AUXILIAR_SVDD_TEMPORARIO
+          })
+      } catch (perfilTemporarioError) {
+        console.error(
+          'Erro ao consultar perfil temporário no login:',
+          perfilTemporarioError
+        )
+      }
+
+      const possuiAuxiliarTemporario =
+        Boolean(
+          perfilTemporarioAtivo?.valido
+        )
+
       const sessionUser = {
         id:
           policial.id,
@@ -473,6 +502,24 @@ export default function Login({
 
         perfil:
           usuario.perfil,
+
+        perfil_temporario:
+          possuiAuxiliarTemporario
+            ? 'AUXILIAR DO SVDD'
+            : null,
+
+        perfil_temporario_ativo:
+          possuiAuxiliarTemporario,
+
+        perfil_temporario_inicio:
+          possuiAuxiliarTemporario
+            ? perfilTemporarioAtivo?.inicio_em || null
+            : null,
+
+        perfil_temporario_fim:
+          possuiAuxiliarTemporario
+            ? perfilTemporarioAtivo?.expira_em || null
+            : null,
 
         ativo:
           usuario.ativo,

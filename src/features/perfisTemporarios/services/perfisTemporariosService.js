@@ -10,7 +10,7 @@ export const PERFIS_TEMPORARIOS = {
   OUTRO_TEMPORARIO: 'OUTRO_TEMPORARIO'
 }
 
-export const DURACAO_PADRAO_AUXILIAR_HORAS = 15
+export const DURACAO_PADRAO_AUXILIAR_HORAS = 13
 
 function texto(valor) {
   if (valor === null || valor === undefined) return ''

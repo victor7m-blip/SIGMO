@@ -24,7 +24,15 @@
 
 .policiais-table-wrap{
   width:100%;
-  overflow-x:auto;
+  max-height:calc(100vh - 190px);
+  overflow:auto;
+  scrollbar-gutter:stable;
+}
+
+.policiais-table thead{
+  position:sticky;
+  top:0;
+  z-index:5;
 }
 
 .policiais-table{
@@ -228,7 +236,9 @@
 }
 
 .policiais-table-wrap{
+    max-height:none;
     overflow:visible;
+    scrollbar-gutter:auto;
 }
 
 .policiais-table thead{

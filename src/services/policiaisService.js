@@ -428,6 +428,33 @@ function normalizarTexto(
     .toUpperCase()
 }
 
+
+function podeAlterarRestricoesArmamento(
+  user
+) {
+  const perfil =
+    normalizarTexto(
+      user?.perfil_efetivo ||
+      user?.perfil ||
+      user?.funcao ||
+      ''
+    )
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+  return [
+    'ADMINISTRADOR',
+    'ADMIN',
+    'P4',
+    'SECAO P4',
+    'GESTOR PATRIMONIAL',
+    'COMANDANTE DE CIA',
+    'COMANDANTE DA CIA',
+    'COMANDANTE DE COMPANHIA',
+    'CMT DE CIA'
+  ].includes(perfil)
+}
+
 function ehPerfilComandante(
   perfil
 ) {
@@ -945,16 +972,26 @@ export async function cadastrarPolicial(
   })
 
   const externo = ehCadastroExterno(payload)
+
+  const payloadComRestricoesProtegidas =
+    podeAlterarRestricoesArmamento(user)
+      ? payload
+      : {
+          ...payload,
+          arma_somente_cautela: false,
+          arma_sem_cautela: false
+        }
+
   const payloadFinal = externo
     ? {
-        ...payload,
+        ...payloadComRestricoesProtegidas,
         perfil: 'USUARIO EXTERNO',
         companhia: null,
         pelotao: null,
         equipe: null,
         funcao: null
       }
-    : payload
+    : payloadComRestricoesProtegidas
 
   const pinTemporario = await gerarPinUnico()
 
@@ -1012,11 +1049,56 @@ export async function atualizarPolicial(
     ignorarId: id
   })
 
+  let payloadProtegido = {
+    ...payload
+  }
+
+  if (
+    !podeAlterarRestricoesArmamento(
+      user
+    )
+  ) {
+    const {
+      data: policialAtual,
+      error: policialAtualError
+    } = await supabase
+      .from(TABLE)
+      .select(`
+        arma_somente_cautela,
+        arma_sem_cautela
+      `)
+      .eq(
+        'id',
+        id
+      )
+      .single()
+
+    if (policialAtualError) {
+      throw policialAtualError
+    }
+
+    payloadProtegido = {
+      ...payloadProtegido,
+
+      arma_somente_cautela:
+        Boolean(
+          policialAtual
+            ?.arma_somente_cautela
+        ),
+
+      arma_sem_cautela:
+        Boolean(
+          policialAtual
+            ?.arma_sem_cautela
+        )
+    }
+  }
+
   const dadosAtualizacao = {
-    ...payload,
+    ...payloadProtegido,
 
     qr_code:
-      payload.qr_code ||
+      payloadProtegido.qr_code ||
       null
   }
 
