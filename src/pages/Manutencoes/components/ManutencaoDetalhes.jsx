@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
   STATUS_MANUTENCAO,
-  listarFotosManutencao
+  listarFotosManutencao,
+  buscarNovidadePatrimonialDaManutencao
 } from '../../../services/manutencoesService'
 
 function dataHora(valor) {
@@ -22,25 +23,39 @@ export default function ManutencaoDetalhes({
   salvando
 }) {
   const [observacoes, setObservacoes] = useState('')
-const [fotos, setFotos] = useState([])
+  const [fotos, setFotos] = useState([])
+  const [novidadeUsuario, setNovidadeUsuario] = useState(null)
+  const [fotosUsuario, setFotosUsuario] = useState([])
+  const [fotoAmpliada, setFotoAmpliada] = useState(null)
 
-useEffect(() => {
-  async function carregarFotos() {
-    if (!manutencao?.id) {
-      setFotos([])
-      return
+  useEffect(() => {
+    async function carregarHistorico() {
+      if (!manutencao?.id) {
+        setFotos([])
+        setNovidadeUsuario(null)
+        setFotosUsuario([])
+        return
+      }
+
+      try {
+        const [fotosManutencao, registroUsuario] = await Promise.all([
+          listarFotosManutencao(manutencao.id),
+          buscarNovidadePatrimonialDaManutencao(manutencao)
+        ])
+
+        setFotos(fotosManutencao || [])
+        setNovidadeUsuario(registroUsuario?.novidade || null)
+        setFotosUsuario(registroUsuario?.fotos || [])
+      } catch (erro) {
+        console.error('Erro ao carregar histórico completo da manutenção:', erro)
+        setFotos([])
+        setNovidadeUsuario(null)
+        setFotosUsuario([])
+      }
     }
 
-    try {
-      const lista = await listarFotosManutencao(manutencao.id)
-      setFotos(lista)
-    } catch (erro) {
-      console.error(erro)
-    }
-  }
-
-  carregarFotos()
-}, [manutencao])
+    carregarHistorico()
+  }, [manutencao])
 
 if (!manutencao) return null
 
@@ -82,6 +97,11 @@ if (!manutencao) return null
               <img
   src={fotos[0]?.foto_url || manutencao.foto_url}
   alt="Foto da manutenção"
+  onClick={() => setFotoAmpliada({
+    url: fotos[0]?.foto_url || manutencao.foto_url,
+    titulo: 'Foto da manutenção'
+  })}
+  style={{ cursor: 'zoom-in' }}
 />
             ) : (
               <span aria-hidden="true">🔧</span>
@@ -106,25 +126,155 @@ if (!manutencao) return null
     ))}
   </div>
 )}
+          {novidadeUsuario && (
+            <section
+              className="manutencao-detalhe-texto"
+              style={{
+                border: '1px solid #bfdbfe',
+                borderRadius: '12px',
+                padding: '14px',
+                background: '#eff6ff',
+                marginBottom: '16px'
+              }}
+            >
+              <h3>Novidade registrada pelo usuário</h3>
+
+              <p>
+                <strong>
+                  {novidadeUsuario.titulo ||
+                    novidadeUsuario.tipo_novidade ||
+                    'NÃO INFORMADO'}
+                </strong>
+              </p>
+
+              <p style={{ marginTop: '8px' }}>
+                {novidadeUsuario.descricao ||
+                  'Nenhuma descrição registrada.'}
+              </p>
+
+              <p style={{ marginTop: '8px', fontSize: '13px' }}>
+                <strong>Registrado por:</strong>{' '}
+                {novidadeUsuario.registrado_por_nome ||
+                  novidadeUsuario.registrada_por_nome ||
+                  'Não informado'}
+                {' · '}
+                {dataHora(
+                  novidadeUsuario.created_at ||
+                  novidadeUsuario.registrada_em
+                )}
+              </p>
+
+              {fotosUsuario.length > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    flexWrap: 'wrap',
+                    marginTop: '12px'
+                  }}
+                >
+                  {fotosUsuario.map((foto, indice) => (
+                    <button
+                      type="button"
+                      key={foto.id || `${foto.foto_url}-${indice}`}
+                      title="Ampliar foto registrada pelo usuário"
+                      onClick={() => setFotoAmpliada({
+                        url: foto.foto_url,
+                        titulo: `Foto ${indice + 1} registrada pelo usuário`
+                      })}
+                      style={{
+                        padding: 0,
+                        border: 0,
+                        background: 'transparent',
+                        cursor: 'zoom-in'
+                      }}
+                    >
+                      <img
+                        src={foto.foto_url}
+                        alt={`Foto ${indice + 1} registrada pelo usuário`}
+                        style={{
+                          width: '92px',
+                          height: '92px',
+                          objectFit: 'cover',
+                          borderRadius: '8px',
+                          border: '1px solid #93c5fd'
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          <section
+            className="manutencao-detalhe-texto"
+            style={{
+              border: '1px solid #fed7aa',
+              borderRadius: '12px',
+              padding: '14px',
+              background: '#fff7ed',
+              marginBottom: '16px'
+            }}
+          >
+            <h3>Providência / entrada em manutenção pelo SVDD</h3>
+
+            <p>
+              <strong>
+                {manutencao.providencia ||
+                  manutencao.destino ||
+                  'MANUTENÇÃO'}
+              </strong>
+            </p>
+
+            <p style={{ marginTop: '8px' }}>
+              {manutencao.descricao ||
+                'Nenhuma descrição registrada.'}
+            </p>
+
+            <p style={{ marginTop: '8px', fontSize: '13px' }}>
+              <strong>Registrado por:</strong>{' '}
+              {manutencao.registrada_por_nome || 'Não informado'}
+              {' · '}
+              {dataHora(
+                manutencao.registrada_em ||
+                manutencao.created_at
+              )}
+            </p>
+
+            {fotos.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                  marginTop: '12px'
+                }}
+              >
+                {fotos.map((foto, indice) => (
+                  <img
+                    key={foto.id || `${foto.foto_url}-${indice}`}
+                    src={foto.foto_url}
+                    alt={`Foto ${indice + 1} da manutenção`}
+                    onClick={() => setFotoAmpliada({
+                      url: foto.foto_url,
+                      titulo: `Foto ${indice + 1} da manutenção`
+                    })}
+                    style={{
+                      width: '92px',
+                      height: '92px',
+                      objectFit: 'cover',
+                      borderRadius: '8px',
+                      border: '1px solid #fdba74',
+                      cursor: 'zoom-in'
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className="manutencao-detalhe-grade">
-            <section className="manutencao-detalhe-texto">
-  <h3>Ocorrência</h3>
-
-  <p>
-    <strong>{manutencao.tipo_ocorrencia || manutencao.tipo_novidade || 'NÃO INFORMADO'}</strong>
-  </p>
-
-  <p style={{marginTop:'8px'}}>
-    {manutencao.descricao || 'Nenhuma descrição registrada.'}
-  </p>
-</section>
-            <section className="manutencao-detalhe-texto">
-  <h3>Providência</h3>
-
-  <p>
-    {manutencao.providencia || manutencao.destino || 'MANUTENÇÃO'}
-  </p>
-</section>   
             <div><span>Módulo</span><strong>{manutencao.modulo || 'OUTROS'}</strong></div>
             <div><span>Status</span><strong>{String(manutencao.status || '').replaceAll('_', ' ')}</strong></div>
             <div><span>Quantidade</span><strong>{manutencao.quantidade || 1}</strong></div>
@@ -177,6 +327,56 @@ if (!manutencao) return null
           </footer>
         )}
       </aside>
+
+      {fotoAmpliada?.url && (
+        <div
+          role="presentation"
+          onClick={() => setFotoAmpliada(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(2, 12, 27, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fechar foto ampliada"
+            onClick={() => setFotoAmpliada(null)}
+            style={{
+              position: 'fixed',
+              top: '20px',
+              right: '24px',
+              width: '44px',
+              height: '44px',
+              borderRadius: '10px',
+              border: '1px solid rgba(255,255,255,.35)',
+              background: '#0b3157',
+              color: '#fff',
+              fontSize: '26px',
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+
+          <img
+            src={fotoAmpliada.url}
+            alt={fotoAmpliada.titulo || 'Foto ampliada'}
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              maxWidth: '92vw',
+              maxHeight: '88vh',
+              objectFit: 'contain',
+              borderRadius: '12px'
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }

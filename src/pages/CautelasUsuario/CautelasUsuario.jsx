@@ -51,16 +51,43 @@ function obterDescricao(item) {
 }
 
 function obterIdentificacao(item) {
-  return (
+  const identificacaoDireta =
     item?.numero_patrimonio ||
     item?.patrimonio ||
-    item?.identificador ||
     item?.numero_serie ||
     item?.codigo ||
-    item?.patrimonio_id ||
-    item?.id ||
-    'Sem identificação'
-  )
+    item?.identificador ||
+    null
+
+  if (identificacaoDireta) {
+    return String(identificacaoDireta).trim()
+  }
+
+  const descricao = String(
+    item?.descricao ||
+    item?.patrimonio_descricao ||
+    ''
+  ).trim()
+
+  if (descricao) {
+    const partes = descricao
+      .split(' - ')
+      .map((parte) => parte.trim())
+      .filter(Boolean)
+
+    const ultimaParte =
+      partes[partes.length - 1] || ''
+
+    if (
+      ultimaParte &&
+      ultimaParte !== descricao &&
+      !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(ultimaParte)
+    ) {
+      return ultimaParte
+    }
+  }
+
+  return 'SEM IDENTIFICAÇÃO PATRIMONIAL'
 }
 
 function lerObservacao(item) {
@@ -1400,11 +1427,11 @@ function alterarQuantidadeDevolver(
                           >
                             <div className="cautela-usuario-carrinho-info">
                               <strong>
-                                {obterIdentificacao(item)}
+                                {obterDescricao(item)}
                               </strong>
 
                               <span>
-                                {obterDescricao(item)}
+                                {obterIdentificacao(item)}
                               </span>
 
                               {quantitativo && (

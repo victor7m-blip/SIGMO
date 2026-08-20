@@ -485,6 +485,159 @@ function obterModuloManutencao(tipo) {
   return MODULOS_MANUTENCAO.OUTROS
 }
 
+async function buscarNovidadeOficialComFotos(novidade) {
+  const novidadeId =
+    novidade?.novidade_id ||
+    novidade?.id ||
+    null
+
+  if (!novidadeId) {
+    return null
+  }
+
+  const {
+    data: registro,
+    error: registroError
+  } = await supabase
+    .from('sigmo_patrimonio_novidades')
+    .select('*')
+    .eq('id', novidadeId)
+    .maybeSingle()
+
+  if (registroError) {
+    throw registroError
+  }
+
+  if (!registro?.id) {
+    return null
+  }
+
+  const {
+    data: fotos,
+    error: fotosError
+  } = await supabase
+    .from('sigmo_patrimonio_novidades_fotos')
+    .select('*')
+    .eq('novidade_id', registro.id)
+    .order('principal', { ascending: false })
+    .order('ordem', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (fotosError) {
+    throw fotosError
+  }
+
+  return {
+    ...registro,
+    fotos: (fotos || []).map((foto, indice) => ({
+      ...foto,
+      url:
+        foto?.foto_url ||
+        foto?.url ||
+        null,
+      caminho:
+        foto?.foto_caminho ||
+        foto?.caminho ||
+        null,
+      ordem:
+        foto?.ordem ||
+        indice + 1,
+      principal:
+        foto?.principal === true ||
+        indice === 0,
+      origem:
+        'USUARIO'
+    }))
+  }
+}
+
+function mesclarFotosNovidade(...listas) {
+  const resultado = []
+  const chaves = new Set()
+
+  for (const lista of listas) {
+    for (const foto of Array.isArray(lista) ? lista : []) {
+      if (!foto || typeof foto !== 'object') continue
+
+      const url =
+        foto?.foto_url ||
+        foto?.url ||
+        foto?.publicUrl ||
+        foto?.public_url ||
+        null
+
+      const caminho =
+        foto?.foto_caminho ||
+        foto?.caminho ||
+        foto?.path ||
+        null
+
+      const chave =
+        `${url || ''}|${caminho || ''}`
+
+      if (!url || chaves.has(chave)) {
+        continue
+      }
+
+      chaves.add(chave)
+
+      resultado.push({
+        ...foto,
+        url,
+        caminho,
+        ordem:
+          foto?.ordem ||
+          resultado.length + 1,
+        principal:
+          resultado.length === 0
+            ? true
+            : foto?.principal === true
+      })
+    }
+  }
+
+  return resultado
+}
+
+function montarDescricaoManutencao({
+  novidadeOficial,
+  novidadeAtual,
+  observacao
+}) {
+  const relatoUsuario =
+    texto(novidadeOficial?.descricao)
+
+  const analiseSvdd =
+    texto(novidadeAtual?.descricao)
+
+  const partes = []
+
+  if (relatoUsuario) {
+    partes.push(
+      `RELATO DO USUÁRIO: ${relatoUsuario}`
+    )
+  }
+
+  if (
+    analiseSvdd &&
+    analiseSvdd !== relatoUsuario
+  ) {
+    partes.push(
+      `ANÁLISE DO SVDD: ${analiseSvdd}`
+    )
+  }
+
+  if (partes.length === 0) {
+    partes.push(
+      analiseSvdd ||
+      texto(observacao) ||
+      'MATERIAL ENCAMINHADO PARA MANUTENÇÃO NO RECEBIMENTO.'
+    )
+  }
+
+  return partes.join(' | ')
+}
+
 function novidadeSolicitaManutencao(
   novidade
 ) {
@@ -740,6 +893,17 @@ export async function receberMaterial({
           user
         })
 
+  const novidadeOficial =
+    await buscarNovidadeOficialComFotos(
+      novidadeFinal
+    )
+
+  const fotosParaManutencao =
+    mesclarFotosNovidade(
+      novidadeOficial?.fotos,
+      novidadeFinal?.fotos
+    )
+
   const movimentacao =
     await registrarMovimentacao({
       patrimonioId:
@@ -870,16 +1034,25 @@ export async function receberMaterial({
           1,
 
         tipoNovidade:
+          novidadeOficial?.titulo ||
           novidadeFinal?.tipo ||
           'DEVOLVIDO COM NOVIDADE',
 
         descricao:
-          novidadeFinal?.descricao ||
-          observacao ||
-          'Material encaminhado para manutenção no recebimento.',
+          montarDescricaoManutencao({
+            novidadeOficial,
+            novidadeAtual:
+              novidadeFinal,
+            observacao
+          }),
 
         observacoes:
-          observacao,
+          [
+            texto(observacao),
+            'PROVIDÊNCIA DEFINIDA PELO SVDD: MANUTENCAO'
+          ]
+            .filter(Boolean)
+            .join(' | '),
 
         origem:
           'CAUTELA INDIVIDUAL',
@@ -895,16 +1068,15 @@ export async function receberMaterial({
             entregadorNome
         },
 
+        // A manutenção herda as fotos oficiais já registradas pelo usuário
+        // e também eventuais fotos adicionadas pelo SVDD, sem depender
+        // apenas do estado da tela.
         foto:
-          novidadeOriginal?.foto ||
+          fotosParaManutencao[0] ||
           null,
 
         fotos:
-          Array.isArray(
-            novidadeOriginal?.fotos
-          )
-            ? novidadeOriginal.fotos
-            : [],
+          fotosParaManutencao,
 
         user
       })

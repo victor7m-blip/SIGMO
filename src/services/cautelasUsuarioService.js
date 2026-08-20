@@ -20,10 +20,6 @@ import {
   listarTonfasEmServico
 } from './tonfasMovimentacoesService'
 
-import {
-  registrarManutencao,
-  MODULOS_MANUTENCAO
-} from './manutencoesService'
 
 import {
   criarNotificacaoParaPerfil
@@ -690,75 +686,6 @@ async function notificarNovidadePatrimonial({
       ...payloadBase
     })
   ])
-}
-
-function novidadeSolicitaManutencao(novidade) {
-  return (
-    normalizarMaiusculo(
-      novidade?.providencia ||
-      novidade?.destino
-    ) === 'MANUTENCAO'
-  )
-}
-
-function obterModuloManutencao(tipoPatrimonio) {
-  const tipo =
-    normalizarMaiusculo(tipoPatrimonio)
-
-  if (tipo === 'ARMA' || tipo === 'ARMAS') {
-    return MODULOS_MANUTENCAO.ARMAS
-  }
-
-  if (
-    tipo === 'TONFA' ||
-    tipo === 'TONFAS' ||
-    tipo === 'CASSETETE' ||
-    tipo === 'CASSETETES'
-  ) {
-    return MODULOS_MANUTENCAO.TONFAS
-  }
-
-  if (tipo === 'HT' || tipo === 'HTS') {
-    return MODULOS_MANUTENCAO.HT
-  }
-
-  if (tipo === 'TPD' || tipo === 'TPDS') {
-    return MODULOS_MANUTENCAO.TPD
-  }
-
-  if (tipo === 'TASER' || tipo === 'TASERS') {
-    return MODULOS_MANUTENCAO.TASER
-  }
-
-  if (tipo === 'COLETE' || tipo === 'COLETES') {
-    return MODULOS_MANUTENCAO.COLETE
-  }
-
-  if (
-    tipo === 'MUNICAO' ||
-    tipo === 'MUNICOES' ||
-    tipo === 'MUNIÇÃO' ||
-    tipo === 'MUNIÇÕES'
-  ) {
-    return MODULOS_MANUTENCAO.MUNICAO
-  }
-
-  return MODULOS_MANUTENCAO.OUTROS
-}
-
-function obterArquivosNovidadeOriginal(novidade) {
-  if (!novidade || typeof novidade !== 'object') {
-    return []
-  }
-
-  return [
-    ...(Array.isArray(novidade.fotos)
-      ? novidade.fotos
-      : []),
-    ...(novidade.foto
-      ? [novidade.foto]
-      : [])
-  ].filter(ehArquivo)
 }
 
 function obterRePolicial(user) {
@@ -1465,7 +1392,6 @@ export async function confirmarRecebimentoCautela({
   const processados = []
   const itensMovimentacaoAlterados = []
   const novidadesOficiaisCriadas = []
-  const manutencoesCriadas = []
 
   try {
     for (
@@ -1671,146 +1597,6 @@ export async function confirmarRecebimentoCautela({
       })
     }
 
-    const registrosParaManutencao = [
-      ...itensIndividuaisComNovidade.map(
-        (registro) => ({
-          item: registro.item,
-          patrimonio:
-            patrimoniosPorId.get(
-              String(
-                registro.item?.patrimonio_id
-              )
-            ),
-          novidade:
-            lerObjetoObservacao(
-              registro.observacaoAtualizada
-            )?.novidade_recebimento ||
-            null,
-          novidadeOriginal:
-            registro.novidadeOriginal,
-          quantidade:
-            Number(
-              registro.item?.quantidade ||
-              1
-            ) || 1
-        })
-      ),
-      ...itensQuantitativos.map(
-        (registro) => ({
-          item: registro.item,
-          patrimonio:
-            registro.patrimonio,
-          novidade:
-            registro.novidadePreparada,
-          novidadeOriginal:
-            registro.novidadeOriginal,
-          quantidade:
-            registro.quantidadeReceber
-        })
-      )
-    ].filter(
-      (registro) =>
-        registro.patrimonio?.id &&
-        novidadeSolicitaManutencao(
-          registro.novidade
-        )
-    )
-
-    for (
-      const registro of
-      registrosParaManutencao
-    ) {
-      const tipoPatrimonio =
-        obterTipoPatrimonioNovidade({
-          patrimonio:
-            registro.patrimonio,
-          item:
-            registro.item,
-          observacao:
-            lerObjetoObservacao(
-              registro.item?.observacao
-            )
-        })
-
-      const arquivos =
-        obterArquivosNovidadeOriginal(
-          registro.novidadeOriginal
-        )
-
-      const manutencao =
-        await registrarManutencao({
-          modulo:
-            obterModuloManutencao(
-              tipoPatrimonio
-            ),
-
-          tipoMaterial:
-            tipoPatrimonio ||
-            registro.patrimonio?.tipo ||
-            'MATERIAL',
-
-          referenciaId:
-            registro.patrimonio
-              ?.referencia_id ||
-            registro.patrimonio?.id,
-
-          patrimonioId:
-            registro.patrimonio?.id ||
-            null,
-
-          movimentacaoId:
-            movimentacaoId,
-
-          quantidade:
-            Math.max(
-              1,
-              Number(
-                registro.quantidade ||
-                1
-              ) || 1
-            ),
-
-          tipoNovidade:
-            registro.novidade?.tipo ||
-            'DEVOLVIDO COM NOVIDADE',
-
-          descricao:
-            registro.novidade
-              ?.descricao ||
-            'Material encaminhado para manutenção no recebimento.',
-
-          observacoes:
-            `NOVIDADE REGISTRADA NO RECEBIMENTO. PROVIDÊNCIA: MANUTENCAO.`,
-
-          origem:
-            movimentacao?.origem_local ||
-            'CAUTELA INDIVIDUAL',
-
-          destino:
-            'MANUTENCAO',
-
-          policial: {
-            id:
-              policial?.id || null,
-            re:
-              policial?.re || null,
-            nome:
-              nomeUsuario(policial)
-          },
-
-          fotos:
-            arquivos,
-
-          user
-        })
-
-      if (manutencao?.id) {
-        manutencoesCriadas.push(
-          manutencao.id
-        )
-      }
-    }
-
     const totalQuantitativoRecebido =
       itensQuantitativos.reduce(
         (total, item) =>
@@ -1837,8 +1623,6 @@ export async function confirmarRecebimentoCautela({
         totalMantidoSvdd,
       novidades_registradas:
         novidadesOficiaisCriadas.length,
-      manutencoes_registradas:
-        manutencoesCriadas.length,
       mensagem:
         entregaCargaPermanente
           ? 'Carga permanente recebida com sucesso. O material foi vinculado ao seu cadastro funcional.'

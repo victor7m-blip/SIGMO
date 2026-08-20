@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 export default function CarrinhoMateriais({
   itens = [],
   onRemover,
@@ -8,8 +10,11 @@ export default function CarrinhoMateriais({
   onRemoverFotoNovidade,
   onRemoverNovidade
 }) {
+  const [fotoAmpliada, setFotoAmpliada] = useState(null)
+
   return (
-    <div className="pagar-material-selected">
+    <>
+      <div className="pagar-material-selected">
       <h3>Materiais selecionados</h3>
 
       {itens.length === 0 ? (
@@ -388,13 +393,21 @@ export default function CarrinhoMateriais({
                               }
                               className="pagar-material-novidade-foto-card"
                             >
-                              <a
-                                href={
-                                  foto.foto_url
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFotoAmpliada({
+                                    url: foto.foto_url,
+                                    alt: `Foto ${indice + 1} da novidade registrada`
+                                  })
                                 }
-                                target="_blank"
-                                rel="noreferrer"
                                 title="Ampliar foto registrada pelo usuário"
+                                style={{
+                                  padding: 0,
+                                  border: 0,
+                                  background: 'transparent',
+                                  cursor: 'zoom-in'
+                                }}
                               >
                                 <img
                                   src={
@@ -404,7 +417,7 @@ export default function CarrinhoMateriais({
                                     indice + 1
                                   } da novidade registrada`}
                                 />
-                              </a>
+                              </button>
 
                               <div>
                                 <span>
@@ -436,13 +449,21 @@ export default function CarrinhoMateriais({
                               }
                               className="pagar-material-novidade-foto-card"
                             >
-                              <a
-                                href={
-                                  preview.url
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFotoAmpliada({
+                                    url: preview.url,
+                                    alt: `Foto ${indice + 1} da novidade`
+                                  })
                                 }
-                                target="_blank"
-                                rel="noreferrer"
                                 title="Ampliar foto"
+                                style={{
+                                  padding: 0,
+                                  border: 0,
+                                  background: 'transparent',
+                                  cursor: 'zoom-in'
+                                }}
                               >
                                 <img
                                   src={
@@ -452,7 +473,7 @@ export default function CarrinhoMateriais({
                                     indice + 1
                                   } da novidade`}
                                 />
-                              </a>
+                              </button>
 
                               <div>
                                 <span>
@@ -508,6 +529,64 @@ export default function CarrinhoMateriais({
           )
         })
       )}
-    </div>
+      </div>
+
+      {fotoAmpliada && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Foto ampliada da novidade"
+          onClick={() => setFotoAmpliada(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.82)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fechar foto ampliada"
+            onClick={() => setFotoAmpliada(null)}
+            style={{
+              position: 'fixed',
+              top: '20px',
+              right: '24px',
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              border: '1px solid rgba(255,255,255,0.35)',
+              background: 'rgba(7, 35, 65, 0.92)',
+              color: '#fff',
+              fontSize: '28px',
+              lineHeight: 1,
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+
+          <img
+            src={fotoAmpliada.url}
+            alt={fotoAmpliada.alt}
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              display: 'block',
+              maxWidth: '95vw',
+              maxHeight: '90vh',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+              borderRadius: '10px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.45)'
+            }}
+          />
+        </div>
+      )}
+    </>
   )
 }

@@ -188,6 +188,9 @@ export async function carregarCentralOperacional({ user } = {}) {
   const movimentacoes = movRes.status === 'fulfilled' ? movRes.value : []
   const transferencias = transfRes.status === 'fulfilled' ? transfRes.value : []
   const novidades = novRes.status === 'fulfilled' ? novRes.value : []
+  const novidadesPendentes = novidades.filter(
+  (item) => normalizarSemAcentos(item?.status) === 'REGISTRADA'
+)
   const patrimonios = patRes.status === 'fulfilled' ? patRes.value : []
   const baixasAprovacao = baixasRes.status === 'fulfilled' ? baixasRes.value : []
 
@@ -274,7 +277,7 @@ export async function carregarCentralOperacional({ user } = {}) {
     indicadores: [
       { key: 'nao-localizados', titulo: 'Não localizados', total: naoLocalizados.length, itens: naoLocalizados },
       { key: 'baixados', titulo: 'Baixados', total: baixados.length, itens: baixados },
-      { key: 'novidades', titulo: 'Novidades patrimoniais', total: novidades.length, itens: novidades }
+      { key: 'novidades', titulo: 'Novidades patrimoniais', total: novidadesPendentes.length, itens: novidadesPendentes }
     ]
   }
 }

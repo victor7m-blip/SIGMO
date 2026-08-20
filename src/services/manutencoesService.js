@@ -120,7 +120,62 @@ function ehArquivo(valor) {
   )
 }
 
-function normalizarArquivosFotos({
+function ehFotoExistente(valor) {
+  if (!valor || typeof valor !== 'object' || ehArquivo(valor)) {
+    return false
+  }
+
+  return Boolean(
+    texto(
+      valor.foto_url ||
+      valor.url ||
+      valor.publicUrl ||
+      valor.public_url
+    )
+  )
+}
+
+function normalizarFotoExistente(valor, indice = 0) {
+  const fotoUrl = texto(
+    valor?.foto_url ||
+    valor?.url ||
+    valor?.publicUrl ||
+    valor?.public_url
+  )
+
+  if (!fotoUrl) return null
+
+  return {
+    foto_url: fotoUrl,
+    foto_caminho:
+      texto(
+        valor?.foto_caminho ||
+        valor?.caminho ||
+        valor?.path
+      ) || null,
+    categoria:
+      maiusculo(valor?.categoria) || 'ENTRADA',
+    tipo:
+      maiusculo(valor?.tipo) || null,
+    legenda:
+      texto(valor?.legenda || valor?.descricao) || null,
+    principal:
+      Boolean(valor?.principal),
+    ordem:
+      inteiroPositivo(valor?.ordem, indice + 1),
+    criada_por_id:
+      valor?.criada_por_id ||
+      valor?.registrada_por_id ||
+      null,
+    criada_por_nome:
+      texto(
+        valor?.criada_por_nome ||
+        valor?.registrada_por_nome
+      ) || null
+  }
+}
+
+function normalizarFotosEntrada({
   foto = null,
   fotos = []
 } = {}) {
@@ -130,17 +185,42 @@ function normalizarArquivosFotos({
   ]
 
   const arquivos = []
+  const existentes = []
+  const chavesExistentes = new Set()
 
-  for (const candidato of candidatos) {
-    if (
-      ehArquivo(candidato) &&
-      !arquivos.includes(candidato)
-    ) {
-      arquivos.push(candidato)
+  for (let indice = 0; indice < candidatos.length; indice += 1) {
+    const candidato = candidatos[indice]
+
+    if (ehArquivo(candidato)) {
+      if (!arquivos.includes(candidato)) {
+        arquivos.push(candidato)
+      }
+      continue
+    }
+
+    if (ehFotoExistente(candidato)) {
+      const normalizada = normalizarFotoExistente(candidato, indice)
+      if (!normalizada) continue
+
+      const chave = `${normalizada.foto_url}|${normalizada.foto_caminho || ''}`
+      if (!chavesExistentes.has(chave)) {
+        chavesExistentes.add(chave)
+        existentes.push(normalizada)
+      }
     }
   }
 
-  return arquivos
+  return {
+    arquivos,
+    existentes
+  }
+}
+
+function normalizarArquivosFotos({
+  foto = null,
+  fotos = []
+} = {}) {
+  return normalizarFotosEntrada({ foto, fotos }).arquivos
 }
 
 function criarCaminhoFoto({ modulo, referenciaId, arquivo }) {
@@ -247,6 +327,53 @@ export async function listarFotosManutencao(manutencaoId) {
   return data || []
 }
 
+export async function buscarNovidadePatrimonialDaManutencao(manutencao) {
+  const patrimonioId = texto(manutencao?.patrimonio_id)
+  const referenciaId = texto(manutencao?.referencia_id)
+
+  if (!patrimonioId && !referenciaId) {
+    return { novidade: null, fotos: [] }
+  }
+
+  let query = supabase
+    .from('sigmo_patrimonio_novidades')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  query = patrimonioId
+    ? query.eq('patrimonio_id', patrimonioId)
+    : query.eq('referencia_id', referenciaId)
+
+  const { data: novidades, error: novidadeError } = await query
+  if (novidadeError) throw novidadeError
+
+  const novidade = novidades?.[0] || null
+  if (!novidade?.id) return { novidade: null, fotos: [] }
+
+  const { data: fotos, error: fotosError } = await supabase
+    .from('sigmo_patrimonio_novidades_fotos')
+    .select('*')
+    .eq('novidade_id', novidade.id)
+    .order('principal', { ascending: false })
+    .order('ordem', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (fotosError) throw fotosError
+
+  return {
+    novidade,
+    fotos: (fotos || []).map((foto, indice) => ({
+      ...foto,
+      foto_url: foto?.foto_url || foto?.url || null,
+      foto_caminho: foto?.foto_caminho || foto?.caminho || null,
+      ordem: foto?.ordem || indice + 1,
+      principal: foto?.principal === true || indice === 0,
+      origem: 'USUARIO'
+    }))
+  }
+}
+
 export async function adicionarFotoManutencao({
   manutencaoId,
   modulo,
@@ -340,6 +467,94 @@ function normalizarManutencao(item = {}) {
   }
 }
 
+
+async function aplicarEntradaManutencaoArma({
+  referenciaId,
+  user = null
+}) {
+  const { data: arma, error } = await supabase
+    .from('sigmo_armas')
+    .select('*')
+    .eq('id', referenciaId)
+    .single()
+
+  if (error) throw error
+
+  const payloadAnterior = {
+    status: arma.status,
+    local_atual: arma.local_atual,
+    carga_policial_id: arma.carga_policial_id,
+    carga_policial_re: arma.carga_policial_re,
+    carga_policial_nome: arma.carga_policial_nome,
+    carga_policial_posto_graduacao: arma.carga_policial_posto_graduacao,
+    carga_policial_companhia: arma.carga_policial_companhia,
+    carga_policial_pelotao: arma.carga_policial_pelotao,
+    carga_policial_funcao: arma.carga_policial_funcao
+  }
+
+  const payloadNovo = {
+    status: 'MANUTENCAO',
+    local_atual: 'MANUTENCAO',
+    carga_policial_id: null,
+    carga_policial_re: null,
+    carga_policial_nome: null,
+    carga_policial_posto_graduacao: null,
+    carga_policial_companhia: null,
+    carga_policial_pelotao: null,
+    carga_policial_funcao: null
+  }
+
+  const { data: atualizada, error: updateError } = await supabase
+    .from('sigmo_armas')
+    .update(payloadNovo)
+    .eq('id', arma.id)
+    .select()
+    .single()
+
+  if (updateError) throw updateError
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo: 'arma',
+      referencia_id: atualizada.id,
+      dados: atualizada,
+      user,
+      local_atual: 'MANUTENCAO',
+      companhia_atual: atualizada.unidade || ''
+    })
+  } catch (error) {
+    await supabase
+      .from('sigmo_armas')
+      .update(payloadAnterior)
+      .eq('id', arma.id)
+
+    throw error
+  }
+
+  return {
+    arma: atualizada,
+    rollback: async () => {
+      const { data: restaurada, error: rollbackError } = await supabase
+        .from('sigmo_armas')
+        .update(payloadAnterior)
+        .eq('id', arma.id)
+        .select()
+        .single()
+
+      if (rollbackError) throw rollbackError
+
+      await criarOuAtualizarPatrimonio({
+        tipo: 'arma',
+        referencia_id: restaurada.id,
+        dados: restaurada,
+        user,
+        local_atual: restaurada.local_atual || 'COFRE DO SVDD',
+        companhia_atual: restaurada.unidade || ''
+      })
+    }
+  }
+}
+
 export async function registrarManutencao({
   modulo,
   tipoMaterial,
@@ -387,14 +602,17 @@ export async function registrarManutencao({
     )
   }
 
-  const arquivos =
-    normalizarArquivosFotos({
-      foto,
-      fotos
-    })
+  const {
+    arquivos,
+    existentes: fotosExistentes
+  } = normalizarFotosEntrada({
+    foto,
+    fotos
+  })
 
   const fotosEnviadas = []
   let manutencaoCriada = null
+  let movimentacaoPatrimonial = null
 
   try {
     for (
@@ -427,8 +645,14 @@ export async function registrarManutencao({
       })
     }
 
+    const todasFotosEntrada = [
+      ...fotosExistentes,
+      ...fotosEnviadas
+    ]
+
     const fotoPrincipal =
-      fotosEnviadas[0] || {
+      todasFotosEntrada.find((item) => item.principal) ||
+      todasFotosEntrada[0] || {
         foto_url: null,
         foto_caminho: null
       }
@@ -522,65 +746,71 @@ export async function registrarManutencao({
 
     manutencaoCriada = data
 
-    if (
-      fotosEnviadas.length > 0
-    ) {
-      const registrosFotos =
-        fotosEnviadas.map(
-          (item) => ({
-            manutencao_id:
-              data.id,
+    if (todasFotosEntrada.length > 0) {
+      const existePrincipal = todasFotosEntrada.some(
+        (item) => Boolean(item.principal)
+      )
 
-            foto_url:
-              item.foto_url,
+      const registrosFotos = todasFotosEntrada.map(
+        (item, indice) => ({
+          manutencao_id: data.id,
+          foto_url: item.foto_url,
+          foto_caminho: item.foto_caminho || null,
+          categoria: maiusculo(item.categoria) || 'ENTRADA',
+          tipo:
+            maiusculo(item.tipo) ||
+            maiusculo(tipoNovidade) ||
+            'GERAL',
+          legenda:
+            texto(item.legenda) ||
+            texto(descricao) ||
+            null,
+          principal:
+            existePrincipal
+              ? Boolean(item.principal)
+              : indice === 0,
+          ordem:
+            inteiroPositivo(item.ordem, indice + 1),
+          criada_por_id:
+            item.criada_por_id ||
+            obterUsuarioId(user),
+          criada_por_nome:
+            texto(item.criada_por_nome) ||
+            obterUsuarioNome(user)
+        })
+      )
 
-            foto_caminho:
-              item.foto_caminho,
-
-            categoria:
-              'ENTRADA',
-
-            tipo:
-              maiusculo(
-                tipoNovidade
-              ) ||
-              'GERAL',
-
-            legenda:
-              texto(descricao) ||
-              null,
-
-            principal:
-              item.principal,
-
-            ordem:
-              item.ordem,
-
-            criada_por_id:
-              obterUsuarioId(user),
-
-            criada_por_nome:
-              obterUsuarioNome(user)
-          })
-        )
-
-      const {
-        error: fotosError
-      } = await supabase
+      const { error: fotosError } = await supabase
         .from(TABELA_FOTOS)
-        .insert(
-          registrosFotos
-        )
+        .insert(registrosFotos)
 
       if (fotosError) {
         throw fotosError
       }
     }
 
+    if (moduloValido === MODULOS_MANUTENCAO.ARMAS) {
+      movimentacaoPatrimonial = await aplicarEntradaManutencaoArma({
+        referenciaId: referenciaValida,
+        user
+      })
+    }
+
     return normalizarManutencao(
       data
     )
   } catch (error) {
+    if (movimentacaoPatrimonial?.rollback) {
+      try {
+        await movimentacaoPatrimonial.rollback()
+      } catch (rollbackError) {
+        console.error(
+          'Erro ao desfazer entrada patrimonial em manutenção:',
+          rollbackError
+        )
+      }
+    }
+
     if (manutencaoCriada?.id) {
       try {
         await supabase
@@ -917,6 +1147,106 @@ export async function buscarManutencao(manutencaoId) {
   return normalizarManutencao(data)
 }
 
+
+async function aplicarRetornoArma(manutencao, user) {
+  const { data: arma, error } = await supabase
+    .from('sigmo_armas')
+    .select('*')
+    .eq('id', manutencao.referencia_id)
+    .single()
+
+  if (error) throw error
+
+  if (maiusculo(arma.status) !== 'MANUTENCAO') {
+    throw new Error('A arma não está registrada como em manutenção.')
+  }
+
+  const payloadAnterior = {
+    status: arma.status,
+    local_atual: arma.local_atual,
+    carga_policial_id: arma.carga_policial_id,
+    carga_policial_re: arma.carga_policial_re,
+    carga_policial_nome: arma.carga_policial_nome,
+    carga_policial_posto_graduacao: arma.carga_policial_posto_graduacao,
+    carga_policial_companhia: arma.carga_policial_companhia,
+    carga_policial_pelotao: arma.carga_policial_pelotao,
+    carga_policial_funcao: arma.carga_policial_funcao
+  }
+
+  const origem = maiusculo(manutencao.origem)
+  const retornoAoP4 =
+    origem.includes('P4') ||
+    origem.includes('GUARDA DO QUARTEL') ||
+    origem.includes('DEPOSITO DO P4') ||
+    origem.includes('DEPÓSITO DO P4')
+
+  const localRetorno = retornoAoP4
+    ? 'GUARDA DO P4'
+    : 'COFRE DO SVDD'
+
+  const payloadNovo = {
+    status: 'RESERVA',
+    local_atual: localRetorno,
+    carga_policial_id: null,
+    carga_policial_re: null,
+    carga_policial_nome: null,
+    carga_policial_posto_graduacao: null,
+    carga_policial_companhia: null,
+    carga_policial_pelotao: null,
+    carga_policial_funcao: null
+  }
+
+  const { data: atualizada, error: updateError } = await supabase
+    .from('sigmo_armas')
+    .update(payloadNovo)
+    .eq('id', arma.id)
+    .select()
+    .single()
+
+  if (updateError) throw updateError
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo: 'arma',
+      referencia_id: atualizada.id,
+      dados: atualizada,
+      user,
+      local_atual: localRetorno,
+      companhia_atual: atualizada.unidade || ''
+    })
+  } catch (error) {
+    await supabase
+      .from('sigmo_armas')
+      .update(payloadAnterior)
+      .eq('id', arma.id)
+
+    throw error
+  }
+
+  return {
+    arma: atualizada,
+    rollback: async () => {
+      const { data: restaurada, error: rollbackError } = await supabase
+        .from('sigmo_armas')
+        .update(payloadAnterior)
+        .eq('id', arma.id)
+        .select()
+        .single()
+
+      if (rollbackError) throw rollbackError
+
+      await criarOuAtualizarPatrimonio({
+        tipo: 'arma',
+        referencia_id: restaurada.id,
+        dados: restaurada,
+        user,
+        local_atual: restaurada.local_atual || 'MANUTENCAO',
+        companhia_atual: restaurada.unidade || ''
+      })
+    }
+  }
+}
+
 async function aplicarRetornoTonfa(manutencao, user) {
   const { data: tonfa, error } = await supabase
     .from('sigmo_tonfas')
@@ -1151,6 +1481,10 @@ async function aplicarRetornoHT(manutencao, user) {
 }
 
 async function aplicarRetornoPatrimonial(manutencao, user) {
+  if (manutencao.modulo === MODULOS_MANUTENCAO.ARMAS) {
+    return aplicarRetornoArma(manutencao, user)
+  }
+
   if (manutencao.modulo === MODULOS_MANUTENCAO.TONFAS) {
     return aplicarRetornoTonfa(manutencao, user)
   }
@@ -1162,6 +1496,53 @@ async function aplicarRetornoPatrimonial(manutencao, user) {
   return {
     rollback: async () => {}
   }
+}
+
+
+async function concluirNovidadePatrimonialDaManutencao(manutencao, user) {
+  const patrimonioId = texto(manutencao?.patrimonio_id)
+
+  // Evita vincular ocorrências apenas por aproximação via referencia_id.
+  if (!patrimonioId) {
+
+    return null
+  }
+
+  const { data: novidades, error: buscaError } = await supabase
+    .from('sigmo_patrimonio_novidades')
+    .select('id, patrimonio_id, titulo, status, created_at')
+    .eq('patrimonio_id', patrimonioId)
+    .eq('status', 'registrada')
+    .lte('created_at', manutencao.registrada_em)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (buscaError) throw buscaError
+
+  const novidade = novidades?.[0] || null
+  if (!novidade?.id) {
+
+    return null
+  }
+
+  const payloadConclusao = {
+    status: 'concluida',
+    aprovado_por_id: obterUsuarioId(user),
+    aprovado_por_nome: obterUsuarioNome(user),
+    updated_at: new Date().toISOString()
+  }
+
+  const { data, error } = await supabase
+    .from('sigmo_patrimonio_novidades')
+    .update(payloadConclusao)
+    .eq('id', novidade.id)
+    .eq('status', 'registrada')
+    .select()
+    .maybeSingle()
+
+  if (error) throw error
+
+  return data || null
 }
 
 export async function concluirManutencao({
@@ -1245,6 +1626,8 @@ export async function concluirManutencao({
         user
       })
     }
+
+    await concluirNovidadePatrimonialDaManutencao(atual, user)
 
     return normalizarManutencao(data)
   } catch (error) {

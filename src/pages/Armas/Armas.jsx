@@ -501,7 +501,9 @@ export default function Armas({ user, onAbrirPolicial }) {
     'ENCARREGADO SVDD',
     'ENCARREGADO DO SVDD',
     'AUXILIAR SVDD',
-    'AUXILIAR DO SVDD'
+    'AUXILIAR DO SVDD',
+    'AUXILIAR TEMPORARIO DO SVDD',
+    'AUXILIAR TEMPORÁRIO DO SVDD'
   ].includes(perfilUsuario)
 
   const ehPerfilGestor = [
@@ -511,6 +513,7 @@ export default function Armas({ user, onAbrirPolicial }) {
     'COMANDANTE'
   ].includes(perfilUsuario)
 
+  const podeGerenciarCadastroArma = !ehPerfilSVDD
   const podeTransferirArmas = ehPerfilP4 || ehPerfilSVDD || ehPerfilGestor
   const contextoTransferenciaSVDD = ehPerfilSVDD
   const codigoOrigemTransferencia = contextoTransferenciaSVDD ? 'SVDD' : 'P4'
@@ -926,12 +929,22 @@ setFotoSelecionadaVisualizacao(
   }
 
   function abrirNovoCadastro() {
+    if (!podeGerenciarCadastroArma) {
+      window.alert('O perfil do SVDD não possui permissão para cadastrar armas.')
+      return
+    }
+
     setArmaEditando(null)
     setArmaVisualizando(null)
     setFormAberto(true)
   }
 
   function abrirEdicao(arma) {
+    if (!podeGerenciarCadastroArma) {
+      window.alert('O perfil do SVDD não possui permissão para alterar dados cadastrais de armas.')
+      return
+    }
+
     if (estaEmCarga(arma)) {
       window.alert(
         'Esta arma está vinculada como CARGA PERMANENTE e não pode ser editada enquanto permanecer em carga. Para alterar cadastro ou fotos, primeiro é necessário devolver a carga ao P4.'
@@ -955,6 +968,11 @@ setFotoSelecionadaVisualizacao(
   }
 
   async function handleExcluir(arma) {
+    if (!podeGerenciarCadastroArma) {
+      window.alert('O perfil do SVDD não possui permissão para excluir armas.')
+      return
+    }
+
     if (estaEmCarga(arma)) {
       window.alert(
         'Esta arma está vinculada como CARGA PERMANENTE e não pode ser excluída enquanto permanecer em carga. Primeiro é necessário devolver a carga ao P4.'
@@ -1540,6 +1558,7 @@ setFotoSelecionadaVisualizacao(
           </p>
         </div>
 
+        {podeGerenciarCadastroArma && (
         <div className="armas-header-actions">
           <button
             type="button"
@@ -1549,6 +1568,7 @@ setFotoSelecionadaVisualizacao(
             Nova arma
           </button>
         </div>
+        )}
       </header>
 
       {erro && (
@@ -2155,24 +2175,28 @@ setFotoSelecionadaVisualizacao(
                           Ver
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            abrirEdicao(arma)
-                          }
-                        >
-                          Editar
-                        </button>
+                        {podeGerenciarCadastroArma && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                abrirEdicao(arma)
+                              }
+                            >
+                              Editar
+                            </button>
 
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={() =>
-                            handleExcluir(arma)
-                          }
-                        >
-                          Excluir
-                        </button>
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={() =>
+                                handleExcluir(arma)
+                              }
+                            >
+                              Excluir
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -2653,10 +2677,10 @@ setFotoSelecionadaVisualizacao(
           fotos={fotosVisualizacao}
           carregandoFotos={loadingFotosVisualizacao}
           onClose={() => setArmaVisualizando(null)}
-          onEdit={(arma) => {
+          onEdit={podeGerenciarCadastroArma ? (arma) => {
             setArmaVisualizando(null)
             abrirEdicao(arma)
-          }}
+          } : undefined}
           onAbrirPolicial={(re) => {
   if (!re) return
   abrirPolicialResponsavel(re)

@@ -87,24 +87,40 @@ export default function ArmaDados({
   const armaEmCarga =
     form.status === 'CARGA'
 
-  const statusProtegidos =
-    new Set(['CARGA', 'CAUTELADO'])
+  const statusAtual =
+    String(form.status || '')
+      .trim()
+      .toUpperCase()
 
-  const statusDisponiveis =
+  const statusProtegidos =
+    new Set(['CARGA', 'CAUTELADO', 'MANUTENCAO'])
+
+  const statusAtualProtegido =
+    statusOperacionalProtegido ||
+    statusProtegidos.has(statusAtual)
+
+  const statusDisponiveisBase =
     STATUS_ARMAS.filter((status) => {
       if (!statusProtegidos.has(status)) {
         return true
       }
 
       return (
-        statusOperacionalProtegido &&
-        status === form.status
+        statusAtualProtegido &&
+        status === statusAtual
       )
     })
 
+  const statusDisponiveis =
+    statusAtualProtegido &&
+    statusAtual &&
+    !statusDisponiveisBase.includes(statusAtual)
+      ? [statusAtual, ...statusDisponiveisBase]
+      : statusDisponiveisBase
+
   const camposCargaBloqueados =
     disabled ||
-    statusOperacionalProtegido
+    statusAtualProtegido
 
   useEffect(() => {
     if (!armaEmCarga) {
@@ -691,15 +707,15 @@ export default function ArmaDados({
             onChange={onChange}
             disabled={
               disabled ||
-              statusOperacionalProtegido
+              statusAtualProtegido
             }
             options={statusDisponiveis}
           />
         </PatrimonioFormGrid>
 
         <div className="arma-dados-aviso">
-          CARGA e CAUTELADO são situações controladas pela Engine Patrimonial.
-          Use Pagar/Receber Material para movimentar armas para policiais.
+          CARGA, CAUTELADO e MANUTENÇÃO são situações controladas pela Engine Patrimonial.
+          Use Pagar/Receber Material para movimentações com policiais e o fluxo de Manutenções para entrada e retorno de manutenção.
         </div>
       </section>
 

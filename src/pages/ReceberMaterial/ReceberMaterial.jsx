@@ -371,6 +371,22 @@ export default function ReceberMaterial({
     setMensagem
   ] = useState('')
 
+  const [
+    fotoAmpliada,
+    setFotoAmpliada
+  ] = useState(null)
+
+  const erroRef = useRef(null)
+
+  useEffect(() => {
+    if (!erro || !erroRef.current) return
+
+    erroRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    })
+  }, [erro])
+
   const nomeEntregador =
     obterNomePolicial(
       policialEntregador
@@ -1111,8 +1127,34 @@ export default function ReceberMaterial({
               ),
               providencia: '',
               quantidade_afetada: 1,
-              fotos: [],
-              previews: []
+              fotos: Array.isArray(novidadePendente.fotos)
+                ? novidadePendente.fotos.map((foto, indice) => ({
+                    ...foto,
+                    url:
+                      foto?.url ||
+                      foto?.foto_url ||
+                      null,
+                    caminho:
+                      foto?.caminho ||
+                      foto?.foto_caminho ||
+                      null,
+                    ordem:
+                      foto?.ordem ||
+                      indice + 1,
+                    principal:
+                      foto?.principal === true ||
+                      indice === 0,
+                    origem:
+                      'USUARIO'
+                  }))
+                : [],
+              previews: [],
+              descricao_usuario: normalizarTexto(
+                novidadePendente.descricao || ''
+              ),
+              titulo_usuario: normalizarTexto(
+                novidadePendente.titulo || ''
+              )
             }
           : item?.novidade
     }
@@ -1716,7 +1758,10 @@ async function confirmarRecebimento() {
       )}
 
       {erro && (
-        <div className="pagar-material-feedback pagar-material-feedback-error">
+        <div
+          ref={erroRef}
+          className="pagar-material-feedback pagar-material-feedback-error"
+        >
           {erro}
         </div>
       )}
@@ -2005,12 +2050,22 @@ async function confirmarRecebimento() {
           }}
         >
           {item.novidade_pendente.fotos.map((foto) => (
-            <a
+            <button
               key={foto.id}
-              href={foto.foto_url}
-              target="_blank"
-              rel="noreferrer"
+              type="button"
+              onClick={() =>
+                setFotoAmpliada({
+                  url: foto.foto_url,
+                  alt: 'Foto da novidade'
+                })
+              }
               title="Ampliar foto da novidade"
+              style={{
+                padding: 0,
+                border: 0,
+                background: 'transparent',
+                cursor: 'zoom-in'
+              }}
             >
               <img
                 src={foto.foto_url}
@@ -2023,7 +2078,7 @@ async function confirmarRecebimento() {
                   border: '1px solid #cbd5e1'
                 }}
               />
-            </a>
+            </button>
           ))}
         </div>
       )}
@@ -2219,6 +2274,63 @@ async function confirmarRecebimento() {
           </section>
         </aside>
       </section>
+
+      {fotoAmpliada && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Foto ampliada da novidade"
+          onClick={() => setFotoAmpliada(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(0, 0, 0, 0.82)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fechar foto ampliada"
+            onClick={() => setFotoAmpliada(null)}
+            style={{
+              position: 'fixed',
+              top: '20px',
+              right: '24px',
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              border: '1px solid rgba(255,255,255,0.35)',
+              background: 'rgba(7, 35, 65, 0.92)',
+              color: '#fff',
+              fontSize: '28px',
+              lineHeight: 1,
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+
+          <img
+            src={fotoAmpliada.url}
+            alt={fotoAmpliada.alt}
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              display: 'block',
+              maxWidth: '95vw',
+              maxHeight: '90vh',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+              borderRadius: '10px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.45)'
+            }}
+          />
+        </div>
+      )}
     </main>
   )
 }
