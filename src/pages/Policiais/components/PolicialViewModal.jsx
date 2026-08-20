@@ -12,11 +12,16 @@ import {
   obterPolicialPorId
 } from '../../../services/policiaisService'
 
+import {
+  obterPerfilEfetivo
+} from '../../../services/permissionService'
+
 import './policialViewModal.css'
 
 export default function PolicialViewModal({
   policial,
   fotos = [],
+  user = null,
   onClose,
   onPrintFicha,
   onPrintCredencial,
@@ -123,6 +128,26 @@ export default function PolicialViewModal({
   const qrValue =
     policialAtual.qr_code ||
     `SIGMO-POLICIAL-${policialAtual.id}`
+
+  const perfilVisualizador =
+    String(
+      obterPerfilEfetivo(user) ||
+      ''
+    )
+      .trim()
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+  const ocultarDocumentosPessoais =
+    [
+      'ENCARREGADO DO SVDD',
+      'ENCARREGADO SVDD',
+      'AUXILIAR DO SVDD',
+      'AUXILIAR SVDD',
+      'AUXILIAR_SVDD_TEMPORARIO',
+      'AUXILIAR SVDD TEMPORARIO'
+    ].includes(perfilVisualizador)
 
   return (
     <div className={`policial-modal-overlay${modoLateral ? ' policial-modal-overlay-lateral' : ''}`}>
@@ -259,19 +284,23 @@ export default function PolicialViewModal({
                 }
               />
 
-              <Info
-                label="CPF"
-                value={
-                  policialAtual.cpf
-                }
-              />
+              {!ocultarDocumentosPessoais && (
+                <>
+                  <Info
+                    label="CPF"
+                    value={
+                      policialAtual.cpf
+                    }
+                  />
 
-              <Info
-                label="RG"
-                value={
-                  policialAtual.rg
-                }
-              />
+                  <Info
+                    label="RG"
+                    value={
+                      policialAtual.rg
+                    }
+                  />
+                </>
+              )}
 
               <Info
                 label="Perfil"

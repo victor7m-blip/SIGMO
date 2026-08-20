@@ -17,6 +17,10 @@ import {
   buscarPatrimonioPorQrCode
 } from '../../services/pagarMaterialService'
 
+import {
+  obterPerfilEfetivo
+} from '../../services/permissionService'
+
 import RecebedorCard from './components/RecebedorCard'
 import PesquisaMaterial from './components/PesquisaMaterial'
 import ResumoEntrega from './components/ResumoEntrega'
@@ -47,11 +51,7 @@ function normalizarPerfil(valor) {
 
 function obterPerfilUsuario(user) {
   return normalizarPerfil(
-    user?.perfil ||
-    user?.role ||
-    user?.tipo_usuario ||
-    user?.user_metadata?.perfil ||
-    ''
+    obterPerfilEfetivo(user)
   )
 }
 
@@ -201,8 +201,21 @@ export default function PagarMaterial({
   const [atualizarPesquisaEm, setAtualizarPesquisaEm] = useState(0)
 
   const opcoesTipo = useMemo(
-    () => tiposPermitidos(localOrigem),
-    [localOrigem]
+    () => {
+      if (perfil.includes('AUXILIAR')) {
+        return [
+          {
+            value: TIPO_CAUTELA,
+            label: 'CAUTELA'
+          }
+        ]
+      }
+
+      return tiposPermitidos(
+        localOrigem
+      )
+    },
+    [localOrigem, perfil]
   )
 
   const exigePolicial = tipoMovimentacao !== TIPO_TRANSFERENCIA_P4

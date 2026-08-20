@@ -25,8 +25,194 @@ import {
 import './styles/Taser.css'
 
 const LIMITE = 20
+const LIMITE_RESUMO = 5000
 const statusOptions = STATUS_TASER
 const tipoOptions = TIPOS_TASER
+
+
+function normalizar(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+}
+
+function resumirTasers(lista = []) {
+  const resumo = {
+    total: lista.length,
+    p4: 0,
+    svdd: 0,
+    cargaPermanente: 0,
+    cautelas: 0,
+    manutencao: 0,
+    naoLocalizados: 0,
+    baixados: 0,
+    outros: 0
+  }
+
+  lista.forEach((taser) => {
+    const status = normalizar(taser?.status_operacional || taser?.status)
+    const local = normalizar(taser?.local_atual)
+
+    if (status === 'BAIXADO') {
+      resumo.baixados += 1
+      return
+    }
+
+    if (status === 'MANUTENCAO' || local.includes('MANUTENCAO')) {
+      resumo.manutencao += 1
+      return
+    }
+
+    if (
+      status.includes('NAO_LOCALIZ') ||
+      local.includes('NAO_LOCALIZ') ||
+      !local
+    ) {
+      resumo.naoLocalizados += 1
+      return
+    }
+
+    if (status.includes('CAUTELA') || status === 'EM_SERVICO') {
+      resumo.cautelas += 1
+      return
+    }
+
+    if (status === 'CARGA' || status.includes('CARGA_PERMANENTE')) {
+      resumo.cargaPermanente += 1
+      return
+    }
+
+    if (local.includes('SVDD') || local.includes('SERVICO DE DIA')) {
+      resumo.svdd += 1
+      return
+    }
+
+    if (
+      status === 'RESERVA' ||
+      status === 'DISPONIVEL' ||
+      local.includes('P4') ||
+      local.includes('DEPOSITO') ||
+      local.includes('RESERVA')
+    ) {
+      resumo.p4 += 1
+      return
+    }
+
+    resumo.outros += 1
+  })
+
+  return resumo
+}
+
+function percentual(valor, total) {
+  if (!Number(total)) return 0
+  return Math.max(0, Math.min(100, (Number(valor || 0) / Number(total)) * 100))
+}
+
+function ResumoCard({ titulo, valor, detalhe, tone = 'blue' }) {
+  return (
+    <article className={`taser-summary-card taser-summary-${tone}`}>
+      <span className="taser-summary-label">{titulo}</span>
+      <strong>{Number(valor || 0).toLocaleString('pt-BR')}</strong>
+      <small>{detalhe}</small>
+    </article>
+  )
+}
+
+function GraficoRoscaTaser({ total, itens }) {
+  let acumulado = 0
+
+  const segmentos = itens.map((item) => {
+    const inicio = acumulado
+    acumulado += percentual(item.valor, total)
+    return `${item.cor} ${inicio}% ${acumulado}%`
+  })
+
+  if (acumulado < 100) {
+    segmentos.push(`#e8edf4 ${acumulado}% 100%`)
+  }
+
+  return (
+    <section className="taser-chart-card taser-chart-donut-card">
+      <div className="taser-chart-header">
+        <div>
+          <span>Distribuição patrimonial</span>
+          <h2>Situação dos Tasers</h2>
+        </div>
+      </div>
+
+      <div className="taser-chart-donut-layout">
+        <div
+          className="taser-chart-donut"
+          style={{ background: `conic-gradient(${segmentos.join(', ')})` }}
+          aria-label={`Total de ${total} Tasers`}
+        >
+          <div>
+            <strong>{Number(total || 0).toLocaleString('pt-BR')}</strong>
+            <span>TOTAL</span>
+          </div>
+        </div>
+
+        <div className="taser-chart-legend">
+          {itens.map((item) => (
+            <div key={item.label}>
+              <i style={{ background: item.cor }} />
+              <span>{item.label}</span>
+              <strong>{item.valor}</strong>
+              <small>
+                {percentual(item.valor, total).toLocaleString('pt-BR', {
+                  maximumFractionDigits: 1
+                })}%
+              </small>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function GraficoBarrasTaser({ total, itens }) {
+  const maior = Math.max(1, ...itens.map((item) => Number(item.valor || 0)))
+
+  return (
+    <section className="taser-chart-card taser-chart-bars-card">
+      <div className="taser-chart-header">
+        <div>
+          <span>Visão comparativa</span>
+          <h2>Tasers por local e situação</h2>
+        </div>
+      </div>
+
+      <div className="taser-chart-bars">
+        {itens.map((item) => (
+          <div className="taser-chart-bar-item" key={item.label}>
+            <div className="taser-chart-bar-value">{item.valor}</div>
+            <div className="taser-chart-bar-track">
+              <i
+                style={{
+                  height: `${Math.max(
+                    item.valor ? 9 : 2,
+                    (Number(item.valor || 0) / maior) * 100
+                  )}%`,
+                  background: item.cor
+                }}
+              />
+            </div>
+            <strong>{item.label}</strong>
+            <small>
+              {percentual(item.valor, total).toLocaleString('pt-BR', {
+                maximumFractionDigits: 1
+              })}%
+            </small>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
 
 export default function Taser({ user }) {
   const [tasers, setTasers] = useState([])
@@ -34,6 +220,8 @@ export default function Taser({ user }) {
   const [pagina, setPagina] = useState(1)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
+  const [todosTasers, setTodosTasers] = useState([])
+  const [loadingResumo, setLoadingResumo] = useState(false)
 
   const [formAberto, setFormAberto] = useState(false)
   const [taserEditando, setTaserEditando] = useState(null)
@@ -99,9 +287,33 @@ export default function Taser({ user }) {
     sortDirection
   ])
 
+  const carregarResumo = useCallback(async () => {
+    try {
+      setLoadingResumo(true)
+
+      const resultado = await listarTasers({
+        filtros: {},
+        pagina: 1,
+        limite: LIMITE_RESUMO,
+        sortBy: 'criado_em',
+        sortDirection: 'desc'
+      })
+
+      setTodosTasers(resultado.data || [])
+    } catch (error) {
+      console.error('Erro ao carregar resumo dos Tasers:', error)
+    } finally {
+      setLoadingResumo(false)
+    }
+  }, [])
+
   useEffect(() => {
     carregarTasers()
   }, [carregarTasers])
+
+  useEffect(() => {
+    carregarResumo()
+  }, [carregarResumo])
 
   function handleFiltroChange(event) {
     const { name, value } = event.target
@@ -200,7 +412,10 @@ export default function Taser({ user }) {
 
   async function handleSaved() {
     fecharFormulario()
-    await carregarTasers()
+    await Promise.all([
+      carregarTasers(),
+      carregarResumo()
+    ])
   }
 
   async function handleExcluir(taser) {
@@ -217,7 +432,10 @@ export default function Taser({ user }) {
 
     try {
       await excluirTaser(taser.id, user)
-      await carregarTasers()
+      await Promise.all([
+        carregarTasers(),
+        carregarResumo()
+      ])
     } catch (error) {
       window.alert(
         error.message ||
@@ -252,6 +470,24 @@ export default function Taser({ user }) {
       : option.label
   }
 
+  const resumo = useMemo(
+    () => resumirTasers(todosTasers),
+    [todosTasers]
+  )
+
+  const dadosGrafico = useMemo(
+    () => [
+      { label: 'Depósito do P4', valor: resumo.p4, cor: '#22c55e' },
+      { label: 'Cofre do SVDD', valor: resumo.svdd, cor: '#3b82f6' },
+      { label: 'Carga permanente', valor: resumo.cargaPermanente, cor: '#f97316' },
+      { label: 'Cautelas ativas', valor: resumo.cautelas, cor: '#eab308' },
+      { label: 'Manutenção', valor: resumo.manutencao, cor: '#ef4444' },
+      { label: 'Não localizados', valor: resumo.naoLocalizados, cor: '#dc2626' },
+      { label: 'Outras situações', valor: resumo.outros, cor: '#64748b' }
+    ],
+    [resumo]
+  )
+
   return (
     <main className="taser-page">
       <header className="taser-header">
@@ -268,13 +504,24 @@ export default function Taser({ user }) {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="taser-btn-primary"
-          onClick={abrirNovoCadastro}
-        >
-          Novo Taser
-        </button>
+        <div className="taser-hero-actions">
+          <button
+            type="button"
+            className="taser-btn-secondary"
+            onClick={() => Promise.all([carregarTasers(), carregarResumo()])}
+            disabled={loading || loadingResumo}
+          >
+            {loading || loadingResumo ? 'Atualizando...' : 'Atualizar'}
+          </button>
+
+          <button
+            type="button"
+            className="taser-btn-primary"
+            onClick={abrirNovoCadastro}
+          >
+            + Novo Taser
+          </button>
+        </div>
       </header>
 
       {erro && (
@@ -282,6 +529,68 @@ export default function Taser({ user }) {
           {erro}
         </div>
       )}
+
+      <section
+        className="taser-summary-grid"
+        aria-label="Resumo patrimonial dos Tasers"
+      >
+        <ResumoCard
+          titulo="Total de Tasers"
+          valor={resumo.total}
+          detalhe="equipamentos cadastrados"
+          tone="blue"
+        />
+        <ResumoCard
+          titulo="Depósito do P4"
+          valor={resumo.p4}
+          detalhe="sob guarda patrimonial do P4"
+          tone="green"
+        />
+        <ResumoCard
+          titulo="Cofre do SVDD"
+          valor={resumo.svdd}
+          detalhe="sob guarda do Serviço de Dia"
+          tone="cyan"
+        />
+        <ResumoCard
+          titulo="Carga permanente"
+          valor={resumo.cargaPermanente}
+          detalhe="vinculados permanentemente"
+          tone="orange"
+        />
+        <ResumoCard
+          titulo="Cautelas ativas"
+          valor={resumo.cautelas}
+          detalhe="entregas temporárias ativas"
+          tone="yellow"
+        />
+        <ResumoCard
+          titulo="Manutenção"
+          valor={resumo.manutencao}
+          detalhe="temporariamente indisponíveis"
+          tone="red"
+        />
+        <ResumoCard
+          titulo="Não localizados"
+          valor={resumo.naoLocalizados}
+          detalhe="localização pendente"
+          tone="slate"
+        />
+        <ResumoCard
+          titulo="Baixados"
+          valor={resumo.baixados}
+          detalhe="mantidos no histórico"
+          tone="dark"
+        />
+      </section>
+
+      <section
+        className="taser-charts-grid"
+        aria-label="Gráficos patrimoniais dos Tasers"
+      >
+        <GraficoRoscaTaser total={resumo.total} itens={dadosGrafico} />
+        <GraficoBarrasTaser total={resumo.total} itens={dadosGrafico} />
+      </section>
 
       <section className="taser-toolbar">
         <div className="taser-search">
@@ -554,11 +863,32 @@ function TaserDetalhesModal({
     setFotoSelecionada
   ] = useState(fotoPrincipal)
 
+  const [fotoAmpliada, setFotoAmpliada] = useState(null)
+  const [zoomFoto, setZoomFoto] = useState(1)
+
   useEffect(() => {
     setFotoSelecionada(
       fotoPrincipal
     )
   }, [fotoPrincipal])
+
+  useEffect(() => {
+    if (!fotoAmpliada) setZoomFoto(1)
+  }, [fotoAmpliada])
+
+  function alterarZoom(delta) {
+    setZoomFoto((atual) =>
+      Math.max(
+        0.5,
+        Math.min(4, Number((atual + delta).toFixed(2)))
+      )
+    )
+  }
+
+  function handleWheelFoto(event) {
+    event.preventDefault()
+    alterarZoom(event.deltaY < 0 ? 0.1 : -0.1)
+  }
 
   const fotosDisponiveis =
     fotos.length > 0
@@ -676,15 +1006,23 @@ function TaserDetalhesModal({
                 !erroFotos &&
                 fotoSelecionada && (
                   <>
-                    <img
-                      src={fotoSelecionada.url}
-                      alt={
-                        taser.patrimonio ||
-                        taser.numero_serie ||
-                        'Taser'
-                      }
-                      className="taser-modal-photo"
-                    />
+                    <button
+                      type="button"
+                      className="taser-modal-photo-button"
+                      onClick={() => setFotoAmpliada(fotoSelecionada)}
+                      title="Clique para ampliar a foto"
+                      aria-label="Ampliar foto do Taser"
+                    >
+                      <img
+                        src={fotoSelecionada.url}
+                        alt={
+                          taser.patrimonio ||
+                          taser.numero_serie ||
+                          'Taser'
+                        }
+                        className="taser-modal-photo"
+                      />
+                    </button>
 
                     {fotosDisponiveis.length > 1 && (
                       <div className="taser-modal-thumbnails">
@@ -761,6 +1099,88 @@ function TaserDetalhesModal({
             </p>
           </div>
         </div>
+
+        {fotoAmpliada && (
+          <div
+            className="taser-photo-lightbox"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setFotoAmpliada(null)
+              }
+            }}
+          >
+            <section
+              className="taser-photo-lightbox-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Foto ampliada do Taser"
+            >
+              <header>
+                <div>
+                  <span>Foto cadastral do Taser</span>
+                  <h3>{taser.patrimonio || taser.numero_serie || 'Taser'}</h3>
+                  <small>Use a roda do mouse para ampliar ou reduzir.</small>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setFotoAmpliada(null)}
+                  aria-label="Fechar foto ampliada"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div
+                className="taser-photo-lightbox-stage"
+                onWheel={handleWheelFoto}
+              >
+                <img
+                  src={fotoAmpliada.url}
+                  alt={`Foto ampliada do Taser ${
+                    taser.patrimonio || taser.numero_serie || ''
+                  }`}
+                  style={{
+                    transform: `scale(${zoomFoto})`
+                  }}
+                />
+              </div>
+
+              <footer>
+                <button
+                  type="button"
+                  className="taser-btn-secondary"
+                  onClick={() => alterarZoom(-0.1)}
+                >
+                  −
+                </button>
+                <strong>{Math.round(zoomFoto * 100)}%</strong>
+                <button
+                  type="button"
+                  className="taser-btn-secondary"
+                  onClick={() => alterarZoom(0.1)}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="taser-btn-secondary"
+                  onClick={() => setZoomFoto(1)}
+                >
+                  100%
+                </button>
+                <button
+                  type="button"
+                  className="taser-btn-primary taser-photo-lightbox-close"
+                  onClick={() => setFotoAmpliada(null)}
+                >
+                  Fechar
+                </button>
+              </footer>
+            </section>
+          </div>
+        )}
 
         <footer>
           <button

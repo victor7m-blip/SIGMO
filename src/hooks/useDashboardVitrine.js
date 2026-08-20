@@ -17,6 +17,22 @@ import {
   listarTonfas
 } from '../services/tonfasService'
 
+import {
+  listarHTs
+} from '../services/htsService'
+
+import {
+  listarTPDs
+} from '../services/tpdsService'
+
+import {
+  listarTasers
+} from '../services/tasersService'
+
+import {
+  listarManutencoes
+} from '../services/manutencoesService'
+
 const LIMITE = 5000
 
 function normalizar(valor) {
@@ -246,6 +262,28 @@ function resumirTonfas(lista) {
     tonfasDetalhe,
     cassetetesDetalhe
   }
+}
+
+
+function itemIndividualDisponivelSvdd(item) {
+  if (item?.ativo === false) return false
+
+  const status = normalizar(item?.status_operacional || item?.status)
+  const local = normalizar(item?.local_atual)
+
+  if ([
+    'CAUTELADO',
+    'CARGA',
+    'EM SERVICO',
+    'EM_SERVICO',
+    'MANUTENCAO',
+    'BAIXADO',
+    'APREENDIDO'
+  ].includes(status)) {
+    return false
+  }
+
+  return local.includes('COFRE DO SVDD') || local === 'SVDD'
 }
 
 function obterPolicialId(user) {
@@ -522,7 +560,11 @@ export default function useDashboardVitrine(
 
         const [
           armasResultado,
-          tonfasResultado
+          tonfasResultado,
+          htsResultado,
+          tpdsResultado,
+          tasersResultado,
+          manutencoesResultado
         ] = await Promise.all([
           listarArmas({
             pagina: 1,
@@ -531,6 +573,23 @@ export default function useDashboardVitrine(
           listarTonfas({
             pagina: 1,
             limite: LIMITE
+          }),
+          listarHTs({
+            pagina: 1,
+            limite: LIMITE
+          }),
+          listarTPDs({
+            pagina: 1,
+            limite: LIMITE
+          }),
+          listarTasers({
+            pagina: 1,
+            limite: LIMITE
+          }),
+          listarManutencoes({
+            status: 'EM_MANUTENCAO',
+            pagina: 1,
+            limite: 200
           })
         ])
 
@@ -545,20 +604,74 @@ const tonfasResumoOriginal =
     tonfasResultado?.data || []
   )
 
+const individuaisSvddDisponiveis =
+  [
+    ...(htsResultado?.data || []),
+    ...(tpdsResultado?.data || []),
+    ...(tasersResultado?.data || [])
+  ].filter(itemIndividualDisponivelSvdd).length
+
 const tonfasResumo =
   ajustarTonfasPorPerfil(
     tonfasResumoOriginal,
     user
   )
 
+const manutencoesAtivas =
+  manutencoesResultado?.data || []
+
+const manutencaoArmas =
+  manutencoesAtivas
+    .filter(
+      (item) =>
+        normalizar(item?.modulo) ===
+        'ARMAS'
+    )
+    .reduce(
+      (total, item) =>
+        total +
+        Number(item?.quantidade || 1),
+      0
+    )
+
+const manutencaoTonfas =
+  manutencoesAtivas
+    .filter(
+      (item) =>
+        normalizar(item?.modulo) ===
+        'TONFAS'
+    )
+    .reduce(
+      (total, item) =>
+        total +
+        Number(item?.quantidade || 1),
+      0
+    )
+
+const armasResumo =
+  resumirArmas(
+    armasFiltradas
+  )
+
+armasResumo.manutencao =
+  manutencaoArmas
+
+const tonfasGeral = {
+  ...tonfasResumo.geral,
+  manutencao:
+    manutencaoTonfas
+}
+
 setDados({
   armas:
-    resumirArmas(
-      armasFiltradas
-    ),
+    armasResumo,
 
-  tonfas:
-    tonfasResumo.geral,
+  tonfas: {
+    ...tonfasGeral,
+    svdd:
+      Number(tonfasGeral.svdd || 0) +
+      individuaisSvddDisponiveis
+  },
 
   tonfasDetalhe:
     tonfasResumo

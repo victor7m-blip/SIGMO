@@ -217,9 +217,29 @@ export async function carregarCentralOperacional({ user } = {}) {
     'EM ANDAMENTO'
   ]
 
-  const aguardandoRecebimentoBase = movPerfil.filter((item) =>
-    contem(item.status, statusRecebimentoPendente)
-  )
+  const aguardandoRecebimentoBase = movPerfil.filter((item) => {
+    if (!contem(item.status, statusRecebimentoPendente)) return false
+
+    // Recebimentos individuais pertencem exclusivamente ao policial
+    // destinatário. O Administrador pode acompanhar o sistema, mas não deve
+    // enxergar/assumir a confirmação de cautela ou entrega de outro usuário.
+    if (perfil === 'ADMINISTRADOR') {
+      const destino = normalizarSemAcentos(
+        item?.destino_local || item?.destino_nome || item?.destino_codigo
+      )
+      const tipo = normalizarSemAcentos(
+        item?.tipo_movimentacao || item?.tipo
+      )
+
+      const recebimentoIndividual =
+        destino === 'CAUTELA INDIVIDUAL' &&
+        (tipo === 'CAUTELA' || tipo === 'ENTREGA')
+
+      if (recebimentoIndividual) return false
+    }
+
+    return true
+  })
 
   // Só detalhamos as pendências exibidas na Central. Isso permite mostrar
   // destinatário, itens e quantidades sem alterar a Engine de movimentação.

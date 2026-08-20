@@ -978,6 +978,7 @@ function PainelDashboard({
           label="Em manutenção"
           value={manutencaoIntegrada}
           detail="itens em manutenção"
+          onClick={() => onNavegar('manutencoes')}
         />
       </section>
 
@@ -2242,7 +2243,7 @@ export default function DashboardV2({
   const dashboard = useDashboard()
 
   useEffect(() => {
-    if (!ehUsuario(user) || avisoVerificado) return
+    if (!podeAcessarRota(user, 'receber-material') || avisoVerificado) return
 
     let ativo = true
     listarCautelasAguardandoUsuario(user)

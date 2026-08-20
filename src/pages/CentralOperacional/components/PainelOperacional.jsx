@@ -19,6 +19,57 @@ function formatarData(valor) {
   return data.toLocaleString('pt-BR')
 }
 
+function tempoPendente(valor) {
+  if (!valor) return ''
+
+  const data = new Date(valor)
+
+  if (Number.isNaN(data.getTime())) {
+    return ''
+  }
+
+  const agora = new Date()
+
+  const diferencaMs =
+    Math.max(
+      0,
+      agora.getTime() -
+      data.getTime()
+    )
+
+  const minutos =
+    Math.floor(
+      diferencaMs /
+      (1000 * 60)
+    )
+
+  const horas =
+    Math.floor(
+      diferencaMs /
+      (1000 * 60 * 60)
+    )
+
+  const dias =
+    Math.floor(
+      diferencaMs /
+      (1000 * 60 * 60 * 24)
+    )
+
+  if (dias > 0) {
+    return `Pendente há ${dias} ${dias === 1 ? 'dia' : 'dias'}`
+  }
+
+  if (horas > 0) {
+    return `Pendente há ${horas} ${horas === 1 ? 'hora' : 'horas'}`
+  }
+
+  if (minutos > 0) {
+    return `Pendente há ${minutos} min`
+  }
+
+  return 'Registrada agora'
+}
+
 function ehRecebimentoUsuario(secao) {
   return secao?.key === 'recebimentos'
 }
@@ -97,7 +148,28 @@ function tituloItem(item, secao) {
   }
 
   if (ehNovidade(secao)) {
-    return `${item?.tipo_patrimonio || 'Patrimônio'} — ${item?.titulo || 'Novidade patrimonial'}`
+    const identificador =
+      item?.patrimonio ||
+      item?.numero_patrimonio ||
+      item?.numero_serie ||
+      item?.identificador ||
+      item?.referencia ||
+      ''
+
+    const patrimonio =
+      [
+        item?.especie ||
+        item?.especie_patrimonio ||
+        item?.tipo_especifico ||
+        item?.tipo_patrimonio ||
+        'Patrimônio',
+        identificador
+      ]
+        .map(texto)
+        .filter(Boolean)
+        .join(' — ')
+
+    return `${patrimonio} — ${item?.titulo || 'Novidade patrimonial'}`
   }
 
   if (ehIndicadorPatrimonio(secao)) {
@@ -187,6 +259,9 @@ function detalheItem(item, secao) {
   if (ehNovidade(secao)) {
     return [
       item?.descricao,
+      item?.providencia || item?.providencia_sugerida
+        ? `PROVIDÊNCIA SUGERIDA: ${item?.providencia || item?.providencia_sugerida}`
+        : '',
       item?.gravidade,
       item?.status,
       item?.registrado_por_nome
@@ -377,6 +452,21 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                       <strong>{tituloItem(item, selecionado)}</strong>
                       <p>{detalheItem(item, selecionado) || 'Sem informações complementares.'}</p>
 
+                      {ehNovidade(selecionado) && (
+                        <div
+                          style={{
+                            marginTop: '6px',
+                            fontWeight: 800,
+                            color: '#dc2626'
+                          }}
+                        >
+                          {tempoPendente(
+                            item?.created_at ||
+                            item?.updated_at
+                          )}
+                        </div>
+                      )}
+
                       {registroAberto === (item?.id || index) && (
                         <div className="central-registro-detalhes">
                           {ehIndicadorPatrimonio(selecionado) ? (
@@ -390,12 +480,19 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                             </>
                           ) : ehNovidade(selecionado) ? (
                             <>
-                              <div><span>Patrimônio</span><strong>{item?.tipo_patrimonio || 'Não informado'}</strong></div>
+                              <div><span>Tipo de patrimônio</span><strong>{item?.especie || item?.especie_patrimonio || item?.tipo_especifico || item?.tipo_patrimonio || 'Não informado'}</strong></div>
+                              <div><span>Patrimônio / Nº de série</span><strong>{item?.patrimonio || item?.numero_patrimonio || item?.numero_serie || item?.identificador || item?.referencia || 'Não informado'}</strong></div>
                               <div><span>Ocorrência</span><strong>{item?.titulo || 'Novidade patrimonial'}</strong></div>
                               <div><span>Gravidade</span><strong>{item?.gravidade || 'Não informada'}</strong></div>
                               <div><span>Status</span><strong>{item?.status || 'Registrada'}</strong></div>
                               <div><span>Registrado por</span><strong>{item?.registrado_por_nome || 'Não informado'}</strong></div>
                               <div><span>Data / hora</span><strong>{formatarData(item?.created_at)}</strong></div>
+                              <div>
+                                <span>Tempo aguardando providência</span>
+                                <strong style={{ color: '#dc2626', fontWeight: 800 }}>
+                                  {tempoPendente(item?.created_at || item?.updated_at) || 'Não informado'}
+                                </strong>
+                              </div>
                               <div className="central-registro-itens"><span>Descrição</span><strong>{item?.descricao || 'Sem descrição.'}</strong></div>
                               {(item?.providencia || item?.providencia_sugerida) && (
                                 <div className="central-registro-itens"><span>Providência sugerida</span><strong>{item?.providencia || item?.providencia_sugerida}</strong></div>

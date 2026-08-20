@@ -59,19 +59,7 @@ if (!manutencao) return null
         <header>
           <div>
             <span>CENTRAL DE MANUTENÇÕES</span>
-            <h2>
-              {manutencao.tipo_material || 'Material'}
-              {(manutencao.numero_serie || manutencao.patrimonio) && (
-                <> · {manutencao.numero_serie || manutencao.patrimonio}</>
-              )}
-            </h2>
-            {(manutencao.marca || manutencao.modelo || manutencao.calibre) && (
-              <small>
-                {[manutencao.marca, manutencao.modelo, manutencao.calibre]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </small>
-            )}
+            <h2>{manutencao.tipo_material || 'Material'}</h2>
           </div>
           <button type="button" onClick={onFechar} aria-label="Fechar">×</button>
         </header>

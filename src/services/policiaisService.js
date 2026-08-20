@@ -962,6 +962,90 @@ async function garantirUsuarioExterno({
   return resultado.usuario_id
 }
 
+
+async function criarUsuarioInterno({
+  policialId,
+  pin,
+  perfil,
+  ativo = true,
+  user = null
+}) {
+  if (!policialId) {
+    throw new Error(
+      'Policial cadastrado não identificado.'
+    )
+  }
+
+  const operadorUsuarioId =
+    user?.user_id ||
+    user?.usuario_id ||
+    null
+
+  if (!operadorUsuarioId) {
+    throw new Error(
+      'Usuário operador não identificado. Saia e entre novamente no SIGMO.'
+    )
+  }
+
+  const pinLimpo = String(pin ?? '')
+    .replace(/\D/g, '')
+    .slice(0, 6)
+
+  if (pinLimpo.length !== 6) {
+    throw new Error(
+      'PIN temporário inválido para criação do usuário.'
+    )
+  }
+
+  const perfilFinal =
+    normalizarTexto(perfil) ||
+    'USUÁRIO'
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_garantir_usuario_interno',
+    {
+      p_operador_usuario_id:
+        operadorUsuarioId,
+
+      p_policial_id:
+        policialId,
+
+      p_perfil:
+        perfilFinal,
+
+      p_pin:
+        pinLimpo,
+
+      p_ativo:
+        Boolean(ativo)
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      error?.details ||
+      'Não foi possível criar o acesso do usuário interno.'
+    )
+  }
+
+  const resultado =
+    Array.isArray(data)
+      ? data[0]
+      : data
+
+  if (!resultado?.usuario_id) {
+    throw new Error(
+      'O banco não confirmou a criação do usuário SIGMO.'
+    )
+  }
+
+  return resultado.usuario_id
+}
+
 export async function cadastrarPolicial(
   payload,
   user = null
@@ -1007,23 +1091,37 @@ export async function cadastrarPolicial(
 
   if (error) throw error
 
-  if (externo) {
-    try {
+  try {
+    if (externo) {
       await garantirUsuarioExterno({
-  policialId: data.id,
-  pin: pinTemporario,
-  ativo:
-    payloadFinal.situacao !==
-    'INATIVO',
-  user
-})
-    } catch (usuarioError) {
-      await supabase.from(TABLE).delete().eq('id', data.id)
-      throw new Error(
-        usuarioError?.message ||
-        'Não foi possível criar o acesso do usuário externo.'
-      )
+        policialId: data.id,
+        pin: pinTemporario,
+        ativo:
+          payloadFinal.situacao !==
+          'INATIVO',
+        user
+      })
+    } else {
+      await criarUsuarioInterno({
+        policialId: data.id,
+        pin: pinTemporario,
+        perfil: payloadFinal.perfil,
+        ativo:
+          payloadFinal.situacao !==
+          'INATIVO',
+        user
+      })
     }
+  } catch (usuarioError) {
+    await supabase
+      .from(TABLE)
+      .delete()
+      .eq('id', data.id)
+
+    throw new Error(
+      usuarioError?.message ||
+      'Não foi possível criar o acesso do usuário no SIGMO.'
+    )
   }
 
   return {

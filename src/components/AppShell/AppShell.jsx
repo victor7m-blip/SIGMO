@@ -164,8 +164,11 @@ const perfilNormalizado =
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 
-const ehUsuarioComum =
-  perfilNormalizado === 'USUARIO'
+const deveExibirCadastro =
+  podeAcessarRota(
+    user,
+    'policiais'
+  )
 
 const perfilTemporario =
   possuiPerfilTemporarioAtivo(
@@ -396,7 +399,7 @@ const tempoRestanteTemporario =
 
               const labelExibido =
               item.key === 'policiais' &&
-              ehUsuarioComum
+              deveExibirCadastro
               ? 'Cadastro'
               : item.label
 

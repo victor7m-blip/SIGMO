@@ -69,18 +69,7 @@ export default function ManutencaoCard({
 
             <h3>
               {manutencao.tipo_material || 'Material'}
-              {(manutencao.numero_serie || manutencao.patrimonio) && (
-                <> · {manutencao.numero_serie || manutencao.patrimonio}</>
-              )}
             </h3>
-
-            {(manutencao.marca || manutencao.modelo || manutencao.calibre) && (
-              <small>
-                {[manutencao.marca, manutencao.modelo, manutencao.calibre]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </small>
-            )}
           </div>
 
           <span

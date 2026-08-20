@@ -506,7 +506,9 @@ export default function ReceberMaterial({
                     patrimonio?.tipo ||
                     itemMov?.tipo_patrimonio ||
                     'PATRIMÔNIO',
-                  local_origem: null,
+                  local_origem:
+                    devolucao?.destino_local ||
+                    null,
                   local_atual:
                     patrimonio?.local_atual ||
                     'CAUTELA INDIVIDUAL',

@@ -17,6 +17,12 @@ import {
   registerAudit
 } from '../../../services/auditoriaService'
 
+import {
+  concederPerfilTemporario,
+  PERFIS_TEMPORARIOS,
+  DURACAO_PADRAO_AUXILIAR_HORAS
+} from '../../../features/perfisTemporarios/services/perfisTemporariosService'
+
 import PolicialFotos from './PolicialFotos'
 
 const initialForm = {
@@ -995,7 +1001,7 @@ export default function PolicialForm({
 
         if (
           !perfilAtualEhUsuario ||
-          perfilNovo !== 'AUXILIAR DO SVDD'
+          perfilNovo !== PERFIS_TEMPORARIOS.AUXILIAR_SVDD_TEMPORARIO
         ) {
           return
         }
@@ -1256,8 +1262,10 @@ export default function PolicialForm({
         let payloadPermitido =
           payload
 
+        let concederAuxiliarTemporario = false
+
         if (svddEditandoCadastro) {
-          const podePromoverParaAuxiliar =
+          concederAuxiliarTemporario =
             ['USUÁRIO', 'USUARIO'].includes(
               String(dadosAnteriores.perfil || '')
                 .trim()
@@ -1266,15 +1274,15 @@ export default function PolicialForm({
             String(payload.perfil || '')
               .trim()
               .toUpperCase() ===
-              'AUXILIAR DO SVDD'
+              PERFIS_TEMPORARIOS.AUXILIAR_SVDD_TEMPORARIO
 
           payloadPermitido = {
             ...dadosAnteriores,
             companhia: payload.companhia,
             pelotao: payload.pelotao,
-            perfil: podePromoverParaAuxiliar
-              ? 'AUXILIAR DO SVDD'
-              : dadosAnteriores.perfil
+            // O perfil permanente continua USUÁRIO.
+            // A função de Auxiliar SVDD é concedida separadamente por 13 horas.
+            perfil: dadosAnteriores.perfil
           }
         }
 
@@ -1371,6 +1379,31 @@ export default function PolicialForm({
   user
 )
 
+        if (concederAuxiliarTemporario) {
+          await concederPerfilTemporario({
+            policialRe: policialEditando.re,
+            policialNome: policialEditando.nome || policialEditando.nome_guerra || '',
+            perfil: PERFIS_TEMPORARIOS.AUXILIAR_SVDD_TEMPORARIO,
+            setor: 'SVDD',
+            concedidoPorRe: reUsuario,
+            concedidoPorNome: obterNomeUsuario(user),
+            motivo: 'Designação temporária pelo Encarregado do SVDD.',
+            duracaoHoras: DURACAO_PADRAO_AUXILIAR_HORAS,
+            metadados: {
+              origem: 'CADASTRO_POLICIAL',
+              policial_id: policialEditando.id
+            }
+          })
+
+          await registrarAuditoriaSegura({
+            acao: 'CONCEDER_PERFIL_TEMPORARIO',
+            descricao:
+              `${obterNomeUsuario(user)} concedeu perfil de Auxiliar do SVDD por ${DURACAO_PADRAO_AUXILIAR_HORAS} horas para ${policialEditando.nome || policialEditando.nome_guerra || policialEditando.re}.`,
+            modulo: 'Policiais',
+            severidade: 'Informativo'
+          })
+        }
+
         if (
           alteracoes.length >
           0
@@ -1407,9 +1440,11 @@ export default function PolicialForm({
         )
 
         setSucesso(
-          alteracoes.length > 0
-            ? 'Dados do policial atualizados com sucesso.'
-            : 'Nenhuma alteração foi identificada.'
+          concederAuxiliarTemporario
+            ? `Perfil de Auxiliar do SVDD concedido por ${DURACAO_PADRAO_AUXILIAR_HORAS} horas.`
+            : alteracoes.length > 0
+              ? 'Dados do policial atualizados com sucesso.'
+              : 'Nenhuma alteração foi identificada.'
         )
 
         onSaved?.(
@@ -1597,7 +1632,9 @@ export default function PolicialForm({
                 .filter(
                   (item) =>
                     !(usuarioEhAuxiliar || usuarioEhEncarregado) ||
-                    item.valor !== 'POLICIAL_27_BPM'
+                    item.valor !== 'POLICIAL_27_BPM' ||
+                    (Boolean(policialEditando) &&
+                      form.tipo_cadastro === 'POLICIAL_27_BPM')
                 )
                 .map((item) => (
                   <option key={item.valor} value={item.valor}>
@@ -1900,7 +1937,7 @@ export default function PolicialForm({
               {(svddEditandoCadastro
                 ? (
                     perfilAtualEhUsuario
-                      ? ['USUÁRIO', 'AUXILIAR DO SVDD']
+                      ? ['USUÁRIO', PERFIS_TEMPORARIOS.AUXILIAR_SVDD_TEMPORARIO]
                       : [form.perfil]
                   )
                 : perfis
@@ -1910,7 +1947,9 @@ export default function PolicialForm({
                     key={item}
                     value={item}
                   >
-                    {item}
+                    {item === PERFIS_TEMPORARIOS.AUXILIAR_SVDD_TEMPORARIO
+                      ? `AUXILIAR DO SVDD — TEMPORÁRIO (${DURACAO_PADRAO_AUXILIAR_HORAS}H)`
+                      : item}
                   </option>
                 )
               )}

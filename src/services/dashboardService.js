@@ -59,7 +59,47 @@ function objeto(valor) {
   }
 }
 
+function patrimonioPermiteResponsavelAtual(item) {
+  const statusAtual =
+    normalizarMaiusculo(
+      item?.status ||
+      item?.status_operacional ||
+      ''
+    )
+
+  const localAtual =
+    normalizarMaiusculo(
+      item?.local_atual ||
+      item?.local ||
+      ''
+    )
+
+  // O estado operacional vigente da tabela central prevalece sobre
+  // snapshots históricos existentes em `dados` ou na tabela de referência.
+  if (
+    statusAtual.includes('RESERVA') ||
+    localAtual.includes('COFRE')
+  ) {
+    return false
+  }
+
+  return (
+    statusAtual.includes('CARGA') ||
+    statusAtual.includes('CAUTELA') ||
+    statusAtual.includes('EM_SERVICO') ||
+    statusAtual.includes('EM SERVIÇO') ||
+    localAtual.includes('CAUTELA')
+  )
+}
+
 function obterResponsavel(item) {
+  if (!patrimonioPermiteResponsavelAtual(item)) {
+    return {
+      re: '',
+      nome: ''
+    }
+  }
+
   const dados = objeto(item?.dados)
 
   return {
@@ -70,6 +110,7 @@ function obterResponsavel(item) {
       dados.re_responsavel ||
       dados.recebedor_re ||
       dados.policial_re ||
+      dados.carga_policial_re ||
       '',
 
     nome:
@@ -79,6 +120,7 @@ function obterResponsavel(item) {
       dados.nome_responsavel ||
       dados.recebedor_nome ||
       dados.policial_nome ||
+      dados.carga_policial_nome ||
       ''
   }
 }
@@ -339,6 +381,116 @@ export async function listarNovidadesPatrimoniais({
       .push(foto)
   }
 
+  // patrimonio_id da novidade aponta para sigmo_patrimonios.id.
+  // Primeiro enriquecemos pela tabela central; depois, quando houver
+  // referencia_id, buscamos o registro específico do módulo.
+  const patrimonioIds = [
+    ...new Set(
+      novidades
+        .map(
+          (item) =>
+            item?.patrimonio_id
+        )
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  let patrimoniosPorId =
+    new Map()
+
+  if (patrimonioIds.length > 0) {
+    const {
+      data: patrimonios,
+      error: patrimoniosError
+    } = await supabase
+      .from(PATRIMONIOS_TABLE)
+      .select('*')
+      .in(
+        'id',
+        patrimonioIds
+      )
+
+    if (patrimoniosError) {
+      console.warn(
+        'Não foi possível enriquecer as novidades com o patrimônio central:',
+        patrimoniosError
+      )
+    } else {
+      patrimoniosPorId =
+        new Map(
+          (patrimonios ?? []).map(
+            (patrimonio) => [
+              String(patrimonio.id),
+              patrimonio
+            ]
+          )
+        )
+    }
+  }
+
+  const idsReferenciaPorTabela =
+    new Map()
+
+  for (const patrimonio of patrimoniosPorId.values()) {
+    const tipo =
+      normalizarTipo(
+        patrimonio?.tipo
+      )
+
+    const tabela =
+      TABELAS_REFERENCIA[tipo]
+
+    const referenciaId =
+      patrimonio?.referencia_id
+
+    if (
+      !tabela ||
+      !referenciaId
+    ) {
+      continue
+    }
+
+    if (!idsReferenciaPorTabela.has(tabela)) {
+      idsReferenciaPorTabela.set(
+        tabela,
+        new Set()
+      )
+    }
+
+    idsReferenciaPorTabela
+      .get(tabela)
+      .add(
+        String(referenciaId)
+      )
+  }
+
+  const referenciasPorTabela =
+    new Map()
+
+  for (
+    const [tabela, idsSet]
+    of idsReferenciaPorTabela.entries()
+  ) {
+    const registros =
+      await buscarRegistrosReferencia(
+        tabela,
+        [...idsSet]
+      )
+
+    referenciasPorTabela.set(
+      tabela,
+      new Map(
+        registros.map(
+          (registro) => [
+            String(registro.id),
+            registro
+          ]
+        )
+      )
+    )
+  }
+
   return novidades.map(
     (item) => {
       const fotosItem =
@@ -346,10 +498,89 @@ export async function listarNovidadesPatrimoniais({
           String(item?.id || '')
         ) || []
 
+      const patrimonioCentral =
+        patrimoniosPorId.get(
+          String(
+            item?.patrimonio_id ||
+            ''
+          )
+        ) || null
+
+      const tipo =
+        normalizarTipo(
+          patrimonioCentral?.tipo ||
+          item?.tipo_patrimonio
+        )
+
+      const tabela =
+        TABELAS_REFERENCIA[tipo]
+
+      const registroReferencia =
+        tabela &&
+        patrimonioCentral?.referencia_id
+          ? referenciasPorTabela
+              .get(tabela)
+              ?.get(
+                String(
+                  patrimonioCentral.referencia_id
+                )
+              ) || null
+          : null
+
+      const dadosCentral =
+        objeto(
+          patrimonioCentral?.dados
+        )
+
+      const identificacao =
+        normalizarTexto(
+          registroReferencia?.patrimonio ||
+          registroReferencia?.numero_serie ||
+          registroReferencia?.numero_patrimonio ||
+          patrimonioCentral?.identificador ||
+          patrimonioCentral?.numero_patrimonio ||
+          patrimonioCentral?.patrimonio ||
+          patrimonioCentral?.numero_serie ||
+          dadosCentral?.numero_patrimonio ||
+          dadosCentral?.patrimonio ||
+          dadosCentral?.numero_serie ||
+          ''
+        )
+
+      const numeroSerie =
+        normalizarTexto(
+          registroReferencia?.numero_serie ||
+          patrimonioCentral?.numero_serie ||
+          dadosCentral?.numero_serie ||
+          identificacao
+        )
+
       return {
         ...item,
+
+        patrimonio:
+          item?.patrimonio ||
+          identificacao ||
+          null,
+
+        numero_serie:
+          item?.numero_serie ||
+          numeroSerie ||
+          null,
+
+        especie:
+          item?.especie ||
+          registroReferencia?.especie ||
+          null,
+
+        referencia_id:
+          item?.referencia_id ||
+          patrimonioCentral?.referencia_id ||
+          null,
+
         fotos:
           fotosItem,
+
         foto_url:
           fotosItem.find(
             (foto) =>
@@ -587,31 +818,23 @@ export async function listarCategoriasOperacionais() {
         item.status
       )
 
-    const responsavel =
-      obterResponsavel(item)
-
-    const localAtual =
-      obterLocalAtual(item)
-
-    const comPolicial =
-      Boolean(
-        responsavel.re ||
-        responsavel.nome
+    const itemClassificado =
+      mesclarPatrimonio(
+        item,
+        null
       )
 
+    const comPolicial =
+      itemClassificado.com_policial
+
     const noCofre =
-      !comPolicial &&
-      localEhCofre(localAtual)
+      itemClassificado.no_cofre
 
     const localizado =
-      !comPolicial &&
-      !noCofre &&
-      localEhValido(localAtual)
+      itemClassificado.localizado
 
     const semLocalizacao =
-      !comPolicial &&
-      !noCofre &&
-      !localizado
+      itemClassificado.sem_localizacao
 
     categoria.total += 1
 

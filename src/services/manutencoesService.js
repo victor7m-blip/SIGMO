@@ -713,8 +713,188 @@ export async function listarManutencoes({
 
   if (error) throw error
 
+  const manutencoes = (data || []).map(normalizarManutencao)
+
+  const referenciasArmas = [...new Set(
+    manutencoes
+      .filter((item) =>
+        item.modulo === MODULOS_MANUTENCAO.ARMAS &&
+        item.referencia_id
+      )
+      .map((item) => String(item.referencia_id))
+  )]
+
+  const referenciasTPD = [...new Set(
+    manutencoes
+      .filter((item) =>
+        item.modulo === MODULOS_MANUTENCAO.TPD &&
+        item.referencia_id
+      )
+      .map((item) => String(item.referencia_id))
+  )]
+
+  const referenciasHT = [...new Set(
+    manutencoes
+      .filter((item) =>
+        item.modulo === MODULOS_MANUTENCAO.HT &&
+        item.referencia_id
+      )
+      .map((item) => String(item.referencia_id))
+  )]
+
+  const referenciasTaser = [...new Set(
+    manutencoes
+      .filter((item) =>
+        item.modulo === MODULOS_MANUTENCAO.TASER &&
+        item.referencia_id
+      )
+      .map((item) => String(item.referencia_id))
+  )]
+
+  let armasPorId = new Map()
+  let htsPorId = new Map()
+  let tpdsPorId = new Map()
+  let tasersPorId = new Map()
+
+  if (referenciasArmas.length > 0) {
+    const { data: armas, error: armasError } = await supabase
+      .from('sigmo_armas')
+      .select('id, patrimonio, numero_serie, especie, marca, modelo, calibre')
+      .in('id', referenciasArmas)
+
+    if (armasError) {
+      console.warn(
+        'Não foi possível carregar a identificação das armas em manutenção:',
+        armasError
+      )
+    } else {
+      armasPorId = new Map(
+        (armas || []).map((arma) => [String(arma.id), arma])
+      )
+    }
+  }
+
+  if (referenciasHT.length > 0) {
+    const { data: hts, error: htsError } = await supabase
+      .from('sigmo_hts')
+      .select('id, patrimonio, numero_serie, marca, modelo, tipo_ht')
+      .in('id', referenciasHT)
+
+    if (htsError) {
+      console.warn(
+        'Não foi possível carregar a identificação dos HTs em manutenção:',
+        htsError
+      )
+    } else {
+      htsPorId = new Map(
+        (hts || []).map((ht) => [String(ht.id), ht])
+      )
+    }
+  }
+
+  if (referenciasTPD.length > 0) {
+    const { data: tpds, error: tpdsError } = await supabase
+      .from('sigmo_tpds')
+      .select('id, patrimonio, numero_serie, marca, modelo, tipo_equipamento')
+      .in('id', referenciasTPD)
+
+    if (tpdsError) {
+      console.warn(
+        'Não foi possível carregar a identificação dos TPDs em manutenção:',
+        tpdsError
+      )
+    } else {
+      tpdsPorId = new Map(
+        (tpds || []).map((tpd) => [String(tpd.id), tpd])
+      )
+    }
+  }
+
+  if (referenciasTaser.length > 0) {
+    const { data: tasers, error: tasersError } = await supabase
+      .from('sigmo_tasers')
+      .select('id, patrimonio, numero_serie, marca, modelo, tipo_taser')
+      .in('id', referenciasTaser)
+
+    if (tasersError) {
+      console.warn(
+        'Não foi possível carregar a identificação dos Tasers em manutenção:',
+        tasersError
+      )
+    } else {
+      tasersPorId = new Map(
+        (tasers || []).map((taser) => [String(taser.id), taser])
+      )
+    }
+  }
+
   return {
-    data: (data || []).map(normalizarManutencao),
+    data: manutencoes.map((item) => {
+      if (!item.referencia_id) {
+        return item
+      }
+
+      const referenciaId = String(item.referencia_id)
+
+      if (item.modulo === MODULOS_MANUTENCAO.ARMAS) {
+        const arma = armasPorId.get(referenciaId)
+        if (!arma) return item
+
+        return {
+          ...item,
+          patrimonio: arma.patrimonio || null,
+          numero_serie: arma.numero_serie || null,
+          especie: arma.especie || null,
+          marca: arma.marca || null,
+          modelo: arma.modelo || null,
+          calibre: arma.calibre || null
+        }
+      }
+
+      if (item.modulo === MODULOS_MANUTENCAO.HT) {
+        const ht = htsPorId.get(referenciaId)
+        if (!ht) return item
+
+        return {
+          ...item,
+          patrimonio: ht.patrimonio || null,
+          numero_serie: ht.numero_serie || null,
+          marca: ht.marca || null,
+          modelo: ht.modelo || null,
+          tipo_ht: ht.tipo_ht || null
+        }
+      }
+
+      if (item.modulo === MODULOS_MANUTENCAO.TPD) {
+        const tpd = tpdsPorId.get(referenciaId)
+        if (!tpd) return item
+
+        return {
+          ...item,
+          patrimonio: tpd.patrimonio || null,
+          numero_serie: tpd.numero_serie || null,
+          marca: tpd.marca || null,
+          modelo: tpd.modelo || null,
+          tipo_equipamento: tpd.tipo_equipamento || null
+        }
+      }
+
+      if (item.modulo === MODULOS_MANUTENCAO.TASER) {
+        const taser = tasersPorId.get(referenciaId)
+        if (!taser) return item
+
+        return {
+          ...item,
+          patrimonio: taser.patrimonio || null,
+          numero_serie: taser.numero_serie || null,
+          marca: taser.marca || null,
+          modelo: taser.modelo || null,
+          tipo_taser: taser.tipo_taser || null
+        }
+      }
+
+      return item
+    }),
     total: count || 0,
     pagina: paginaValida,
     limite: limiteValido

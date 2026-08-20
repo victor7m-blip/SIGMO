@@ -20,6 +20,7 @@ import {
 
 import { carregarCentralOperacional } from '../../services/centralOperacionalService'
 import { listarTonfas } from '../../services/tonfasService'
+import { listarCautelasAtivas } from '../../services/tonfasMovimentacoesService'
 import {
   ehEncarregado,
   ehAuxiliar
@@ -95,19 +96,65 @@ function obterNomePatrimonio(patrimonio) {
 }
 
 function obterStatusPatrimonio(patrimonio) {
+  const dados = obterDadosPatrimonio(patrimonio)
+
   return normalizarMaiusculo(
-    patrimonio?.status || 'SEM STATUS'
+    patrimonio?.status ||
+    patrimonio?.status_operacional ||
+    dados.status ||
+    dados.status_operacional ||
+    'SEM STATUS'
+  )
+}
+
+function patrimonioPermiteResponsavelAtual(patrimonio) {
+  const statusAtual = normalizarMaiusculo(
+    patrimonio?.status ||
+    patrimonio?.status_operacional ||
+    ''
+  )
+
+  const localAtual = normalizarMaiusculo(
+    patrimonio?.local_atual ||
+    patrimonio?.local ||
+    ''
+  )
+
+  // Estado/local atual prevalece sobre qualquer snapshot histórico.
+  // Patrimônio em RESERVA ou no COFRE não pode permanecer vinculado
+  // operacionalmente a policial por causa de carga antiga em `dados`.
+  if (
+    statusAtual.includes('RESERVA') ||
+    localAtual.includes('COFRE')
+  ) {
+    return false
+  }
+
+  return (
+    statusAtual.includes('CARGA') ||
+    statusAtual.includes('CAUTELA') ||
+    statusAtual.includes('EM_SERVICO') ||
+    statusAtual.includes('EM SERVIÇO') ||
+    localAtual.includes('CAUTELA')
   )
 }
 
 function obterResponsavelNome(patrimonio) {
+  if (!patrimonioPermiteResponsavelAtual(patrimonio)) {
+    return ''
+  }
+
   const dados = obterDadosPatrimonio(patrimonio)
 
   return (
+    patrimonio?.responsavel_atual_nome ||
     patrimonio?.responsavel_nome ||
     patrimonio?.nome_responsavel ||
+    patrimonio?.carga_policial_nome ||
+    dados.responsavel_atual_nome ||
     dados.responsavel_nome ||
     dados.nome_responsavel ||
+    dados.carga_policial_nome ||
     dados.recebedor_nome ||
     dados.policial_nome ||
     ''
@@ -115,15 +162,43 @@ function obterResponsavelNome(patrimonio) {
 }
 
 function obterResponsavelRe(patrimonio) {
+  if (!patrimonioPermiteResponsavelAtual(patrimonio)) {
+    return ''
+  }
+
   const dados = obterDadosPatrimonio(patrimonio)
 
   return (
+    patrimonio?.responsavel_atual_re ||
     patrimonio?.responsavel_re ||
     patrimonio?.re_responsavel ||
+    patrimonio?.carga_policial_re ||
+    dados.responsavel_atual_re ||
     dados.responsavel_re ||
     dados.re_responsavel ||
+    dados.carga_policial_re ||
     dados.recebedor_re ||
     dados.policial_re ||
+    ''
+  )
+}
+
+function obterResponsavelId(patrimonio) {
+  if (!patrimonioPermiteResponsavelAtual(patrimonio)) {
+    return ''
+  }
+
+  const dados = obterDadosPatrimonio(patrimonio)
+
+  return (
+    patrimonio?.responsavel_atual_id ||
+    patrimonio?.responsavel_id ||
+    patrimonio?.carga_policial_id ||
+    patrimonio?.policial_id ||
+    dados.responsavel_atual_id ||
+    dados.responsavel_id ||
+    dados.carga_policial_id ||
+    dados.policial_id ||
     ''
   )
 }
@@ -131,6 +206,9 @@ function obterResponsavelRe(patrimonio) {
 function obterLocalAtual(patrimonio) {
   const dados = obterDadosPatrimonio(patrimonio)
 
+  // A linha atual de sigmo_patrimonios é a fonte operacional vigente.
+  // O JSON `dados` funciona apenas como fallback, pois pode guardar
+  // snapshots antigos de cautela, carga ou localização.
   return (
     patrimonio?.local_atual ||
     patrimonio?.local ||
@@ -155,14 +233,19 @@ function normalizarPatrimonio(patrimonio) {
   const noCofre =
     normalizarMaiusculo(localAtual).includes('COFRE')
 
+  const responsavelId =
+    obterResponsavelId(patrimonio)
+
   const comPolicial = Boolean(
-    responsavelNome || responsavelRe
+    responsavelId || responsavelNome || responsavelRe
   )
 
   return {
     ...dados,
     ...patrimonio,
 
+    // `dados` pode conter snapshot histórico. Os campos operacionais
+    // abaixo são sempre recalculados a partir do estado vigente.
     dados,
 
     identificador:
@@ -173,6 +256,9 @@ function normalizarPatrimonio(patrimonio) {
 
     status_operacional:
       obterStatusPatrimonio(patrimonio),
+
+    responsavel_id:
+      responsavelId,
 
     responsavel_nome:
       responsavelNome,
@@ -343,24 +429,72 @@ function resumirCategoriaPorPatrimonios(categoria, patrimonios) {
 }
 
 
-function resumoTonfasSVDD(lista = []) {
-  const linhas = Array.isArray(lista) ? lista : []
+function normalizarSemAcento(valor) {
+  return normalizarMaiusculo(valor)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
 
-  const somar = (campo) =>
-    linhas.reduce(
-      (total, item) =>
-        total + Number(item?.[campo] || 0),
-      0
+function filtrarTonfasPorTipo(lista = [], tipoMaterial = '') {
+  const tipo = normalizarSemAcento(tipoMaterial)
+
+  return (Array.isArray(lista) ? lista : []).filter(
+    (item) => normalizarSemAcento(item?.tipo) === tipo
+  )
+}
+
+function somarSaldoTonfas(lista = [], campo) {
+  return (Array.isArray(lista) ? lista : []).reduce(
+    (total, item) =>
+      total + Number(item?.[campo] || 0),
+    0
+  )
+}
+
+function criarResumoQuantitativo({
+  lista = [],
+  tipoMaterial,
+  visaoSVDD = false
+}) {
+  const linhas = filtrarTonfasPorTipo(
+    lista,
+    tipoMaterial
+  )
+
+  const noP4 = visaoSVDD
+    ? 0
+    : somarSaldoTonfas(linhas, 'quantidade_p4')
+
+  const noSVDD =
+    somarSaldoTonfas(linhas, 'quantidade_svdd')
+
+  const emServico =
+    somarSaldoTonfas(
+      linhas,
+      'quantidade_em_servico'
     )
 
-  const noCofre = somar('quantidade_svdd')
-  const emServico = somar('quantidade_em_servico')
-  const manutencao = somar('quantidade_manutencao')
-  const total = noCofre + emServico + manutencao
+  const manutencao =
+    somarSaldoTonfas(
+      linhas,
+      'quantidade_manutencao'
+    )
+
+  const noCofre = noP4 + noSVDD
+  const total =
+    noCofre + emServico + manutencao
 
   return normalizarCategoria({
-    tipo: 'tonfa',
-    categoria: 'TONFA / CASSETETE',
+    tipo:
+      normalizarSemAcento(tipoMaterial) ===
+      'CASSETETE'
+        ? 'cassetete'
+        : 'tonfa',
+    tipo_consulta: 'tonfa',
+    tipo_material:
+      normalizarSemAcento(tipoMaterial),
+    categoria:
+      normalizarSemAcento(tipoMaterial),
     total,
     com_policial: emServico,
     no_cofre: noCofre,
@@ -368,6 +502,34 @@ function resumoTonfasSVDD(lista = []) {
     divergencias: 0,
     quantitativo: true
   })
+}
+
+function resumoTonfasGeral(lista = []) {
+  return [
+    criarResumoQuantitativo({
+      lista,
+      tipoMaterial: 'TONFA'
+    }),
+    criarResumoQuantitativo({
+      lista,
+      tipoMaterial: 'CASSETETE'
+    })
+  ]
+}
+
+function resumoTonfasSVDD(lista = []) {
+  return [
+    criarResumoQuantitativo({
+      lista,
+      tipoMaterial: 'TONFA',
+      visaoSVDD: true
+    }),
+    criarResumoQuantitativo({
+      lista,
+      tipoMaterial: 'CASSETETE',
+      visaoSVDD: true
+    })
+  ]
 }
 
 function CentralOperacional({ user }) {
@@ -437,19 +599,19 @@ function CentralOperacional({ user }) {
       setDashboard(dadosDashboard)
       setOperacional(dadosOperacionais)
 
+      const categoriasBase =
+        (dadosCategorias ?? []).map(
+          normalizarCategoria
+        )
+
+      const tonfasResultado =
+        await listarTonfas({
+          pagina: 1,
+          limite: 5000
+        })
+
       if (visaoSVDD) {
-        const categoriasBase =
-          (dadosCategorias ?? []).map(
-            normalizarCategoria
-          )
-
-        const tonfasResultado =
-          await listarTonfas({
-            pagina: 1,
-            limite: 5000
-          })
-
-        const categoriaTonfas =
+        const categoriasTonfas =
           resumoTonfasSVDD(
             tonfasResultado?.data || []
           )
@@ -484,16 +646,51 @@ function CentralOperacional({ user }) {
         setCategorias(
           [
             ...categoriasComEscopo,
-            categoriaTonfas
+            ...categoriasTonfas
           ].filter(
             (categoria) =>
               Number(categoria.total || 0) > 0
           )
         )
       } else {
+        const categoriasTonfas =
+          resumoTonfasGeral(
+            tonfasResultado?.data || []
+          )
+
+        // Na visão geral, os quantitativos de TONFA/CASSETETE vêm do
+        // estoque próprio. Para os patrimônios individualizados, porém,
+        // a Central deve classificar usando a situação atual retornada
+        // pelo módulo de origem (HT, Taser, TPD, Armas etc.), evitando
+        // que registros antigos da central apareçam como "sem localização".
+        const categoriasIndividualizadas =
+          await Promise.all(
+            categoriasBase
+              .filter(
+                (categoria) =>
+                  categoria.tipo !== 'tonfa' &&
+                  categoria.tipo !== 'cassetete'
+              )
+              .map(async (categoria) => {
+                const lista =
+                  await listarPatrimoniosCategoria(
+                    categoria.tipo
+                  )
+
+                return resumirCategoriaPorPatrimonios(
+                  categoria,
+                  lista ?? []
+                )
+              })
+          )
+
         setCategorias(
-          (dadosCategorias ?? []).map(
-            normalizarCategoria
+          [
+            ...categoriasIndividualizadas,
+            ...categoriasTonfas
+          ].filter(
+            (categoria) =>
+              Number(categoria.total || 0) > 0
           )
         )
       }
@@ -521,43 +718,73 @@ function CentralOperacional({ user }) {
       setPatrimonioSelecionado(null)
       setResponsavelSelecionado(null)
       setConferenciaAberta(false)
-
       setCarregandoCategoria(true)
       setErroCategoria('')
 
       try {
-        const lista =
-          await listarPatrimoniosCategoria(
-            categoria.tipo
-          )
+        if (categoria.quantitativo && categoria.tipo_material) {
+          const cautelasAtivas = await listarCautelasAtivas({
+            tipoMaterial: categoria.tipo_material
+          })
+
+          const patrimonios = (cautelasAtivas ?? [])
+            .map((movimentacao) => {
+              const saldo =
+                movimentacao.saldo === null || movimentacao.saldo === undefined
+                  ? Math.max(
+                      0,
+                      Number(movimentacao.quantidade || 0) -
+                        Number(movimentacao.quantidade_devolvida || 0)
+                    )
+                  : Number(movimentacao.saldo || 0)
+
+              return {
+                ...movimentacao,
+                id: `TONFA-MOV-${movimentacao.id}`,
+                referencia_id: movimentacao.tonfa_id,
+                tipo: normalizarMaiusculo(
+                  movimentacao.tipo_material || categoria.tipo_material
+                ),
+                categoria: normalizarMaiusculo(
+                  movimentacao.tipo_material || categoria.tipo_material
+                ),
+                identificador: normalizarMaiusculo(
+                  movimentacao.tipo_material || categoria.tipo_material
+                ),
+                nome_operacional: normalizarMaiusculo(
+                  movimentacao.tipo_material || categoria.tipo_material
+                ),
+                status_operacional: 'EM SERVIÇO',
+                local_atual: 'CAUTELA INDIVIDUAL',
+                responsavel_nome:
+                  movimentacao.policial_nome || 'POLICIAL NÃO IDENTIFICADO',
+                responsavel_re: movimentacao.policial_re || '',
+                com_policial: true,
+                no_cofre: false,
+                quantidade: saldo,
+                saldo
+              }
+            })
+            .filter((item) => Number(item.saldo || 0) > 0)
+
+          setPatrimoniosCategoria(patrimonios)
+          return
+        }
+
+        const tipoConsulta = categoria.tipo_consulta || categoria.tipo
+        const lista = await listarPatrimoniosCategoria(tipoConsulta)
 
         const listaPerfil =
-          visaoSVDD &&
-          categoria.tipo !== 'tonfa'
-            ? (lista ?? []).filter(
-                patrimonioPertenceAoSVDD
-              )
+          visaoSVDD
+            ? (lista ?? []).filter(patrimonioPertenceAoSVDD)
             : (lista ?? [])
 
-        const patrimonios =
-          listaPerfil.map(
-            normalizarPatrimonio
-          )
-
-        setPatrimoniosCategoria(
-          patrimonios
-        )
+        setPatrimoniosCategoria(listaPerfil.map(normalizarPatrimonio))
       } catch (error) {
-        console.error(
-          'Erro ao carregar categoria:',
-          error
-        )
-
+        console.error('Erro ao carregar categoria:', error)
         setErroCategoria(
-          error?.message ||
-            'Não foi possível carregar os patrimônios.'
+          error?.message || 'Não foi possível carregar os patrimônios.'
         )
-
         setPatrimoniosCategoria([])
       } finally {
         setCarregandoCategoria(false)
@@ -649,7 +876,10 @@ function CentralOperacional({ user }) {
           'pt-BR'
         )
       )
-    }, [patrimoniosCategoria])
+    }, [
+      patrimoniosCategoria,
+      categoriaSelecionada
+    ])
 
   const resumoGeral =
     useMemo(() => {
@@ -683,6 +913,28 @@ function CentralOperacional({ user }) {
 
   const resumo =
     useMemo(() => {
+      if (
+        categoriaSelecionada?.quantitativo
+      ) {
+        return {
+          total: Number(
+            categoriaSelecionada.total || 0
+          ),
+          com_policial: Number(
+            categoriaSelecionada.com_policial || 0
+          ),
+          no_cofre: Number(
+            categoriaSelecionada.no_cofre || 0
+          ),
+          sem_localizacao: Number(
+            categoriaSelecionada.sem_localizacao || 0
+          ),
+          divergencias: Number(
+            categoriaSelecionada.divergencias || 0
+          )
+        }
+      }
+
       const total =
         patrimoniosCategoria.length
 
@@ -781,17 +1033,7 @@ function CentralOperacional({ user }) {
             resumo={
               categoriaSelecionada
                 ? resumo
-                : visaoSVDD
-                  ? resumoGeral
-                  : {
-                      total:
-                        dashboard?.cards
-                          ?.total ?? 0,
-                      com_policial: 0,
-                      no_cofre: 0,
-                      sem_localizacao: 0,
-                      divergencias: 0
-                    }
+                : resumoGeral
             }
           />
 
@@ -816,7 +1058,7 @@ function CentralOperacional({ user }) {
                   ) => (
                     <CategoriaCard
                       key={
-                        categoria.tipo
+                        `${categoria.tipo}-${categoria.categoria}`
                       }
                       categoria={
                         categoria

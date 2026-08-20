@@ -1916,11 +1916,27 @@ function HTDetalhesModal({
     setFotoSelecionada
   ] = useState(fotoPrincipal)
 
+  const [fotoAmpliada, setFotoAmpliada] = useState(null)
+  const [zoomFoto, setZoomFoto] = useState(1)
+
   useEffect(() => {
     setFotoSelecionada(
       fotoPrincipal
     )
   }, [fotoPrincipal])
+
+  useEffect(() => {
+    if (!fotoAmpliada) setZoomFoto(1)
+  }, [fotoAmpliada])
+
+  function alterarZoom(delta) {
+    setZoomFoto((atual) => Math.max(0.5, Math.min(4, Number((atual + delta).toFixed(2)))))
+  }
+
+  function handleWheelFoto(event) {
+    event.preventDefault()
+    alterarZoom(event.deltaY < 0 ? 0.1 : -0.1)
+  }
 
   const fotosDisponiveis =
     fotos.length > 0
@@ -2039,15 +2055,30 @@ function HTDetalhesModal({
                 fotoSelecionada && (
                   <>
                     <div className="ht-modal-photo-wrap">
-                      <img
-                        src={fotoSelecionada.url}
-                        alt={
-                          ht.patrimonio ||
-                          ht.numero_serie ||
-                          'HT'
-                        }
-                        className="ht-modal-photo"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setFotoAmpliada(fotoSelecionada)}
+                        title="Clique para ampliar a foto"
+                        aria-label="Ampliar foto do HT"
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: 0,
+                          border: 0,
+                          background: 'transparent',
+                          cursor: 'zoom-in'
+                        }}
+                      >
+                        <img
+                          src={fotoSelecionada.url}
+                          alt={
+                            ht.patrimonio ||
+                            ht.numero_serie ||
+                            'HT'
+                          }
+                          className="ht-modal-photo"
+                        />
+                      </button>
 
                       {fotoSelecionada.principal && (
                         <span className="ht-modal-principal-badge">
@@ -2133,6 +2164,129 @@ function HTDetalhesModal({
             </p>
           </div>
         </div>
+
+        {fotoAmpliada && (
+          <div
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setFotoAmpliada(null)
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 10000,
+              background: 'rgba(5, 18, 43, 0.92)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px'
+            }}
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-label="Foto ampliada do HT"
+              style={{
+                width: 'min(1080px, 96vw)',
+                maxHeight: '94vh',
+                background: '#eef5ff',
+                borderRadius: '18px',
+                overflow: 'hidden',
+                boxShadow: '0 24px 70px rgba(0,0,0,.35)'
+              }}
+            >
+              <header
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '16px 20px',
+                  background: 'linear-gradient(90deg, #2146c7, #147f9c)',
+                  color: '#fff'
+                }}
+              >
+                <div>
+                  <strong style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase' }}>
+                    Foto cadastral do HT
+                  </strong>
+                  <b style={{ fontSize: '18px' }}>
+                    {ht.patrimonio || ht.numero_serie || 'Rádio HT'}
+                  </b>
+                  <small style={{ display: 'block', marginTop: '3px' }}>
+                    Use a roda do mouse para ampliar ou reduzir.
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFotoAmpliada(null)}
+                  aria-label="Fechar foto ampliada"
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,.55)',
+                    background: 'rgba(255,255,255,.12)',
+                    color: '#fff',
+                    fontSize: '24px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ×
+                </button>
+              </header>
+
+              <div
+                onWheel={handleWheelFoto}
+                style={{
+                  height: 'min(62vh, 620px)',
+                  overflow: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '22px',
+                  background: '#dce9f8'
+                }}
+              >
+                <img
+                  src={fotoAmpliada.url}
+                  alt={`Foto ampliada do HT ${ht.patrimonio || ht.numero_serie || ''}`}
+                  style={{
+                    maxWidth: '92%',
+                    maxHeight: '54vh',
+                    objectFit: 'contain',
+                    borderRadius: '12px',
+                    transform: `scale(${zoomFoto})`,
+                    transformOrigin: 'center center',
+                    transition: 'transform .12s ease'
+                  }}
+                />
+              </div>
+
+              <footer
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 18px',
+                  background: '#fff'
+                }}
+              >
+                <button type="button" className="ht-btn-secondary" onClick={() => alterarZoom(-0.1)}>−</button>
+                <strong>{Math.round(zoomFoto * 100)}%</strong>
+                <button type="button" className="ht-btn-secondary" onClick={() => alterarZoom(0.1)}>+</button>
+                <button type="button" className="ht-btn-secondary" onClick={() => setZoomFoto(1)}>100%</button>
+                <button
+                  type="button"
+                  className="ht-btn-primary"
+                  onClick={() => setFotoAmpliada(null)}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  Fechar
+                </button>
+              </footer>
+            </section>
+          </div>
+        )}
 
         <footer>
           <button
