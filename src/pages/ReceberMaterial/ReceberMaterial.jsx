@@ -75,6 +75,31 @@ function obterNomeUsuario(user) {
   )
 }
 
+function obterDestinoRecebimentoOperador(user) {
+  const perfil = normalizarTexto(
+    user?.perfil ||
+    user?.perfil_efetivo ||
+    user?.user_metadata?.perfil ||
+    ''
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (perfil === 'P4') {
+    return 'DEPÓSITO DO P4'
+  }
+
+  if (
+    perfil.includes('SVDD') ||
+    perfil === 'AUXILIAR' ||
+    perfil === 'AUXILIAR TEMPORARIO'
+  ) {
+    return 'COFRE DO SVDD'
+  }
+
+  return null
+}
+
 function obterIdentificador(item) {
   return (
     item?.identificador ||
@@ -268,24 +293,19 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
     const chave = String(novidade?.patrimonio_id || '')
     if (!chave) continue
 
-    const atual = porPatrimonio.get(chave)
-    const statusAtual =
-      normalizarTexto(atual?.status || '')
     const statusNovo =
       normalizarTexto(novidade?.status || '')
 
-    const novaEhPrioritaria =
-      prioridades.includes(statusNovo)
-    const atualEhPrioritaria =
-      prioridades.includes(statusAtual)
+    // Somente ocorrências realmente pendentes podem voltar para a tela
+    // de recebimento. Novidades concluídas não podem "ressuscitar" em
+    // uma nova devolução do mesmo patrimônio.
+    if (!prioridades.includes(statusNovo)) {
+      continue
+    }
 
-    if (
-      atual &&
-      (
-        atualEhPrioritaria ||
-        !novaEhPrioritaria
-      )
-    ) {
+    const atual = porPatrimonio.get(chave)
+
+    if (atual) {
       continue
     }
 
@@ -414,9 +434,13 @@ export default function ReceberMaterial({
             policialEntregador?.policial_id ||
             null
 
+          const destinoLocal =
+            obterDestinoRecebimentoOperador(user)
+
           const devolucao =
             await buscarDevolucaoPendentePolicial({
-              policialId
+              policialId,
+              destinoLocal
             })
 
           if (!devolucao?.id) {
@@ -595,7 +619,8 @@ export default function ReceberMaterial({
       [
         nomeEntregador,
         policialEntregador,
-        reEntregador
+        reEntregador,
+        user
       ]
     )
 
@@ -691,22 +716,90 @@ export default function ReceberMaterial({
   function alternarNovidadeItem(itemId) {
     atualizarItemSelecionado(
       itemId,
-      (item) => ({
-        ...item,
+      (item) => {
+        const novidadePendente =
+          item?.novidade_pendente || null
 
-        novidade_aberta:
-          !item.novidade_aberta,
+        const novidadeExistente =
+          item?.novidade ||
+          (
+            novidadePendente?.id
+              ? {
+                  id:
+                    novidadePendente.id,
+                  novidade_id:
+                    novidadePendente.id,
+                  existente:
+                    true,
+                  tipo:
+                    normalizarTexto(
+                      novidadePendente.titulo || ''
+                    ),
+                  descricao:
+                    normalizarTexto(
+                      novidadePendente.descricao || ''
+                    ),
+                  providencia:
+                    '',
+                  quantidade_afetada:
+                    1,
+                  fotos:
+                    Array.isArray(
+                      novidadePendente.fotos
+                    )
+                      ? novidadePendente.fotos.map(
+                          (foto, indice) => ({
+                            ...foto,
+                            url:
+                              foto?.url ||
+                              foto?.foto_url ||
+                              null,
+                            caminho:
+                              foto?.caminho ||
+                              foto?.foto_caminho ||
+                              null,
+                            ordem:
+                              foto?.ordem ||
+                              indice + 1,
+                            principal:
+                              foto?.principal === true ||
+                              indice === 0,
+                            origem:
+                              'USUARIO'
+                          })
+                        )
+                      : [],
+                  previews:
+                    [],
+                  descricao_usuario:
+                    normalizarTexto(
+                      novidadePendente.descricao || ''
+                    ),
+                  titulo_usuario:
+                    normalizarTexto(
+                      novidadePendente.titulo || ''
+                    )
+                }
+              : {
+                  tipo: '',
+                  descricao: '',
+                  providencia: '',
+                  quantidade_afetada: 1,
+                  fotos: [],
+                  previews: []
+                }
+          )
 
-        novidade:
-          item.novidade || {
-            tipo: '',
-            descricao: '',
-            providencia: '',
-            quantidade_afetada: 1,
-            fotos: [],
-            previews: []
-          }
-      })
+        return {
+          ...item,
+
+          novidade_aberta:
+            !item.novidade_aberta,
+
+          novidade:
+            novidadeExistente
+        }
+      }
     )
 
     setErro('')
@@ -1210,10 +1303,77 @@ function alterarQuantidade(id, valor) {
     }
 
     setItensSelecionados(
-      patrimonios.map((item) => ({
-        ...item,
-        quantidade_receber: Number(item.quantidade || 1)
-      }))
+      patrimonios.map((item) => {
+        const novidadePendente =
+          item?.novidade_pendente || null
+
+        return {
+          ...item,
+          quantidade_receber:
+            Number(item.quantidade || 1),
+          novidade_aberta:
+            Boolean(novidadePendente),
+          novidade:
+            novidadePendente?.id
+              ? {
+                  id:
+                    novidadePendente.id,
+                  novidade_id:
+                    novidadePendente.id,
+                  existente:
+                    true,
+                  tipo:
+                    normalizarTexto(
+                      novidadePendente.titulo || ''
+                    ),
+                  descricao:
+                    normalizarTexto(
+                      novidadePendente.descricao || ''
+                    ),
+                  providencia:
+                    '',
+                  quantidade_afetada:
+                    1,
+                  fotos:
+                    Array.isArray(
+                      novidadePendente.fotos
+                    )
+                      ? novidadePendente.fotos.map(
+                          (foto, indice) => ({
+                            ...foto,
+                            url:
+                              foto?.url ||
+                              foto?.foto_url ||
+                              null,
+                            caminho:
+                              foto?.caminho ||
+                              foto?.foto_caminho ||
+                              null,
+                            ordem:
+                              foto?.ordem ||
+                              indice + 1,
+                            principal:
+                              foto?.principal === true ||
+                              indice === 0,
+                            origem:
+                              'USUARIO'
+                          })
+                        )
+                      : [],
+                  previews:
+                    [],
+                  descricao_usuario:
+                    normalizarTexto(
+                      novidadePendente.descricao || ''
+                    ),
+                  titulo_usuario:
+                    normalizarTexto(
+                      novidadePendente.titulo || ''
+                    )
+                }
+              : item?.novidade
+        }
+      })
     )
   }
 

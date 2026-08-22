@@ -201,7 +201,9 @@ export async function criarMovimentacao({
   destino_local,
   solicitante,
   recebedor,
-  observacoes = ''
+  observacoes = '',
+  fim_turno_servico = null,
+  previsao_entrega = null
 }) {
   const { data, error } = await supabase.rpc(
     'sigmo_criar_movimentacao',
@@ -223,7 +225,11 @@ export async function criarMovimentacao({
       p_recebedor_nome:
         obterNomeUsuario(recebedor),
       p_observacoes:
-        observacoes
+        observacoes,
+      p_fim_turno_servico:
+        fim_turno_servico || null,
+      p_previsao_entrega:
+        previsao_entrega || null
     }
   )
 

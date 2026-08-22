@@ -236,8 +236,33 @@ function normalizarPatrimonio(patrimonio) {
   const responsavelId =
     obterResponsavelId(patrimonio)
 
+  const statusAtual =
+    normalizarMaiusculo(
+      patrimonio?.status ||
+      patrimonio?.status_operacional ||
+      dados.status ||
+      dados.status_operacional ||
+      ''
+    )
+
+  const localAtualNormalizado =
+    normalizarMaiusculo(localAtual)
+
+  const estadoDeCautela =
+    !statusAtual.includes('CARGA') &&
+    (
+      statusAtual.includes('CAUTELADO') ||
+      statusAtual.includes('CAUTELA') ||
+      statusAtual.includes('EM_SERVICO') ||
+      statusAtual.includes('EM SERVIÇO') ||
+      localAtualNormalizado.includes('CAUTELA')
+    )
+
   const comPolicial = Boolean(
-    responsavelId || responsavelNome || responsavelRe
+    responsavelId ||
+    responsavelNome ||
+    responsavelRe ||
+    estadoDeCautela
   )
 
   return {
@@ -380,6 +405,16 @@ function patrimonioPertenceAoSVDD(patrimonio) {
     origem.includes('COFRE DO SVDD') ||
     origem.includes('SERVICO DE DIA')
 
+  const cautelaIndividual =
+    !status.includes('CARGA') &&
+    (
+      status.includes('CAUTELADO') ||
+      status.includes('CAUTELA') ||
+      status.includes('EM_SERVICO') ||
+      status.includes('EM SERVICO') ||
+      local.includes('CAUTELA INDIVIDUAL')
+    )
+
   const foraDoCofreMasSobResponsabilidade =
     origemSVDD &&
     (
@@ -391,7 +426,74 @@ function patrimonioPertenceAoSVDD(patrimonio) {
       local.includes('MANUTENCAO')
     )
 
-  return localSVDD || foraDoCofreMasSobResponsabilidade
+  return (
+    localSVDD ||
+    foraDoCofreMasSobResponsabilidade ||
+    cautelaIndividual
+  )
+}
+
+
+function patrimonioPertenceAoP4(patrimonio) {
+  const dados = obterDadosPatrimonio(patrimonio)
+
+  const local = normalizarMaiusculo(
+    patrimonio?.local_atual ||
+    patrimonio?.local ||
+    dados?.local_atual ||
+    dados?.local ||
+    ''
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  const origem = normalizarMaiusculo(
+    patrimonio?.origem_local ||
+    patrimonio?.local_origem ||
+    dados?.origem_local ||
+    dados?.local_origem ||
+    ''
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  const status = normalizarMaiusculo(
+    patrimonio?.status_operacional ||
+    patrimonio?.status ||
+    dados?.status_operacional ||
+    dados?.status ||
+    ''
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  const localP4 =
+    local.includes('P4') ||
+    local.includes('GUARDA DO P4') ||
+    local.includes('COFRE P4') ||
+    local.includes('DEPOSITO DO P4')
+
+  const origemP4 =
+    origem.includes('P4') ||
+    origem.includes('GUARDA DO P4') ||
+    origem.includes('COFRE P4') ||
+    origem.includes('DEPOSITO DO P4')
+
+  const foraDoCofreMasSobResponsabilidade =
+    origemP4 &&
+    (
+      status.includes('CAUTELA') ||
+      status.includes('EM_SERVICO') ||
+      status.includes('EM SERVICO') ||
+      status.includes('MANUTENCAO') ||
+      local.includes('CAUTELA') ||
+      local.includes('MANUTENCAO')
+    )
+
+  return (
+    localP4 ||
+    foraDoCofreMasSobResponsabilidade
+  )
 }
 
 function resumirCategoriaPorPatrimonios(categoria, patrimonios) {
@@ -454,31 +556,39 @@ function somarSaldoTonfas(lista = [], campo) {
 function criarResumoQuantitativo({
   lista = [],
   tipoMaterial,
-  visaoSVDD = false
+  visaoSVDD = false,
+  visaoP4 = false
 }) {
   const linhas = filtrarTonfasPorTipo(
     lista,
     tipoMaterial
   )
 
-  const noP4 = visaoSVDD
-    ? 0
-    : somarSaldoTonfas(linhas, 'quantidade_p4')
+  const noP4 =
+    visaoSVDD
+      ? 0
+      : somarSaldoTonfas(linhas, 'quantidade_p4')
 
   const noSVDD =
-    somarSaldoTonfas(linhas, 'quantidade_svdd')
+    visaoP4
+      ? 0
+      : somarSaldoTonfas(linhas, 'quantidade_svdd')
 
   const emServico =
-    somarSaldoTonfas(
-      linhas,
-      'quantidade_em_servico'
-    )
+    visaoP4
+      ? 0
+      : somarSaldoTonfas(
+          linhas,
+          'quantidade_em_servico'
+        )
 
   const manutencao =
-    somarSaldoTonfas(
-      linhas,
-      'quantidade_manutencao'
-    )
+    visaoP4
+      ? 0
+      : somarSaldoTonfas(
+          linhas,
+          'quantidade_manutencao'
+        )
 
   const noCofre = noP4 + noSVDD
   const total =
@@ -517,6 +627,21 @@ function resumoTonfasGeral(lista = []) {
   ]
 }
 
+function resumoTonfasP4(lista = []) {
+  return [
+    criarResumoQuantitativo({
+      lista,
+      tipoMaterial: 'TONFA',
+      visaoP4: true
+    }),
+    criarResumoQuantitativo({
+      lista,
+      tipoMaterial: 'CASSETETE',
+      visaoP4: true
+    })
+  ]
+}
+
 function resumoTonfasSVDD(lista = []) {
   return [
     criarResumoQuantitativo({
@@ -536,6 +661,18 @@ function CentralOperacional({ user }) {
   const visaoSVDD =
     ehEncarregado(user) ||
     ehAuxiliar(user)
+
+  const perfilAtual =
+    normalizarMaiusculo(
+      user?.perfil_efetivo ||
+      user?.perfil ||
+      ''
+    )
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+  const visaoP4 =
+    perfilAtual === 'P4'
 
   const [dashboard, setDashboard] = useState(null)
   const [operacional, setOperacional] = useState(null)
@@ -654,9 +791,13 @@ function CentralOperacional({ user }) {
         )
       } else {
         const categoriasTonfas =
-          resumoTonfasGeral(
-            tonfasResultado?.data || []
-          )
+          visaoP4
+            ? resumoTonfasP4(
+                tonfasResultado?.data || []
+              )
+            : resumoTonfasGeral(
+                tonfasResultado?.data || []
+              )
 
         // Na visão geral, os quantitativos de TONFA/CASSETETE vêm do
         // estoque próprio. Para os patrimônios individualizados, porém,
@@ -677,9 +818,16 @@ function CentralOperacional({ user }) {
                     categoria.tipo
                   )
 
+                const listaEscopo =
+                  visaoP4
+                    ? (lista ?? []).filter(
+                        patrimonioPertenceAoP4
+                      )
+                    : (lista ?? [])
+
                 return resumirCategoriaPorPatrimonios(
                   categoria,
-                  lista ?? []
+                  listaEscopo
                 )
               })
           )
@@ -707,7 +855,7 @@ function CentralOperacional({ user }) {
     } finally {
       setCarregandoCentral(false)
     }
-  }, [user, visaoSVDD])
+  }, [user, visaoSVDD, visaoP4])
 
   useEffect(() => {
     carregarCentral()
@@ -777,7 +925,9 @@ function CentralOperacional({ user }) {
         const listaPerfil =
           visaoSVDD
             ? (lista ?? []).filter(patrimonioPertenceAoSVDD)
-            : (lista ?? [])
+            : visaoP4
+              ? (lista ?? []).filter(patrimonioPertenceAoP4)
+              : (lista ?? [])
 
         setPatrimoniosCategoria(listaPerfil.map(normalizarPatrimonio))
       } catch (error) {
@@ -790,7 +940,7 @@ function CentralOperacional({ user }) {
         setCarregandoCategoria(false)
       }
     },
-    [visaoSVDD]
+    [visaoSVDD, visaoP4]
   )
 
   const voltarCategorias =

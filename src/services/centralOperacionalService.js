@@ -179,7 +179,10 @@ export async function carregarCentralOperacional({ user } = {}) {
   const resultados = await Promise.allSettled([
     listarMovimentacoes(),
     listarTransferenciasOperacionaisPendentes(),
-    listarNovidadesPatrimoniais({ limite: 20 }),
+    listarNovidadesPatrimoniais({
+      limite: 50,
+      status: 'REGISTRADA'
+    }),
     listarPatrimoniosIndicadores(),
     listarBaixasAguardandoAprovacao()
   ])
@@ -188,9 +191,12 @@ export async function carregarCentralOperacional({ user } = {}) {
   const movimentacoes = movRes.status === 'fulfilled' ? movRes.value : []
   const transferencias = transfRes.status === 'fulfilled' ? transfRes.value : []
   const novidades = novRes.status === 'fulfilled' ? novRes.value : []
-  const novidadesPendentes = novidades.filter(
-  (item) => normalizarSemAcentos(item?.status) === 'REGISTRADA'
-)
+  const novidadesPendentes = ordenarRecentes(
+    (novidades || []).filter(
+      (item) =>
+        normalizarSemAcentos(item?.status) === 'REGISTRADA'
+    )
+  )
   const patrimonios = patRes.status === 'fulfilled' ? patRes.value : []
   const baixasAprovacao = baixasRes.status === 'fulfilled' ? baixasRes.value : []
 

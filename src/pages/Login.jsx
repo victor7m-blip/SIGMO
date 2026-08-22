@@ -55,6 +55,42 @@ function formatarDataHora(valor) {
   }
 }
 
+async function abrirSessaoSegura(
+  usuarioId,
+  pinInformado
+) {
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_abrir_sessao',
+    {
+      p_usuario_id: usuarioId,
+      p_pin: pinInformado
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  const sessao =
+    Array.isArray(data)
+      ? data[0]
+      : data
+
+  const token =
+    sessao?.token
+
+  if (!token) {
+    throw new Error(
+      'A sessão segura não retornou um token.'
+    )
+  }
+
+  return token
+}
+
 export default function Login({
   onLogin
 }) {
@@ -339,7 +375,16 @@ export default function Login({
         )
       }
 
-      saveSession(sessionUser)
+      const sigmoSessionToken =
+        await abrirSessaoSegura(
+          trocaPendente.usuarioId,
+          pinNovoLimpo
+        )
+
+      saveSession(
+        sessionUser,
+        sigmoSessionToken
+      )
       onLogin(sessionUser)
     } catch (err) {
       console.error(
@@ -544,6 +589,12 @@ export default function Login({
         return
       }
 
+      const sigmoSessionToken =
+        await abrirSessaoSegura(
+          usuario.id,
+          pinLimpo
+        )
+
       try {
         await registerAudit(
           'LOGIN',
@@ -559,7 +610,8 @@ export default function Login({
       }
 
       saveSession(
-        sessionUser
+        sessionUser,
+        sigmoSessionToken
       )
 
       onLogin(

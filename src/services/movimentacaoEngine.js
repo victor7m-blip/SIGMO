@@ -35,7 +35,9 @@ export async function iniciarMovimentacao({
   destinoLocal,
   solicitante,
   recebedor,
-  observacoes = ''
+  observacoes = '',
+  fimTurnoServico = null,
+  previsaoEntrega = null
 }) {
   if (!tipo) {
     throw new Error(
@@ -61,7 +63,9 @@ export async function iniciarMovimentacao({
     destino_local: destinoLocal,
     solicitante,
     recebedor,
-    observacoes
+    observacoes,
+    fim_turno_servico: fimTurnoServico,
+    previsao_entrega: previsaoEntrega
   })
 
   const movimentacaoId =
@@ -133,6 +137,8 @@ export async function criarMovimentacaoCompleta({
   solicitante,
   recebedor,
   observacoes = '',
+  fimTurnoServico = null,
+  previsaoEntrega = null,
   itens = [],
   aprovarAutomaticamente = false,
   aprovador = null
@@ -144,7 +150,9 @@ export async function criarMovimentacaoCompleta({
       destinoLocal,
       solicitante,
       recebedor,
-      observacoes
+      observacoes,
+      fimTurnoServico,
+      previsaoEntrega
     })
 
   await incluirItensMovimentacao({

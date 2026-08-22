@@ -31,6 +31,28 @@ function formatarData(valor) {
   }).format(data)
 }
 
+function obterPrazoTurno(item) {
+  return (
+    item?.fim_turno_servico ||
+    item?.dados?.fim_turno_servico ||
+    null
+  )
+}
+
+function turnoVencido(item) {
+  const prazo = obterPrazoTurno(item)
+
+  if (!prazo) return false
+
+  const data = new Date(prazo)
+
+  if (Number.isNaN(data.getTime())) {
+    return false
+  }
+
+  return data.getTime() < Date.now()
+}
+
 function normalizar(valor) {
   return String(valor ?? '')
     .trim()
@@ -1241,6 +1263,23 @@ function alterarQuantidadeDevolver(
                 DEVOLUÇÃO JÁ ENCAMINHADA
               </small>
             )}
+
+            {obterPrazoTurno(item) && (
+              <small
+                style={{
+                  display: 'block',
+                  marginTop: '5px',
+                  fontWeight: 700,
+                  color: turnoVencido(item)
+                    ? '#b42318'
+                    : '#475467'
+                }}
+              >
+                {turnoVencido(item)
+                  ? `CAUTELA VENCIDA • ${formatarData(obterPrazoTurno(item))}`
+                  : `TÉRMINO DO TURNO • ${formatarData(obterPrazoTurno(item))}`}
+              </small>
+            )}
           </div>
         </label>
 
@@ -1293,6 +1332,23 @@ function alterarQuantidadeDevolver(
             <span>
               {obterDescricao(item)}
             </span>
+
+            {obterPrazoTurno(item) && (
+              <small
+                style={{
+                  display: 'block',
+                  marginTop: '6px',
+                  fontWeight: 700,
+                  color: turnoVencido(item)
+                    ? '#b42318'
+                    : '#475467'
+                }}
+              >
+                {turnoVencido(item)
+                  ? `CAUTELA VENCIDA • ${formatarData(obterPrazoTurno(item))}`
+                  : `TÉRMINO DO TURNO • ${formatarData(obterPrazoTurno(item))}`}
+              </small>
+            )}
 
             {quantitativo && (
               <label className="cautela-usuario-carrinho-quantidade">

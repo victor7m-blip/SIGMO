@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'sigmo_user'
-const SESSION_VERSION = 2
+const SESSION_VERSION = 3
 
 const INACTIVITY_LIMIT = 15 * 60 * 1000 // 15 minutos
 const SESSION_LIMIT = 2 * 60 * 60 * 1000 // 2 horas
@@ -71,12 +71,17 @@ function updateLastActivity() {
   return true
 }
 
-export function saveSession(user) {
+export function saveSession(user, sigmoSessionToken = null) {
   const createdAt = now()
 
   const session = {
     version: SESSION_VERSION,
     user,
+    sigmoSessionToken:
+      typeof sigmoSessionToken === 'string' &&
+      sigmoSessionToken.trim()
+        ? sigmoSessionToken.trim()
+        : null,
     createdAt,
     expiresAt: createdAt + SESSION_LIMIT,
     lastActivityAt: createdAt
@@ -94,6 +99,17 @@ export function loadSession() {
   }
 
   return session.user
+}
+
+export function loadSessionToken() {
+  const session = readStoredSession()
+
+  if (!isSessionValid(session)) {
+    clearSession()
+    return null
+  }
+
+  return session.sigmoSessionToken || null
 }
 
 export function clearSession() {

@@ -1500,11 +1500,24 @@ async function aplicarRetornoPatrimonial(manutencao, user) {
 
 
 async function concluirNovidadePatrimonialDaManutencao(manutencao, user) {
-  const patrimonioId = texto(manutencao?.patrimonio_id)
+  let patrimonioId = texto(manutencao?.patrimonio_id)
 
-  // Evita vincular ocorrências apenas por aproximação via referencia_id.
+  // Manutenções criadas a partir de alguns fluxos antigos podem não ter
+  // patrimonio_id gravado. Nesse caso, resolve o patrimônio pela referência
+  // exata do material antes de concluir a novidade.
+  if (!patrimonioId && texto(manutencao?.referencia_id)) {
+    const { data: patrimonio, error: patrimonioError } = await supabase
+      .from('sigmo_patrimonios')
+      .select('id')
+      .eq('referencia_id', texto(manutencao.referencia_id))
+      .maybeSingle()
+
+    if (patrimonioError) throw patrimonioError
+
+    patrimonioId = texto(patrimonio?.id)
+  }
+
   if (!patrimonioId) {
-
     return null
   }
 

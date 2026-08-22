@@ -287,12 +287,21 @@ export async function listarNovidadesPatrimoniais({
     )
   )
 
+  let query = supabase
+    .from(NOVIDADES_TABLE)
+    .select('*')
+
+  if (status) {
+    query = query.ilike(
+      'status',
+      status
+    )
+  }
+
   const {
     data,
     error
-  } = await supabase
-    .from(NOVIDADES_TABLE)
-    .select('*')
+  } = await query
     .order(
       'created_at',
       {

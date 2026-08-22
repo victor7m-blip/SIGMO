@@ -10,6 +10,10 @@ import {
 } from '../services/permissionService'
 
 import {
+  supabase
+} from '../services/supabaseClient'
+
+import {
   listarArmas
 } from '../services/armasService'
 
@@ -265,6 +269,28 @@ function resumirTonfas(lista) {
 }
 
 
+function itemIndividualEmServico(item) {
+  if (item?.ativo === false) return false
+
+  const status = normalizar(
+    item?.status_operacional ||
+    item?.status
+  )
+
+  const local = normalizar(
+    item?.local_atual
+  )
+
+  return (
+    status === 'CAUTELADO' ||
+    status === 'EM SERVICO' ||
+    status === 'EM_SERVICO' ||
+    local.includes('CAUTELA') ||
+    local.includes('EM SERVICO') ||
+    local.includes('EM_SERVICO')
+  )
+}
+
 function itemIndividualDisponivelSvdd(item) {
   if (item?.ativo === false) return false
 
@@ -284,6 +310,75 @@ function itemIndividualDisponivelSvdd(item) {
   }
 
   return local.includes('COFRE DO SVDD') || local === 'SVDD'
+}
+
+function resumirIndividuais(lista) {
+  const ativos = (lista || []).filter(
+    (item) => item?.ativo !== false
+  )
+
+  const resumo = {
+    total: ativos.length,
+    p4: 0,
+    svdd: 0,
+    emServico: 0,
+    manutencao: 0,
+    carga: 0,
+    naoLocalizados: 0
+  }
+
+  for (const item of ativos) {
+    const status = normalizar(
+      item?.status_operacional ||
+      item?.status
+    )
+
+    const local = normalizar(
+      item?.local_atual
+    )
+
+    if (
+      status.includes('MANUTENCAO') ||
+      local.includes('MANUTENCAO')
+    ) {
+      resumo.manutencao += 1
+      continue
+    }
+
+    if (
+      status === 'CARGA' ||
+      local.includes('CARGA PERMANENTE')
+    ) {
+      resumo.carga += 1
+      continue
+    }
+
+    if (itemIndividualEmServico(item)) {
+      resumo.emServico += 1
+      continue
+    }
+
+    if (
+      local.includes('COFRE DO SVDD') ||
+      local === 'SVDD'
+    ) {
+      resumo.svdd += 1
+      continue
+    }
+
+    if (
+      local.includes('P4') ||
+      local.includes('DEPOSITO DO P4') ||
+      local.includes('GUARDA DO P4')
+    ) {
+      resumo.p4 += 1
+      continue
+    }
+
+    resumo.naoLocalizados += 1
+  }
+
+  return resumo
 }
 
 function obterPolicialId(user) {
@@ -504,6 +599,37 @@ function ajustarTonfasPorPerfil(
   return resumo
 }
 
+async function contarPatrimoniosIndividualizadosEmServico() {
+  const {
+    data,
+    error
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id, tipo, status, local_atual, ativo')
+    .eq('ativo', true)
+    .in('tipo', ['arma', 'ht', 'tpd', 'taser'])
+
+  if (error) {
+    throw error
+  }
+
+  return (data || []).filter((item) => {
+    const status = normalizar(item?.status)
+    const local = normalizar(item?.local_atual)
+
+    if (status === 'CARGA') {
+      return false
+    }
+
+    return (
+      status === 'CAUTELADO' ||
+      status === 'EM SERVICO' ||
+      status === 'EM_SERVICO' ||
+      local.includes('CAUTELA')
+    )
+  }).length
+}
+
 const INICIAL = {
   armas: {
     total: 0,
@@ -537,6 +663,18 @@ const INICIAL = {
     svdd: 0,
     emServico: 0,
     manutencao: 0
+  },
+  individuais: {
+    total: 0,
+    p4: 0,
+    svdd: 0,
+    emServico: 0,
+    manutencao: 0,
+    carga: 0,
+    naoLocalizados: 0
+  },
+  patrimonios: {
+    emServico: 0
   }
 }
 
@@ -564,7 +702,8 @@ export default function useDashboardVitrine(
           htsResultado,
           tpdsResultado,
           tasersResultado,
-          manutencoesResultado
+          manutencoesResultado,
+          patrimoniosEmServico
         ] = await Promise.all([
           listarArmas({
             pagina: 1,
@@ -590,7 +729,8 @@ export default function useDashboardVitrine(
             status: 'EM_MANUTENCAO',
             pagina: 1,
             limite: 200
-          })
+          }),
+          contarPatrimoniosIndividualizadosEmServico()
         ])
 
         const armasFiltradas =
@@ -604,12 +744,22 @@ const tonfasResumoOriginal =
     tonfasResultado?.data || []
   )
 
+const individuaisLista = [
+  ...(htsResultado?.data || []),
+  ...(tpdsResultado?.data || []),
+  ...(tasersResultado?.data || [])
+]
+
+const individuaisResumo =
+  resumirIndividuais(
+    individuaisLista
+  )
+
 const individuaisSvddDisponiveis =
-  [
-    ...(htsResultado?.data || []),
-    ...(tpdsResultado?.data || []),
-    ...(tasersResultado?.data || [])
-  ].filter(itemIndividualDisponivelSvdd).length
+  individuaisResumo.svdd
+
+const individuaisEmServico =
+  individuaisResumo.emServico
 
 const tonfasResumo =
   ajustarTonfasPorPerfil(
@@ -679,7 +829,18 @@ setDados({
 
   cassetetesDetalhe:
     tonfasResumo
-      .cassetetesDetalhe
+      .cassetetesDetalhe,
+
+  individuais: {
+    ...individuaisResumo,
+    emServico:
+      individuaisEmServico
+  },
+
+  patrimonios: {
+    emServico:
+      Number(patrimoniosEmServico || 0)
+  }
 })
       } catch (error) {
         console.error(

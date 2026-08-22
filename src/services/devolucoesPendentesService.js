@@ -7,21 +7,31 @@ const STATUS_PENDENTES = [
 ]
 
 export async function buscarDevolucaoPendentePolicial({
-  policialId
+  policialId,
+  destinoLocal = null
 } = {}) {
   if (!policialId) {
     return null
   }
 
-  const {
-    data: movimentacoes,
-    error: movimentacoesError
-  } = await supabase
+  let query = supabase
     .from('sigmo_movimentacoes')
     .select('*')
     .eq('tipo_movimentacao', 'DEVOLUCAO')
     .eq('solicitante_id', policialId)
     .in('status', STATUS_PENDENTES)
+
+  if (destinoLocal) {
+    query = query.eq(
+      'destino_local',
+      destinoLocal
+    )
+  }
+
+  const {
+    data: movimentacoes,
+    error: movimentacoesError
+  } = await query
     .order('created_at', { ascending: false })
     .limit(1)
 

@@ -39,6 +39,31 @@ const DESTINO_CAUTELA = 'CAUTELA INDIVIDUAL'
 const DESTINO_P4 = 'DEPÓSITO DO P4'
 const DESTINO_SVDD = 'COFRE DO SVDD'
 
+const CHAVE_FIM_TURNO_DATA = 'sigmo_pagar_material_fim_turno_data'
+const CHAVE_FIM_TURNO_HORA = 'sigmo_pagar_material_fim_turno_hora'
+const CHAVE_PREVISAO_ENTREGA_DATA = 'sigmo_pagar_material_previsao_entrega_data'
+const CHAVE_PREVISAO_ENTREGA_HORA = 'sigmo_pagar_material_previsao_entrega_hora'
+
+function lerPreferenciaLocal(chave) {
+  try {
+    return window.localStorage.getItem(chave) || ''
+  } catch {
+    return ''
+  }
+}
+
+function salvarPreferenciaLocal(chave, valor) {
+  try {
+    if (valor) {
+      window.localStorage.setItem(chave, valor)
+    } else {
+      window.localStorage.removeItem(chave)
+    }
+  } catch {
+    // Mantém o fluxo operacional caso o navegador bloqueie o localStorage.
+  }
+}
+
 function normalizarPerfil(valor) {
   return String(valor || '')
     .normalize('NFD')
@@ -82,6 +107,18 @@ function obterNomeUsuario(user) {
     user?.email ||
     'USUÁRIO SIGMO'
   )
+}
+
+function montarDataHoraIso(data, hora) {
+  if (!data || !hora) return null
+
+  const valor = new Date(`${data}T${hora}`)
+
+  if (Number.isNaN(valor.getTime())) {
+    return null
+  }
+
+  return valor.toISOString()
 }
 
 function criarChaveMaterial(material) {
@@ -192,6 +229,18 @@ export default function PagarMaterial({
   const [tipoMovimentacao, setTipoMovimentacao] = useState(TIPO_CAUTELA)
   const [localDestino, setLocalDestino] = useState(DESTINO_CAUTELA)
   const [observacoes, setObservacoes] = useState('')
+  const [fimTurnoData, setFimTurnoData] = useState(
+    () => lerPreferenciaLocal(CHAVE_FIM_TURNO_DATA)
+  )
+  const [fimTurnoHora, setFimTurnoHora] = useState(
+    () => lerPreferenciaLocal(CHAVE_FIM_TURNO_HORA)
+  )
+  const [previsaoEntregaData, setPrevisaoEntregaData] = useState(
+    () => lerPreferenciaLocal(CHAVE_PREVISAO_ENTREGA_DATA)
+  )
+  const [previsaoEntregaHora, setPrevisaoEntregaHora] = useState(
+    () => lerPreferenciaLocal(CHAVE_PREVISAO_ENTREGA_HORA)
+  )
   const [itensSelecionados, setItensSelecionados] = useState([])
   const [mensagem, setMensagem] = useState('')
   const [erro, setErro] = useState('')
@@ -220,10 +269,38 @@ export default function PagarMaterial({
 
   const exigePolicial = tipoMovimentacao !== TIPO_TRANSFERENCIA_P4
 
+  const ehCautela = tipoMovimentacao === TIPO_CAUTELA
+
+  const ehTransferencia =
+    tipoMovimentacao === TIPO_TRANSFERENCIA ||
+    tipoMovimentacao === TIPO_TRANSFERENCIA_P4
+
   useEffect(() => {
     const origemPerfil = origemInicialPorPerfil(perfil)
     if (!origemSelecionavel) setLocalOrigem(origemPerfil)
   }, [perfil, origemSelecionavel])
+
+  useEffect(() => {
+    salvarPreferenciaLocal(CHAVE_FIM_TURNO_DATA, fimTurnoData)
+  }, [fimTurnoData])
+
+  useEffect(() => {
+    salvarPreferenciaLocal(CHAVE_FIM_TURNO_HORA, fimTurnoHora)
+  }, [fimTurnoHora])
+
+  useEffect(() => {
+    salvarPreferenciaLocal(
+      CHAVE_PREVISAO_ENTREGA_DATA,
+      previsaoEntregaData
+    )
+  }, [previsaoEntregaData])
+
+  useEffect(() => {
+    salvarPreferenciaLocal(
+      CHAVE_PREVISAO_ENTREGA_HORA,
+      previsaoEntregaHora
+    )
+  }, [previsaoEntregaHora])
 
   useEffect(() => {
     const tipoAindaPermitido = opcoesTipo.some(
@@ -350,6 +427,16 @@ export default function PagarMaterial({
       return
     }
 
+    if (ehCautela && (!fimTurnoData || !fimTurnoHora)) {
+      setErro('Informe a data e a hora do término do turno de serviço.')
+      return
+    }
+
+    if (ehTransferencia && (!previsaoEntregaData || !previsaoEntregaHora)) {
+      setErro('Informe a data e a hora da previsão de entrega.')
+      return
+    }
+
     if (itensSelecionados.length === 0) {
       setErro('Adicione pelo menos um material.')
       return
@@ -383,6 +470,24 @@ export default function PagarMaterial({
       return
     }
 
+    const fimTurnoServico = ehCautela
+      ? montarDataHoraIso(fimTurnoData, fimTurnoHora)
+      : null
+
+    const previsaoEntrega = ehTransferencia
+      ? montarDataHoraIso(previsaoEntregaData, previsaoEntregaHora)
+      : null
+
+    if (ehCautela && !fimTurnoServico) {
+      setErro('A data/hora do término do turno é inválida.')
+      return
+    }
+
+    if (ehTransferencia && !previsaoEntrega) {
+      setErro('A data/hora da previsão de entrega é inválida.')
+      return
+    }
+
     try {
       setSalvando(true)
       setErro('')
@@ -405,6 +510,8 @@ export default function PagarMaterial({
           solicitante: user,
           recebedor: policialRecebedor,
           observacoes,
+          fimTurnoServico,
+          previsaoEntrega,
           itens: itensPendentes,
           aprovarAutomaticamente: false
         })
@@ -460,6 +567,8 @@ export default function PagarMaterial({
               ? policialRecebedor
               : null,
             observacoes,
+            fimTurnoServico,
+            previsaoEntrega,
             itens: itensIndividuais,
             aprovarAutomaticamente: true
           })
@@ -470,9 +579,16 @@ export default function PagarMaterial({
         )
       }
 
+      setReRecebedor('')
+      setPolicialRecebedor(null)
       setItensSelecionados([])
       setObservacoes('')
       setAtualizarPesquisaEm(Date.now())
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      })
 
       onConcluido?.()
     } catch (error) {
@@ -559,6 +675,50 @@ export default function PagarMaterial({
                 Local de destino
                 <input value={localDestino} readOnly tabIndex={-1} />
               </label>
+
+              {ehCautela && (
+                <>
+                  <label>
+                    Término do turno de serviço
+                    <input
+                      type="date"
+                      value={fimTurnoData}
+                      onChange={(event) => setFimTurnoData(event.target.value)}
+                    />
+                  </label>
+
+                  <label>
+                    Hora de devolução
+                    <input
+                      type="time"
+                      value={fimTurnoHora}
+                      onChange={(event) => setFimTurnoHora(event.target.value)}
+                    />
+                  </label>
+                </>
+              )}
+
+              {ehTransferencia && (
+                <>
+                  <label>
+                    Previsão de entrega
+                    <input
+                      type="date"
+                      value={previsaoEntregaData}
+                      onChange={(event) => setPrevisaoEntregaData(event.target.value)}
+                    />
+                  </label>
+
+                  <label>
+                    Hora prevista
+                    <input
+                      type="time"
+                      value={previsaoEntregaHora}
+                      onChange={(event) => setPrevisaoEntregaHora(event.target.value)}
+                    />
+                  </label>
+                </>
+              )}
 
               <label className="pagar-material-field-full">
                 Observações

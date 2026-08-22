@@ -13,6 +13,10 @@ import {
   MODULOS_MANUTENCAO
 } from './manutencoesService'
 
+import {
+  criarNotificacaoParaPerfil
+} from './notificacoesService'
+
 const PATRIMONIOS_TABLE =
   'sigmo_patrimonios'
 
@@ -485,6 +489,405 @@ function obterModuloManutencao(tipo) {
   return MODULOS_MANUTENCAO.OUTROS
 }
 
+
+function obterTipoPatrimonioNovidadeRecebimento(patrimonio) {
+  const tipo =
+    maiusculo(
+      patrimonio?.tipo ||
+      patrimonio?.dados?.tipo ||
+      patrimonio?.dados?.categoria ||
+      'MATERIAL'
+    )
+
+  if (
+    tipo === 'ARMA' ||
+    tipo === 'ARMAS'
+  ) {
+    return 'ARMA'
+  }
+
+  if (
+    tipo === 'HT' ||
+    tipo === 'HTS'
+  ) {
+    return 'HT'
+  }
+
+  if (
+    tipo === 'TPD' ||
+    tipo === 'TPDS'
+  ) {
+    return 'TPD'
+  }
+
+  if (
+    tipo === 'TASER' ||
+    tipo === 'TASERS'
+  ) {
+    return 'TASER'
+  }
+
+  if (
+    tipo === 'TONFA' ||
+    tipo === 'TONFAS'
+  ) {
+    return 'TONFA'
+  }
+
+  if (
+    tipo === 'CASSETETE' ||
+    tipo === 'CASSETETES'
+  ) {
+    return 'CASSETETE'
+  }
+
+  return tipo || 'MATERIAL'
+}
+
+function montarDescricaoNovidadeOficialRecebimento(novidade) {
+  const partes = [
+    texto(novidade?.descricao)
+  ]
+
+  if (novidade?.providencia) {
+    partes.push(
+      `PROVIDÊNCIA SUGERIDA: ${maiusculo(novidade.providencia)}`
+    )
+  }
+
+  if (
+    Array.isArray(novidade?.fotos) &&
+    novidade.fotos.length > 0
+  ) {
+    partes.push(
+      `FOTOS ANEXADAS: ${novidade.fotos.length}`
+    )
+  }
+
+  return partes
+    .filter(Boolean)
+    .join(' | ')
+}
+
+async function registrarFotosNovidadeOficialRecebimento({
+  novidadeId,
+  novidade
+}) {
+  if (
+    !novidadeId ||
+    !Array.isArray(novidade?.fotos) ||
+    novidade.fotos.length === 0
+  ) {
+    return []
+  }
+
+  const registros =
+    novidade.fotos
+      .filter(
+        (foto) =>
+          foto?.url ||
+          foto?.foto_url
+      )
+      .map(
+        (foto, indice) => ({
+          novidade_id:
+            novidadeId,
+
+          foto_url:
+            foto?.url ||
+            foto?.foto_url,
+
+          foto_caminho:
+            foto?.caminho ||
+            foto?.foto_caminho ||
+            null,
+
+          nome_original:
+            foto?.nome_original ||
+            null,
+
+          tipo_arquivo:
+            foto?.tipo ||
+            foto?.tipo_arquivo ||
+            null,
+
+          tamanho_bytes:
+            Number(
+              foto?.tamanho ||
+              foto?.tamanho_bytes ||
+              0
+            ) || null,
+
+          principal:
+            foto?.principal === true ||
+            indice === 0,
+
+          ordem:
+            Number(
+              foto?.ordem ||
+              indice + 1
+            ) || indice + 1
+        })
+      )
+
+  if (registros.length === 0) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(
+      'sigmo_patrimonio_novidades_fotos'
+    )
+    .insert(registros)
+    .select()
+
+  if (error) {
+    throw new Error(
+      `A novidade foi registrada, mas não foi possível vincular as fotos: ${error.message}`
+    )
+  }
+
+  return data || []
+}
+
+async function registrarNovidadeOficialRecebimento({
+  patrimonio,
+  novidade,
+  user
+}) {
+  if (
+    !patrimonio?.id ||
+    !novidade
+  ) {
+    return null
+  }
+
+  const tipoPatrimonio =
+    obterTipoPatrimonioNovidadeRecebimento(
+      patrimonio
+    )
+
+  const titulo =
+    maiusculo(
+      novidade?.tipo ||
+      'NOVIDADE NO RECEBIMENTO'
+    )
+
+  const descricao =
+    montarDescricaoNovidadeOficialRecebimento(
+      novidade
+    )
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_registrar_patrimonio_novidade',
+    {
+      p_patrimonio_id:
+        patrimonio.id,
+
+      p_tipo_patrimonio:
+        tipoPatrimonio,
+
+      p_titulo:
+        titulo,
+
+      p_descricao:
+        descricao ||
+        null,
+
+      p_gravidade:
+        'baixa',
+
+      p_registrado_por_id:
+        user?.id ||
+        null,
+
+      p_registrado_por_nome:
+        maiusculo(
+          obterNomeUsuario(user)
+        ) ||
+        null
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      `Não foi possível registrar a novidade patrimonial: ${error.message}`
+    )
+  }
+
+  const novidadeId =
+    Array.isArray(data)
+      ? (
+          data[0]?.id ||
+          data[0]?.sigmo_registrar_patrimonio_novidade ||
+          data[0] ||
+          null
+        )
+      : (
+          data?.id ||
+          data?.sigmo_registrar_patrimonio_novidade ||
+          data ||
+          null
+        )
+
+  if (!novidadeId) {
+    return null
+  }
+
+  const fotos =
+    await registrarFotosNovidadeOficialRecebimento({
+      novidadeId,
+      novidade
+    })
+
+  return {
+    id:
+      novidadeId,
+
+    patrimonio_id:
+      patrimonio.id,
+
+    tipo_patrimonio:
+      tipoPatrimonio,
+
+    titulo,
+
+    descricao,
+
+    status:
+      'registrada',
+
+    fotos
+  }
+}
+
+
+async function notificarNovidadePatrimonialRecebimento({
+  novidadeOficial,
+  novidade,
+  patrimonio,
+  user
+}) {
+  if (
+    !novidadeOficial?.id ||
+    !patrimonio?.id ||
+    !novidade
+  ) {
+    return []
+  }
+
+  const tipoPatrimonio =
+    novidadeOficial?.tipo_patrimonio ||
+    obterTipoPatrimonioNovidadeRecebimento(
+      patrimonio
+    )
+
+  const descricaoMaterial =
+    maiusculo(
+      patrimonio?.descricao ||
+      patrimonio?.dados?.descricao ||
+      patrimonio?.dados?.patrimonio ||
+      patrimonio?.dados?.numero_serie ||
+      tipoPatrimonio ||
+      'MATERIAL'
+    )
+
+  const tipoNovidade =
+    maiusculo(
+      novidade?.tipo ||
+      novidadeOficial?.titulo ||
+      'NOVIDADE'
+    )
+
+  const providencia =
+    maiusculo(
+      novidade?.providencia ||
+      'ANALISE'
+    )
+
+  const descricao =
+    maiusculo(
+      novidade?.descricao
+    )
+
+  const operadorNome =
+    maiusculo(
+      obterNomeUsuario(user)
+    )
+
+  const operadorRe =
+    obterReUsuario(user)
+
+  const mensagem = [
+    `${operadorNome}${operadorRe ? ` (RE ${operadorRe})` : ''} registrou uma novidade em ${descricaoMaterial}.`,
+    `TIPO: ${tipoNovidade}.`,
+    descricao
+      ? `DESCRIÇÃO: ${descricao}.`
+      : '',
+    `PROVIDÊNCIA SUGERIDA: ${providencia}.`
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const payloadBase = {
+    titulo:
+      'NOVIDADE PATRIMONIAL REGISTRADA',
+    mensagem,
+    tipo:
+      'ALERTA',
+    modulo:
+      'PATRIMONIO',
+    prioridade:
+      'ALTA',
+    link:
+      '/central-operacional',
+    metadata: {
+      origem:
+        'RECEBIMENTO PELO SETOR',
+      novidade_id:
+        novidadeOficial.id,
+      patrimonio_id:
+        patrimonio.id,
+      referencia_id:
+        patrimonio?.referencia_id ||
+        null,
+      tipo_patrimonio:
+        tipoPatrimonio,
+      tipo_novidade:
+        tipoNovidade,
+      providencia,
+      descricao,
+      registrado_por_id:
+        user?.id ||
+        null,
+      registrado_por_re:
+        operadorRe ||
+        null,
+      registrado_por_nome:
+        operadorNome
+    }
+  }
+
+  return Promise.all([
+    criarNotificacaoParaPerfil({
+      perfil:
+        'ENCARREGADO DO SVDD',
+      ...payloadBase
+    }),
+    criarNotificacaoParaPerfil({
+      perfil:
+        'P4',
+      ...payloadBase
+    })
+  ])
+}
+
 async function buscarNovidadeOficialComFotos(novidade) {
   const novidadeId =
     novidade?.novidade_id ||
@@ -549,6 +952,65 @@ async function buscarNovidadeOficialComFotos(novidade) {
         'USUARIO'
     }))
   }
+}
+
+
+async function concluirNovidadeRecebidaSemManutencao({
+  novidadeOficial,
+  patrimonioId,
+  user
+}) {
+  let novidadeId =
+    novidadeOficial?.id ||
+    null
+
+  // Fallback seguro: alguns fluxos podem perder o novidade_id na montagem
+  // do carrinho. Nesse caso, localiza a ocorrência pendente pelo patrimônio
+  // exato que acabou de ser recebido.
+  if (!novidadeId && patrimonioId) {
+    const { data: pendentes, error: buscaError } = await supabase
+      .from('sigmo_patrimonio_novidades')
+      .select('id, patrimonio_id, status, created_at')
+      .eq('patrimonio_id', patrimonioId)
+      .ilike('status', 'registrada')
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (buscaError) {
+      throw buscaError
+    }
+
+    novidadeId =
+      pendentes?.[0]?.id ||
+      null
+  }
+
+  if (!novidadeId) {
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from('sigmo_patrimonio_novidades')
+    .update({
+      status: 'concluida',
+      aprovado_por_id:
+        user?.id ||
+        null,
+      aprovado_por_nome:
+        obterNomeUsuario(user),
+      updated_at:
+        new Date().toISOString()
+    })
+    .eq('id', novidadeId)
+    .ilike('status', 'registrada')
+    .select()
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data || null
 }
 
 function mesclarFotosNovidade(...listas) {
@@ -893,10 +1355,47 @@ export async function receberMaterial({
           user
         })
 
-  const novidadeOficial =
+  let novidadeOficial =
     await buscarNovidadeOficialComFotos(
       novidadeFinal
     )
+
+  // Quando a novidade é criada pelo próprio operador durante o
+  // recebimento, ainda não existe registro oficial na tabela central.
+  // Cria esse registro antes de aplicar a providência, para que a
+  // Central Operacional acompanhe a ocorrência.
+  let novidadeCriadaNoRecebimento =
+    false
+
+  if (
+    !novidadeOficial?.id &&
+    novidadeFinal
+  ) {
+    novidadeOficial =
+      await registrarNovidadeOficialRecebimento({
+        patrimonio,
+        novidade:
+          novidadeFinal,
+        user
+      })
+
+    novidadeCriadaNoRecebimento =
+      Boolean(
+        novidadeOficial?.id
+      )
+  }
+
+  if (
+    novidadeCriadaNoRecebimento
+  ) {
+    await notificarNovidadePatrimonialRecebimento({
+      novidadeOficial,
+      novidade:
+        novidadeFinal,
+      patrimonio,
+      user
+    })
+  }
 
   const fotosParaManutencao =
     mesclarFotosNovidade(
@@ -1082,6 +1581,24 @@ export async function receberMaterial({
       })
   }
 
+  let novidadeConcluida = null
+
+  if (
+    novidadeOficial?.id &&
+    !novidadeSolicitaManutencao(
+      novidadeFinal
+    )
+  ) {
+    novidadeConcluida =
+      await concluirNovidadeRecebidaSemManutencao({
+        novidadeOficial,
+        patrimonioId:
+          patrimonio?.id ||
+          null,
+        user
+      })
+  }
+
   return {
     patrimonio:
       patrimonioAtualizado,
@@ -1090,7 +1607,10 @@ export async function receberMaterial({
 
     movimentacao,
 
-    manutencao
+    manutencao,
+
+    novidade_concluida:
+      novidadeConcluida
   }
 }
 

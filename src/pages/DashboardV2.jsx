@@ -26,7 +26,9 @@ import {
 import {
   listarCautelasAguardandoUsuario,
   listarDevolucoesPendentesUsuario,
-  listarMateriaisEmServicoUsuario
+  listarMateriaisEmServicoUsuario,
+  listarCautelasVencidasSVDD,
+  estenderTurnoCautela
 } from '../services/cautelasUsuarioService'
 import {
   listarNotificacoes,
@@ -97,6 +99,113 @@ function dataHora(valor) {
       timeStyle: 'short'
     }
   ).format(new Date(valor))
+}
+
+function descricaoCautelaResumida(item) {
+  const tipo = String(
+    item?.tipo ||
+    item?.tipo_patrimonio ||
+    ''
+  )
+    .trim()
+    .toUpperCase()
+
+  const descricao = String(
+    item?.descricao || ''
+  )
+    .trim()
+    .toUpperCase()
+
+  const patrimonio = String(
+    item?.patrimonio ||
+    item?.numero_patrimonio ||
+    item?.numero_serie ||
+    ''
+  )
+    .trim()
+    .toUpperCase()
+
+  if (
+    tipo === 'ARMA' ||
+    descricao.includes('PISTOLA') ||
+    descricao.includes('ESPINGARDA') ||
+    descricao.includes('FUZIL')
+  ) {
+    const especie =
+      descricao.includes('ESPINGARDA')
+        ? 'ESPINGARDA'
+        : descricao.includes('FUZIL')
+        ? 'FUZIL'
+        : descricao.includes('PISTOLA')
+        ? 'PISTOLA'
+        : 'ARMA'
+
+    const marcasConhecidas = [
+      'GLOCK',
+      'BENELLI',
+      'CBC',
+      'IMBEL',
+      'TAURUS',
+      'BERETTA'
+    ]
+
+    const marca =
+      marcasConhecidas.find(
+        (valor) =>
+          descricao.includes(valor)
+      ) || ''
+
+    return [
+      especie,
+      marca,
+      patrimonio
+    ]
+      .filter(Boolean)
+      .join(' • ')
+  }
+
+  if (tipo === 'TPD' || descricao.startsWith('TPD')) {
+    return [
+      'TPD',
+      patrimonio
+    ]
+      .filter(Boolean)
+      .join(' • ')
+  }
+
+  if (tipo === 'TASER' || descricao.includes('TASER')) {
+    return [
+      'TASER',
+      patrimonio
+    ]
+      .filter(Boolean)
+      .join(' • ')
+  }
+
+  if (tipo === 'HT' || descricao.includes('MOTOROLA')) {
+    return [
+      'HT',
+      patrimonio
+    ]
+      .filter(Boolean)
+      .join(' • ')
+  }
+
+  if (
+    descricao.includes('TONFA') ||
+    descricao.includes('CASSETETE')
+  ) {
+    return descricao.includes('CASSETETE')
+      ? 'CASSETETE'
+      : 'TONFA'
+  }
+
+  return (
+    patrimonio ||
+    descricao ||
+    tipo ||
+    'MATERIAL'
+  )
 }
 
 function obterNomeUsuario(user) {
@@ -647,6 +756,159 @@ function PainelDashboard({
     setCarregandoEmServico
   ] = useState(false)
 
+  const [
+    cautelasVencidas,
+    setCautelasVencidas
+  ] = useState([])
+
+  const [
+    modalCautelasVencidasAberto,
+    setModalCautelasVencidasAberto
+  ] = useState(false)
+
+  const [
+    carregandoCautelasVencidas,
+    setCarregandoCautelasVencidas
+  ] = useState(false)
+
+  const [
+    cautelaParaEstender,
+    setCautelaParaEstender
+  ] = useState(null)
+
+  const [
+    novaDataTurno,
+    setNovaDataTurno
+  ] = useState('')
+
+  const [
+    novaHoraTurno,
+    setNovaHoraTurno
+  ] = useState('')
+
+  const [
+    salvandoExtensaoTurno,
+    setSalvandoExtensaoTurno
+  ] = useState(false)
+
+  const [
+    erroExtensaoTurno,
+    setErroExtensaoTurno
+  ] = useState('')
+
+  async function carregarCautelasVencidas() {
+    try {
+      setCarregandoCautelasVencidas(true)
+      const lista = await listarCautelasVencidasSVDD()
+      setCautelasVencidas(
+        Array.isArray(lista) ? lista : []
+      )
+      return Array.isArray(lista) ? lista : []
+    } catch (error) {
+      console.error(
+        'Erro ao carregar cautelas vencidas:',
+        error
+      )
+      setCautelasVencidas([])
+      return []
+    } finally {
+      setCarregandoCautelasVencidas(false)
+    }
+  }
+
+  function abrirExtensaoTurno(cautela) {
+    const prazoAtual =
+      cautela?.fim_turno_servico
+        ? new Date(cautela.fim_turno_servico)
+        : new Date()
+
+    const base =
+      Number.isNaN(prazoAtual.getTime())
+        ? new Date()
+        : prazoAtual
+
+    const local = new Date(
+      base.getTime() -
+      base.getTimezoneOffset() * 60000
+    )
+
+    setCautelaParaEstender(cautela)
+    setNovaDataTurno(
+      local.toISOString().slice(0, 10)
+    )
+    setNovaHoraTurno(
+      local.toISOString().slice(11, 16)
+    )
+    setErroExtensaoTurno('')
+  }
+
+  function fecharExtensaoTurno() {
+    if (salvandoExtensaoTurno) return
+
+    setCautelaParaEstender(null)
+    setNovaDataTurno('')
+    setNovaHoraTurno('')
+    setErroExtensaoTurno('')
+  }
+
+  async function confirmarExtensaoTurno() {
+    if (!cautelaParaEstender?.id) {
+      setErroExtensaoTurno(
+        'A movimentação da cautela não foi identificada.'
+      )
+      return
+    }
+
+    if (!novaDataTurno || !novaHoraTurno) {
+      setErroExtensaoTurno(
+        'Informe a nova data e hora do término do turno.'
+      )
+      return
+    }
+
+    const novoPrazo = new Date(
+      `${novaDataTurno}T${novaHoraTurno}:00`
+    )
+
+    if (Number.isNaN(novoPrazo.getTime())) {
+      setErroExtensaoTurno(
+        'Informe uma nova data e hora válidas.'
+      )
+      return
+    }
+
+    try {
+      setSalvandoExtensaoTurno(true)
+      setErroExtensaoTurno('')
+
+      await estenderTurnoCautela({
+        movimentacaoId:
+          cautelaParaEstender.id,
+        novoFimTurno:
+          novoPrazo.toISOString(),
+        user
+      })
+
+      setCautelaParaEstender(null)
+      setNovaDataTurno('')
+      setNovaHoraTurno('')
+
+      await carregarCautelasVencidas()
+    } catch (error) {
+      setErroExtensaoTurno(
+        error?.message ||
+        'Não foi possível estender o término do turno.'
+      )
+    } finally {
+      setSalvandoExtensaoTurno(false)
+    }
+  }
+
+  async function abrirCautelasVencidas() {
+    await carregarCautelasVencidas()
+    setModalCautelasVencidasAberto(true)
+  }
+
   async function abrirMateriaisEmServico() {
     try {
       setCarregandoEmServico(true)
@@ -686,6 +948,11 @@ function PainelDashboard({
     ehEncarregado(user) ||
     ehAuxiliar(user)
 
+  useEffect(() => {
+    if (!visaoSVDD) return
+    carregarCautelasVencidas()
+  }, [visaoSVDD])
+
   const armasSVDD =
     Number(vitrine.armas.svdd || 0) +
     Number(vitrine.armas.cautelas || 0) +
@@ -705,7 +972,8 @@ function PainelDashboard({
     visaoSVDD
       ? armasSVDD + tonfasSVDD
       : Number(vitrine.armas.total || 0) +
-        Number(vitrine.tonfas.total || 0)
+        Number(vitrine.tonfas.total || 0) +
+        Number(vitrine.individuais?.total || 0)
 
   const p4Integrado =
     visaoSVDD
@@ -719,7 +987,7 @@ function PainelDashboard({
 
   const emUsoIntegrado =
     Number(
-      vitrine.armas.cautelas || 0
+      vitrine.patrimonios?.emServico || 0
     ) +
     Number(
       vitrine.tonfas.emServico || 0
@@ -859,6 +1127,20 @@ function PainelDashboard({
 
   return (
     <main className="sigmo-command-dashboard">
+      <style>
+        {`
+          @keyframes sigmoCautelaVencidaPulse {
+            0%, 100% {
+              transform: scale(1);
+              filter: brightness(1);
+            }
+            50% {
+              transform: scale(1.018);
+              filter: brightness(1.18);
+            }
+          }
+        `}
+      </style>
       <header className="sigmo-command-header">
         <div>
           <h1>
@@ -980,6 +1262,32 @@ function PainelDashboard({
           detail="itens em manutenção"
           onClick={() => onNavegar('manutencoes')}
         />
+
+        {visaoSVDD && (
+          <div
+            style={
+              cautelasVencidas.length > 0
+                ? {
+                    animation:
+                      'sigmoCautelaVencidaPulse 1.2s ease-in-out infinite'
+                  }
+                : undefined
+            }
+          >
+            <KpiStrip
+              icon="◷"
+              tone="red"
+              label="Cautelas vencidas"
+              value={cautelasVencidas.length}
+              detail={
+                cautelasVencidas.length > 0
+                  ? 'exigem providência'
+                  : 'nenhuma cautela vencida'
+              }
+              onClick={abrirCautelasVencidas}
+            />
+          </div>
+        )}
       </section>
 
 
@@ -1028,6 +1336,331 @@ function PainelDashboard({
                   </article>
                 ))
               )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {modalCautelasVencidasAberto && (
+        <div
+          className="sigmo-command-service-modal-backdrop"
+          onClick={() =>
+            setModalCautelasVencidasAberto(false)
+          }
+        >
+          <section
+            className="sigmo-command-service-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <header>
+              <div>
+                <span>CAUTELAS VENCIDAS</span>
+                <h2>
+                  Turnos que exigem providência
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setModalCautelasVencidasAberto(false)
+                }
+              >
+                Fechar
+              </button>
+            </header>
+
+            <div className="sigmo-command-service-modal-body">
+              {carregandoCautelasVencidas ? (
+                <p>Carregando...</p>
+              ) : cautelasVencidas.length === 0 ? (
+                <p>Nenhuma cautela vencida.</p>
+              ) : (
+                cautelasVencidas.map((cautela) => (
+                  <article key={cautela.id}>
+                    <div>
+                      <strong>
+                        {cautela.recebedor_nome ||
+                          'Policial não identificado'}
+                      </strong>
+
+                      <span>
+                        Vencida em{' '}
+                        {dataHora(
+                          cautela.fim_turno_servico
+                        )}
+                      </span>
+
+                      {Array.isArray(cautela.itens) &&
+                        cautela.itens.length > 0 && (
+                          <span>
+                            {cautela.itens
+                              .map((item) =>
+                                descricaoCautelaResumida(item)
+                              )
+                              .join(', ')}
+                          </span>
+                        )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        justifyItems: 'end',
+                        gap: '8px'
+                      }}
+                    >
+                      <b>
+                        {Array.isArray(cautela.itens)
+                          ? cautela.itens.reduce(
+                              (total, item) =>
+                                total +
+                                Number(
+                                  item?.quantidade || 1
+                                ),
+                              0
+                            )
+                          : 0}{' '}
+                        un.
+                      </b>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          abrirExtensaoTurno(cautela)
+                        }
+                        style={{
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border:
+                            '1px solid rgba(255,255,255,.28)',
+                          background:
+                            'rgba(255,255,255,.08)',
+                          color: '#fff',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Estender turno
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {cautelaParaEstender && (
+        <div
+          className="sigmo-command-service-modal-backdrop"
+          style={{ zIndex: 10050 }}
+          onClick={fecharExtensaoTurno}
+        >
+          <section
+            className="sigmo-command-service-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            style={{
+              width:
+                'min(560px, calc(100vw - 32px))'
+            }}
+          >
+            <header>
+              <div>
+                <span>CAUTELA</span>
+                <h2>Estender turno</h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={fecharExtensaoTurno}
+                disabled={salvandoExtensaoTurno}
+              >
+                Fechar
+              </button>
+            </header>
+
+            <div
+              className="sigmo-command-service-modal-body"
+              style={{
+                display: 'grid',
+                gap: '16px'
+              }}
+            >
+              <div>
+                <strong>
+                  {cautelaParaEstender.recebedor_nome ||
+                    'Policial não identificado'}
+                </strong>
+
+                <span
+                  style={{
+                    display: 'block',
+                    marginTop: '4px'
+                  }}
+                >
+                  Prazo atual:{' '}
+                  {dataHora(
+                    cautelaParaEstender.fim_turno_servico
+                  )}
+                </span>
+              </div>
+
+              {Array.isArray(
+                cautelaParaEstender.itens
+              ) &&
+                cautelaParaEstender.itens.length > 0 && (
+                  <div>
+                    <small
+                      style={{
+                        display: 'block',
+                        marginBottom: '6px',
+                        opacity: .75
+                      }}
+                    >
+                      Materiais
+                    </small>
+
+                    <strong>
+                      {cautelaParaEstender.itens
+                        .map((item) =>
+                          descricaoCautelaResumida(item)
+                        )
+                        .join(', ')}
+                    </strong>
+                  </div>
+                )}
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    'repeat(2, minmax(0, 1fr))',
+                  gap: '12px'
+                }}
+              >
+                <label>
+                  <span
+                    style={{
+                      display: 'block',
+                      marginBottom: '6px',
+                      fontWeight: 800
+                    }}
+                  >
+                    Nova data
+                  </span>
+
+                  <input
+                    type="date"
+                    value={novaDataTurno}
+                    onChange={(event) =>
+                      setNovaDataTurno(
+                        event.target.value
+                      )
+                    }
+                    disabled={salvandoExtensaoTurno}
+                    style={{
+                      width: '100%',
+                      minHeight: '42px',
+                      borderRadius: '8px',
+                      border:
+                        '1px solid rgba(255,255,255,.24)',
+                      padding: '0 10px'
+                    }}
+                  />
+                </label>
+
+                <label>
+                  <span
+                    style={{
+                      display: 'block',
+                      marginBottom: '6px',
+                      fontWeight: 800
+                    }}
+                  >
+                    Nova hora
+                  </span>
+
+                  <input
+                    type="time"
+                    value={novaHoraTurno}
+                    onChange={(event) =>
+                      setNovaHoraTurno(
+                        event.target.value
+                      )
+                    }
+                    disabled={salvandoExtensaoTurno}
+                    style={{
+                      width: '100%',
+                      minHeight: '42px',
+                      borderRadius: '8px',
+                      border:
+                        '1px solid rgba(255,255,255,.24)',
+                      padding: '0 10px'
+                    }}
+                  />
+                </label>
+              </div>
+
+              {erroExtensaoTurno && (
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background:
+                      'rgba(220,38,38,.14)',
+                    border:
+                      '1px solid rgba(248,113,113,.34)',
+                    color: '#fecaca',
+                    fontWeight: 700
+                  }}
+                >
+                  {erroExtensaoTurno}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '10px'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={fecharExtensaoTurno}
+                  disabled={salvandoExtensaoTurno}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmarExtensaoTurno}
+                  disabled={salvandoExtensaoTurno}
+                  style={{
+                    padding: '9px 14px',
+                    borderRadius: '8px',
+                    border: 0,
+                    background: '#2563eb',
+                    color: '#fff',
+                    fontWeight: 800,
+                    cursor:
+                      salvandoExtensaoTurno
+                        ? 'wait'
+                        : 'pointer'
+                  }}
+                >
+                  {salvandoExtensaoTurno
+                    ? 'Salvando...'
+                    : 'Confirmar extensão'}
+                </button>
+              </div>
             </div>
           </section>
         </div>
@@ -1934,6 +2567,8 @@ function PainelUsuario({ user, onNavegar }) {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [materialSelecionado, setMaterialSelecionado] = useState(null)
+  const [agoraUsuario, setAgoraUsuario] =
+    useState(() => new Date())
 
   useEffect(() => {
     let ativo = true
@@ -1968,6 +2603,41 @@ function PainelUsuario({ user, onNavegar }) {
     return () => { ativo = false }
   }, [user])
 
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setAgoraUsuario(new Date()),
+      30000
+    )
+
+    return () =>
+      window.clearInterval(timer)
+  }, [])
+
+  const cautelasVencidasUsuario = useMemo(
+    () =>
+      dados.materiais.filter((item) => {
+        const fimTurno =
+          item?.fim_turno_servico
+
+        if (!fimTurno) return false
+
+        const prazo = new Date(fimTurno)
+
+        return (
+          !Number.isNaN(prazo.getTime()) &&
+          prazo.getTime() <= agoraUsuario.getTime()
+        )
+      }),
+    [dados.materiais, agoraUsuario]
+  )
+
+  const totalCautelasVencidasUsuario =
+    cautelasVencidasUsuario.reduce(
+      (total, item) =>
+        total + obterQuantidadeMaterial(item),
+      0
+    )
+
   const totalMateriais = dados.materiais.reduce(
   (total, item) =>
     total + obterQuantidadeMaterial(item),
@@ -1976,6 +2646,20 @@ function PainelUsuario({ user, onNavegar }) {
 
   return (
     <main className="sigmo-command-dashboard">
+      <style>
+        {`
+          @keyframes sigmoCautelaUsuarioVencidaPulse {
+            0%, 100% {
+              transform: scale(1);
+              filter: brightness(1);
+            }
+            50% {
+              transform: scale(1.01);
+              filter: brightness(1.14);
+            }
+          }
+        `}
+      </style>
       <header className="sigmo-command-header">
         <div>
           <h1>Painel Operacional</h1>
@@ -1984,6 +2668,88 @@ function PainelUsuario({ user, onNavegar }) {
       </header>
 
       {erro && <div className="sigmo-command-error">{erro}</div>}
+
+      {totalCautelasVencidasUsuario > 0 && (
+        <section
+          role="alert"
+          style={{
+            marginBottom: '18px',
+            padding: '18px 20px',
+            borderRadius: '16px',
+            border: '1px solid rgba(248,113,113,.55)',
+            background:
+              'linear-gradient(135deg, rgba(127,29,29,.94) 0%, rgba(153,27,27,.88) 100%)',
+            color: '#fff',
+            boxShadow: '0 16px 34px rgba(127,29,29,.22)',
+            animation:
+              'sigmoCautelaUsuarioVencidaPulse 1.35s ease-in-out infinite'
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '18px',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div>
+              <span
+                style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  fontWeight: 900,
+                  letterSpacing: '.12em',
+                  color: '#fecaca'
+                }}
+              >
+                CAUTELA VENCIDA
+              </span>
+
+              <h2
+                style={{
+                  margin: '6px 0 5px',
+                  fontSize: '20px'
+                }}
+              >
+                O término do seu turno foi atingido
+              </h2>
+
+              <p
+                style={{
+                  margin: 0,
+                  lineHeight: 1.5,
+                  opacity: .94
+                }}
+              >
+                Você possui {numero(totalCautelasVencidasUsuario)} material(is)
+                com prazo vencido. Providencie a devolução ou procure o SVDD
+                para extensão do turno.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavegar('devolver-material')
+              }
+              style={{
+                padding: '11px 16px',
+                borderRadius: '10px',
+                border: 0,
+                background: '#fff',
+                color: '#991b1b',
+                fontWeight: 900,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Devolver materiais
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="sigmo-command-kpi-strip">
         <KpiStrip
@@ -2236,31 +3002,48 @@ export default function DashboardV2({
 
   const [policialAbrirRe, setPolicialAbrirRe] = useState('')
   const [avisoRecebimento, setAvisoRecebimento] = useState(0)
-  const [avisoVerificado, setAvisoVerificado] = useState(false)
   const [avisoNotificacao, setAvisoNotificacao] = useState(null)
   const [notificacaoVerificada, setNotificacaoVerificada] = useState(false)
 
   const dashboard = useDashboard()
 
   useEffect(() => {
-    if (!podeAcessarRota(user, 'receber-material') || avisoVerificado) return
+    if (!podeAcessarRota(user, 'receber-material')) {
+      setAvisoRecebimento(0)
+      return
+    }
+
+    if (route !== 'dashboard') {
+      return
+    }
 
     let ativo = true
+
     listarCautelasAguardandoUsuario(user)
       .then((lista) => {
-        if (ativo && Array.isArray(lista) && lista.length > 0) {
-          setAvisoRecebimento(lista.length)
-        }
+        if (!ativo) return
+
+        setAvisoRecebimento(
+          Array.isArray(lista)
+            ? lista.length
+            : 0
+        )
       })
       .catch((error) => {
-        console.warn('Não foi possível verificar materiais pendentes:', error)
-      })
-      .finally(() => {
-        if (ativo) setAvisoVerificado(true)
+        console.warn(
+          'Não foi possível verificar materiais pendentes:',
+          error
+        )
+
+        if (ativo) {
+          setAvisoRecebimento(0)
+        }
       })
 
-    return () => { ativo = false }
-  }, [user, avisoVerificado])
+    return () => {
+      ativo = false
+    }
+  }, [user, route])
 
   useEffect(() => {
     if (
@@ -2484,7 +3267,9 @@ useEffect(() => {
         <PagarMaterial
           user={user}
           onVoltar={voltarDashboard}
-          onConcluido={voltarDashboard}
+          onConcluido={() => {
+            dashboard.atualizar()
+          }}
         />
       )
     }

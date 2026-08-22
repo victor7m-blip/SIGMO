@@ -25,6 +25,10 @@ import {
   criarNotificacaoParaPerfil
 } from './notificacoesService'
 
+import {
+  loadSessionToken
+} from './authService'
+
 const NOVIDADES_FOTOS_BUCKET = 'novidades-fotos'
 const TAMANHO_MAXIMO_FOTO = 5 * 1024 * 1024
 
@@ -734,6 +738,36 @@ function ehCargaPermanente(item) {
   )
 }
 
+function itemIndividualEmCautelaAtiva(item) {
+  if (!item || item?.ativo === false) {
+    return false
+  }
+
+  const dados =
+    lerObjetoObservacao(
+      item?.dados
+    )
+
+  const status =
+    normalizarMaiusculo(
+      item?.status ||
+      item?.status_operacional ||
+      dados?.status ||
+      dados?.status_operacional
+    )
+
+  const local =
+    normalizarMaiusculo(
+      item?.local_atual ||
+      dados?.local_atual
+    )
+
+  return (
+    status === 'CAUTELADO' ||
+    local === 'CAUTELA INDIVIDUAL'
+  )
+}
+
 function ehCautela(movimentacao) {
   return normalizar(
     movimentacao?.tipo_movimentacao ||
@@ -819,6 +853,102 @@ export async function listarCautelasAguardandoUsuario(
   return carregarDetalhes(movimentacoes || [])
 }
 
+async function buscarCautelasAtivasPorPatrimonio({
+  patrimonioIds = [],
+  policialId
+}) {
+  const ids = [
+    ...new Set(
+      (patrimonioIds || [])
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (!policialId || ids.length === 0) {
+    return new Map()
+  }
+
+  const {
+    data: itensMovimentacao,
+    error: itensError
+  } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select('patrimonio_id, movimentacao_id')
+    .in('patrimonio_id', ids)
+
+  if (itensError) {
+    throw itensError
+  }
+
+  const movimentacaoIds = [
+    ...new Set(
+      (itensMovimentacao || [])
+        .map((item) => item?.movimentacao_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (movimentacaoIds.length === 0) {
+    return new Map()
+  }
+
+  const {
+    data: movimentacoes,
+    error: movimentacoesError
+  } = await supabase
+    .from('sigmo_movimentacoes')
+    .select(
+      'id, tipo_movimentacao, status, recebedor_id, fim_turno_servico, created_at'
+    )
+    .in('id', movimentacaoIds)
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .eq('recebedor_id', policialId)
+    .eq('status', 'finalizada')
+    .order('created_at', { ascending: false })
+
+  if (movimentacoesError) {
+    throw movimentacoesError
+  }
+
+  const movimentacaoPorId = new Map(
+    (movimentacoes || []).map((movimentacao) => [
+      String(movimentacao.id),
+      movimentacao
+    ])
+  )
+
+  const cautelaPorPatrimonio = new Map()
+
+  for (const item of itensMovimentacao || []) {
+    const patrimonioId = String(item?.patrimonio_id || '')
+    const movimentacao = movimentacaoPorId.get(
+      String(item?.movimentacao_id || '')
+    )
+
+    if (!patrimonioId || !movimentacao) {
+      continue
+    }
+
+    const atual =
+      cautelaPorPatrimonio.get(patrimonioId)
+
+    if (
+      !atual ||
+      new Date(movimentacao.created_at).getTime() >
+        new Date(atual.created_at).getTime()
+    ) {
+      cautelaPorPatrimonio.set(
+        patrimonioId,
+        movimentacao
+      )
+    }
+  }
+
+  return cautelaPorPatrimonio
+}
+
 export async function listarMateriaisEmServicoUsuario(
   user
 ) {
@@ -847,11 +977,54 @@ export async function listarMateriaisEmServicoUsuario(
   // Esse registro central não deve ser usado como se fosse um item
   // individual da cautela, porque a responsabilidade real está em
   // sigmo_tonfas_movimentacoes.
-  const individuais = (patrimoniosIndividuais || []).filter(
+  const individuaisBase = (patrimoniosIndividuais || []).filter(
     (item) =>
       normalizar(item?.tipo) !== 'tonfa' &&
-      !ehCargaPermanente(item)
+      !ehCargaPermanente(item) &&
+      itemIndividualEmCautelaAtiva(item)
   )
+
+  const cautelasPorPatrimonio =
+    await buscarCautelasAtivasPorPatrimonio({
+      patrimonioIds:
+        individuaisBase.map(
+          (item) =>
+            item?.patrimonio_id ||
+            item?.id
+        ),
+      policialId
+    })
+
+  const individuais =
+    individuaisBase.map((item) => {
+      const patrimonioId =
+        String(
+          item?.patrimonio_id ||
+          item?.id ||
+          ''
+        )
+
+      const cautela =
+        cautelasPorPatrimonio.get(
+          patrimonioId
+        )
+
+      if (!cautela) {
+        return item
+      }
+
+      return {
+        ...item,
+        movimentacao_cautela_id:
+          cautela.id,
+        fim_turno_servico:
+          cautela.fim_turno_servico ||
+          null,
+        cautela_criada_em:
+          cautela.created_at ||
+          null
+      }
+    })
 
   const quantitativosAtivos =
     (quantitativosEmServico || []).filter(
@@ -940,6 +1113,313 @@ export async function listarMateriaisEmServicoUsuario(
     ...individuais,
     ...quantitativos
   ]
+}
+
+
+export async function listarCautelasVencidasSVDD() {
+  const agoraIso = new Date().toISOString()
+
+  const {
+    data: movimentacoes,
+    error: movimentacoesError
+  } = await supabase
+    .from('sigmo_movimentacoes')
+    .select(
+      'id, tipo_movimentacao, status, recebedor_id, recebedor_nome, fim_turno_servico, created_at'
+    )
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .eq('status', 'finalizada')
+    .not('fim_turno_servico', 'is', null)
+    .lt('fim_turno_servico', agoraIso)
+    .order('fim_turno_servico', { ascending: true })
+
+  if (movimentacoesError) {
+    throw movimentacoesError
+  }
+
+  const cautelas = movimentacoes || []
+
+  if (cautelas.length === 0) {
+    return []
+  }
+
+  const movimentacaoIds = cautelas
+    .map((item) => item?.id)
+    .filter(Boolean)
+
+  const {
+    data: itens,
+    error: itensError
+  } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select(
+      'id, movimentacao_id, patrimonio_id, quantidade, descricao, tipo_patrimonio, observacao'
+    )
+    .in('movimentacao_id', movimentacaoIds)
+
+  if (itensError) {
+    throw itensError
+  }
+
+  const patrimonioIds = [
+    ...new Set(
+      (itens || [])
+        .map((item) => item?.patrimonio_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  let patrimonios = []
+
+  if (patrimonioIds.length > 0) {
+    const {
+      data,
+      error
+    } = await supabase
+      .from('sigmo_patrimonios')
+      .select(
+        'id, tipo, referencia_id, descricao, status, local_atual, responsavel_atual_id, responsavel_atual_nome, dados'
+      )
+      .in('id', patrimonioIds)
+
+    if (error) {
+      throw error
+    }
+
+    patrimonios = data || []
+  }
+
+  const patrimonioPorId = new Map(
+    patrimonios.map((item) => [
+      String(item.id),
+      item
+    ])
+  )
+
+  const cautelaPorId = new Map(
+    cautelas.map((item) => [
+      String(item.id),
+      item
+    ])
+  )
+
+  const itensPorMovimentacao = new Map()
+
+  for (const item of itens || []) {
+    const movimentacaoId =
+      String(item?.movimentacao_id || '')
+
+    if (!movimentacaoId) continue
+
+    const cautela =
+      cautelaPorId.get(movimentacaoId)
+
+    if (!cautela?.recebedor_id) {
+      continue
+    }
+
+    const patrimonio =
+      patrimonioPorId.get(
+        String(item?.patrimonio_id || '')
+      )
+
+    if (!patrimonio) {
+      continue
+    }
+
+    const statusAtual =
+      normalizarMaiusculo(
+        patrimonio?.status
+      )
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+
+    const localAtual =
+      normalizarMaiusculo(
+        patrimonio?.local_atual
+      )
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+
+    const responsavelAtualId =
+      String(
+        patrimonio?.responsavel_atual_id ||
+        ''
+      )
+
+    const aindaComMesmoPolicial =
+      responsavelAtualId ===
+      String(cautela.recebedor_id)
+
+    const aindaEmCautela =
+      statusAtual === 'CAUTELADO' &&
+      localAtual === 'CAUTELA INDIVIDUAL'
+
+    if (
+      !aindaComMesmoPolicial ||
+      !aindaEmCautela
+    ) {
+      continue
+    }
+
+    const dados =
+      patrimonio?.dados &&
+      typeof patrimonio.dados === 'object'
+        ? patrimonio.dados
+        : {}
+
+    const registro = {
+      ...item,
+      patrimonio:
+        patrimonio?.numero_patrimonio ||
+        patrimonio?.patrimonio ||
+        dados?.patrimonio ||
+        null,
+      numero_serie:
+        patrimonio?.numero_serie ||
+        dados?.numero_serie ||
+        null,
+      tipo:
+        patrimonio?.tipo ||
+        item?.tipo_patrimonio ||
+        null,
+      descricao:
+        patrimonio?.descricao ||
+        item?.descricao ||
+        'MATERIAL'
+    }
+
+    if (!itensPorMovimentacao.has(movimentacaoId)) {
+      itensPorMovimentacao.set(
+        movimentacaoId,
+        []
+      )
+    }
+
+    itensPorMovimentacao
+      .get(movimentacaoId)
+      .push(registro)
+  }
+
+  return cautelas
+    .map((cautela) => {
+      const itensAtivos =
+        itensPorMovimentacao.get(
+          String(cautela.id)
+        ) || []
+
+      if (itensAtivos.length === 0) {
+        return null
+      }
+
+      const prazo =
+        new Date(
+          cautela.fim_turno_servico
+        )
+
+      return {
+        ...cautela,
+        vencida: true,
+        atraso_ms:
+          Math.max(
+            0,
+            Date.now() - prazo.getTime()
+          ),
+        itens:
+          itensAtivos
+      }
+    })
+    .filter(Boolean)
+}
+
+export async function estenderTurnoCautela({
+  movimentacaoId,
+  novoFimTurno,
+  user
+}) {
+  if (!movimentacaoId) {
+    throw new Error(
+      'Movimentação da cautela não informada.'
+    )
+  }
+
+  const novaData = new Date(novoFimTurno)
+
+  if (Number.isNaN(novaData.getTime())) {
+    throw new Error(
+      'Informe uma nova data e hora válidas para o término do turno.'
+    )
+  }
+
+  if (novaData.getTime() <= Date.now()) {
+    throw new Error(
+      'O novo término do turno deve ser posterior ao horário atual.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão segura não encontrada. Saia do SIGMO e faça login novamente.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_estender_turno_cautela',
+    {
+      p_token:
+        token,
+      p_movimentacao_id:
+        movimentacaoId,
+      p_novo_fim_turno:
+        novaData.toISOString()
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível estender o término do turno.'
+    )
+  }
+
+  const resultado =
+    Array.isArray(data)
+      ? data[0]
+      : data
+
+  if (!resultado?.movimentacao_id) {
+    throw new Error(
+      'A extensão foi processada, mas o banco não retornou a movimentação atualizada.'
+    )
+  }
+
+  return {
+    sucesso: true,
+    movimentacao_id:
+      resultado.movimentacao_id,
+    recebedor_id:
+      resultado.recebedor_id ||
+      null,
+    recebedor_nome:
+      resultado.recebedor_nome ||
+      null,
+    prazo_anterior:
+      resultado.prazo_anterior ||
+      null,
+    fim_turno_servico:
+      resultado.fim_turno_servico ||
+      null,
+    updated_at:
+      resultado.atualizado_em ||
+      null
+  }
 }
 
 export async function listarDevolucoesPendentesUsuario(
