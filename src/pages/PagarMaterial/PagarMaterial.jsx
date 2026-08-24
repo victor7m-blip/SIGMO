@@ -43,6 +43,7 @@ const CHAVE_FIM_TURNO_DATA = 'sigmo_pagar_material_fim_turno_data'
 const CHAVE_FIM_TURNO_HORA = 'sigmo_pagar_material_fim_turno_hora'
 const CHAVE_PREVISAO_ENTREGA_DATA = 'sigmo_pagar_material_previsao_entrega_data'
 const CHAVE_PREVISAO_ENTREGA_HORA = 'sigmo_pagar_material_previsao_entrega_hora'
+const DURACAO_MAXIMA_CAUTELA_MS = (12 * 60 + 30) * 60 * 1000
 
 function lerPreferenciaLocal(chave) {
   try {
@@ -119,6 +120,29 @@ function montarDataHoraIso(data, hora) {
   }
 
   return valor.toISOString()
+}
+
+function formatarDataInput(data) {
+  const ano = data.getFullYear()
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const dia = String(data.getDate()).padStart(2, '0')
+  return `${ano}-${mes}-${dia}`
+}
+
+function formatarHoraInput(data) {
+  const hora = String(data.getHours()).padStart(2, '0')
+  const minuto = String(data.getMinutes()).padStart(2, '0')
+  return `${hora}:${minuto}`
+}
+
+function obterLimiteCautela() {
+  return new Date(Date.now() + DURACAO_MAXIMA_CAUTELA_MS)
+}
+
+function aplicarFimTurnoPadrao(setData, setHora) {
+  const limite = obterLimiteCautela()
+  setData(formatarDataInput(limite))
+  setHora(formatarHoraInput(limite))
 }
 
 function criarChaveMaterial(material) {
@@ -229,12 +253,14 @@ export default function PagarMaterial({
   const [tipoMovimentacao, setTipoMovimentacao] = useState(TIPO_CAUTELA)
   const [localDestino, setLocalDestino] = useState(DESTINO_CAUTELA)
   const [observacoes, setObservacoes] = useState('')
-  const [fimTurnoData, setFimTurnoData] = useState(
-    () => lerPreferenciaLocal(CHAVE_FIM_TURNO_DATA)
-  )
-  const [fimTurnoHora, setFimTurnoHora] = useState(
-    () => lerPreferenciaLocal(CHAVE_FIM_TURNO_HORA)
-  )
+  const [fimTurnoData, setFimTurnoData] = useState(() => {
+    const limite = obterLimiteCautela()
+    return formatarDataInput(limite)
+  })
+  const [fimTurnoHora, setFimTurnoHora] = useState(() => {
+    const limite = obterLimiteCautela()
+    return formatarHoraInput(limite)
+  })
   const [previsaoEntregaData, setPrevisaoEntregaData] = useState(
     () => lerPreferenciaLocal(CHAVE_PREVISAO_ENTREGA_DATA)
   )
@@ -244,6 +270,7 @@ export default function PagarMaterial({
   const [itensSelecionados, setItensSelecionados] = useState([])
   const [mensagem, setMensagem] = useState('')
   const [erro, setErro] = useState('')
+  const [erroConfirmacao, setErroConfirmacao] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [scannerAberto, setScannerAberto] = useState(false)
   const [buscandoQrCode, setBuscandoQrCode] = useState(false)
@@ -279,14 +306,6 @@ export default function PagarMaterial({
     const origemPerfil = origemInicialPorPerfil(perfil)
     if (!origemSelecionavel) setLocalOrigem(origemPerfil)
   }, [perfil, origemSelecionavel])
-
-  useEffect(() => {
-    salvarPreferenciaLocal(CHAVE_FIM_TURNO_DATA, fimTurnoData)
-  }, [fimTurnoData])
-
-  useEffect(() => {
-    salvarPreferenciaLocal(CHAVE_FIM_TURNO_HORA, fimTurnoHora)
-  }, [fimTurnoHora])
 
   useEffect(() => {
     salvarPreferenciaLocal(
@@ -386,6 +405,7 @@ export default function PagarMaterial({
     setLocalDestino(DESTINO_CAUTELA)
     setObservacoes('')
     setItensSelecionados([])
+    aplicarFimTurnoPadrao(setFimTurnoData, setFimTurnoHora)
     setMensagem('')
     setErro('')
   }
@@ -421,24 +441,33 @@ export default function PagarMaterial({
     }
   }
 
+  function mostrarErroConfirmacao(mensagemErro) {
+    const texto =
+      mensagemErro ||
+      'Não foi possível confirmar a movimentação.'
+
+    setErro(texto)
+    setErroConfirmacao(texto)
+  }
+
   async function confirmarEntrega() {
     if (exigePolicial && !policialRecebedor) {
-      setErro('Informe um RE válido.')
+      mostrarErroConfirmacao('Informe um RE válido.')
       return
     }
 
     if (ehCautela && (!fimTurnoData || !fimTurnoHora)) {
-      setErro('Informe a data e a hora do término do turno de serviço.')
+      mostrarErroConfirmacao('Informe a data e a hora do término do turno de serviço.')
       return
     }
 
     if (ehTransferencia && (!previsaoEntregaData || !previsaoEntregaHora)) {
-      setErro('Informe a data e a hora da previsão de entrega.')
+      mostrarErroConfirmacao('Informe a data e a hora da previsão de entrega.')
       return
     }
 
     if (itensSelecionados.length === 0) {
-      setErro('Adicione pelo menos um material.')
+      mostrarErroConfirmacao('Adicione pelo menos um material.')
       return
     }
 
@@ -453,7 +482,7 @@ export default function PagarMaterial({
       tipoMovimentacao === TIPO_ENTREGA &&
       policialRecebedor?.arma_somente_cautela
     ) {
-      setErro(
+      mostrarErroConfirmacao(
         'Este policial possui restrição de armamento: somente cautela. Não é permitido entregar arma como carga permanente.'
       )
       return
@@ -464,7 +493,7 @@ export default function PagarMaterial({
       tipoMovimentacao === TIPO_CAUTELA &&
       policialRecebedor?.arma_sem_cautela
     ) {
-      setErro(
+      mostrarErroConfirmacao(
         'Este policial possui restrição de armamento: sem cautela de arma. Não é permitido cautelar arma para este policial.'
       )
       return
@@ -479,18 +508,36 @@ export default function PagarMaterial({
       : null
 
     if (ehCautela && !fimTurnoServico) {
-      setErro('A data/hora do término do turno é inválida.')
+      mostrarErroConfirmacao('A data/hora do término do turno é inválida.')
       return
     }
 
+    if (ehCautela) {
+      const fimTurnoMs = new Date(fimTurnoServico).getTime()
+      const agoraMs = Date.now()
+      const limiteMs = agoraMs + DURACAO_MAXIMA_CAUTELA_MS
+
+      if (fimTurnoMs <= agoraMs) {
+        mostrarErroConfirmacao('O término da cautela deve ser posterior ao horário atual.')
+        return
+      }
+
+      if (fimTurnoMs > limiteMs) {
+        mostrarErroConfirmacao(
+          'A cautela inicial não pode ultrapassar 12h30. Se necessário, o SVDD deverá estender o turno posteriormente.'
+        )
+        return
+      }
+    }
+
     if (ehTransferencia && !previsaoEntrega) {
-      setErro('A data/hora da previsão de entrega é inválida.')
+      mostrarErroConfirmacao('A data/hora da previsão de entrega é inválida.')
       return
     }
 
     try {
       setSalvando(true)
-      setErro('')
+      setErroConfirmacao('')
       setMensagem('')
 
       const movimentacaoParaUsuario =
@@ -583,6 +630,7 @@ export default function PagarMaterial({
       setPolicialRecebedor(null)
       setItensSelecionados([])
       setObservacoes('')
+      aplicarFimTurnoPadrao(setFimTurnoData, setFimTurnoHora)
       setAtualizarPesquisaEm(Date.now())
 
       window.scrollTo({
@@ -590,16 +638,25 @@ export default function PagarMaterial({
         behavior: 'smooth'
       })
 
-      onConcluido?.()
     } catch (error) {
       console.error(error)
 
-      setErro(
+      mostrarErroConfirmacao(
         error?.message ||
         'Não foi possível registrar a movimentação.'
       )
+      return
     } finally {
       setSalvando(false)
+    }
+
+    try {
+      onConcluido?.()
+    } catch (callbackError) {
+      console.warn(
+        'Movimentação concluída, mas não foi possível atualizar a tela automaticamente:',
+        callbackError
+      )
     }
   }
 
@@ -694,6 +751,9 @@ export default function PagarMaterial({
                       value={fimTurnoHora}
                       onChange={(event) => setFimTurnoHora(event.target.value)}
                     />
+                    <small>
+                      Prazo inicial máximo: 12h30. Pode reduzir, mas não ultrapassar esse limite.
+                    </small>
                   </label>
                 </>
               )}
@@ -753,6 +813,108 @@ export default function PagarMaterial({
           onConfirmar={confirmarEntrega}
         />
       </section>
+
+      {erroConfirmacao && (
+        <div
+          role="presentation"
+          onClick={() => setErroConfirmacao('')}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10020,
+            display: 'grid',
+            placeItems: 'center',
+            padding: '24px',
+            background: 'rgba(15,23,42,.58)',
+            backdropFilter: 'blur(2px)'
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="pagar-material-erro-titulo"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(520px, 100%)',
+              overflow: 'hidden',
+              border: '1px solid #fecaca',
+              borderRadius: '18px',
+              background: '#ffffff',
+              boxShadow: '0 28px 70px rgba(15,23,42,.28)'
+            }}
+          >
+            <div
+              style={{
+                padding: '22px 24px',
+                borderBottom: '1px solid #fee2e2',
+                background: '#fff7f7'
+              }}
+            >
+              <span
+                style={{
+                  display: 'block',
+                  marginBottom: '5px',
+                  color: '#dc2626',
+                  fontSize: '12px',
+                  fontWeight: 900,
+                  letterSpacing: '.1em'
+                }}
+              >
+                MOVIMENTAÇÃO NÃO CONFIRMADA
+              </span>
+
+              <h2
+                id="pagar-material-erro-titulo"
+                style={{
+                  margin: 0,
+                  color: '#7f1d1d',
+                  fontSize: '20px'
+                }}
+              >
+                Verifique os dados da cautela
+              </h2>
+            </div>
+
+            <div
+              style={{
+                padding: '22px 24px',
+                color: '#991b1b',
+                fontWeight: 700,
+                lineHeight: 1.55
+              }}
+            >
+              {erroConfirmacao}
+            </div>
+
+            <footer
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                padding: '0 24px 22px'
+              }}
+            >
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setErroConfirmacao('')}
+                style={{
+                  minWidth: '100px',
+                  minHeight: '42px',
+                  padding: '9px 16px',
+                  border: 0,
+                  borderRadius: '10px',
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  fontWeight: 850,
+                  cursor: 'pointer'
+                }}
+              >
+                Entendi
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       <QrScanner open={scannerAberto} onRead={handleQrRead} onClose={() => setScannerAberto(false)} />
     </main>

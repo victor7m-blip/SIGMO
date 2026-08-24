@@ -1254,6 +1254,7 @@ export async function cautelarTonfaParaPolicial({
   policial,
   quantidade = 1,
   devolucaoPrevista = null,
+  movimentacaoPrincipalId = null,
   observacoes = null,
   user = null
 }) {
@@ -1364,6 +1365,7 @@ export async function cautelarTonfaParaPolicial({
             valor,
 
           devolucaoPrevista,
+          movimentacaoPrincipalId,
           observacoes,
           user
         })

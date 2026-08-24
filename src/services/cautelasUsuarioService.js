@@ -1094,6 +1094,20 @@ export async function listarMateriaisEmServicoUsuario(
         ...item,
         patrimonio_id: patrimonio.id,
         referencia_id: tonfaId,
+
+        // Tonfa/Cassetete participam do mesmo carrinho de cautela.
+        // Normaliza os campos de prazo usados pela tela Devolver Material
+        // para aplicar a mesma regra visual/operacional dos individualizados.
+        movimentacao_cautela_id:
+          item?.movimentacao_principal_id ||
+          null,
+        fim_turno_servico:
+          item?.devolucao_prevista ||
+          null,
+        cautela_criada_em:
+          item?.criado_em ||
+          null,
+
         descricao:
           item?.descricao ||
           patrimonio?.descricao ||
@@ -1117,35 +1131,635 @@ export async function listarMateriaisEmServicoUsuario(
 
 
 export async function listarCautelasVencidasSVDD() {
-  const agoraIso = new Date().toISOString()
+  const agora = Date.now()
+  const agoraIso = new Date(agora).toISOString()
 
+  // 1) Patrimônios individualizados atualmente em cautela.
   const {
-    data: movimentacoes,
-    error: movimentacoesError
+    data: patrimoniosAtivos,
+    error: patrimoniosError
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select(
+      'id, tipo, referencia_id, descricao, status, local_atual, responsavel_atual_id, responsavel_atual_nome, dados'
+    )
+    .eq('ativo', true)
+    .eq('status', 'CAUTELADO')
+    .eq('local_atual', 'CAUTELA INDIVIDUAL')
+
+  if (patrimoniosError) {
+    throw patrimoniosError
+  }
+
+  const patrimonios = patrimoniosAtivos || []
+  const vencidas = []
+
+  if (patrimonios.length > 0) {
+    const patrimonioIds = patrimonios
+      .map((item) => item?.id)
+      .filter(Boolean)
+
+    const {
+      data: itensMovimentacao,
+      error: itensError
+    } = await supabase
+      .from('sigmo_movimentacao_itens')
+      .select(
+        'id, movimentacao_id, patrimonio_id, quantidade, descricao, tipo_patrimonio, observacao'
+      )
+      .in('patrimonio_id', patrimonioIds)
+
+    if (itensError) {
+      throw itensError
+    }
+
+    const movimentacaoIds = [
+      ...new Set(
+        (itensMovimentacao || [])
+          .map((item) => item?.movimentacao_id)
+          .filter(Boolean)
+          .map(String)
+      )
+    ]
+
+    if (movimentacaoIds.length > 0) {
+      const {
+        data: movimentacoes,
+        error: movimentacoesError
+      } = await supabase
+        .from('sigmo_movimentacoes')
+        .select(
+          'id, tipo_movimentacao, status, recebedor_id, recebedor_nome, fim_turno_servico, created_at'
+        )
+        .in('id', movimentacaoIds)
+        .eq('tipo_movimentacao', 'CAUTELA')
+        .eq('status', 'finalizada')
+        .order('created_at', {
+          ascending: false
+        })
+
+      if (movimentacoesError) {
+        throw movimentacoesError
+      }
+
+      const movimentacaoPorId = new Map(
+        (movimentacoes || []).map((item) => [
+          String(item.id),
+          item
+        ])
+      )
+
+      const patrimonioPorId = new Map(
+        patrimonios.map((item) => [
+          String(item.id),
+          item
+        ])
+      )
+
+      // Só a cautela mais recente do patrimônio, para o responsável
+      // que efetivamente continua com o material, pode ser considerada.
+      const cautelaAtualPorPatrimonio = new Map()
+
+      for (const item of itensMovimentacao || []) {
+        const patrimonioId = String(
+          item?.patrimonio_id || ''
+        )
+
+        const movimentacao = movimentacaoPorId.get(
+          String(item?.movimentacao_id || '')
+        )
+
+        const patrimonio = patrimonioPorId.get(
+          patrimonioId
+        )
+
+        if (
+          !patrimonioId ||
+          !movimentacao ||
+          !patrimonio
+        ) {
+          continue
+        }
+
+        if (
+          String(movimentacao.recebedor_id || '') !==
+          String(patrimonio.responsavel_atual_id || '')
+        ) {
+          continue
+        }
+
+        const atual =
+          cautelaAtualPorPatrimonio.get(patrimonioId)
+
+        if (
+          !atual ||
+          new Date(movimentacao.created_at).getTime() >
+            new Date(atual.movimentacao.created_at).getTime()
+        ) {
+          cautelaAtualPorPatrimonio.set(
+            patrimonioId,
+            {
+              movimentacao,
+              item,
+              patrimonio
+            }
+          )
+        }
+      }
+
+      const vencidasPorMovimentacao = new Map()
+
+      for (const registro of cautelaAtualPorPatrimonio.values()) {
+        const {
+          movimentacao,
+          item,
+          patrimonio
+        } = registro
+
+        const prazo = movimentacao?.fim_turno_servico
+
+        if (
+          !prazo ||
+          new Date(prazo).getTime() >= agora
+        ) {
+          continue
+        }
+
+        const dados =
+          patrimonio?.dados &&
+          typeof patrimonio.dados === 'object'
+            ? patrimonio.dados
+            : {}
+
+        const itemAtivo = {
+          ...item,
+          patrimonio:
+            patrimonio?.numero_patrimonio ||
+            patrimonio?.patrimonio ||
+            dados?.patrimonio ||
+            null,
+          numero_serie:
+            patrimonio?.numero_serie ||
+            dados?.numero_serie ||
+            null,
+          tipo:
+            patrimonio?.tipo ||
+            item?.tipo_patrimonio ||
+            null,
+          descricao:
+            patrimonio?.descricao ||
+            item?.descricao ||
+            'MATERIAL',
+          quantidade:
+            Math.max(
+              1,
+              Number(item?.quantidade || 1) || 1
+            )
+        }
+
+        const movimentacaoId =
+          String(movimentacao.id)
+
+        if (!vencidasPorMovimentacao.has(movimentacaoId)) {
+          vencidasPorMovimentacao.set(
+            movimentacaoId,
+            {
+              ...movimentacao,
+              vencida: true,
+              tipo_registro:
+                'PATRIMONIO_INDIVIDUAL',
+              atraso_ms:
+                Math.max(
+                  0,
+                  agora -
+                    new Date(
+                      movimentacao.fim_turno_servico
+                    ).getTime()
+                ),
+              itens: []
+            }
+          )
+        }
+
+        vencidasPorMovimentacao
+          .get(movimentacaoId)
+          .itens.push(itemAtivo)
+      }
+
+      vencidas.push(
+        ...vencidasPorMovimentacao.values()
+      )
+    }
+  }
+
+  // 2) Tonfas e Cassetetes não usam patrimônio individual por unidade.
+  // A fonte da verdade é sigmo_tonfas_movimentacoes.
+  const {
+    data: quantitativos,
+    error: quantitativosError
+  } = await supabase
+    .from('sigmo_tonfas_movimentacoes')
+    .select('*')
+    .eq(
+      'status',
+      'EM_SERVICO'
+    )
+    .not(
+      'devolucao_prevista',
+      'is',
+      null
+    )
+    .lt(
+      'devolucao_prevista',
+      agoraIso
+    )
+    .order(
+      'devolucao_prevista',
+      { ascending: true }
+    )
+
+  if (quantitativosError) {
+    throw quantitativosError
+  }
+
+  // Agrupa Tonfa/Cassetete pela movimentação principal do carrinho.
+  // cautelarTonfaParaPolicial() recebe movimentacaoPrincipalId no recebimento,
+  // então o quantitativo deve voltar para a mesma cautela que originou o carrinho,
+  // em vez de criar um card independente no Dashboard.
+  const vencidaPorId = new Map(
+    vencidas.map((item) => [String(item.id), item])
+  )
+
+  const quantitativosSemPrincipal = []
+
+  for (const movimentacao of quantitativos || []) {
+    const saldo =
+      movimentacao?.saldo === null ||
+      movimentacao?.saldo === undefined
+        ? Math.max(
+            0,
+            Number(movimentacao?.quantidade || 0) -
+              Number(
+                movimentacao?.quantidade_devolvida || 0
+              )
+          )
+        : Math.max(
+            0,
+            Number(movimentacao?.saldo || 0)
+          )
+
+    if (saldo <= 0) {
+      continue
+    }
+
+    const prazo =
+      movimentacao?.devolucao_prevista
+
+    const itemQuantitativo = {
+      id:
+        `TONFA-ITEM-${movimentacao.id}`,
+      patrimonio_id:
+        null,
+      referencia_id:
+        movimentacao.tonfa_id ||
+        null,
+      tonfa_id:
+        movimentacao.tonfa_id ||
+        null,
+      movimentacao_tonfa_id:
+        movimentacao.id,
+      tipo_registro:
+        'TONFA_QUANTIDADE',
+      tipo:
+        normalizarMaiusculo(
+          movimentacao.tipo_material
+        ) || 'TONFA',
+      tipo_patrimonio:
+        normalizarMaiusculo(
+          movimentacao.tipo_material
+        ) || 'TONFA',
+      descricao:
+        normalizarMaiusculo(
+          movimentacao.tipo_material
+        ) || 'TONFA',
+      patrimonio:
+        'ESTOQUE CONTROLADO',
+      quantidade:
+        saldo,
+      saldo,
+      policial_id:
+        movimentacao.policial_id ||
+        null,
+      policial_re:
+        movimentacao.policial_re ||
+        null,
+      policial_nome:
+        movimentacao.policial_nome ||
+        null,
+      devolucao_prevista:
+        prazo
+    }
+
+    const movimentacaoPrincipalId =
+      movimentacao?.movimentacao_principal_id ||
+      movimentacao?.movimentacaoPrincipalId ||
+      null
+
+    if (movimentacaoPrincipalId) {
+      const chavePrincipal =
+        String(movimentacaoPrincipalId)
+
+      const cautelaExistente =
+        vencidaPorId.get(chavePrincipal)
+
+      if (cautelaExistente) {
+        cautelaExistente.itens.push(
+          itemQuantitativo
+        )
+
+        // O prazo do carrinho é único. Mantemos no card o prazo mais
+        // antigo caso haja alguma divergência histórica entre registros.
+        if (
+          prazo &&
+          (
+            !cautelaExistente.fim_turno_servico ||
+            new Date(prazo).getTime() <
+              new Date(
+                cautelaExistente.fim_turno_servico
+              ).getTime()
+          )
+        ) {
+          cautelaExistente.fim_turno_servico =
+            prazo
+          cautelaExistente.atraso_ms =
+            Math.max(
+              0,
+              agora - new Date(prazo).getTime()
+            )
+        }
+
+        continue
+      }
+
+      // Carrinho composto somente por quantitativos: cria um único card
+      // usando o ID da movimentação principal e permite que os próximos
+      // itens do mesmo pagamento sejam anexados ao mesmo registro.
+      const novaCautela = {
+        id:
+          movimentacaoPrincipalId,
+        movimentacao_principal_id:
+          movimentacaoPrincipalId,
+        tipo_movimentacao:
+          'CAUTELA',
+        tipo_registro:
+          'CARRINHO_MISTO',
+        status:
+          'finalizada',
+        recebedor_id:
+          movimentacao.policial_id ||
+          null,
+        recebedor_nome:
+          movimentacao.policial_nome ||
+          'POLICIAL NÃO IDENTIFICADO',
+        recebedor_re:
+          movimentacao.policial_re ||
+          null,
+        fim_turno_servico:
+          prazo,
+        created_at:
+          movimentacao.criado_em ||
+          null,
+        vencida: true,
+        atraso_ms:
+          Math.max(
+            0,
+            agora - new Date(prazo).getTime()
+          ),
+        itens: [itemQuantitativo]
+      }
+
+      vencidas.push(novaCautela)
+      vencidaPorId.set(
+        chavePrincipal,
+        novaCautela
+      )
+      continue
+    }
+
+    // Compatibilidade com cautelas quantitativas antigas, criadas antes
+    // de existir o vínculo com a movimentação principal do carrinho.
+    quantitativosSemPrincipal.push({
+      id:
+        `TONFA-MOV-${movimentacao.id}`,
+      movimentacao_tonfa_id:
+        movimentacao.id,
+      tipo_movimentacao:
+        'CAUTELA',
+      tipo_registro:
+        'TONFA_QUANTIDADE',
+      status:
+        movimentacao.status,
+      recebedor_id:
+        movimentacao.policial_id ||
+        null,
+      recebedor_nome:
+        movimentacao.policial_nome ||
+        'POLICIAL NÃO IDENTIFICADO',
+      recebedor_re:
+        movimentacao.policial_re ||
+        null,
+      fim_turno_servico:
+        prazo,
+      created_at:
+        movimentacao.criado_em ||
+        null,
+      vencida: true,
+      atraso_ms:
+        Math.max(
+          0,
+          agora - new Date(prazo).getTime()
+        ),
+      itens: [itemQuantitativo]
+    })
+  }
+
+  vencidas.push(...quantitativosSemPrincipal)
+
+  return vencidas.sort(
+    (a, b) =>
+      new Date(
+        a.fim_turno_servico
+      ).getTime() -
+      new Date(
+        b.fim_turno_servico
+      ).getTime()
+  )
+}
+
+
+
+function extrairHistoricoExtensoesTurno(observacoes) {
+  const texto = String(observacoes || '').trim()
+
+  if (!texto) {
+    return []
+  }
+
+  return texto
+    .split(/\r?\n/)
+    .map((linha) => linha.trim())
+    .filter(
+      (linha) =>
+        linha.includes(
+          'EXTENSÃO DE TURNO PELO SVDD'
+        )
+    )
+    .map((linha) => {
+      const partes =
+        linha
+          .split('|')
+          .map((parte) => parte.trim())
+          .filter(Boolean)
+
+      const registro = {
+        prazo_anterior: null,
+        novo_prazo: null,
+        observacao: null,
+        registrado_por: null,
+        re: null,
+        registrado_em: null,
+        texto_original: linha
+      }
+
+      for (const parte of partes) {
+        if (
+          parte.startsWith(
+            'PRAZO ANTERIOR:'
+          )
+        ) {
+          registro.prazo_anterior =
+            parte
+              .replace(
+                'PRAZO ANTERIOR:',
+                ''
+              )
+              .trim() ||
+            null
+          continue
+        }
+
+        if (
+          parte.startsWith(
+            'NOVO PRAZO:'
+          )
+        ) {
+          registro.novo_prazo =
+            parte
+              .replace(
+                'NOVO PRAZO:',
+                ''
+              )
+              .trim() ||
+            null
+          continue
+        }
+
+        if (
+          parte.startsWith(
+            'OBSERVAÇÃO:'
+          )
+        ) {
+          registro.observacao =
+            parte
+              .replace(
+                'OBSERVAÇÃO:',
+                ''
+              )
+              .trim() ||
+            null
+          continue
+        }
+
+        if (
+          parte.startsWith(
+            'REGISTRADO POR:'
+          )
+        ) {
+          registro.registrado_por =
+            parte
+              .replace(
+                'REGISTRADO POR:',
+                ''
+              )
+              .trim() ||
+            null
+          continue
+        }
+
+        if (parte.startsWith('RE:')) {
+          registro.re =
+            parte
+              .replace('RE:', '')
+              .trim() ||
+            null
+          continue
+        }
+
+        if (
+          parte.startsWith(
+            'REGISTRADO EM:'
+          )
+        ) {
+          registro.registrado_em =
+            parte
+              .replace(
+                'REGISTRADO EM:',
+                ''
+              )
+              .trim() ||
+            null
+        }
+      }
+
+      return registro
+    })
+}
+
+export async function listarCautelasComTurnoEstendidoSVDD() {
+  const {
+    data: cautelas,
+    error: cautelasError
   } = await supabase
     .from('sigmo_movimentacoes')
     .select(
-      'id, tipo_movimentacao, status, recebedor_id, recebedor_nome, fim_turno_servico, created_at'
+      'id, tipo_movimentacao, status, recebedor_id, recebedor_nome, fim_turno_servico, observacoes, created_at, updated_at'
     )
     .eq('tipo_movimentacao', 'CAUTELA')
     .eq('status', 'finalizada')
     .not('fim_turno_servico', 'is', null)
-    .lt('fim_turno_servico', agoraIso)
-    .order('fim_turno_servico', { ascending: true })
+    .ilike(
+      'observacoes',
+      '%EXTENSÃO DE TURNO PELO SVDD%'
+    )
+    .order('updated_at', {
+      ascending: false
+    })
 
-  if (movimentacoesError) {
-    throw movimentacoesError
+  if (cautelasError) {
+    throw cautelasError
   }
 
-  const cautelas = movimentacoes || []
+  const listaCautelas =
+    cautelas || []
 
-  if (cautelas.length === 0) {
+  if (listaCautelas.length === 0) {
     return []
   }
 
-  const movimentacaoIds = cautelas
-    .map((item) => item?.id)
-    .filter(Boolean)
+  const movimentacaoIds =
+    listaCautelas
+      .map((item) => item?.id)
+      .filter(Boolean)
 
   const {
     data: itens,
@@ -1155,7 +1769,10 @@ export async function listarCautelasVencidasSVDD() {
     .select(
       'id, movimentacao_id, patrimonio_id, quantidade, descricao, tipo_patrimonio, observacao'
     )
-    .in('movimentacao_id', movimentacaoIds)
+    .in(
+      'movimentacao_id',
+      movimentacaoIds
+    )
 
   if (itensError) {
     throw itensError
@@ -1164,7 +1781,10 @@ export async function listarCautelasVencidasSVDD() {
   const patrimonioIds = [
     ...new Set(
       (itens || [])
-        .map((item) => item?.patrimonio_id)
+        .map(
+          (item) =>
+            item?.patrimonio_id
+        )
         .filter(Boolean)
         .map(String)
     )
@@ -1187,33 +1807,139 @@ export async function listarCautelasVencidasSVDD() {
       throw error
     }
 
-    patrimonios = data || []
+    patrimonios =
+      data || []
   }
 
-  const patrimonioPorId = new Map(
-    patrimonios.map((item) => [
+  const patrimonioPorId =
+    new Map(
+      patrimonios.map(
+        (item) => [
+          String(item.id),
+          item
+        ]
+      )
+    )
+
+  // Descobre a cautela finalizada mais recente de cada patrimônio.
+  // Assim uma extensão antiga não reaparece quando o mesmo material
+  // é cautelado novamente para o mesmo policial.
+  const {
+    data: todosItensCautela,
+    error: todosItensCautelaError
+  } = patrimonioIds.length > 0
+    ? await supabase
+        .from('sigmo_movimentacao_itens')
+        .select('patrimonio_id, movimentacao_id')
+        .in('patrimonio_id', patrimonioIds)
+    : { data: [], error: null }
+
+  if (todosItensCautelaError) {
+    throw todosItensCautelaError
+  }
+
+  const todosMovimentacaoIds = [
+    ...new Set(
+      (todosItensCautela || [])
+        .map((item) => item?.movimentacao_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  let todasCautelas = []
+
+  if (todosMovimentacaoIds.length > 0) {
+    const {
+      data,
+      error
+    } = await supabase
+      .from('sigmo_movimentacoes')
+      .select(
+        'id, tipo_movimentacao, status, recebedor_id, created_at'
+      )
+      .in('id', todosMovimentacaoIds)
+      .eq('tipo_movimentacao', 'CAUTELA')
+      .eq('status', 'finalizada')
+      .order('created_at', {
+        ascending: false
+      })
+
+    if (error) {
+      throw error
+    }
+
+    todasCautelas = data || []
+  }
+
+  const todasCautelasPorId = new Map(
+    todasCautelas.map((item) => [
       String(item.id),
       item
     ])
   )
 
-  const cautelaPorId = new Map(
-    cautelas.map((item) => [
-      String(item.id),
-      item
-    ])
-  )
+  const cautelaMaisRecentePorPatrimonio =
+    new Map()
 
-  const itensPorMovimentacao = new Map()
+  for (const item of todosItensCautela || []) {
+    const patrimonioId =
+      String(item?.patrimonio_id || '')
+
+    const cautela =
+      todasCautelasPorId.get(
+        String(item?.movimentacao_id || '')
+      )
+
+    if (!patrimonioId || !cautela) {
+      continue
+    }
+
+    const atual =
+      cautelaMaisRecentePorPatrimonio.get(
+        patrimonioId
+      )
+
+    if (
+      !atual ||
+      new Date(cautela.created_at).getTime() >
+        new Date(atual.created_at).getTime()
+    ) {
+      cautelaMaisRecentePorPatrimonio.set(
+        patrimonioId,
+        cautela
+      )
+    }
+  }
+
+  const cautelaPorId =
+    new Map(
+      listaCautelas.map(
+        (item) => [
+          String(item.id),
+          item
+        ]
+      )
+    )
+
+  const itensPorMovimentacao =
+    new Map()
 
   for (const item of itens || []) {
     const movimentacaoId =
-      String(item?.movimentacao_id || '')
+      String(
+        item?.movimentacao_id ||
+        ''
+      )
 
-    if (!movimentacaoId) continue
+    if (!movimentacaoId) {
+      continue
+    }
 
     const cautela =
-      cautelaPorId.get(movimentacaoId)
+      cautelaPorId.get(
+        movimentacaoId
+      )
 
     if (!cautela?.recebedor_id) {
       continue
@@ -1221,7 +1947,10 @@ export async function listarCautelasVencidasSVDD() {
 
     const patrimonio =
       patrimonioPorId.get(
-        String(item?.patrimonio_id || '')
+        String(
+          item?.patrimonio_id ||
+          ''
+        )
       )
 
     if (!patrimonio) {
@@ -1233,46 +1962,78 @@ export async function listarCautelasVencidasSVDD() {
         patrimonio?.status
       )
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(
+          /[\u0300-\u036f]/g,
+          ''
+        )
 
     const localAtual =
       normalizarMaiusculo(
         patrimonio?.local_atual
       )
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(
+          /[\u0300-\u036f]/g,
+          ''
+        )
 
     const responsavelAtualId =
       String(
-        patrimonio?.responsavel_atual_id ||
+        patrimonio
+          ?.responsavel_atual_id ||
         ''
       )
 
     const aindaComMesmoPolicial =
       responsavelAtualId ===
-      String(cautela.recebedor_id)
+      String(
+        cautela.recebedor_id
+      )
 
     const aindaEmCautela =
-      statusAtual === 'CAUTELADO' &&
-      localAtual === 'CAUTELA INDIVIDUAL'
+      statusAtual ===
+        'CAUTELADO' &&
+      localAtual ===
+        'CAUTELA INDIVIDUAL'
+
+    const cautelaMaisRecente =
+      cautelaMaisRecentePorPatrimonio.get(
+        String(
+          item?.patrimonio_id ||
+          ''
+        )
+      )
+
+    const ehCautelaAtual =
+      String(
+        cautelaMaisRecente?.id ||
+        ''
+      ) ===
+      String(
+        cautela.id ||
+        ''
+      )
 
     if (
       !aindaComMesmoPolicial ||
-      !aindaEmCautela
+      !aindaEmCautela ||
+      !ehCautelaAtual
     ) {
       continue
     }
 
     const dados =
       patrimonio?.dados &&
-      typeof patrimonio.dados === 'object'
+      typeof patrimonio.dados ===
+        'object'
         ? patrimonio.dados
         : {}
 
     const registro = {
       ...item,
       patrimonio:
-        patrimonio?.numero_patrimonio ||
+        patrimonio
+          ?.numero_patrimonio ||
         patrimonio?.patrimonio ||
         dados?.patrimonio ||
         null,
@@ -1290,7 +2051,11 @@ export async function listarCautelasVencidasSVDD() {
         'MATERIAL'
     }
 
-    if (!itensPorMovimentacao.has(movimentacaoId)) {
+    if (
+      !itensPorMovimentacao.has(
+        movimentacaoId
+      )
+    ) {
       itensPorMovimentacao.set(
         movimentacaoId,
         []
@@ -1302,30 +2067,44 @@ export async function listarCautelasVencidasSVDD() {
       .push(registro)
   }
 
-  return cautelas
+  return listaCautelas
     .map((cautela) => {
       const itensAtivos =
         itensPorMovimentacao.get(
           String(cautela.id)
         ) || []
 
-      if (itensAtivos.length === 0) {
+      if (
+        itensAtivos.length === 0
+      ) {
         return null
       }
 
-      const prazo =
-        new Date(
-          cautela.fim_turno_servico
+      const historicoExtensoes =
+        extrairHistoricoExtensoesTurno(
+          cautela?.observacoes
         )
+
+      const primeiraExtensao =
+        historicoExtensoes[0] ||
+        null
 
       return {
         ...cautela,
-        vencida: true,
-        atraso_ms:
-          Math.max(
-            0,
-            Date.now() - prazo.getTime()
-          ),
+        turno_estendido: true,
+        retirado_em:
+          cautela?.created_at ||
+          null,
+        prazo_original:
+          primeiraExtensao
+            ?.prazo_anterior ||
+          null,
+        historico_extensoes:
+          historicoExtensoes,
+        ultima_extensao:
+          historicoExtensoes[
+            historicoExtensoes.length - 1
+          ] || null,
         itens:
           itensAtivos
       }
@@ -1333,9 +2112,11 @@ export async function listarCautelasVencidasSVDD() {
     .filter(Boolean)
 }
 
+
 export async function estenderTurnoCautela({
   movimentacaoId,
   novoFimTurno,
+  observacao = '',
   user
 }) {
   if (!movimentacaoId) {
@@ -1358,6 +2139,17 @@ export async function estenderTurnoCautela({
     )
   }
 
+  const observacaoNormalizada =
+    normalizarMaiusculo(
+      observacao
+    )
+
+  if (!observacaoNormalizada) {
+    throw new Error(
+      'Informe a justificativa para a extensão da cautela.'
+    )
+  }
+
   const token =
     loadSessionToken()
 
@@ -1371,14 +2163,16 @@ export async function estenderTurnoCautela({
     data,
     error
   } = await supabase.rpc(
-    'sigmo_estender_turno_cautela',
+    'sigmo_estender_turno_cautela_v2',
     {
       p_token:
         token,
       p_movimentacao_id:
         movimentacaoId,
       p_novo_fim_turno:
-        novaData.toISOString()
+        novaData.toISOString(),
+      p_observacao:
+        observacaoNormalizada
     }
   )
 
@@ -1418,7 +2212,9 @@ export async function estenderTurnoCautela({
       null,
     updated_at:
       resultado.atualizado_em ||
-      null
+      null,
+    observacao:
+      observacaoNormalizada
   }
 }
 
@@ -2027,6 +2823,11 @@ export async function confirmarRecebimentoCautela({
         policial,
         quantidade:
           registro.quantidadeReceber,
+        devolucaoPrevista:
+          movimentacao?.fim_turno_servico ||
+          null,
+        movimentacaoPrincipalId:
+          movimentacaoId,
         observacoes:
           [
             registro.saldoNaoRecebido > 0

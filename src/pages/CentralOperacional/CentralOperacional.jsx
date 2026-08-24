@@ -108,15 +108,21 @@ function obterStatusPatrimonio(patrimonio) {
 }
 
 function patrimonioPermiteResponsavelAtual(patrimonio) {
+  const dados = obterDadosPatrimonio(patrimonio)
+
   const statusAtual = normalizarMaiusculo(
     patrimonio?.status ||
     patrimonio?.status_operacional ||
+    dados.status ||
+    dados.status_operacional ||
     ''
   )
 
   const localAtual = normalizarMaiusculo(
     patrimonio?.local_atual ||
     patrimonio?.local ||
+    dados.local_atual ||
+    dados.local ||
     ''
   )
 

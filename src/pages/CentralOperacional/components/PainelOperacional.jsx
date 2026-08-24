@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import {
+  cancelarMovimentacao,
   confirmarRecebimentoMovimentacao
 } from '../../../services/movimentacoesService'
 
@@ -81,6 +82,18 @@ function normalizarOperacional(valor) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ')
+}
+
+function ehCancelavelAguardandoUsuario(item, secao) {
+  if (!ehRecebimentoUsuario(secao)) return false
+
+  const status = normalizarOperacional(
+    item?.status
+  ).replace(/ /g, '_')
+
+  return (
+    status === 'AGUARDANDO_RECEBIMENTO'
+  )
 }
 
 function ehRecebimentoP4(item, secao) {
@@ -321,11 +334,53 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   const [selecionado, setSelecionado] = useState(null)
   const [registroAberto, setRegistroAberto] = useState(null)
   const [recebendoId, setRecebendoId] = useState(null)
+  const [cancelandoId, setCancelandoId] = useState(null)
   const [fotoAmpliada, setFotoAmpliada] = useState(null)
   const secoes = useMemo(
     () => [...(dados?.alertas ?? []), ...(dados?.indicadores ?? [])],
     [dados]
   )
+
+  async function cancelarAguardandoRecebimento(item) {
+    if (!item?.id || cancelandoId || recebendoId) return
+
+    const confirmou = window.confirm(
+      'Cancelar esta movimentação antes do recebimento pelo usuário?\n\n' +
+      'A movimentação permanecerá registrada no histórico como cancelada.'
+    )
+
+    if (!confirmou) return
+
+    try {
+      setCancelandoId(item.id)
+
+      await cancelarMovimentacao({
+        movimentacao_id: item.id,
+        usuario: user,
+        observacao:
+          'MOVIMENTAÇÃO CANCELADA PELO SETOR RESPONSÁVEL ANTES DO RECEBIMENTO PELO USUÁRIO.'
+      })
+
+      setSelecionado(null)
+      setRegistroAberto(null)
+
+      if (typeof onAtualizar === 'function') {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao cancelar movimentação aguardando recebimento:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível cancelar a movimentação.'
+      )
+    } finally {
+      setCancelandoId(null)
+    }
+  }
 
   async function receberNoP4(item) {
     if (!item?.id || recebendoId) return
@@ -612,11 +667,29 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                       >
                         {registroAberto === (item?.id || index) ? 'Ocultar' : 'Ver detalhes'}
                       </button>
+                      {ehCancelavelAguardandoUsuario(item, selecionado) && (
+                        <button
+                          type="button"
+                          className="central-detalhe-button"
+                          disabled={Boolean(cancelandoId) || Boolean(recebendoId)}
+                          onClick={() => cancelarAguardandoRecebimento(item)}
+                          style={{
+                            borderColor: '#dc2626',
+                            color: '#dc2626',
+                            fontWeight: 800
+                          }}
+                        >
+                          {cancelandoId === item.id
+                            ? 'Cancelando...'
+                            : 'Cancelar movimentação'}
+                        </button>
+                      )}
+
                       {ehRecebimentoP4(item, selecionado) && (
                         <button
                           type="button"
                           className="central-button central-button-primary"
-                          disabled={Boolean(recebendoId)}
+                          disabled={Boolean(recebendoId) || Boolean(cancelandoId)}
                           onClick={() => receberNoP4(item)}
                         >
                           {recebendoId === item.id

@@ -1434,3 +1434,253 @@
 .sigmo-command-service-modal-body article span {
   opacity: .72;
 }
+
+
+/* =========================================================
+   Dashboard — Tema Claro
+   Ativado por .sigmo-command-dashboard-light
+   ========================================================= */
+
+.sigmo-command-dashboard-light {
+  --dash-bg: #eef4fb;
+  --dash-panel: #ffffff;
+  --dash-panel-2: #f7f9fc;
+  --dash-line: rgba(71, 85, 105, 0.18);
+  --dash-text: #0f172a;
+  --dash-muted: #64748b;
+  --dash-blue: #2563eb;
+  --dash-cyan: #0891b2;
+  --dash-purple: #7c3aed;
+  --dash-green: #16a34a;
+  --dash-yellow: #ca8a04;
+  --dash-orange: #ea580c;
+  --dash-red: #dc2626;
+
+  color: var(--dash-text);
+  background:
+    radial-gradient(
+      circle at 72% 5%,
+      rgba(37, 99, 235, 0.08),
+      transparent 28%
+    ),
+    linear-gradient(
+      180deg,
+      #f7faff 0%,
+      #edf3fa 100%
+    );
+}
+
+.sigmo-command-theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 50px;
+  padding: 7px 12px;
+  border: 1px solid var(--dash-line);
+  border-radius: 13px;
+  background: rgba(9, 31, 57, 0.78);
+  color: #fff;
+  cursor: pointer;
+}
+
+.sigmo-command-theme-toggle-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(36,118,242,.18);
+  color: #7fb0ff;
+  font-size: 1rem;
+}
+
+.sigmo-command-theme-toggle strong,
+.sigmo-command-theme-toggle small {
+  display: block;
+  text-align: left;
+}
+
+.sigmo-command-theme-toggle strong {
+  color: #fff;
+  font-size: .67rem;
+}
+
+.sigmo-command-theme-toggle small {
+  margin-top: 2px;
+  color: var(--dash-muted);
+  font-size: .55rem;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-theme-toggle,
+.sigmo-command-dashboard-light .sigmo-command-live,
+.sigmo-command-dashboard-light .sigmo-command-clock {
+  background: rgba(255,255,255,.92);
+  border-color: rgba(100,116,139,.22);
+  box-shadow: 0 8px 22px rgba(15,23,42,.06);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-theme-toggle-icon {
+  background: #e8eef8;
+  color: #334155;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-theme-toggle strong,
+.sigmo-command-dashboard-light .sigmo-command-live strong,
+.sigmo-command-dashboard-light .sigmo-command-clock strong,
+.sigmo-command-dashboard-light .sigmo-command-clock > b,
+.sigmo-command-dashboard-light .sigmo-command-unit strong,
+.sigmo-command-dashboard-light .sigmo-command-header h1 {
+  color: #0f172a;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-header p {
+  color: #64748b;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-live small,
+.sigmo-command-dashboard-light .sigmo-command-clock small,
+.sigmo-command-dashboard-light .sigmo-command-theme-toggle small {
+  color: #64748b;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-clock > b {
+  border-left-color: rgba(100,116,139,.22);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-kpi-strip,
+.sigmo-command-dashboard-light .sigmo-command-panel,
+.sigmo-command-dashboard-light .sigmo-command-roadmap {
+  background: rgba(255,255,255,.96);
+  border-color: rgba(100,116,139,.18);
+  box-shadow: 0 12px 30px rgba(15,23,42,.06);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-kpi {
+  border-right-color: rgba(100,116,139,.18);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-kpi > div > span,
+.sigmo-command-dashboard-light .sigmo-command-tonfa-totals > div > span {
+  color: #334155;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-kpi > div > strong,
+.sigmo-command-dashboard-light .sigmo-command-panel-title span,
+.sigmo-command-dashboard-light .sigmo-command-panel-title strong,
+.sigmo-command-dashboard-light .sigmo-command-arma-mini strong,
+.sigmo-command-dashboard-light .sigmo-command-donut strong,
+.sigmo-command-dashboard-light .sigmo-command-legend-row b,
+.sigmo-command-dashboard-light .sigmo-command-bar-row b,
+.sigmo-command-dashboard-light .sigmo-command-tonfa-totals > div > strong,
+.sigmo-command-dashboard-light .sigmo-command-four-values b,
+.sigmo-command-dashboard-light .sigmo-command-section-title h2,
+.sigmo-command-dashboard-light .sigmo-command-movement-copy strong,
+.sigmo-command-dashboard-light .sigmo-command-alert-list strong,
+.sigmo-command-dashboard-light .sigmo-command-shortcuts button,
+.sigmo-command-dashboard-light .sigmo-command-roadmap-grid strong {
+  color: #0f172a;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-panel-title small,
+.sigmo-command-dashboard-light .sigmo-command-kpi > div > small,
+.sigmo-command-dashboard-light .sigmo-command-legend-row,
+.sigmo-command-dashboard-light .sigmo-command-legend-row small,
+.sigmo-command-dashboard-light .sigmo-command-bar-row > span,
+.sigmo-command-dashboard-light .sigmo-command-four-values small,
+.sigmo-command-dashboard-light .sigmo-command-movement-copy span,
+.sigmo-command-dashboard-light .sigmo-command-alert-list small,
+.sigmo-command-dashboard-light .sigmo-command-roadmap-grid small,
+.sigmo-command-dashboard-light .sigmo-command-empty,
+.sigmo-command-dashboard-light .sigmo-command-footer {
+  color: #64748b;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-arm-summary,
+.sigmo-command-dashboard-light .sigmo-command-tonfa-totals > div,
+.sigmo-command-dashboard-light .sigmo-command-roadmap-grid > div,
+.sigmo-command-dashboard-light .sigmo-command-shortcuts button {
+  background: #f8fafc;
+  border-color: rgba(100,116,139,.16);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-arma-mini {
+  border-right-color: rgba(100,116,139,.16);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-arma-mini span,
+.sigmo-command-dashboard-light .sigmo-command-arms-charts h3,
+.sigmo-command-dashboard-light .sigmo-command-tonfa-charts h3 {
+  color: #334155;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-donut > div {
+  border-color: rgba(226,232,240,.95);
+  background: #ffffff;
+  box-shadow: inset 0 0 16px rgba(15,23,42,.06);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-donut small {
+  color: #64748b;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-bar-track {
+  background: #e7edf5;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-arms-charts > div + div,
+.sigmo-command-dashboard-light .sigmo-command-tonfa-charts > div + div,
+.sigmo-command-dashboard-light .sigmo-command-panel-title,
+.sigmo-command-dashboard-light .sigmo-command-section-title,
+.sigmo-command-dashboard-light .sigmo-command-four-values {
+  border-color: rgba(100,116,139,.16);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-movement {
+  border-bottom-color: rgba(100,116,139,.13);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-shortcuts button:hover {
+  border-color: rgba(37,99,235,.34);
+  background: #eef4ff;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-service-modal {
+  border-color: rgba(37,99,235,.28);
+  background: linear-gradient(135deg,#ffffff 0%,#edf4fc 100%);
+  color: #0f172a;
+  box-shadow: 0 28px 70px rgba(15,23,42,.22);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-service-modal > header {
+  border-bottom-color: rgba(100,116,139,.18);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-service-modal > header button {
+  border-color: rgba(100,116,139,.28);
+  color: #0f172a;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-service-modal-body article {
+  border-bottom-color: rgba(100,116,139,.15);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-error {
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.sigmo-command-dashboard-light .sigmo-command-loading {
+  background: #ffffff;
+  color: #334155;
+  border-color: rgba(100,116,139,.18);
+}
+
+.sigmo-command-dashboard-light .sigmo-command-scroll::-webkit-scrollbar-thumb {
+  background: rgba(71,85,105,.38);
+}
+
+@media (max-width: 820px) {
+  .sigmo-command-theme-toggle {
+    min-height: 46px;
+  }
+}

@@ -62,14 +62,43 @@ function normalizar(valor) {
 }
 
 function obterDescricao(item) {
-  return (
+  const descricaoOriginal = String(
     item?.descricao ||
     item?.nome ||
     item?.tipo ||
     item?.categoria ||
     item?.patrimonio_descricao ||
     'Material operacional'
-  )
+  ).trim()
+
+  return descricaoOriginal
+    .split(/\s+/)
+    .filter((parte, indice, partes) => {
+      const atual = normalizar(parte)
+
+      if (atual === 'n/a' || atual === 'na') {
+        return false
+      }
+
+      if (
+        atual === 'nao' &&
+        normalizar(partes[indice + 1]) === 'informado'
+      ) {
+        return false
+      }
+
+      if (
+        atual === 'informado' &&
+        normalizar(partes[indice - 1]) === 'nao'
+      ) {
+        return false
+      }
+
+      return true
+    })
+    .join(' ')
+    .replace(/\s+-\s+/g, ' - ')
+    .trim()
 }
 
 function obterIdentificacao(item) {

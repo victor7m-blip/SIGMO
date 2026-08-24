@@ -104,8 +104,10 @@ function obterResponsavel(item) {
 
   return {
     re:
+      item?.responsavel_atual_re ||
       item?.responsavel_re ||
       item?.re_responsavel ||
+      dados.responsavel_atual_re ||
       dados.responsavel_re ||
       dados.re_responsavel ||
       dados.recebedor_re ||
@@ -114,8 +116,10 @@ function obterResponsavel(item) {
       '',
 
     nome:
+      item?.responsavel_atual_nome ||
       item?.responsavel_nome ||
       item?.nome_responsavel ||
+      dados.responsavel_atual_nome ||
       dados.responsavel_nome ||
       dados.nome_responsavel ||
       dados.recebedor_nome ||
@@ -732,6 +736,24 @@ function mesclarPatrimonio(
   return {
     ...patrimonioMesclado,
 
+    // A linha vigente de sigmo_patrimonios é a fonte operacional.
+    // Campos vindos de `dados` ou da tabela de referência são apenas histórico/fallback.
+    status_operacional:
+      patrimonio?.status ||
+      patrimonioMesclado?.status_operacional ||
+      patrimonioMesclado?.status ||
+      '',
+
+    responsavel_atual_id:
+      patrimonio?.responsavel_atual_id ||
+      patrimonioMesclado?.responsavel_atual_id ||
+      null,
+
+    responsavel_atual_nome:
+      patrimonio?.responsavel_atual_nome ||
+      patrimonioMesclado?.responsavel_atual_nome ||
+      null,
+
     responsavel_re:
       responsavel.re,
 
@@ -739,6 +761,7 @@ function mesclarPatrimonio(
       responsavel.nome,
 
     local_atual:
+      patrimonio?.local_atual ||
       localAtual ||
       'NÃO INFORMADO',
 

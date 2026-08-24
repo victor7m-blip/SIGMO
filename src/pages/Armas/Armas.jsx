@@ -1774,7 +1774,6 @@ setFotoSelecionadaVisualizacao(
         </div>
       </section>
 
-      {!ehPerfilSVDD && (
       <section className="armas-dashboard-section armas-graficos-section">
         <div className="armas-section-title">
           <div>
@@ -1788,7 +1787,6 @@ setFotoSelecionadaVisualizacao(
           <GraficoBarrasArmas resumo={resumo} />
         </div>
       </section>
-      )}
 
       <section className="armas-toolbar">
         <div className="armas-filter">

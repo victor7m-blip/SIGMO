@@ -6,6 +6,12 @@ const PATRIMONIOS_TABLE =
 const TONFAS_TABLE =
   'sigmo_tonfas'
 
+const MOVIMENTACOES_TABLE =
+  'sigmo_movimentacoes'
+
+const MOVIMENTACOES_ITENS_TABLE =
+  'sigmo_movimentacao_itens'
+
 const FONTES_REFERENCIA = {
   arma: {
     modulo: 'ARMA',
@@ -722,6 +728,62 @@ async function carregarRegistrosNormalizados() {
   )
 }
 
+
+async function buscarPatrimoniosComprometidos() {
+  // Segunda trava de disponibilidade:
+  // além do estado atual em sigmo_patrimonios, considera itens que já
+  // pertencem a uma movimentação/carrinho ainda em andamento.
+  const { data: movimentacoes, error: erroMovimentacoes } = await supabase
+    .from(MOVIMENTACOES_TABLE)
+    .select('id,status,tipo_movimentacao')
+    .in('status', [
+      'aguardando_aprovacao',
+      'aguardando_recebimento',
+      'pendente',
+      'em_andamento'
+    ])
+
+  if (erroMovimentacoes) {
+    console.warn(
+      'Não foi possível verificar movimentações pendentes para bloquear materiais.',
+      erroMovimentacoes
+    )
+    return new Set()
+  }
+
+  const idsMovimentacoes = (movimentacoes ?? [])
+    .filter((movimentacao) => {
+      const tipo = normalizarTexto(movimentacao.tipo_movimentacao)
+      return tipo === 'CAUTELA' || tipo === 'TRANSFERENCIA' || tipo === 'TRANSFERÊNCIA'
+    })
+    .map((movimentacao) => movimentacao.id)
+    .filter(Boolean)
+
+  if (idsMovimentacoes.length === 0) {
+    return new Set()
+  }
+
+  const { data: itens, error: erroItens } = await supabase
+    .from(MOVIMENTACOES_ITENS_TABLE)
+    .select('patrimonio_id,movimentacao_id')
+    .in('movimentacao_id', idsMovimentacoes)
+
+  if (erroItens) {
+    console.warn(
+      'Não foi possível verificar itens de movimentações pendentes.',
+      erroItens
+    )
+    return new Set()
+  }
+
+  return new Set(
+    (itens ?? [])
+      .map((item) => item.patrimonio_id)
+      .filter(Boolean)
+      .map(String)
+  )
+}
+
 export async function listarPatrimoniosParaEntrega({
   busca = '',
   apenasDisponiveis = false,
@@ -729,10 +791,12 @@ export async function listarPatrimoniosParaEntrega({
 } = {}) {
   const [
     patrimoniosIndividuais,
-    estoquesQuantidade
+    estoquesQuantidade,
+    patrimoniosComprometidos
   ] = await Promise.all([
     carregarRegistrosNormalizados(),
-    carregarTonfasPorOrigem(origemLocal)
+    carregarTonfasPorOrigem(origemLocal),
+    buscarPatrimoniosComprometidos()
   ])
 
   let itens = [
@@ -745,6 +809,13 @@ const origem = normalizarTexto(origemLocal)
 itens = itens.filter((item) => {
   if (item.controla_quantidade) {
     return true
+  }
+
+  if (
+    item.patrimonio_id &&
+    patrimoniosComprometidos.has(String(item.patrimonio_id))
+  ) {
+    return false
   }
 
   const local = normalizarTexto(item.local_atual)

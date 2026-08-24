@@ -14,6 +14,9 @@ import {
 
 import './AppShell.css'
 
+const SIDEBAR_STORAGE_KEY =
+  'sigmo_sidebar_recolhida'
+
 const UNIDADE = {
   nome: '27º BPM/M',
   companhia: '5ª CIA',
@@ -132,6 +135,41 @@ export default function AppShell({
     mobileMenuOpen,
     setMobileMenuOpen
   ] = useState(false)
+
+  const [
+    sidebarRecolhida,
+    setSidebarRecolhida
+  ] = useState(() => {
+    try {
+      return (
+        localStorage.getItem(
+          SIDEBAR_STORAGE_KEY
+        ) === 'true'
+      )
+    } catch {
+      return false
+    }
+  })
+
+  function alternarSidebar() {
+    setSidebarRecolhida(
+      (valorAtual) => {
+        const novoValor =
+          !valorAtual
+
+        try {
+          localStorage.setItem(
+            SIDEBAR_STORAGE_KEY,
+            String(novoValor)
+          )
+        } catch {
+          // Mantém a função mesmo sem storage.
+        }
+
+        return novoValor
+      }
+    )
+  }
 
   const [
     agora,
@@ -298,7 +336,15 @@ const tempoRestanteTemporario =
   }
 
   return (
-    <div className={`app-shell app-shell-${route}`}>
+    <div
+      className={[
+        'app-shell',
+        `app-shell-${route}`,
+        sidebarRecolhida
+          ? 'app-shell-sidebar-collapsed'
+          : ''
+      ].join(' ')}
+    >
       <button
         type="button"
         className="menu-toggle"
@@ -329,6 +375,33 @@ const tempoRestanteTemporario =
           }
         />
       )}
+
+      <button
+        type="button"
+        className="sidebar-collapse-toggle"
+        aria-label={
+          sidebarRecolhida
+            ? 'Exibir menu lateral'
+            : 'Ocultar menu lateral'
+        }
+        aria-pressed={
+          sidebarRecolhida
+        }
+        title={
+          sidebarRecolhida
+            ? 'Exibir menu lateral'
+            : 'Ocultar menu lateral'
+        }
+        onClick={
+          alternarSidebar
+        }
+      >
+        <span aria-hidden="true">
+          {sidebarRecolhida
+            ? '›'
+            : '‹'}
+        </span>
+      </button>
 
       <aside
         className={[

@@ -457,9 +457,7 @@ function filtrarArmasPorPerfil(
 
       const cargaPermanente =
         status === 'CARGA' ||
-        Boolean(
-          arma?.carga_policial_id
-        )
+        local.includes('CARGA PERMANENTE')
 
       if (
         particular ||
@@ -599,7 +597,7 @@ function ajustarTonfasPorPerfil(
   return resumo
 }
 
-async function contarPatrimoniosIndividualizadosEmServico() {
+async function resumirPatrimoniosIndividualizados() {
   const {
     data,
     error
@@ -613,21 +611,60 @@ async function contarPatrimoniosIndividualizadosEmServico() {
     throw error
   }
 
-  return (data || []).filter((item) => {
+  const resumo = {
+    total: 0,
+    noCofre: 0,
+    emServico: 0,
+    manutencao: 0,
+    carga: 0,
+    outros: 0
+  }
+
+  for (const item of data || []) {
     const status = normalizar(item?.status)
     const local = normalizar(item?.local_atual)
 
-    if (status === 'CARGA') {
-      return false
+    resumo.total += 1
+
+    if (
+      status.includes('MANUTENCAO') ||
+      local.includes('MANUTENCAO')
+    ) {
+      resumo.manutencao += 1
+      continue
     }
 
-    return (
+    if (
+      status === 'CARGA' ||
+      local.includes('CARGA PERMANENTE')
+    ) {
+      resumo.carga += 1
+      continue
+    }
+
+    if (
       status === 'CAUTELADO' ||
       status === 'EM SERVICO' ||
       status === 'EM_SERVICO' ||
       local.includes('CAUTELA')
-    )
-  }).length
+    ) {
+      resumo.emServico += 1
+      continue
+    }
+
+    if (
+      local.includes('COFRE DO SVDD') ||
+      local === 'SVDD' ||
+      local.includes('SERVICO DE DIA')
+    ) {
+      resumo.noCofre += 1
+      continue
+    }
+
+    resumo.outros += 1
+  }
+
+  return resumo
 }
 
 const INICIAL = {
@@ -674,7 +711,12 @@ const INICIAL = {
     naoLocalizados: 0
   },
   patrimonios: {
-    emServico: 0
+    total: 0,
+    noCofre: 0,
+    emServico: 0,
+    manutencao: 0,
+    carga: 0,
+    outros: 0
   }
 }
 
@@ -703,7 +745,7 @@ export default function useDashboardVitrine(
           tpdsResultado,
           tasersResultado,
           manutencoesResultado,
-          patrimoniosEmServico
+          patrimoniosResumo
         ] = await Promise.all([
           listarArmas({
             pagina: 1,
@@ -730,7 +772,7 @@ export default function useDashboardVitrine(
             pagina: 1,
             limite: 200
           }),
-          contarPatrimoniosIndividualizadosEmServico()
+          resumirPatrimoniosIndividualizados()
         ])
 
         const armasFiltradas =
@@ -754,9 +796,6 @@ const individuaisResumo =
   resumirIndividuais(
     individuaisLista
   )
-
-const individuaisSvddDisponiveis =
-  individuaisResumo.svdd
 
 const individuaisEmServico =
   individuaisResumo.emServico
@@ -806,6 +845,15 @@ const armasResumo =
 armasResumo.manutencao =
   manutencaoArmas
 
+armasResumo.total =
+  Number(armasResumo.p4 || 0) +
+  Number(armasResumo.svdd || 0) +
+  Number(armasResumo.carga || 0) +
+  Number(armasResumo.cautelas || 0) +
+  Number(armasResumo.manutencao || 0) +
+  Number(armasResumo.naoLocalizadas || 0) +
+  Number(armasResumo.particulares || 0)
+
 const tonfasGeral = {
   ...tonfasResumo.geral,
   manutencao:
@@ -817,10 +865,7 @@ setDados({
     armasResumo,
 
   tonfas: {
-    ...tonfasGeral,
-    svdd:
-      Number(tonfasGeral.svdd || 0) +
-      individuaisSvddDisponiveis
+    ...tonfasGeral
   },
 
   tonfasDetalhe:
@@ -838,8 +883,18 @@ setDados({
   },
 
   patrimonios: {
+    total:
+      Number(patrimoniosResumo?.total || 0),
+    noCofre:
+      Number(patrimoniosResumo?.noCofre || 0),
     emServico:
-      Number(patrimoniosEmServico || 0)
+      Number(patrimoniosResumo?.emServico || 0),
+    manutencao:
+      Number(patrimoniosResumo?.manutencao || 0),
+    carga:
+      Number(patrimoniosResumo?.carga || 0),
+    outros:
+      Number(patrimoniosResumo?.outros || 0)
   }
 })
       } catch (error) {

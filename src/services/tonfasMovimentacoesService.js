@@ -64,6 +64,7 @@ export async function registrarCautelaTonfa({
   policial,
   quantidade,
   devolucaoPrevista = null,
+  movimentacaoPrincipalId = null,
   observacoes = null,
   user = null
 }) {
@@ -135,6 +136,10 @@ export async function registrarCautelaTonfa({
 
     devolucao_prevista:
       devolucaoPrevista ||
+      null,
+
+    movimentacao_principal_id:
+      movimentacaoPrincipalId ||
       null,
 
     status:
@@ -347,6 +352,10 @@ saldo:
 
       devolucao_prevista:
         movimentacao.devolucao_prevista,
+
+      movimentacao_principal_id:
+        movimentacao.movimentacao_principal_id ||
+        null,
 
       retirado_por:
         movimentacao.retirado_por,
