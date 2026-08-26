@@ -20,6 +20,10 @@ import {
 } from '../../services/tasersService'
 
 import {
+  supabase
+} from '../../services/supabaseClient'
+
+import {
   listarFotosTaser
 } from '../../services/tasersFotosService'
 
@@ -244,6 +248,20 @@ export default function Taser({ user }) {
     unidade: ''
   })
 
+  const perfilAtual = normalizar(
+    user?.perfil ||
+    user?.role ||
+    user?.tipo_perfil ||
+    user?.perfil_nome
+  )
+
+  const podeAdministrarTaser =
+    perfilAtual === 'P4' ||
+    perfilAtual === 'ADMINISTRADOR' ||
+    perfilAtual === 'ADMIN' ||
+    perfilAtual.includes('CMT') ||
+    perfilAtual.includes('COMANDANTE')
+
   const totalPaginas = useMemo(
     () => Math.max(1, Math.ceil(total / LIMITE)),
     [total]
@@ -269,7 +287,84 @@ export default function Taser({ user }) {
         sortDirection
       })
 
-      setTasers(resultado.data || [])
+      const listaTasers =
+        resultado.data || []
+
+      const idsTasers =
+        listaTasers
+          .map((item) => item?.id)
+          .filter(Boolean)
+
+      let patrimoniosPorReferencia =
+        new Map()
+
+      if (idsTasers.length > 0) {
+        const {
+          data: patrimonios,
+          error: patrimoniosError
+        } = await supabase
+          .from('sigmo_patrimonios')
+          .select(
+            'id, referencia_id, status, local_atual, responsavel_atual_id, responsavel_atual_nome, ativo'
+          )
+          .eq('tipo', 'taser')
+          .in('referencia_id', idsTasers)
+
+        if (patrimoniosError) {
+          throw patrimoniosError
+        }
+
+        patrimoniosPorReferencia =
+          new Map(
+            (patrimonios || []).map(
+              (patrimonio) => [
+                String(
+                  patrimonio.referencia_id
+                ),
+                patrimonio
+              ]
+            )
+          )
+      }
+
+      setTasers(
+        listaTasers.map((taser) => {
+          const patrimonio =
+            patrimoniosPorReferencia.get(
+              String(taser?.id || '')
+            )
+
+          if (!patrimonio) {
+            return taser
+          }
+
+          return {
+            ...taser,
+
+            // Situação operacional vigente vem da Engine Patrimonial.
+            // Os dados técnicos continuam sendo lidos de sigmo_tasers.
+            status_operacional:
+              patrimonio.status ||
+              taser.status_operacional,
+
+            local_atual:
+              patrimonio.local_atual ||
+              taser.local_atual,
+
+            responsavel_atual_id:
+              patrimonio.responsavel_atual_id ||
+              null,
+
+            responsavel_atual_nome:
+              patrimonio.responsavel_atual_nome ||
+              null,
+
+            patrimonio_central_id:
+              patrimonio.id
+          }
+        })
+      )
+
       setTotal(resultado.total || 0)
     } catch (error) {
       console.error(error)
@@ -292,15 +387,31 @@ export default function Taser({ user }) {
     try {
       setLoadingResumo(true)
 
-      const resultado = await listarTasers({
-        filtros: {},
-        pagina: 1,
-        limite: LIMITE_RESUMO,
-        sortBy: 'criado_em',
-        sortDirection: 'desc'
-      })
+      // Para situação/localização atual, a Engine Patrimonial é a
+      // fonte oficial. A tabela específica do Taser continua sendo
+      // usada para cadastro, filtros e dados técnicos da listagem.
+      const {
+        data,
+        error
+      } = await supabase
+        .from('sigmo_patrimonios')
+        .select('id, status, local_atual, ativo')
+        .eq('tipo', 'taser')
+        .eq('ativo', true)
 
-      setTodosTasers(resultado.data || [])
+      if (error) {
+        throw error
+      }
+
+      setTodosTasers(
+        (data || []).map((item) => ({
+          ...item,
+          status_operacional:
+            item?.status || '',
+          local_atual:
+            item?.local_atual || ''
+        }))
+      )
     } catch (error) {
       console.error('Erro ao carregar resumo dos Tasers:', error)
     } finally {
@@ -366,6 +477,8 @@ export default function Taser({ user }) {
   }
 
   function abrirEdicao(taser) {
+    if (!podeAdministrarTaser) return
+
     setTaserEditando(taser)
     limparVisualizacao()
     setFormAberto(true)
@@ -420,6 +533,8 @@ export default function Taser({ user }) {
   }
 
   async function handleExcluir(taser) {
+    if (!podeAdministrarTaser) return
+
     const identificacao =
       taser.patrimonio ||
       taser.numero_serie ||
@@ -770,8 +885,8 @@ export default function Taser({ user }) {
           sortDirection={sortDirection}
           onSort={ordenar}
           onView={abrirVisualizacao}
-          onEdit={abrirEdicao}
-          onDelete={handleExcluir}
+          onEdit={podeAdministrarTaser ? abrirEdicao : undefined}
+          onDelete={podeAdministrarTaser ? handleExcluir : undefined}
         />
 
         <footer className="taser-pagination">
@@ -824,10 +939,13 @@ export default function Taser({ user }) {
           carregandoFotos={carregandoFotos}
           erroFotos={erroFotos}
           onClose={fecharVisualizacao}
-          onEdit={() =>
-            abrirEdicao(
-              taserVisualizando
-            )
+          onEdit={
+            podeAdministrarTaser
+              ? () =>
+                  abrirEdicao(
+                    taserVisualizando
+                  )
+              : undefined
           }
         />
       )}

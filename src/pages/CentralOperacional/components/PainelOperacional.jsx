@@ -136,7 +136,7 @@ function ehAprovacao(secao) {
 }
 
 function ehNovidade(secao) {
-  return secao?.key === 'novidades'
+  return ['novidades', 'novidades-p4', 'novidades-svdd'].includes(secao?.key)
 }
 
 function ehIndicadorPatrimonio(secao) {
@@ -341,6 +341,66 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     [dados]
   )
 
+  const indicadoresExibidos = useMemo(() => {
+    const indicadores = dados?.indicadores ?? []
+    const perfil = normalizarOperacional(dados?.perfil || user?.perfil)
+
+    if (perfil !== 'P4') return indicadores
+
+    const resultado = []
+
+    for (const card of indicadores) {
+      if (card?.key !== 'novidades') {
+        resultado.push(card)
+        continue
+      }
+
+      const itens = Array.isArray(card?.itens) ? card.itens : []
+
+      const pertenceAoSvdd = (item) => {
+        const carga = normalizarOperacional(
+          item?.carga_atual ||
+          item?.responsabilidade_atual ||
+          item?.responsavel_setor ||
+          item?.setor_responsavel ||
+          item?.local_atual ||
+          item?.origem ||
+          item?.origem_local ||
+          item?.destino ||
+          item?.destino_local
+        )
+
+        return (
+          carga.includes('SVDD') ||
+          carga.includes('SERVICO DE DIA') ||
+          carga.includes('COFRE DO SVDD')
+        )
+      }
+
+      const itensSvdd = itens.filter(pertenceAoSvdd)
+      const itensP4 = itens.filter((item) => !pertenceAoSvdd(item))
+
+      resultado.push(
+        {
+          ...card,
+          key: 'novidades-p4',
+          titulo: 'Novidades patrimoniais P4',
+          total: itensP4.length,
+          itens: itensP4
+        },
+        {
+          ...card,
+          key: 'novidades-svdd',
+          titulo: 'Novidades patrimoniais SVDD',
+          total: itensSvdd.length,
+          itens: itensSvdd
+        }
+      )
+    }
+
+    return resultado
+  }, [dados, user])
+
   async function cancelarAguardandoRecebimento(item) {
     if (!item?.id || cancelandoId || recebendoId) return
 
@@ -467,7 +527,7 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
         </div>
 
         <div className="central-operacional-grid central-operacional-grid-secundario">
-          {(dados?.indicadores ?? []).map((card) => (
+          {indicadoresExibidos.map((card) => (
             <button
               type="button"
               key={card.key}

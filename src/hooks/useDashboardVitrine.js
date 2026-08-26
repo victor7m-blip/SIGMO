@@ -22,18 +22,6 @@ import {
 } from '../services/tonfasService'
 
 import {
-  listarHTs
-} from '../services/htsService'
-
-import {
-  listarTPDs
-} from '../services/tpdsService'
-
-import {
-  listarTasers
-} from '../services/tasersService'
-
-import {
   listarManutencoes
 } from '../services/manutencoesService'
 
@@ -63,6 +51,207 @@ function localArma(arma) {
       arma?.local ||
       arma?.guardiao_nome
   )
+}
+
+
+function origemCautelaEhSvdd(valor) {
+  const origem = normalizar(valor)
+
+  return (
+    origem.includes('SVDD') ||
+    origem.includes('SERVICO DE DIA') ||
+    origem.includes('COFRE DO SVDD')
+  )
+}
+
+function origemCautelaEhP4(valor) {
+  const origem = normalizar(valor)
+
+  return (
+    origem.includes('P4') ||
+    origem.includes('DEPOSITO DO P4') ||
+    origem.includes('GUARDA DO P4') ||
+    origem.includes('COFRE DO P4')
+  )
+}
+
+async function carregarOrigemCautelaPorPatrimonio(patrimonioIds = []) {
+  const ids = [
+    ...new Set(
+      (patrimonioIds || [])
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  const resultado = new Map()
+
+  if (ids.length === 0) {
+    return resultado
+  }
+
+  const { data: itens, error: itensError } =
+    await supabase
+      .from('sigmo_movimentacao_itens')
+      .select('patrimonio_id, movimentacao_id')
+      .in('patrimonio_id', ids)
+
+  if (itensError) {
+    throw itensError
+  }
+
+  const movimentacaoIds = [
+    ...new Set(
+      (itens || [])
+        .map((item) => item?.movimentacao_id)
+        .filter(Boolean)
+    )
+  ]
+
+  if (movimentacaoIds.length === 0) {
+    return resultado
+  }
+
+  const { data: movimentacoes, error: movimentacoesError } =
+    await supabase
+      .from('sigmo_movimentacoes')
+      .select(
+        'id, tipo_movimentacao, origem_local, destino_local, status, created_at'
+      )
+      .in('id', movimentacaoIds)
+      .eq('tipo_movimentacao', 'CAUTELA')
+      .eq('status', 'finalizada')
+      .order('created_at', {
+        ascending: false
+      })
+
+  if (movimentacoesError) {
+    throw movimentacoesError
+  }
+
+  const patrimoniosPorMovimentacao = new Map()
+
+  for (const item of itens || []) {
+    const movimentacaoId =
+      String(item?.movimentacao_id || '')
+
+    const patrimonioId =
+      String(item?.patrimonio_id || '')
+
+    if (!movimentacaoId || !patrimonioId) {
+      continue
+    }
+
+    if (!patrimoniosPorMovimentacao.has(movimentacaoId)) {
+      patrimoniosPorMovimentacao.set(
+        movimentacaoId,
+        []
+      )
+    }
+
+    patrimoniosPorMovimentacao
+      .get(movimentacaoId)
+      .push(patrimonioId)
+  }
+
+  // `movimentacoes` já vem ordenado da mais recente para a mais antiga.
+  // Percorrer nessa ordem é essencial: o patrimônio pode ter cautelas
+  // históricas tanto do SVDD quanto do P4, e deve valer somente a última.
+  for (const movimentacao of movimentacoes || []) {
+    if (
+      normalizar(
+        movimentacao?.destino_local
+      ) !== 'CAUTELA INDIVIDUAL'
+    ) {
+      continue
+    }
+
+    const patrimonioIds =
+      patrimoniosPorMovimentacao.get(
+        String(movimentacao?.id || '')
+      ) || []
+
+    for (const patrimonioId of patrimonioIds) {
+      if (!resultado.has(patrimonioId)) {
+        resultado.set(
+          patrimonioId,
+          movimentacao
+        )
+      }
+    }
+  }
+
+  return resultado
+}
+
+async function enriquecerArmasComOrigemCautela(lista = []) {
+  const armas = Array.isArray(lista) ? lista : []
+
+  const referencias = [
+    ...new Set(
+      armas
+        .map((arma) => arma?.id)
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (referencias.length === 0) {
+    return armas
+  }
+
+  const { data: patrimonios, error } =
+    await supabase
+      .from('sigmo_patrimonios')
+      .select('id, referencia_id')
+      .eq('tipo', 'arma')
+      .in('referencia_id', referencias)
+
+  if (error) {
+    throw error
+  }
+
+  const patrimonioPorReferencia = new Map(
+    (patrimonios || []).map((item) => [
+      String(item.referencia_id),
+      item
+    ])
+  )
+
+  const origemPorPatrimonio =
+    await carregarOrigemCautelaPorPatrimonio(
+      (patrimonios || []).map((item) => item.id)
+    )
+
+  return armas.map((arma) => {
+    const patrimonio =
+      patrimonioPorReferencia.get(
+        String(arma?.id || '')
+      )
+
+    const movimentacao =
+      patrimonio
+        ? origemPorPatrimonio.get(
+            String(patrimonio.id)
+          )
+        : null
+
+    return {
+      ...arma,
+      patrimonio_id_central:
+        patrimonio?.id ||
+        arma?.patrimonio_id_central ||
+        null,
+      origem_cautela:
+        movimentacao?.origem_local ||
+        arma?.origem_cautela ||
+        null,
+      cautela_movimentacao_id:
+        movimentacao?.id ||
+        arma?.cautela_movimentacao_id ||
+        null
+    }
+  })
 }
 
 function resumirArmas(lista) {
@@ -479,7 +668,9 @@ function filtrarArmasPorPerfil(
         status.includes('CAUTELA') ||
         local.includes('CAUTELA')
       ) {
-        return true
+        return origemCautelaEhSvdd(
+          arma?.origem_cautela
+        )
       }
 
       if (
@@ -490,7 +681,14 @@ function filtrarArmasPorPerfil(
           'MANUTENCAO'
         )
       ) {
-        return true
+        const origem =
+          arma?.origem_cautela ||
+          arma?.origem_local ||
+          arma?.local_origem
+
+        return origem
+          ? origemCautelaEhSvdd(origem)
+          : true
       }
 
       return false
@@ -597,7 +795,7 @@ function ajustarTonfasPorPerfil(
   return resumo
 }
 
-async function resumirPatrimoniosIndividualizados() {
+async function resumirPatrimoniosIndividualizados(user) {
   const {
     data,
     error
@@ -611,57 +809,125 @@ async function resumirPatrimoniosIndividualizados() {
     throw error
   }
 
+  const lista = data || []
+  const perfil =
+    obterPerfilEfetivo(user)
+
+  const visaoSomenteSvdd =
+    perfil === PERFIS.ENCARREGADO_SVDD ||
+    perfil === PERFIS.AUXILIAR_SVDD
+
+  const origemPorPatrimonio =
+    await carregarOrigemCautelaPorPatrimonio(
+      lista.map((item) => item?.id)
+    )
+
   const resumo = {
     total: 0,
     noCofre: 0,
     emServico: 0,
     manutencao: 0,
     carga: 0,
-    outros: 0
+    outros: 0,
+    individuais: {
+      total: 0,
+      p4: 0,
+      svdd: 0,
+      emServico: 0,
+      manutencao: 0,
+      carga: 0,
+      naoLocalizados: 0
+    }
   }
 
-  for (const item of data || []) {
+  for (const item of lista) {
+    const tipo = normalizar(item?.tipo)
     const status = normalizar(item?.status)
     const local = normalizar(item?.local_atual)
 
+    const cautela =
+      origemPorPatrimonio.get(
+        String(item?.id || '')
+      )
+
+    const origemCautela =
+      cautela?.origem_local ||
+      ''
+
+    const emServico =
+      status === 'CAUTELADO' ||
+      status === 'EM SERVICO' ||
+      status === 'EM_SERVICO' ||
+      local.includes('CAUTELA')
+
+    if (
+      visaoSomenteSvdd &&
+      emServico &&
+      !origemCautelaEhSvdd(
+        origemCautela
+      )
+    ) {
+      continue
+    }
+
     resumo.total += 1
+
+    let classificacao = 'outros'
 
     if (
       status.includes('MANUTENCAO') ||
       local.includes('MANUTENCAO')
     ) {
       resumo.manutencao += 1
-      continue
-    }
-
-    if (
+      classificacao = 'manutencao'
+    } else if (
       status === 'CARGA' ||
       local.includes('CARGA PERMANENTE')
     ) {
       resumo.carga += 1
-      continue
-    }
-
-    if (
-      status === 'CAUTELADO' ||
-      status === 'EM SERVICO' ||
-      status === 'EM_SERVICO' ||
-      local.includes('CAUTELA')
-    ) {
+      classificacao = 'carga'
+    } else if (emServico) {
       resumo.emServico += 1
-      continue
-    }
-
-    if (
+      classificacao = 'emServico'
+    } else if (
       local.includes('COFRE DO SVDD') ||
       local === 'SVDD' ||
       local.includes('SERVICO DE DIA')
     ) {
       resumo.noCofre += 1
+      classificacao = 'svdd'
+    } else {
+      resumo.outros += 1
+
+      if (
+        local.includes('P4') ||
+        local.includes('DEPOSITO DO P4') ||
+        local.includes('GUARDA DO P4') ||
+        local.includes('COFRE DO P4')
+      ) {
+        classificacao = 'p4'
+      }
+    }
+
+    if (tipo === 'ARMA') {
       continue
     }
 
-    resumo.outros += 1
+    resumo.individuais.total += 1
+
+    if (classificacao === 'manutencao') {
+      resumo.individuais.manutencao += 1
+    } else if (classificacao === 'carga') {
+      resumo.individuais.carga += 1
+    } else if (classificacao === 'emServico') {
+      resumo.individuais.emServico += 1
+    } else if (classificacao === 'svdd') {
+      resumo.individuais.svdd += 1
+    } else if (classificacao === 'p4') {
+      resumo.individuais.p4 += 1
+    } else {
+      resumo.individuais.naoLocalizados += 1
+    }
   }
 
   return resumo
@@ -741,29 +1007,20 @@ export default function useDashboardVitrine(
         const [
           armasResultado,
           tonfasResultado,
-          htsResultado,
-          tpdsResultado,
-          tasersResultado,
           manutencoesResultado,
           patrimoniosResumo
         ] = await Promise.all([
           listarArmas({
             pagina: 1,
             limite: LIMITE
-          }),
+          }).then(async (resultado) => ({
+            ...resultado,
+            data:
+              await enriquecerArmasComOrigemCautela(
+                resultado?.data || []
+              )
+          })),
           listarTonfas({
-            pagina: 1,
-            limite: LIMITE
-          }),
-          listarHTs({
-            pagina: 1,
-            limite: LIMITE
-          }),
-          listarTPDs({
-            pagina: 1,
-            limite: LIMITE
-          }),
-          listarTasers({
             pagina: 1,
             limite: LIMITE
           }),
@@ -772,7 +1029,7 @@ export default function useDashboardVitrine(
             pagina: 1,
             limite: 200
           }),
-          resumirPatrimoniosIndividualizados()
+          resumirPatrimoniosIndividualizados(user)
         ])
 
         const armasFiltradas =
@@ -786,16 +1043,17 @@ const tonfasResumoOriginal =
     tonfasResultado?.data || []
   )
 
-const individuaisLista = [
-  ...(htsResultado?.data || []),
-  ...(tpdsResultado?.data || []),
-  ...(tasersResultado?.data || [])
-]
-
-const individuaisResumo =
-  resumirIndividuais(
-    individuaisLista
-  )
+const individuaisResumo = {
+  ...(patrimoniosResumo?.individuais || {
+    total: 0,
+    p4: 0,
+    svdd: 0,
+    emServico: 0,
+    manutencao: 0,
+    carga: 0,
+    naoLocalizados: 0
+  })
+}
 
 const individuaisEmServico =
   individuaisResumo.emServico
@@ -806,8 +1064,140 @@ const tonfasResumo =
     user
   )
 
-const manutencoesAtivas =
+const manutencoesAtivasOriginais =
   manutencoesResultado?.data || []
+
+const perfilDashboard =
+  obterPerfilEfetivo(user)
+
+const visaoManutencaoSomenteSvdd =
+  perfilDashboard === PERFIS.ENCARREGADO_SVDD ||
+  perfilDashboard === PERFIS.AUXILIAR_SVDD
+
+const manutencoesAtivas =
+  visaoManutencaoSomenteSvdd
+    ? manutencoesAtivasOriginais.filter((item) =>
+        normalizar(item?.origem_institucional) === 'SVDD'
+      )
+    : manutencoesAtivasOriginais
+
+// A tabela de manutenções é a fonte de verdade para "EM MANUTENÇÃO".
+// Alguns módulos individualizados (TASER/HT/TPD) ainda podem permanecer
+// com local_atual no cofre enquanto a manutenção está ativa. Por isso,
+// ajustamos a vitrine sem depender exclusivamente de sigmo_patrimonios.
+const manutencoesPatrimoniaisAtivas =
+  manutencoesAtivas.filter((item) =>
+    ['ARMAS', 'HT', 'TPD', 'TASER'].includes(
+      normalizar(item?.modulo)
+    )
+  )
+
+const manutencoesIndividuaisAtivas =
+  manutencoesAtivas.filter((item) =>
+    ['HT', 'TPD', 'TASER'].includes(
+      normalizar(item?.modulo)
+    )
+  )
+
+const patrimonioIdsEmManutencao = [
+  ...new Set(
+    manutencoesPatrimoniaisAtivas
+      .map((item) => item?.patrimonio_id)
+      .filter(Boolean)
+      .map(String)
+  )
+]
+
+let manutencoesAindaContadasNoCofre = 0
+let manutencoesIndividuaisAindaNoSvdd = 0
+let manutencoesIndividuaisAindaNoP4 = 0
+
+if (patrimonioIdsEmManutencao.length > 0) {
+  const {
+    data: patrimoniosEmManutencao,
+    error: patrimoniosManutencaoError
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id, tipo, status, local_atual')
+    .in('id', patrimonioIdsEmManutencao)
+
+  if (patrimoniosManutencaoError) {
+    console.warn(
+      'Não foi possível ajustar os locais dos itens em manutenção:',
+      patrimoniosManutencaoError
+    )
+  } else {
+    for (const patrimonio of patrimoniosEmManutencao || []) {
+      const status = normalizar(patrimonio?.status)
+      const local = normalizar(patrimonio?.local_atual)
+
+      const jaClassificadoComoManutencao =
+        status.includes('MANUTENCAO') ||
+        local.includes('MANUTENCAO')
+
+      if (jaClassificadoComoManutencao) {
+        continue
+      }
+
+      if (
+        local.includes('COFRE DO SVDD') ||
+        local === 'SVDD' ||
+        local.includes('SERVICO DE DIA')
+      ) {
+        manutencoesAindaContadasNoCofre += 1
+
+        if (normalizar(patrimonio?.tipo) !== 'ARMA') {
+          manutencoesIndividuaisAindaNoSvdd += 1
+        }
+
+        continue
+      }
+
+      if (
+        local.includes('P4') ||
+        local.includes('DEPOSITO DO P4') ||
+        local.includes('GUARDA DO P4') ||
+        local.includes('COFRE DO P4')
+      ) {
+        if (normalizar(patrimonio?.tipo) !== 'ARMA') {
+          manutencoesIndividuaisAindaNoP4 += 1
+        }
+      }
+    }
+  }
+}
+
+const manutencaoPatrimonialTotal =
+  manutencoesPatrimoniaisAtivas.reduce(
+    (total, item) =>
+      total + Number(item?.quantidade || 1),
+    0
+  )
+
+const manutencaoIndividualTotal =
+  manutencoesIndividuaisAtivas.reduce(
+    (total, item) =>
+      total + Number(item?.quantidade || 1),
+    0
+  )
+
+
+individuaisResumo.manutencao =
+  manutencaoIndividualTotal
+
+individuaisResumo.svdd =
+  Math.max(
+    0,
+    Number(individuaisResumo.svdd || 0) -
+      manutencoesIndividuaisAindaNoSvdd
+  )
+
+individuaisResumo.p4 =
+  Math.max(
+    0,
+    Number(individuaisResumo.p4 || 0) -
+      manutencoesIndividuaisAindaNoP4
+  )
 
 const manutencaoArmas =
   manutencoesAtivas
@@ -886,11 +1276,15 @@ setDados({
     total:
       Number(patrimoniosResumo?.total || 0),
     noCofre:
-      Number(patrimoniosResumo?.noCofre || 0),
+      Math.max(
+        0,
+        Number(patrimoniosResumo?.noCofre || 0) -
+          manutencoesAindaContadasNoCofre
+      ),
     emServico:
       Number(patrimoniosResumo?.emServico || 0),
     manutencao:
-      Number(patrimoniosResumo?.manutencao || 0),
+      manutencaoPatrimonialTotal,
     carga:
       Number(patrimoniosResumo?.carga || 0),
     outros:

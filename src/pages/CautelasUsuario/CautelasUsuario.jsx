@@ -573,7 +573,7 @@ function alterarQuantidadeDevolver(
               aberta: true,
               tipo: '',
               descricao: '',
-              providencia: 'ANALISE',
+              providencia: 'MANUTENCAO',
               quantidade_afetada: 1,
               fotos: [],
               previews: []
@@ -608,7 +608,7 @@ function alterarQuantidadeDevolver(
             aberta: true,
             tipo: '',
             descricao: '',
-            providencia: 'ANALISE',
+            providencia: 'MANUTENCAO',
             quantidade_afetada: 1,
             fotos: [],
             previews: []
@@ -720,7 +720,7 @@ function alterarQuantidadeDevolver(
             aberta: true,
             tipo: '',
             descricao: '',
-            providencia: 'ANALISE',
+            providencia: 'MANUTENCAO',
             quantidade_afetada: 1,
             fotos: [],
             previews: []
@@ -852,13 +852,7 @@ function alterarQuantidadeDevolver(
         )
           .trim()
           .toUpperCase(),
-      providencia:
-        String(
-          novidade.providencia ||
-          'ANALISE'
-        )
-          .trim()
-          .toUpperCase(),
+      providencia: 'MANUTENCAO',
       quantidade_afetada:
         Math.max(
           1,
@@ -1639,38 +1633,9 @@ function alterarQuantidadeDevolver(
                                             lineHeight: 1.35
                                           }}
                                         >
-                                          Novidade selecionada. Confira a providência sugerida ao lado e altere se desejar.
+                                          Novidade selecionada. A ocorrência será encaminhada para tratamento pelo setor responsável.
                                         </small>
                                       )}
-                                    </label>
-
-                                    <label>
-                                      Providência sugerida
-
-                                      <select
-                                        value={
-                                          obterNovidadeRecebimento(chave)?.providencia ||
-                                          'ANALISE'
-                                        }
-                                        onChange={(event) =>
-                                          alterarNovidadeRecebimento(
-                                            chave,
-                                            'providencia',
-                                            event.target.value,
-                                            quantidadeReceber
-                                          )
-                                        }
-                                      >
-                                        <option value="ANALISE">
-                                          ANÁLISE PELO SVDD/P4
-                                        </option>
-                                        <option value="MANUTENCAO">
-                                          MANUTENÇÃO
-                                        </option>
-                                        <option value="BAIXA">
-                                          AVALIAR BAIXA
-                                        </option>
-                                      </select>
                                     </label>
 
                                     {quantitativo && (

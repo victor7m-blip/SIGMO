@@ -772,6 +772,7 @@ async function notificarNovidadePatrimonialRecebimento({
   novidadeOficial,
   novidade,
   patrimonio,
+  localDestino,
   user
 }) {
   if (
@@ -874,18 +875,38 @@ async function notificarNovidadePatrimonialRecebimento({
     }
   }
 
-  return Promise.all([
-    criarNotificacaoParaPerfil({
-      perfil:
-        'ENCARREGADO DO SVDD',
-      ...payloadBase
-    }),
-    criarNotificacaoParaPerfil({
-      perfil:
-        'P4',
-      ...payloadBase
-    })
-  ])
+  const localDestinoNormalizado =
+    maiusculo(localDestino) ||
+    ''
+
+  const setorResponsavel =
+    (
+      localDestinoNormalizado.includes('P4') ||
+      localDestinoNormalizado.includes('DEPÓSITO') ||
+      localDestinoNormalizado.includes('DEPOSITO') ||
+      localDestinoNormalizado.includes('GUARDA DO QUARTEL')
+    )
+      ? 'P4'
+      : 'SVDD'
+
+  const perfilDestinatario =
+    setorResponsavel === 'P4'
+      ? 'P4'
+      : 'ENCARREGADO DO SVDD'
+
+  return criarNotificacaoParaPerfil({
+    perfil:
+      perfilDestinatario,
+    ...payloadBase,
+    metadata: {
+      ...payloadBase.metadata,
+      local_destino:
+        localDestinoNormalizado ||
+        null,
+      setor_responsavel:
+        setorResponsavel
+    }
+  })
 }
 
 async function buscarNovidadeOficialComFotos(novidade) {
@@ -1393,6 +1414,7 @@ export async function receberMaterial({
       novidade:
         novidadeFinal,
       patrimonio,
+      localDestino,
       user
     })
   }

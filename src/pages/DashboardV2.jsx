@@ -719,6 +719,34 @@ function NovidadeLinha({ item, onClick }) {
 }
 
 
+function normalizarOrigemCautela(valor) {
+  const origem = String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+
+  if (
+    origem.includes('P4') ||
+    origem.includes('DEPOSITO DO P4') ||
+    origem.includes('GUARDA DO P4') ||
+    origem.includes('COFRE DO P4')
+  ) {
+    return 'P4'
+  }
+
+  if (
+    origem.includes('SVDD') ||
+    origem.includes('SERVICO DE DIA') ||
+    origem.includes('COFRE DO SVDD')
+  ) {
+    return 'SVDD'
+  }
+
+  return 'NÃO INFORMADA'
+}
+
+
 async function listarMateriaisEmServicoConsolidado() {
   const [
     patrimoniosResultado,
@@ -797,6 +825,144 @@ async function listarMateriaisEmServicoConsolidado() {
         }
       })
 
+  if (individuais.length > 0) {
+    try {
+      const patrimonioIds =
+        individuais
+          .map((item) => item?.patrimonio_id)
+          .filter(Boolean)
+
+      const { data: itensMovimentacao, error: itensError } =
+        await supabase
+          .from('sigmo_movimentacao_itens')
+          .select('patrimonio_id, movimentacao_id')
+          .in('patrimonio_id', patrimonioIds)
+
+      if (itensError) {
+        console.warn(
+          'Não foi possível buscar a origem das cautelas:',
+          itensError
+        )
+      } else {
+        const movimentacaoIds = [
+          ...new Set(
+            (itensMovimentacao || [])
+              .map((item) => item?.movimentacao_id)
+              .filter(Boolean)
+          )
+        ]
+
+        if (movimentacaoIds.length > 0) {
+          const { data: movimentacoes, error: movimentacoesError } =
+            await supabase
+              .from('sigmo_movimentacoes')
+              .select(
+                'id, tipo_movimentacao, origem_local, destino_local, status, created_at'
+              )
+              .in('id', movimentacaoIds)
+              .eq('tipo_movimentacao', 'CAUTELA')
+              .eq('status', 'finalizada')
+              .order('created_at', {
+                ascending: false
+              })
+
+          if (movimentacoesError) {
+            console.warn(
+              'Não foi possível identificar a origem das cautelas:',
+              movimentacoesError
+            )
+          } else {
+            const patrimoniosPorMovimentacao =
+              new Map()
+
+            for (const itemMov of itensMovimentacao || []) {
+              const movimentacaoId =
+                String(
+                  itemMov?.movimentacao_id ||
+                  ''
+                )
+
+              const patrimonioId =
+                String(
+                  itemMov?.patrimonio_id ||
+                  ''
+                )
+
+              if (!movimentacaoId || !patrimonioId) {
+                continue
+              }
+
+              if (
+                !patrimoniosPorMovimentacao.has(
+                  movimentacaoId
+                )
+              ) {
+                patrimoniosPorMovimentacao.set(
+                  movimentacaoId,
+                  []
+                )
+              }
+
+              patrimoniosPorMovimentacao
+                .get(movimentacaoId)
+                .push(patrimonioId)
+            }
+
+            const origemPorPatrimonio = {}
+
+            // movimentacoes já está da mais recente para a mais antiga.
+            for (const movimentacao of movimentacoes || []) {
+              if (
+                String(
+                  movimentacao?.destino_local ||
+                  ''
+                )
+                  .trim()
+                  .toUpperCase() !==
+                'CAUTELA INDIVIDUAL'
+              ) {
+                continue
+              }
+
+              const ids =
+                patrimoniosPorMovimentacao.get(
+                  String(movimentacao?.id || '')
+                ) || []
+
+              for (const patrimonioId of ids) {
+                if (
+                  !origemPorPatrimonio[
+                    patrimonioId
+                  ]
+                ) {
+                  origemPorPatrimonio[
+                    patrimonioId
+                  ] =
+                    normalizarOrigemCautela(
+                      movimentacao?.origem_local
+                    )
+                }
+              }
+            }
+
+            for (const item of individuais) {
+              item.origem_cautela =
+                origemPorPatrimonio[
+                  String(item.patrimonio_id)
+                ] ||
+                'NÃO INFORMADA'
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(
+        'Origem das cautelas indisponível; mantendo a listagem:',
+        error
+      )
+    }
+  }
+
   const quantitativos =
     (tonfasResultado.data || [])
       .map((item) => {
@@ -847,6 +1013,12 @@ async function listarMateriaisEmServicoConsolidado() {
           quantidade:
             saldo,
           saldo,
+          origem_cautela:
+            normalizarOrigemCautela(
+              item?.origem_local ||
+              item?.origem ||
+              item?.local_origem
+            ),
           tipo_registro:
             'TONFA_QUANTIDADE'
         }
@@ -1156,15 +1328,45 @@ function PainelDashboard({
       const lista =
         await listarMateriaisEmServicoConsolidado()
 
+      const perfilAtual =
+        String(
+          user?.perfil ||
+          user?.profile ||
+          ''
+        )
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toUpperCase()
+
+      const visaoSomenteSvdd =
+        perfilAtual === 'ENCARREGADO DO SVDD' ||
+        perfilAtual === 'AUXILIAR DO SVDD' ||
+        perfilAtual === 'AUXILIAR SVDD'
+
       setMateriaisEmServico(
-        (lista || []).filter(
-          (item) =>
+        (lista || []).filter((item) => {
+          const saldo =
             Number(
               item?.saldo ??
               item?.quantidade ??
               0
-            ) > 0
-        )
+            )
+
+          if (saldo <= 0) {
+            return false
+          }
+
+          if (!visaoSomenteSvdd) {
+            return true
+          }
+
+          return (
+            String(item?.origem_cautela || '')
+              .trim()
+              .toUpperCase() === 'SVDD'
+          )
+        })
       )
       setModalEmServicoAberto(true)
     } catch (error) {
@@ -1660,19 +1862,70 @@ function PainelDashboard({
                 <p>Nenhum material em serviço.</p>
               ) : (
                 materiaisEmServico.map((item) => (
-                  <article key={item.id}>
+                  <article
+                    key={item.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'minmax(0, 1.25fr) 100px minmax(0, 1fr) auto',
+                      alignItems: 'center',
+                      gap: '16px'
+                    }}
+                  >
                     <div>
                       <strong>
                         {descricaoCautelaResumida(item)}
                       </strong>
-                      <span>
-                        {item.policial_nome ||
-                          'Policial não identificado'}
-                        {item.policial_re
-                          ? ` · RE ${item.policial_re}`
-                          : ''}
+                      <span>Material</span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minWidth: '58px',
+                          padding: '6px 10px',
+                          borderRadius: '999px',
+                          border:
+                            item.origem_cautela === 'P4'
+                              ? '1px solid rgba(96,165,250,.55)'
+                              : item.origem_cautela === 'SVDD'
+                              ? '1px solid rgba(167,139,250,.55)'
+                              : '1px solid rgba(148,163,184,.38)',
+                          background:
+                            item.origem_cautela === 'P4'
+                              ? 'rgba(37,99,235,.18)'
+                              : item.origem_cautela === 'SVDD'
+                              ? 'rgba(124,58,237,.18)'
+                              : 'rgba(100,116,139,.14)',
+                          fontSize: '12px',
+                          fontWeight: 900
+                        }}
+                      >
+                        {item.origem_cautela ||
+                          'NÃO INFORMADA'}
                       </span>
                     </div>
+
+                    <div>
+                      <strong>
+                        {item.policial_nome ||
+                          'Policial não identificado'}
+                      </strong>
+                      <span>
+                        {item.policial_re
+                          ? `RE ${item.policial_re}`
+                          : 'RE não informado'}
+                      </span>
+                    </div>
+
                     <b>
                       {Number(
                         item.saldo ??
@@ -4202,7 +4455,7 @@ if (route === 'tonfas') {
               Você possui {avisoRecebimento} carrinho(s) para receber
             </h2>
             <p style={{ opacity: .86, lineHeight: 1.5 }}>
-              Confira os materiais pagos pelo SVDD e confirme o recebimento do carrinho completo.
+              Confira os materiais encaminhados para você e confirme o recebimento do carrinho completo.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
               <button

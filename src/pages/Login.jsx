@@ -91,6 +91,19 @@ async function abrirSessaoSegura(
   return token
 }
 
+const ACESSOS_TESTE = [
+  { label: 'Usuário 1', re: '111111', pin: '111111' },
+  { label: 'Usuário 2', re: '222222', pin: '222222' },
+  { label: 'Usuário 3', re: '333333', pin: '333333' },
+  { label: 'P4', re: '444444', pin: '444444' },
+  { label: 'Encarregado SVDD', re: '555555', pin: '555555' },
+  { label: 'Auxiliar SVDD', re: '666666', pin: '666666' },
+  { label: 'Auxiliar Temporário', re: '777777', pin: '777777' },
+  { label: 'Sargento', re: '888888', pin: '888888' },
+  { label: 'Cmt de Cia', re: '900000', pin: '900000' },
+  { label: 'Usuário Externo', re: '123432', pin: '000000' }
+]
+
 export default function Login({
   onLogin
 }) {
@@ -255,6 +268,12 @@ export default function Login({
         6
       )
     )
+  }
+
+  function preencherAcessoTeste(acesso) {
+    setRe(acesso.re)
+    setPin(acesso.pin)
+    setError('')
   }
 
   function abrirRecuperacao() {
@@ -785,6 +804,39 @@ export default function Login({
           '#030913'
       }}
     >
+      <aside
+        aria-label="Acessos de teste"
+        style={{
+          position: 'fixed',
+          right: '24px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 20,
+          width: '220px',
+          maxHeight: 'calc(100vh - 48px)',
+          overflowY: 'auto',
+          padding: '16px',
+          border: '1px solid rgba(77, 183, 255, 0.30)',
+          borderRadius: '14px',
+          background: 'rgba(2, 16, 38, 0.88)',
+          boxShadow: '0 18px 55px rgba(0, 0, 0, 0.30)',
+          backdropFilter: 'blur(7px)'
+        }}
+      >
+        <span style={{display:'block',marginBottom:'5px',color:'#4db7ff',fontSize:'11px',fontWeight:900,letterSpacing:'1.2px'}}>ACESSOS DE TESTE</span>
+        <small style={{display:'block',marginBottom:'12px',color:'#9fb4cc',fontSize:'10px',lineHeight:1.4}}>Clique em um perfil para preencher RE e PIN.</small>
+        <div style={{display:'grid',gap:'7px'}}>
+          {ACESSOS_TESTE.map((acesso) => (
+            <button key={`${acesso.re}-${acesso.label}`} type="button"
+              onClick={() => preencherAcessoTeste(acesso)} disabled={loading}
+              style={{width:'100%',padding:'9px 10px',border:'1px solid rgba(142,203,255,.20)',borderRadius:'8px',background:'rgba(255,255,255,.055)',color:'#fff',textAlign:'left',cursor:loading?'not-allowed':'pointer',opacity:loading?.65:1}}>
+              <strong style={{display:'block',fontSize:'12px'}}>{acesso.label}</strong>
+              <span style={{display:'block',marginTop:'2px',color:'#8ecbff',fontSize:'10px',fontWeight:700}}>RE {acesso.re}</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+
       <section className="login-card">
         <form
           onSubmit={handleLogin}

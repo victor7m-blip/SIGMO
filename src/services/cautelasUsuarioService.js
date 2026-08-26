@@ -583,6 +583,7 @@ async function notificarNovidadePatrimonial({
   novidade,
   patrimonio,
   item,
+  movimentacao,
   user
 }) {
   if (!novidadeOficial?.id || !patrimonio?.id || !novidade) {
@@ -679,15 +680,58 @@ async function notificarNovidadePatrimonial({
     }
   }
 
+  const origemCautela =
+    normalizarMaiusculo(
+      movimentacao?.origem_local
+    )
+
+  const perfilResponsavel =
+    (
+      origemCautela.includes('P4') ||
+      origemCautela.includes('DEPÓSITO DO P4') ||
+      origemCautela.includes('DEPOSITO DO P4') ||
+      origemCautela.includes('COFRE DO P4') ||
+      origemCautela.includes('GUARDA DO P4')
+    )
+      ? 'P4'
+      : (
+          origemCautela.includes('SVDD') ||
+          origemCautela.includes('SERVIÇO DE DIA') ||
+          origemCautela.includes('SERVICO DE DIA')
+        )
+        ? 'ENCARREGADO DO SVDD'
+        : null
+
+  if (!perfilResponsavel) {
+    console.warn(
+      'Novidade registrada sem origem institucional identificável. Popup não enviado para evitar notificação ao setor incorreto.',
+      {
+        novidade_id: novidadeOficial.id,
+        patrimonio_id: patrimonio.id,
+        movimentacao_id: movimentacao?.id || null,
+        origem_local: movimentacao?.origem_local || null
+      }
+    )
+    return []
+  }
+
   return Promise.all([
     criarNotificacaoParaPerfil({
-      perfil:
-        'ENCARREGADO DO SVDD',
-      ...payloadBase
-    }),
-    criarNotificacaoParaPerfil({
-      perfil: 'P4',
-      ...payloadBase
+      perfil: perfilResponsavel,
+      ...payloadBase,
+      metadata: {
+        ...payloadBase.metadata,
+        origem_cautela:
+          movimentacao?.origem_local ||
+          null,
+        movimentacao_cautela_id:
+          movimentacao?.id ||
+          null,
+        setor_responsavel:
+          perfilResponsavel === 'P4'
+            ? 'P4'
+            : 'SVDD'
+      }
     })
   ])
 }
@@ -2733,6 +2777,7 @@ export async function confirmarRecebimentoCautela({
           patrimonio,
           item:
             registro.item,
+          movimentacao,
           user
         })
       }
@@ -2812,6 +2857,7 @@ export async function confirmarRecebimentoCautela({
               registro.patrimonio,
             item:
               registro.item,
+            movimentacao,
             user
           })
         }

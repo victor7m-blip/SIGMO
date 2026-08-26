@@ -649,6 +649,97 @@ async function listarTotaisPorModulo() {
     )
 }
 
+
+async function buscarOrigensCautelaPorPatrimonio(patrimonioIds = []) {
+  const ids = [
+    ...new Set(
+      (patrimonioIds || [])
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (ids.length === 0) {
+    return new Map()
+  }
+
+  const { data: itens, error: itensError } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select('patrimonio_id, movimentacao_id')
+    .in('patrimonio_id', ids)
+
+  if (itensError) {
+    throw itensError
+  }
+
+  const movimentacaoIds = [
+    ...new Set(
+      (itens || [])
+        .map((item) => item?.movimentacao_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (movimentacaoIds.length === 0) {
+    return new Map()
+  }
+
+  const { data: movimentacoes, error: movimentacoesError } = await supabase
+    .from('sigmo_movimentacoes')
+    .select(
+      'id, tipo_movimentacao, status, origem_local, destino_local, recebedor_id, recebedor_nome, created_at'
+    )
+    .in('id', movimentacaoIds)
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .eq('status', 'finalizada')
+    .order('created_at', { ascending: false })
+
+  if (movimentacoesError) {
+    throw movimentacoesError
+  }
+
+  const movimentacaoPorId = new Map(
+    (movimentacoes || []).map((item) => [String(item.id), item])
+  )
+
+  const itensPorPatrimonio = new Map()
+
+  for (const item of itens || []) {
+    const patrimonioId = String(item?.patrimonio_id || '')
+    const movimentacao = movimentacaoPorId.get(
+      String(item?.movimentacao_id || '')
+    )
+
+    if (!patrimonioId || !movimentacao) {
+      continue
+    }
+
+    const destino = normalizarMaiusculo(
+      movimentacao?.destino_local
+    )
+
+    if (destino !== 'CAUTELA INDIVIDUAL') {
+      continue
+    }
+
+    const atual = itensPorPatrimonio.get(patrimonioId)
+
+    if (
+      !atual ||
+      new Date(movimentacao.created_at).getTime() >
+        new Date(atual.created_at).getTime()
+    ) {
+      itensPorPatrimonio.set(
+        patrimonioId,
+        movimentacao
+      )
+    }
+  }
+
+  return itensPorPatrimonio
+}
+
 async function buscarRegistrosReferencia(
   tabela,
   ids
@@ -940,25 +1031,25 @@ export async function listarPatrimoniosCategoria(
     normalizarTipo(tipo)
 
   const {
-  data: patrimonios,
-  error
-} = await supabase
-  .from(PATRIMONIOS_TABLE)
-  .select('*')
-  .eq(
-    'tipo',
-    tipoNormalizado
-  )
-  .neq(
-    'status',
-    'INATIVO'
-  )
-  .order(
-    'created_at',
-    {
-      ascending: false
-    }
-  )
+    data: patrimonios,
+    error
+  } = await supabase
+    .from(PATRIMONIOS_TABLE)
+    .select('*')
+    .eq(
+      'tipo',
+      tipoNormalizado
+    )
+    .neq(
+      'status',
+      'INATIVO'
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
 
   if (error) {
     throw error
@@ -971,6 +1062,43 @@ export async function listarPatrimoniosCategoria(
     return []
   }
 
+  const origensCautelaPorPatrimonio =
+    await buscarOrigensCautelaPorPatrimonio(
+      lista.map((item) => item?.id)
+    )
+
+  const enriquecerOrigemOperacional = (patrimonio) => {
+    const cautelaAtual =
+      origensCautelaPorPatrimonio.get(
+        String(patrimonio?.id || '')
+      )
+
+    if (!cautelaAtual) {
+      return patrimonio
+    }
+
+    return {
+      ...patrimonio,
+      origem_local:
+        patrimonio?.origem_local ||
+        cautelaAtual?.origem_local ||
+        null,
+      local_origem:
+        patrimonio?.local_origem ||
+        cautelaAtual?.origem_local ||
+        null,
+      cautela_movimentacao_id:
+        cautelaAtual?.id ||
+        null,
+      cautela_recebedor_id:
+        cautelaAtual?.recebedor_id ||
+        null,
+      cautela_recebedor_nome:
+        cautelaAtual?.recebedor_nome ||
+        null
+    }
+  }
+
   const tabelaReferencia =
     TABELAS_REFERENCIA[
       tipoNormalizado
@@ -980,7 +1108,9 @@ export async function listarPatrimoniosCategoria(
     return lista.map(
       (patrimonio) =>
         mesclarPatrimonio(
-          patrimonio,
+          enriquecerOrigemOperacional(
+            patrimonio
+          ),
           null
         )
     )
@@ -1023,7 +1153,9 @@ export async function listarPatrimoniosCategoria(
         )
 
       return mesclarPatrimonio(
-        patrimonio,
+        enriquecerOrigemOperacional(
+          patrimonio
+        ),
         registro
       )
     }

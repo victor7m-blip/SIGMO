@@ -435,7 +435,10 @@ function patrimonioPertenceAoSVDD(patrimonio) {
   return (
     localSVDD ||
     foraDoCofreMasSobResponsabilidade ||
-    cautelaIndividual
+    (
+      origemSVDD &&
+      cautelaIndividual
+    )
   )
 }
 
@@ -932,7 +935,9 @@ function CentralOperacional({ user }) {
           visaoSVDD
             ? (lista ?? []).filter(patrimonioPertenceAoSVDD)
             : visaoP4
-              ? (lista ?? []).filter(patrimonioPertenceAoP4)
+              ? (lista ?? []).filter(
+                  patrimonioPertenceAoP4
+                )
               : (lista ?? [])
 
         setPatrimoniosCategoria(listaPerfil.map(normalizarPatrimonio))

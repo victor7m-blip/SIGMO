@@ -191,13 +191,139 @@ export async function carregarCentralOperacional({ user } = {}) {
   const movimentacoes = movRes.status === 'fulfilled' ? movRes.value : []
   const transferencias = transfRes.status === 'fulfilled' ? transfRes.value : []
   const novidades = novRes.status === 'fulfilled' ? novRes.value : []
-  const novidadesPendentes = ordenarRecentes(
-    (novidades || []).filter(
-      (item) =>
-        normalizarSemAcentos(item?.status) === 'REGISTRADA'
-    )
-  )
   const patrimonios = patRes.status === 'fulfilled' ? patRes.value : []
+
+  const novidadesRegistradas = (novidades || []).filter(
+    (item) => normalizarSemAcentos(item?.status) === 'REGISTRADA'
+  )
+
+  // A origem da novidade em patrimônio cautelado é a origem da cautela
+  // finalizada mais recente que colocou o item em CAUTELA INDIVIDUAL.
+  const patrimonioIds = [
+    ...new Set(
+      novidadesRegistradas
+        .map((item) => item?.patrimonio_id)
+        .filter(Boolean)
+    )
+  ]
+
+  const cautelaPorPatrimonio = new Map()
+
+  if (patrimonioIds.length > 0) {
+    const { data: itensNovidade, error: itensNovidadeError } = await supabase
+      .from('sigmo_movimentacao_itens')
+      .select('patrimonio_id, movimentacao_id')
+      .in('patrimonio_id', patrimonioIds)
+
+    if (itensNovidadeError) {
+      console.warn('Falha ao localizar movimentações das novidades:', itensNovidadeError)
+    } else {
+      const movimentacaoIds = [
+        ...new Set(
+          (itensNovidade || [])
+            .map((item) => item?.movimentacao_id)
+            .filter(Boolean)
+        )
+      ]
+
+      if (movimentacaoIds.length > 0) {
+        const { data: movsNovidade, error: movsNovidadeError } = await supabase
+          .from('sigmo_movimentacoes')
+          .select('id, tipo_movimentacao, status, origem_local, destino_local, solicitante_nome, recebedor_nome, created_at')
+          .in('id', movimentacaoIds)
+          .order('created_at', { ascending: false })
+
+        if (movsNovidadeError) {
+          console.warn('Falha ao carregar cautelas das novidades:', movsNovidadeError)
+        } else {
+          const movPorId = new Map(
+            (movsNovidade || []).map((mov) => [mov.id, mov])
+          )
+
+          // Como movsNovidade já vem do mais recente para o mais antigo,
+          // a primeira cautela válida encontrada para cada patrimônio vence.
+          const itensPorMovimentacao = new Map()
+          for (const item of itensNovidade || []) {
+            const lista = itensPorMovimentacao.get(item.movimentacao_id) || []
+            lista.push(item)
+            itensPorMovimentacao.set(item.movimentacao_id, lista)
+          }
+
+          for (const mov of movsNovidade || []) {
+            const tipo = normalizarSemAcentos(mov?.tipo_movimentacao)
+            const status = normalizarSemAcentos(mov?.status)
+            const destino = normalizarSemAcentos(mov?.destino_local)
+
+            if (
+              tipo !== 'CAUTELA' ||
+              status !== 'FINALIZADA' ||
+              destino !== 'CAUTELA INDIVIDUAL'
+            ) {
+              continue
+            }
+
+            for (const item of itensPorMovimentacao.get(mov.id) || []) {
+              const patrimonioId = String(item?.patrimonio_id || '')
+              if (patrimonioId && !cautelaPorPatrimonio.has(patrimonioId)) {
+                cautelaPorPatrimonio.set(patrimonioId, mov)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const patrimonioPorId = new Map(
+    patrimonios.map((item) => [String(item?.id || ''), item])
+  )
+
+  const novidadesClassificadas = novidadesRegistradas.map((item) => {
+    const patrimonioId = String(item?.patrimonio_id || '')
+    const patrimonio = patrimonioPorId.get(patrimonioId)
+    const cautela = cautelaPorPatrimonio.get(patrimonioId)
+    const origemCautela = cautela?.origem_local || null
+
+    const cargaAtual =
+      contem(origemCautela, ['SVDD', 'SERVIÇO DE DIA', 'SERVICO DE DIA'])
+        ? 'SVDD'
+        : contem(origemCautela, ['P4', 'DEPÓSITO', 'DEPOSITO'])
+          ? 'P4'
+          : null
+
+    return {
+      ...item,
+      local_atual: patrimonio?.local_atual || item?.local_atual || null,
+      carga_atual: cargaAtual,
+      responsabilidade_atual: cargaAtual,
+      origem_cautela: origemCautela,
+      pago_por: cautela?.solicitante_nome || null,
+      cautelado_com:
+        cautela?.recebedor_nome ||
+        patrimonio?.responsavel_atual_nome ||
+        null,
+      cautela_movimentacao_id: cautela?.id || null,
+      patrimonio_status:
+        patrimonio?.status_operacional ||
+        patrimonio?.status ||
+        null
+    }
+  })
+
+  // Regra da Central:
+  // - SVDD vê somente novidades de materiais sob carga/origem SVDD.
+  // - P4 e Administrador podem acompanhar todas as novidades; no P4 a UI
+  //   separa em "Novidades P4" e "Novidades SVDD".
+  const novidadesVisiveisAoPerfil =
+    perfil.includes('SVDD')
+      ? novidadesClassificadas.filter(
+          (item) => normalizarSemAcentos(item?.carga_atual) === 'SVDD'
+        )
+      : novidadesClassificadas
+
+  const novidadesPendentes = ordenarRecentes(
+    novidadesVisiveisAoPerfil
+  )
   const baixasAprovacao = baixasRes.status === 'fulfilled' ? baixasRes.value : []
 
   const movPerfil = movimentacoes.filter((item) => pertenceAoPerfil(item, perfil))

@@ -179,24 +179,28 @@ export default function TaserTable({
                       Ver
                     </SigmoButton>
 
-                    <SigmoButton
-                      type="button"
-                      onClick={() =>
-                        onEdit?.(taser)
-                      }
-                    >
-                      Editar
-                    </SigmoButton>
+                    {onEdit && (
+                      <SigmoButton
+                        type="button"
+                        onClick={() =>
+                          onEdit(taser)
+                        }
+                      >
+                        Editar
+                      </SigmoButton>
+                    )}
 
-                    <SigmoButton
-                      type="button"
-                      variant="danger"
-                      onClick={() =>
-                        onDelete?.(taser)
-                      }
-                    >
-                      Excluir
-                    </SigmoButton>
+                    {onDelete && (
+                      <SigmoButton
+                        type="button"
+                        variant="danger"
+                        onClick={() =>
+                          onDelete(taser)
+                        }
+                      >
+                        Excluir
+                      </SigmoButton>
+                    )}
                   </div>
                 </td>
               </tr>

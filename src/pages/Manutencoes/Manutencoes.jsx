@@ -18,6 +18,67 @@ const FILTROS_INICIAIS = {
   dataFinal: ''
 }
 
+function normalizarTexto(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+}
+
+function obterSetorManutencao(item) {
+  const origemInstitucional =
+    normalizarTexto(
+      item?.origem_institucional
+    )
+
+  if (origemInstitucional === 'P4') {
+    return 'P4'
+  }
+
+  if (origemInstitucional === 'SVDD') {
+    return 'SVDD'
+  }
+
+  // Fallback apenas para registros antigos que ainda não tenham sido
+  // enriquecidos pelo service.
+  const origem = normalizarTexto(
+    item?.origem ||
+    item?.origem_local ||
+    item?.local_origem
+  )
+
+  if (origem.includes('P4')) return 'P4'
+
+  if (
+    origem.includes('SVDD') ||
+    origem.includes('SERVICO DE DIA') ||
+    origem.includes('COFRE DO SVDD')
+  ) {
+    return 'SVDD'
+  }
+
+  return null
+}
+
+function obterSetorDoUsuario(user) {
+  const perfil = normalizarTexto(
+    user?.perfil_efetivo ||
+    user?.perfil ||
+    user?.role ||
+    user?.tipo_perfil
+  )
+
+  if (perfil.includes('P4')) return 'P4'
+
+  if (
+    perfil.includes('SVDD') ||
+    perfil.includes('SERVICO DE DIA')
+  ) return 'SVDD'
+
+  return null
+}
+
 function dentroDoPeriodo(item, dataInicial, dataFinal) {
   const valor = item.registrada_em || item.created_at
   if (!valor) return !dataInicial && !dataFinal
@@ -73,12 +134,23 @@ export default function Manutencoes({ user, onVoltar }) {
     return () => window.clearTimeout(timer)
   }, [carregar])
 
-  const listaFiltrada = useMemo(
-    () => manutencoes.filter((item) =>
-      dentroDoPeriodo(item, filtros.dataInicial, filtros.dataFinal)
-    ),
-    [manutencoes, filtros.dataInicial, filtros.dataFinal]
-  )
+  const listaFiltrada = useMemo(() => {
+    const setorUsuario = obterSetorDoUsuario(user)
+
+    return manutencoes.filter((item) => {
+      if (!dentroDoPeriodo(item, filtros.dataInicial, filtros.dataFinal)) {
+        return false
+      }
+
+      // A Central de Manutenções é operacionalmente separada por origem:
+      // P4 vê somente registros originados no P4;
+      // SVDD vê somente registros originados no SVDD.
+      // Outros perfis mantêm a visão geral já existente.
+      if (!setorUsuario) return true
+
+      return obterSetorManutencao(item) === setorUsuario
+    })
+  }, [manutencoes, filtros.dataInicial, filtros.dataFinal, user])
 
   const resumo = useMemo(() => {
     return listaFiltrada.reduce(

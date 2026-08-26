@@ -945,8 +945,152 @@ export async function listarManutencoes({
 
   const manutencoes = (data || []).map(normalizarManutencao)
 
-  const referenciasArmas = [...new Set(
+  // Define o guardião institucional da manutenção pela última CAUTELA
+  // finalizada do patrimônio antes da abertura da manutenção.
+  // Ex.: DEPÓSITO DO P4 -> CAUTELA INDIVIDUAL = P4
+  //      COFRE DO SVDD -> CAUTELA INDIVIDUAL = SVDD
+  const patrimoniosManutencao = [...new Set(
     manutencoes
+      .map((item) => item?.patrimonio_id)
+      .filter(Boolean)
+      .map(String)
+  )]
+
+  const cautelasPorPatrimonio = new Map()
+
+  if (patrimoniosManutencao.length > 0) {
+    const { data: itensMovimentacao, error: itensMovimentacaoError } =
+      await supabase
+        .from('sigmo_movimentacao_itens')
+        .select('patrimonio_id, movimentacao_id')
+        .in('patrimonio_id', patrimoniosManutencao)
+
+    if (itensMovimentacaoError) {
+      console.warn(
+        'Não foi possível identificar a origem institucional das manutenções:',
+        itensMovimentacaoError
+      )
+    } else {
+      const movimentacaoIds = [...new Set(
+        (itensMovimentacao || [])
+          .map((item) => item?.movimentacao_id)
+          .filter(Boolean)
+          .map(String)
+      )]
+
+      if (movimentacaoIds.length > 0) {
+        const { data: movimentacoes, error: movimentacoesError } =
+          await supabase
+            .from('sigmo_movimentacoes')
+            .select('id, tipo_movimentacao, status, origem_local, destino_local, created_at')
+            .in('id', movimentacaoIds)
+            .eq('tipo_movimentacao', 'CAUTELA')
+            .eq('status', 'finalizada')
+            .order('created_at', { ascending: false })
+
+        if (movimentacoesError) {
+          console.warn(
+            'Não foi possível carregar as cautelas das manutenções:',
+            movimentacoesError
+          )
+        } else {
+          const patrimoniosPorMovimentacao = new Map()
+
+          for (const itemMovimentacao of itensMovimentacao || []) {
+            const movimentacaoId =
+              String(itemMovimentacao?.movimentacao_id || '')
+            const patrimonioId =
+              String(itemMovimentacao?.patrimonio_id || '')
+
+            if (!movimentacaoId || !patrimonioId) continue
+
+            if (!patrimoniosPorMovimentacao.has(movimentacaoId)) {
+              patrimoniosPorMovimentacao.set(
+                movimentacaoId,
+                []
+              )
+            }
+
+            patrimoniosPorMovimentacao
+              .get(movimentacaoId)
+              .push(patrimonioId)
+          }
+
+          // `movimentacoes` já vem da mais recente para a mais antiga.
+          // Percorremos nessa ordem para preservar corretamente o histórico
+          // institucional de cada patrimônio.
+          for (const movimentacao of movimentacoes || []) {
+            const destino = maiusculo(movimentacao?.destino_local)
+
+            if (destino !== 'CAUTELA INDIVIDUAL') continue
+
+            const patrimonioIds =
+              patrimoniosPorMovimentacao.get(
+                String(movimentacao?.id || '')
+              ) || []
+
+            for (const patrimonioId of patrimonioIds) {
+              if (!cautelasPorPatrimonio.has(patrimonioId)) {
+                cautelasPorPatrimonio.set(
+                  patrimonioId,
+                  []
+                )
+              }
+
+              cautelasPorPatrimonio
+                .get(patrimonioId)
+                .push(movimentacao)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const manutencoesComOrigemInstitucional = manutencoes.map((item) => {
+    const patrimonioId = texto(item?.patrimonio_id)
+    const registradaEm = item?.registrada_em
+      ? new Date(item.registrada_em).getTime()
+      : Number.POSITIVE_INFINITY
+
+    const cautelas = cautelasPorPatrimonio.get(patrimonioId) || []
+
+    const cautela = cautelas.find((movimentacao) => {
+      const criadaEm = movimentacao?.created_at
+        ? new Date(movimentacao.created_at).getTime()
+        : 0
+
+      return criadaEm <= registradaEm
+    })
+
+    const origemCautela = maiusculo(cautela?.origem_local)
+    let origemInstitucional = null
+
+    if (
+      origemCautela.includes('P4') ||
+      origemCautela.includes('DEPÓSITO') ||
+      origemCautela.includes('DEPOSITO') ||
+      origemCautela.includes('GUARDA DO QUARTEL')
+    ) {
+      origemInstitucional = 'P4'
+    } else if (
+      origemCautela.includes('SVDD') ||
+      origemCautela.includes('SERVIÇO DE DIA') ||
+      origemCautela.includes('SERVICO DE DIA')
+    ) {
+      origemInstitucional = 'SVDD'
+    }
+
+    return {
+      ...item,
+      origem_institucional: origemInstitucional,
+      origem_institucional_local: cautela?.origem_local || null,
+      origem_institucional_movimentacao_id: cautela?.id || null
+    }
+  })
+
+  const referenciasArmas = [...new Set(
+    manutencoesComOrigemInstitucional
       .filter((item) =>
         item.modulo === MODULOS_MANUTENCAO.ARMAS &&
         item.referencia_id
@@ -955,7 +1099,7 @@ export async function listarManutencoes({
   )]
 
   const referenciasTPD = [...new Set(
-    manutencoes
+    manutencoesComOrigemInstitucional
       .filter((item) =>
         item.modulo === MODULOS_MANUTENCAO.TPD &&
         item.referencia_id
@@ -964,7 +1108,7 @@ export async function listarManutencoes({
   )]
 
   const referenciasHT = [...new Set(
-    manutencoes
+    manutencoesComOrigemInstitucional
       .filter((item) =>
         item.modulo === MODULOS_MANUTENCAO.HT &&
         item.referencia_id
@@ -973,7 +1117,7 @@ export async function listarManutencoes({
   )]
 
   const referenciasTaser = [...new Set(
-    manutencoes
+    manutencoesComOrigemInstitucional
       .filter((item) =>
         item.modulo === MODULOS_MANUTENCAO.TASER &&
         item.referencia_id
@@ -1059,7 +1203,7 @@ export async function listarManutencoes({
   }
 
   return {
-    data: manutencoes.map((item) => {
+    data: manutencoesComOrigemInstitucional.map((item) => {
       if (!item.referencia_id) {
         return item
       }
@@ -1148,6 +1292,138 @@ export async function buscarManutencao(manutencaoId) {
 }
 
 
+
+async function obterOrigemInstitucionalManutencao(manutencao) {
+  const origemGravada = maiusculo(manutencao?.origem)
+
+  if (
+    origemGravada.includes('P4') ||
+    origemGravada.includes('DEPÓSITO') ||
+    origemGravada.includes('DEPOSITO') ||
+    origemGravada.includes('GUARDA DO QUARTEL')
+  ) {
+    return {
+      setor: 'P4',
+      origem_local: origemGravada,
+      movimentacao_id: manutencao?.movimentacao_id || null
+    }
+  }
+
+  if (
+    origemGravada.includes('SVDD') ||
+    origemGravada.includes('SERVIÇO DE DIA') ||
+    origemGravada.includes('SERVICO DE DIA')
+  ) {
+    return {
+      setor: 'SVDD',
+      origem_local: origemGravada,
+      movimentacao_id: manutencao?.movimentacao_id || null
+    }
+  }
+
+  let patrimonioId = texto(manutencao?.patrimonio_id)
+
+  if (!patrimonioId && texto(manutencao?.referencia_id)) {
+    const { data: patrimonio, error: patrimonioError } = await supabase
+      .from('sigmo_patrimonios')
+      .select('id')
+      .eq('referencia_id', texto(manutencao.referencia_id))
+      .maybeSingle()
+
+    if (patrimonioError) throw patrimonioError
+
+    patrimonioId = texto(patrimonio?.id)
+  }
+
+  if (!patrimonioId) {
+    throw new Error(
+      'Não foi possível identificar o patrimônio para definir o setor de retorno da manutenção.'
+    )
+  }
+
+  const { data: itens, error: itensError } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select('movimentacao_id')
+    .eq('patrimonio_id', patrimonioId)
+
+  if (itensError) throw itensError
+
+  const movimentacaoIds = [
+    ...new Set(
+      (itens || [])
+        .map((item) => item?.movimentacao_id)
+        .filter(Boolean)
+    )
+  ]
+
+  if (movimentacaoIds.length === 0) {
+    throw new Error(
+      'Não foi encontrada a cautela que definiu a responsabilidade institucional do material.'
+    )
+  }
+
+  let query = supabase
+    .from('sigmo_movimentacoes')
+    .select(
+      'id, tipo_movimentacao, status, origem_local, destino_local, solicitante_nome, recebedor_nome, created_at'
+    )
+    .in('id', movimentacaoIds)
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .eq('status', 'finalizada')
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  if (manutencao?.registrada_em) {
+    query = query.lte('created_at', manutencao.registrada_em)
+  }
+
+  const { data: cautelas, error: cautelasError } = await query
+
+  if (cautelasError) throw cautelasError
+
+  const cautela = (cautelas || []).find((movimentacao) => {
+    const destino = maiusculo(movimentacao?.destino_local)
+    return destino === 'CAUTELA INDIVIDUAL'
+  })
+
+  if (!cautela) {
+    throw new Error(
+      'Não foi encontrada uma cautela finalizada válida para definir o retorno da manutenção.'
+    )
+  }
+
+  const origem = maiusculo(cautela.origem_local)
+
+  if (
+    origem.includes('P4') ||
+    origem.includes('DEPÓSITO') ||
+    origem.includes('DEPOSITO') ||
+    origem.includes('GUARDA DO QUARTEL')
+  ) {
+    return {
+      setor: 'P4',
+      origem_local: cautela.origem_local,
+      movimentacao_id: cautela.id
+    }
+  }
+
+  if (
+    origem.includes('SVDD') ||
+    origem.includes('SERVIÇO DE DIA') ||
+    origem.includes('SERVICO DE DIA')
+  ) {
+    return {
+      setor: 'SVDD',
+      origem_local: cautela.origem_local,
+      movimentacao_id: cautela.id
+    }
+  }
+
+  throw new Error(
+    `A origem institucional da cautela não foi reconhecida: ${cautela.origem_local || 'NÃO INFORMADA'}.`
+  )
+}
+
 async function aplicarRetornoArma(manutencao, user) {
   const { data: arma, error } = await supabase
     .from('sigmo_armas')
@@ -1173,16 +1449,15 @@ async function aplicarRetornoArma(manutencao, user) {
     carga_policial_funcao: arma.carga_policial_funcao
   }
 
-  const origem = maiusculo(manutencao.origem)
-  const retornoAoP4 =
-    origem.includes('P4') ||
-    origem.includes('GUARDA DO QUARTEL') ||
-    origem.includes('DEPOSITO DO P4') ||
-    origem.includes('DEPÓSITO DO P4')
+  const origemInstitucional =
+    await obterOrigemInstitucionalManutencao(
+      manutencao
+    )
 
-  const localRetorno = retornoAoP4
-    ? 'GUARDA DO P4'
-    : 'COFRE DO SVDD'
+  const localRetorno =
+    origemInstitucional.setor === 'P4'
+      ? 'COFRE DO P4'
+      : 'COFRE DO SVDD'
 
   const payloadNovo = {
     status: 'RESERVA',
