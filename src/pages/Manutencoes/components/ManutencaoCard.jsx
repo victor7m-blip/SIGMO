@@ -10,7 +10,20 @@ function dataHora(valor) {
   }).format(data)
 }
 
-function statusLabel(status) {
+function statusLabel(status, manutencao) {
+  const statusExterno = String(
+    manutencao?.status_externo ||
+    manutencao?.manutencao_externa_status ||
+    ''
+  ).trim().toUpperCase()
+
+  if (
+    manutencao?.manutencao_externa === true ||
+    ['APROVADA', 'EM_MANUTENCAO_EXTERNA'].includes(statusExterno)
+  ) {
+    return 'Manutenção externa'
+  }
+
   const labels = {
     EM_MANUTENCAO: 'Em manutenção',
     CONCLUIDA: 'Concluída',
@@ -88,7 +101,7 @@ export default function ManutencaoCard({
               manutencao.status || ''
             ).toLowerCase()}`}
           >
-            {statusLabel(manutencao.status)}
+            {statusLabel(manutencao.status, manutencao)}
           </span>
         </div>
 

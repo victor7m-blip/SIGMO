@@ -24,7 +24,10 @@ const TABELAS_REFERENCIA = {
   policiais: 'policiais',
 
   municao: null,
-  municoes: null
+  municoes: null,
+
+  ht: 'sigmo_hts',
+  hts: 'sigmo_hts'
 }
 
 function normalizarTipo(tipo) {
@@ -586,6 +589,21 @@ export async function listarNovidadesPatrimoniais({
           registroReferencia?.especie ||
           null,
 
+        // Situação operacional vigente do material. Esses campos permitem
+        // que a Central classifique a novidade pelo responsável atual,
+        // e não pela origem histórica que gerou a ocorrência.
+        local_atual:
+          registroReferencia?.local_atual ||
+          patrimonioCentral?.local_atual ||
+          dadosCentral?.local_atual ||
+          null,
+
+        status_operacional:
+          registroReferencia?.status_operacional ||
+          patrimonioCentral?.status ||
+          dadosCentral?.status_operacional ||
+          null,
+
         referencia_id:
           item?.referencia_id ||
           patrimonioCentral?.referencia_id ||
@@ -782,6 +800,13 @@ function mesclarPatrimonio(
   const dadosPatrimonio =
     objeto(patrimonio?.dados)
 
+  const tipoPatrimonio =
+    normalizarTipo(patrimonio?.tipo)
+
+  const referenciaHT =
+    ['ht', 'hts'].includes(tipoPatrimonio) &&
+    registroReferencia
+
   const dadosMesclados = {
     ...registroReferencia,
     ...dadosPatrimonio
@@ -791,6 +816,27 @@ function mesclarPatrimonio(
     ...registroReferencia,
     ...dadosPatrimonio,
     ...patrimonio,
+
+    // Para HT, sigmo_hts é a fonte operacional vigente. O registro central
+    // continua fornecendo o vínculo patrimonial, mas não deve sobrescrever
+    // status/local atuais do módulo.
+    ...(referenciaHT
+      ? {
+          status_operacional:
+            registroReferencia?.status_operacional ||
+            patrimonio?.status_operacional ||
+            patrimonio?.status ||
+            '',
+          local_atual:
+            registroReferencia?.local_atual ||
+            patrimonio?.local_atual ||
+            '',
+          status:
+            patrimonio?.status ||
+            registroReferencia?.status ||
+            ''
+        }
+      : {}),
 
     dados:
       dadosMesclados,
@@ -830,10 +876,19 @@ function mesclarPatrimonio(
     // A linha vigente de sigmo_patrimonios é a fonte operacional.
     // Campos vindos de `dados` ou da tabela de referência são apenas histórico/fallback.
     status_operacional:
-      patrimonio?.status ||
-      patrimonioMesclado?.status_operacional ||
-      patrimonioMesclado?.status ||
-      '',
+      referenciaHT
+        ? (
+            registroReferencia?.status_operacional ||
+            patrimonioMesclado?.status_operacional ||
+            patrimonio?.status ||
+            ''
+          )
+        : (
+            patrimonio?.status ||
+            patrimonioMesclado?.status_operacional ||
+            patrimonioMesclado?.status ||
+            ''
+          ),
 
     responsavel_atual_id:
       patrimonio?.responsavel_atual_id ||
@@ -852,9 +907,18 @@ function mesclarPatrimonio(
       responsavel.nome,
 
     local_atual:
-      patrimonio?.local_atual ||
-      localAtual ||
-      'NÃO INFORMADO',
+      referenciaHT
+        ? (
+            registroReferencia?.local_atual ||
+            localAtual ||
+            patrimonio?.local_atual ||
+            'NÃO INFORMADO'
+          )
+        : (
+            patrimonio?.local_atual ||
+            localAtual ||
+            'NÃO INFORMADO'
+          ),
 
     com_policial:
       comPolicial,

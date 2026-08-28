@@ -105,6 +105,9 @@ export async function transferirMaterial({
   motivo = 'TRANSFERÊNCIA DE MATERIAL',
   observacao = '',
 
+  tipoSaida = 'TRANSFERENCIA',
+  previsaoDevolucao = null,
+
   user = null
 }) {
   if (!materialId) {
@@ -136,11 +139,72 @@ export async function transferirMaterial({
     )
   }
 
+  const tipoSaidaNormalizado =
+    maiusculo(tipoSaida) ||
+    'TRANSFERENCIA'
+
+  const emprestimo =
+    tipoSaidaNormalizado ===
+    'EMPRESTIMO'
+
+  if (
+    tipoSaidaNormalizado !==
+      'TRANSFERENCIA' &&
+    tipoSaidaNormalizado !==
+      'EMPRESTIMO'
+  ) {
+    throw new Error(
+      'Tipo de saída patrimonial inválido.'
+    )
+  }
+
+  let previsaoDevolucaoNormalizada =
+    null
+
+  if (emprestimo) {
+    if (!texto(previsaoDevolucao)) {
+      throw new Error(
+        'Informe a previsão de devolução do empréstimo.'
+      )
+    }
+
+    const dataPrevisao =
+      new Date(previsaoDevolucao)
+
+    if (
+      Number.isNaN(
+        dataPrevisao.getTime()
+      )
+    ) {
+      throw new Error(
+        'A previsão de devolução informada é inválida.'
+      )
+    }
+
+    if (
+      dataPrevisao.getTime() <=
+      Date.now()
+    ) {
+      throw new Error(
+        'A previsão de devolução deve ser futura.'
+      )
+    }
+
+    previsaoDevolucaoNormalizada =
+      dataPrevisao.toISOString()
+  }
+
   const patrimonio =
     await buscarPatrimonioPorReferencia({
       tipo: 'material',
       referenciaId: materialId
     })
+
+  if (!patrimonio?.id) {
+    throw new Error(
+      'Patrimônio não encontrado para o material selecionado.'
+    )
+  }
 
   if (
     patrimonio.status ===
@@ -155,31 +219,64 @@ export async function transferirMaterial({
 
   const movimentacao =
     await registrarMovimentacao({
-      patrimonioId: patrimonio.id,
+      patrimonioId:
+        patrimonio.id,
 
       tipo:
-        TIPOS_MOVIMENTACAO.TRANSFERENCIA,
+        emprestimo
+          ? TIPOS_MOVIMENTACAO.EMPRESTIMO
+          : TIPOS_MOVIMENTACAO.TRANSFERENCIA,
 
       statusNovo:
-        patrimonio.status ||
-        STATUS_PATRIMONIO.ATIVO,
+        emprestimo
+          ? STATUS_PATRIMONIO.EMPRESTADO
+          : (
+              patrimonio.status ||
+              STATUS_PATRIMONIO.ATIVO
+            ),
 
       localDestino,
-      companhiaDestino: unidadeDestino,
+      companhiaDestino:
+        unidadeDestino,
 
       recebedorRE: re,
       recebedorNome,
 
       motivo:
         texto(motivo) ||
-        'TRANSFERÊNCIA DE MATERIAL',
+        (
+          emprestimo
+            ? 'EMPRÉSTIMO DE MATERIAL'
+            : 'TRANSFERÊNCIA DE MATERIAL'
+        ),
 
       observacao,
 
       dados: {
-        modulo: 'MATERIAIS',
-        material_id: materialId,
-        documento: texto(documento)
+        modulo:
+          'MATERIAIS',
+
+        material_id:
+          materialId,
+
+        documento:
+          texto(documento),
+
+        natureza:
+          emprestimo
+            ? 'EMPRESTIMO'
+            : 'PROPRIO',
+
+        tipo_saida:
+          tipoSaidaNormalizado,
+
+        previsao_devolucao:
+          previsaoDevolucaoNormalizada,
+
+        status_movimentacao:
+          emprestimo
+            ? 'EM_ANDAMENTO'
+            : 'CONCLUIDA'
       },
 
       user
@@ -199,8 +296,15 @@ export async function transferirMaterial({
 
     patrimonio: {
       ...patrimonio,
+
+      status:
+        emprestimo
+          ? STATUS_PATRIMONIO.EMPRESTADO
+          : patrimonio.status,
+
       local_atual:
         maiusculo(localDestino),
+
       companhia_atual:
         maiusculo(unidadeDestino)
     },

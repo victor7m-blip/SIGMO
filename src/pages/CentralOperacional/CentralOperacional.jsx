@@ -18,8 +18,9 @@ import {
   listarPatrimoniosCategoria
 } from '../../services/dashboardService'
 
-import { carregarCentralOperacional } from '../../services/centralOperacionalService'
+import { carregarCentralOperacional, listarManutencoesExternasContagem } from '../../services/centralOperacionalService'
 import { listarTonfas } from '../../services/tonfasService'
+import { listarManutencoes } from '../../services/manutencoesService'
 import { listarCautelasAtivas } from '../../services/tonfasMovimentacoesService'
 import {
   ehEncarregado,
@@ -99,10 +100,10 @@ function obterStatusPatrimonio(patrimonio) {
   const dados = obterDadosPatrimonio(patrimonio)
 
   return normalizarMaiusculo(
-    patrimonio?.status ||
     patrimonio?.status_operacional ||
-    dados.status ||
+    patrimonio?.status ||
     dados.status_operacional ||
+    dados.status ||
     'SEM STATUS'
   )
 }
@@ -111,10 +112,10 @@ function patrimonioPermiteResponsavelAtual(patrimonio) {
   const dados = obterDadosPatrimonio(patrimonio)
 
   const statusAtual = normalizarMaiusculo(
-    patrimonio?.status ||
     patrimonio?.status_operacional ||
-    dados.status ||
+    patrimonio?.status ||
     dados.status_operacional ||
+    dados.status ||
     ''
   )
 
@@ -236,23 +237,30 @@ function normalizarPatrimonio(patrimonio) {
   const localAtual =
     obterLocalAtual(patrimonio)
 
-  const noCofre =
-    normalizarMaiusculo(localAtual).includes('COFRE')
-
   const responsavelId =
     obterResponsavelId(patrimonio)
 
   const statusAtual =
     normalizarMaiusculo(
-      patrimonio?.status ||
       patrimonio?.status_operacional ||
-      dados.status ||
+      patrimonio?.status ||
       dados.status_operacional ||
+      dados.status ||
       ''
     )
 
   const localAtualNormalizado =
     normalizarMaiusculo(localAtual)
+
+  const emManutencao =
+    statusAtual.includes('MANUTENCAO') ||
+    statusAtual.includes('MANUTENÇÃO') ||
+    localAtualNormalizado.includes('MANUTENCAO') ||
+    localAtualNormalizado.includes('MANUTENÇÃO')
+
+  const noCofre =
+    !emManutencao &&
+    localAtualNormalizado.includes('COFRE')
 
   const estadoDeCautela =
     !statusAtual.includes('CARGA') &&
@@ -363,7 +371,13 @@ function normalizarCategoria(categoria) {
       semLocalizacao,
 
     divergencias:
-      Number(categoria?.divergencias ?? 0)
+      Number(categoria?.divergencias ?? 0),
+
+    manutencao_interna:
+      Number(categoria?.manutencao_interna ?? 0),
+
+    manutencao_externa:
+      Number(categoria?.manutencao_externa ?? 0)
   }
 }
 
@@ -405,6 +419,18 @@ function patrimonioPertenceAoSVDD(patrimonio) {
     local.includes('SVDD') ||
     local.includes('COFRE DO SVDD') ||
     local.includes('SERVICO DE DIA')
+
+  const localP4Atual =
+    local.includes('P4') ||
+    local.includes('GUARDA DO P4') ||
+    local.includes('COFRE P4') ||
+    local.includes('DEPOSITO DO P4')
+
+  // Se o local operacional atual identifica claramente o P4, ele prevalece
+  // sobre a origem histórica de cautela/manutenção.
+  if (localP4Atual) {
+    return false
+  }
 
   const origemSVDD =
     origem.includes('SVDD') ||
@@ -482,6 +508,17 @@ function patrimonioPertenceAoP4(patrimonio) {
     local.includes('COFRE P4') ||
     local.includes('DEPOSITO DO P4')
 
+  const localSVDDAtual =
+    local.includes('SVDD') ||
+    local.includes('COFRE DO SVDD') ||
+    local.includes('SERVICO DE DIA')
+
+  // Se o local operacional atual identifica claramente o SVDD, ele prevalece
+  // sobre a origem histórica de cautela/manutenção.
+  if (localSVDDAtual) {
+    return false
+  }
+
   const origemP4 =
     origem.includes('P4') ||
     origem.includes('GUARDA DO P4') ||
@@ -504,6 +541,51 @@ function patrimonioPertenceAoP4(patrimonio) {
     foraDoCofreMasSobResponsabilidade
   )
 }
+
+function moduloManutencaoDaCategoria(categoria) {
+  const tipo = normalizarSemAcento(
+    categoria?.tipo_material ||
+    categoria?.categoria ||
+    categoria?.tipo ||
+    ''
+  )
+
+  if (tipo === 'ARMA' || tipo === 'ARMAS') return 'ARMAS'
+  if (tipo === 'HT') return 'HT'
+  if (tipo === 'TPD') return 'TPD'
+  if (tipo === 'TASER' || tipo === 'TASERS') return 'TASER'
+  if (tipo === 'TONFA' || tipo === 'CASSETETE') return 'TONFAS'
+
+  return tipo
+}
+
+function contarManutencoesDaCategoria(categoria, manutencoes = []) {
+  const modulo = moduloManutencaoDaCategoria(categoria)
+
+  return (manutencoes || [])
+    .filter((item) => normalizarSemAcento(item?.modulo) === modulo)
+    .reduce(
+      (total, item) => total + Math.max(1, Number(item?.quantidade || 1)),
+      0
+    )
+}
+
+function contarManutencoesExternasDaCategoria(categoria, itens = []) {
+  const modulo = moduloManutencaoDaCategoria(categoria)
+
+  return (itens || [])
+    .filter((item) => {
+      const moduloItem = normalizarSemAcento(
+        item?.modulo || item?.tipo_material || ''
+      )
+      return moduloItem === modulo
+    })
+    .reduce(
+      (total, item) => total + Math.max(1, Number(item?.quantidade || 1)),
+      0
+    )
+}
+
 
 function resumirCategoriaPorPatrimonios(categoria, patrimonios) {
   const lista = (patrimonios ?? []).map(normalizarPatrimonio)
@@ -735,12 +817,77 @@ function CentralOperacional({ user }) {
       const [
         dadosDashboard,
         dadosCategorias,
-        dadosOperacionais
+        dadosOperacionais,
+        manutencoesResultado,
+        manutencoesExternas
       ] = await Promise.all([
         carregarDashboardPatrimonial(),
         listarCategoriasOperacionais(),
-        carregarCentralOperacional({ user })
+        carregarCentralOperacional({ user }),
+        listarManutencoes({
+          status: 'EM_MANUTENCAO',
+          pagina: 1,
+          limite: 5000
+        }),
+        listarManutencoesExternasContagem()
       ])
+
+      const manutencoesTodas =
+        manutencoesResultado?.data || []
+
+      const manutencoesEscopo =
+        manutencoesTodas.filter((item) => {
+          const origem = normalizarSemAcento(
+            item?.origem_institucional ||
+            item?.origem ||
+            item?.local_origem ||
+            ''
+          )
+
+          if (visaoP4) {
+            return (
+              origem === 'P4' ||
+              origem.includes('COFRE DO P4') ||
+              origem.includes('GUARDA DO P4') ||
+              origem.includes('DEPOSITO')
+            )
+          }
+
+          if (visaoSVDD) {
+            return (
+              origem === 'SVDD' ||
+              origem.includes('COFRE DO SVDD') ||
+              origem.includes('SERVICO DE DIA')
+            )
+          }
+
+          return true
+        })
+
+      const idsManutencoesEscopo = new Set(
+        manutencoesEscopo
+          .map((item) => String(item?.id || ''))
+          .filter(Boolean)
+      )
+
+      const manutencoesExternasEscopo =
+        (manutencoesExternas || []).filter((item) =>
+          idsManutencoesEscopo.has(
+            String(item?.manutencao_id || '')
+          )
+        )
+
+      const idsExternos = new Set(
+        manutencoesExternasEscopo
+          .map((item) => String(item?.manutencao_id || ''))
+          .filter(Boolean)
+      )
+
+      const manutencoesInternas =
+        manutencoesEscopo.filter(
+          (item) =>
+            !idsExternos.has(String(item?.id || ''))
+        )
 
       setDashboard(dadosDashboard)
       setOperacional(dadosOperacionais)
@@ -793,7 +940,16 @@ function CentralOperacional({ user }) {
           [
             ...categoriasComEscopo,
             ...categoriasTonfas
-          ].filter(
+          ].map((categoria) => ({
+            ...categoria,
+            manutencao_interna:
+              contarManutencoesDaCategoria(categoria, manutencoesInternas),
+            manutencao_externa:
+              contarManutencoesExternasDaCategoria(
+                categoria,
+                manutencoesExternasEscopo
+              )
+          })).filter(
             (categoria) =>
               Number(categoria.total || 0) > 0
           )
@@ -845,7 +1001,16 @@ function CentralOperacional({ user }) {
           [
             ...categoriasIndividualizadas,
             ...categoriasTonfas
-          ].filter(
+          ].map((categoria) => ({
+            ...categoria,
+            manutencao_interna:
+              contarManutencoesDaCategoria(categoria, manutencoesInternas),
+            manutencao_externa:
+              contarManutencoesExternasDaCategoria(
+                categoria,
+                manutencoesExternasEscopo
+              )
+          })).filter(
             (categoria) =>
               Number(categoria.total || 0) > 0
           )
@@ -929,18 +1094,130 @@ function CentralOperacional({ user }) {
         }
 
         const tipoConsulta = categoria.tipo_consulta || categoria.tipo
-        const lista = await listarPatrimoniosCategoria(tipoConsulta)
+
+        const [
+          lista,
+          manutencoesResultado,
+          manutencoesExternas
+        ] = await Promise.all([
+          listarPatrimoniosCategoria(tipoConsulta),
+          listarManutencoes({
+            modulo: moduloManutencaoDaCategoria(categoria),
+            status: 'EM_MANUTENCAO',
+            pagina: 1,
+            limite: 200
+          }),
+          listarManutencoesExternasContagem()
+        ])
+
+        const manutencoesCategoria =
+          manutencoesResultado?.data || []
+
+        const idsExternos = new Set(
+          (manutencoesExternas || [])
+            .map((item) => String(item?.manutencao_id || ''))
+            .filter(Boolean)
+        )
+
+        const porReferencia = new Map()
+
+        for (const bruto of lista || []) {
+          const item = normalizarPatrimonio(bruto)
+          const chave = String(
+            item?.referencia_id ||
+            item?.id ||
+            item?.identificador ||
+            ''
+          )
+          if (chave) porReferencia.set(chave, item)
+        }
+
+        for (const manutencao of manutencoesCategoria) {
+          const chave = String(
+            manutencao?.referencia_id ||
+            manutencao?.patrimonio_id ||
+            manutencao?.id ||
+            ''
+          )
+
+          const existente = porReferencia.get(chave) || {}
+
+          porReferencia.set(chave, {
+            ...existente,
+            ...manutencao,
+            id: existente?.id || manutencao?.referencia_id || manutencao?.id,
+            referencia_id:
+              manutencao?.referencia_id ||
+              existente?.referencia_id ||
+              existente?.id,
+            identificador:
+              manutencao?.patrimonio ||
+              manutencao?.numero_serie ||
+              existente?.identificador ||
+              existente?.patrimonio ||
+              'SEM IDENTIFICAÇÃO',
+            patrimonio:
+              manutencao?.patrimonio ||
+              existente?.patrimonio ||
+              manutencao?.numero_serie,
+            numero_serie:
+              manutencao?.numero_serie ||
+              existente?.numero_serie,
+            status_operacional: 'MANUTENCAO',
+            com_policial: false,
+            no_cofre: false,
+            manutencao_externa:
+              idsExternos.has(String(manutencao?.id)),
+            manutencao_interna:
+              !idsExternos.has(String(manutencao?.id)),
+            local_operacional_atual:
+              existente?.local_atual ||
+              manutencao?.local_atual ||
+              null,
+            local_atual:
+              idsExternos.has(String(manutencao?.id))
+                ? 'MANUTENÇÃO EXTERNA'
+                : 'MANUTENÇÃO INTERNA'
+          })
+        }
+
+        const listaCompleta = [...porReferencia.values()]
+
+        const itemComCustodiaAtual = (item) => ({
+          ...item,
+          local_atual:
+            item?.local_operacional_atual ||
+            item?.local_atual
+        })
 
         const listaPerfil =
           visaoSVDD
-            ? (lista ?? []).filter(patrimonioPertenceAoSVDD)
-            : visaoP4
-              ? (lista ?? []).filter(
-                  patrimonioPertenceAoP4
+            ? listaCompleta.filter((item) =>
+                patrimonioPertenceAoSVDD(
+                  itemComCustodiaAtual(item)
                 )
-              : (lista ?? [])
+              )
+            : visaoP4
+              ? listaCompleta.filter((item) =>
+                  item?.manutencao_externa ||
+                  patrimonioPertenceAoP4(
+                    itemComCustodiaAtual(item)
+                  )
+                )
+              : listaCompleta
 
-        setPatrimoniosCategoria(listaPerfil.map(normalizarPatrimonio))
+        setPatrimoniosCategoria(
+          listaPerfil.map((item) => ({
+            ...normalizarPatrimonio(item),
+            manutencao_interna: Boolean(item?.manutencao_interna),
+            manutencao_externa: Boolean(item?.manutencao_externa),
+            local_atual: item?.manutencao_externa
+              ? 'MANUTENÇÃO EXTERNA'
+              : item?.manutencao_interna
+                ? 'MANUTENÇÃO INTERNA'
+                : normalizarPatrimonio(item).local_atual
+          }))
+        )
       } catch (error) {
         console.error('Erro ao carregar categoria:', error)
         setErroCategoria(
@@ -1055,19 +1332,19 @@ function CentralOperacional({ user }) {
           no_cofre:
             acc.no_cofre +
             Number(categoria.no_cofre || 0),
-          sem_localizacao:
-            acc.sem_localizacao +
-            Number(categoria.sem_localizacao || 0),
-          divergencias:
-            acc.divergencias +
-            Number(categoria.divergencias || 0)
+          manutencao_interna:
+            acc.manutencao_interna +
+            Number(categoria.manutencao_interna || 0),
+          manutencao_externa:
+            acc.manutencao_externa +
+            Number(categoria.manutencao_externa || 0)
         }),
         {
           total: 0,
           com_policial: 0,
           no_cofre: 0,
-          sem_localizacao: 0,
-          divergencias: 0
+          manutencao_interna: 0,
+          manutencao_externa: 0
         }
       )
     }, [categorias])
@@ -1087,11 +1364,11 @@ function CentralOperacional({ user }) {
           no_cofre: Number(
             categoriaSelecionada.no_cofre || 0
           ),
-          sem_localizacao: Number(
-            categoriaSelecionada.sem_localizacao || 0
+          manutencao_interna: Number(
+            categoriaSelecionada.manutencao_interna || 0
           ),
-          divergencias: Number(
-            categoriaSelecionada.divergencias || 0
+          manutencao_externa: Number(
+            categoriaSelecionada.manutencao_externa || 0
           )
         }
       }
@@ -1130,9 +1407,10 @@ function CentralOperacional({ user }) {
         com_policial:
           comPolicial,
         no_cofre: noCofre,
-        sem_localizacao:
-          semLocalizacao,
-        divergencias
+        manutencao_interna:
+          Number(categoriaSelecionada?.manutencao_interna || 0),
+        manutencao_externa:
+          Number(categoriaSelecionada?.manutencao_externa || 0)
       }
     }, [patrimoniosCategoria])
 

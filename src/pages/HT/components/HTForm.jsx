@@ -474,10 +474,11 @@ export default function HTForm({
         {etapa === 'dados' && (
           <>
             <HTDados
-              form={form}
-              onChange={handleChange}
-              disabled={saving}
-            />
+  form={form}
+  onChange={handleChange}
+  disabled={saving}
+  user={user}
+/>
 
             <div className="patrimonio-form-actions">
               <SigmoButton

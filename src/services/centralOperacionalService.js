@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient'
 import { listarNovidadesPatrimoniais } from './dashboardService'
 import { listarMovimentacoes, buscarMovimentacaoPorId } from './movimentacoesService'
 import { obterPerfilEfetivo, normalizarPerfil } from './permissionService'
+import { loadSessionToken } from './authService'
 
 function texto(valor) {
   return String(valor ?? '').trim()
@@ -53,32 +54,283 @@ function pertenceAoPerfil(item, perfil) {
 
 
 async function listarTransferenciasOperacionaisPendentes() {
-  const { data, error } = await supabase
-    .from('sigmo_transferencias_patrimoniais')
-    .select('*')
-    .eq('status', 'PENDENTE')
-    .order('enviado_em', { ascending: true })
-    .limit(500)
+  // Há dois fluxos de transferência coexistindo no SIGMO:
+  // 1) tabela operacional legada sigmo_transferencias_patrimoniais;
+  // 2) Engine Patrimonial, que grava em sigmo_patrimonio_movimentacoes.
+  //
+  // A Central consolida ambos. Em especial, transferências de HT feitas
+  // pela Engine (ex.: SVDD -> P4 preservando MANUTENCAO) não existem na
+  // tabela operacional legada.
+  const [legadoRes, engineRes] = await Promise.allSettled([
+    supabase
+      .from('sigmo_transferencias_patrimoniais')
+      .select('*')
+      .eq('status', 'PENDENTE')
+      .order('enviado_em', { ascending: true })
+      .limit(500),
 
-  if (error) throw error
-  return data ?? []
+    supabase
+      .from('sigmo_patrimonio_movimentacoes')
+      .select(`
+        id,
+        protocolo,
+        tipo_movimentacao,
+        status_movimentacao,
+        patrimonio_id,
+        local_origem,
+        local_destino,
+        destino_guardiao_codigo,
+        destino_guardiao_nome,
+        motivo,
+        observacao,
+        dados,
+        metadata,
+        criado_em,
+        created_at
+      `)
+      .eq('tipo_movimentacao', 'TRANSFERENCIA')
+      .eq('status_movimentacao', 'PENDENTE')
+      .order('criado_em', { ascending: true })
+      .limit(500)
+  ])
+
+  const legado =
+    legadoRes.status === 'fulfilled' && !legadoRes.value.error
+      ? (legadoRes.value.data ?? [])
+      : []
+
+  if (legadoRes.status === 'fulfilled' && legadoRes.value.error) {
+    console.warn(
+      'Falha ao carregar transferências operacionais legadas:',
+      legadoRes.value.error
+    )
+  }
+
+  const engineBruto =
+    engineRes.status === 'fulfilled' && !engineRes.value.error
+      ? (engineRes.value.data ?? [])
+      : []
+
+  if (engineRes.status === 'fulfilled' && engineRes.value.error) {
+    console.warn(
+      'Falha ao carregar transferências da Engine Patrimonial:',
+      engineRes.value.error
+    )
+  }
+
+  // Por enquanto entram nesta consolidação somente as transferências de HT
+  // identificadas explicitamente pela Engine. Isso evita alterar o
+  // comportamento dos demais módulos que já usam a tabela operacional.
+  const engineHT = engineBruto
+    .filter((item) => {
+      const dados = item?.dados || {}
+      const dadosEngine = item?.metadata?.dados_engine || {}
+      const modulo = normalizarSemAcentos(
+        dados?.modulo ||
+        dados?.categoria ||
+        dadosEngine?.modulo ||
+        dadosEngine?.categoria
+      )
+
+      return modulo === 'HT'
+    })
+    .map((item) => {
+      const dados = item?.dados || {}
+      const dadosEngine = item?.metadata?.dados_engine || {}
+      const origemEngine =
+        dados?.guardiao_origem?.codigo ||
+        dadosEngine?.guardiao_origem?.codigo ||
+        null
+      const destinoEngine =
+        item?.destino_guardiao_codigo ||
+        dados?.guardiao_destino?.codigo ||
+        dadosEngine?.guardiao_destino?.codigo ||
+        null
+
+      return {
+        ...item,
+
+        // Shape comum esperado pela Central/PainelOperacional.
+        status: item?.status_movimentacao,
+        tipo: item?.tipo_movimentacao,
+        modulo: 'HT',
+        categoria: 'HT',
+        referencia_id:
+          dados?.referencia_id ||
+          dados?.ht_id ||
+          dadosEngine?.referencia_id ||
+          dadosEngine?.ht_id ||
+          null,
+        ht_id:
+          dados?.ht_id ||
+          dadosEngine?.ht_id ||
+          null,
+        patrimonio:
+          dados?.patrimonio ||
+          dadosEngine?.patrimonio ||
+          item?.metadata?.patrimonio?.identificacao ||
+          null,
+        numero_serie:
+          dados?.numero_serie ||
+          dadosEngine?.numero_serie ||
+          null,
+
+        origem_codigo: origemEngine,
+        origem_nome:
+          dados?.guardiao_origem?.nome ||
+          dadosEngine?.guardiao_origem?.nome ||
+          item?.local_origem ||
+          null,
+        origem_local: item?.local_origem,
+        destino_codigo: destinoEngine,
+        destino_nome:
+          item?.destino_guardiao_nome ||
+          dados?.guardiao_destino?.nome ||
+          dadosEngine?.guardiao_destino?.nome ||
+          item?.local_destino ||
+          null,
+        destino_local: item?.local_destino,
+
+        // ordenarRecentes/dataItem reconhece created_at.
+        created_at: item?.created_at || item?.criado_em,
+
+        origem_transferencia: 'ENGINE_PATRIMONIAL'
+      }
+    })
+
+  // Evita duplicidade caso algum fluxo seja espelhado nas duas tabelas.
+  const resultado = []
+  const chaves = new Set()
+
+  for (const item of [...legado, ...engineHT]) {
+    const dados = item?.dados || {}
+    const chave = [
+      item?.id || '',
+      item?.patrimonio_id || '',
+      item?.referencia_id || dados?.referencia_id || '',
+      item?.destino_codigo || item?.destino_guardiao_codigo || '',
+      item?.created_at || item?.criado_em || item?.enviado_em || ''
+    ].join('|')
+
+    if (chaves.has(chave)) continue
+    chaves.add(chave)
+    resultado.push(item)
+  }
+
+  return resultado
 }
 
 function transferenciaParaPerfil(item, perfil) {
   if (!item || !perfil) return true
   if (perfil === 'ADMINISTRADOR') return true
 
-  const destino = upper(item.destino_codigo || item.destino_nome)
+  const origem = upper(
+    item.origem_codigo ||
+    item.origem_nome ||
+    item.origem_local ||
+    item.local_origem
+  )
 
+  const destino = upper(
+    item.destino_codigo ||
+    item.destino_nome ||
+    item.destino_local ||
+    item.local_destino
+  )
+
+  // A transferência pendente deve ser visível tanto para quem enviou
+  // quanto para quem vai receber. Isso permite ao SVDD acompanhar uma
+  // devolução SVDD -> P4 enquanto ela ainda aguarda recebimento.
   if (perfil.includes('SVDD')) {
-    return contem(destino, ['SVDD', 'SERVIÇO DE DIA', 'SERVICO DE DIA', 'COFRE'])
+    return (
+      contem(origem, ['SVDD', 'SERVIÇO DE DIA', 'SERVICO DE DIA', 'COFRE DO SVDD']) ||
+      contem(destino, ['SVDD', 'SERVIÇO DE DIA', 'SERVICO DE DIA', 'COFRE DO SVDD'])
+    )
   }
 
   if (perfil.includes('P4')) {
-    return contem(destino, ['P4', 'DEPÓSITO', 'DEPOSITO'])
+    return (
+      contem(origem, ['P4', 'DEPÓSITO', 'DEPOSITO', 'GUARDA DO P4', 'COFRE DO P4']) ||
+      contem(destino, ['P4', 'DEPÓSITO', 'DEPOSITO', 'GUARDA DO P4', 'COFRE DO P4'])
+    )
   }
 
   return false
+}
+
+
+
+async function listarManutencoesExternasAguardandoAprovacao() {
+  const token = loadSessionToken()
+  if (!token) return []
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_listar_manutencoes_externas_pendentes',
+    { p_token: token }
+  )
+
+  if (error) {
+    console.warn('Falha ao carregar manutenções externas pendentes:', error)
+    return []
+  }
+
+  return (data ?? []).map((item) => ({
+    ...item,
+    origem_aprovacao: 'MANUTENCAO_EXTERNA',
+    tipo: 'MANUTENÇÃO EXTERNA',
+    created_at: item?.solicitada_em || item?.created_at
+  }))
+}
+
+
+export async function decidirManutencaoExterna({
+  manutencaoExternaId,
+  decisao,
+  observacoes = null
+}) {
+  const token = loadSessionToken()
+
+  if (!token) {
+    throw new Error('Sessão SIGMO não localizada. Faça login novamente.')
+  }
+
+  const decisaoNormalizada = upper(decisao)
+
+  if (!['APROVAR', 'REPROVAR'].includes(decisaoNormalizada)) {
+    throw new Error('Decisão de manutenção externa inválida.')
+  }
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_decidir_manutencao_externa',
+    {
+      p_token: token,
+      p_manutencao_externa_id: manutencaoExternaId,
+      p_decisao: decisaoNormalizada,
+      p_observacoes: texto(observacoes) || null
+    }
+  )
+
+  if (error) throw error
+
+  return data
+}
+
+
+export async function listarManutencoesExternasContagem() {
+  const token = loadSessionToken()
+  if (!token) return []
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_listar_manutencoes_externas_contagem',
+    { p_token: token }
+  )
+
+  if (error) {
+    console.warn('Falha ao carregar contagem de manutenção externa:', error)
+    return []
+  }
+
+  return data ?? []
 }
 
 
@@ -184,10 +436,25 @@ export async function carregarCentralOperacional({ user } = {}) {
       status: 'REGISTRADA'
     }),
     listarPatrimoniosIndicadores(),
-    listarBaixasAguardandoAprovacao()
+    listarBaixasAguardandoAprovacao(),
+    listarManutencoesExternasAguardandoAprovacao(),
+    supabase
+      .from('sigmo_manutencoes')
+      .select('id, quantidade')
+      .eq('status', 'EM_MANUTENCAO'),
+    listarManutencoesExternasContagem()
   ])
 
-  const [movRes, transfRes, novRes, patRes, baixasRes] = resultados
+  const [
+    movRes,
+    transfRes,
+    novRes,
+    patRes,
+    baixasRes,
+    manutExternasRes,
+    manutInternasRes,
+    manutExternasContagemRes
+  ] = resultados
   const movimentacoes = movRes.status === 'fulfilled' ? movRes.value : []
   const transferencias = transfRes.status === 'fulfilled' ? transfRes.value : []
   const novidades = novRes.status === 'fulfilled' ? novRes.value : []
@@ -284,16 +551,36 @@ export async function carregarCentralOperacional({ user } = {}) {
     const cautela = cautelaPorPatrimonio.get(patrimonioId)
     const origemCautela = cautela?.origem_local || null
 
-    const cargaAtual =
+    const localAtual =
+      item?.local_atual ||
+      patrimonio?.local_atual ||
+      null
+
+    const cargaPelaCautela =
       contem(origemCautela, ['SVDD', 'SERVIÇO DE DIA', 'SERVICO DE DIA'])
         ? 'SVDD'
         : contem(origemCautela, ['P4', 'DEPÓSITO', 'DEPOSITO'])
           ? 'P4'
           : null
 
+    const cargaPeloLocalAtual =
+      contem(localAtual, ['SVDD', 'SERVIÇO DE DIA', 'SERVICO DE DIA', 'COFRE DO SVDD'])
+        ? 'SVDD'
+        : contem(localAtual, ['P4', 'DEPÓSITO', 'DEPOSITO', 'COFRE DO P4', 'GUARDA DO P4'])
+          ? 'P4'
+          : null
+
+    // A responsabilidade operacional atual prevalece sobre a origem histórica
+    // da cautela. A origem da cautela é usada somente como fallback quando o
+    // patrimônio não possui um local atual reconhecido.
+    const cargaAtual =
+      cargaPeloLocalAtual ||
+      cargaPelaCautela ||
+      null
+
     return {
       ...item,
-      local_atual: patrimonio?.local_atual || item?.local_atual || null,
+      local_atual: localAtual,
       carga_atual: cargaAtual,
       responsabilidade_atual: cargaAtual,
       origem_cautela: origemCautela,
@@ -325,6 +612,8 @@ export async function carregarCentralOperacional({ user } = {}) {
     novidadesVisiveisAoPerfil
   )
   const baixasAprovacao = baixasRes.status === 'fulfilled' ? baixasRes.value : []
+  const manutencoesExternasAprovacao =
+    manutExternasRes.status === 'fulfilled' ? manutExternasRes.value : []
 
   const movPerfil = movimentacoes.filter((item) => pertenceAoPerfil(item, perfil))
   const transfPerfil = transferencias.filter((item) => transferenciaParaPerfil(item, perfil))
@@ -334,6 +623,10 @@ export async function carregarCentralOperacional({ user } = {}) {
     baixas: baixasAprovacao,
     perfil
   })
+
+  const ehP4 = perfil.includes('P4')
+  const ehComandante = perfil.includes('COMANDANTE')
+  const manutencoesExternasPendentes = ordenarRecentes(manutencoesExternasAprovacao)
 
   // A Engine usa estados positivos de pendência. Não inferimos pendência
   // simplesmente por "não estar concluída", pois FINALIZADA é histórico.
@@ -397,11 +690,65 @@ export async function carregarCentralOperacional({ user } = {}) {
 
   const naoLocalizados = patrimonios.filter(patrimonioNaoLocalizado)
 
+  const manutencoesExternasContagem =
+    manutExternasContagemRes.status === 'fulfilled'
+      ? (manutExternasContagemRes.value || [])
+      : []
+
+  const idsExternos = new Set(
+    manutencoesExternasContagem
+      .map((item) => String(item?.manutencao_id || ''))
+      .filter(Boolean)
+  )
+
+  const manutencoesInternasContagem =
+    manutInternasRes.status === 'fulfilled' && !manutInternasRes.value?.error
+      ? (manutInternasRes.value?.data || [])
+      : []
+
+  const totalManutencaoInterna = manutencoesInternasContagem
+    .filter((item) => !idsExternos.has(String(item?.id || '')))
+    .reduce(
+      (total, item) => total + Math.max(1, Number(item?.quantidade || 1)),
+      0
+    )
+
+  const totalManutencaoExterna = manutencoesExternasContagem.reduce(
+    (total, item) => total + Math.max(1, Number(item?.quantidade || 1)),
+    0
+  )
+
   return {
     perfil,
     atualizadoEm: new Date().toISOString(),
+    manutencao_interna: totalManutencaoInterna,
+    manutencao_externa: totalManutencaoExterna,
     alertas: [
-      { key: 'aprovacoes', titulo: 'Aguardando aprovações', total: aguardandoAprovacao.length, itens: ordenarRecentes(aguardandoAprovacao), tom: 'atencao' },
+      ...(ehComandante
+        ? [{
+            key: 'aprovacoes-comandante',
+            titulo: 'Aprovações pendentes',
+            total: aguardandoAprovacao.length + manutencoesExternasPendentes.length,
+            itens: ordenarRecentes([
+              ...aguardandoAprovacao,
+              ...manutencoesExternasPendentes
+            ]),
+            tom: 'atencao'
+          }]
+        : [{
+            key: 'aprovacoes',
+            titulo: 'Aguardando aprovações',
+            total: aguardandoAprovacao.length,
+            itens: ordenarRecentes(aguardandoAprovacao),
+            tom: 'atencao'
+          }]),
+      ...(ehP4 ? [{
+        key: 'manutencao-externa-acompanhamento',
+        titulo: 'Aguardando aprovação do Cmt',
+        total: manutencoesExternasPendentes.length,
+        itens: manutencoesExternasPendentes,
+        tom: 'atencao'
+      }] : []),
       { key: 'recebimentos', titulo: 'Aguardando recebimento pelo usuário', total: aguardandoRecebimento.length, itens: ordenarRecentes(aguardandoRecebimento), tom: 'acao' },
       { key: 'devolucoes', titulo: 'Devoluções pendentes', total: devolucoes.length, itens: ordenarRecentes(devolucoes), tom: 'acao' },
       { key: 'transferencias', titulo: 'Transferências pendentes', total: transfPerfil.length, itens: ordenarRecentes(transfPerfil), tom: 'atencao' }

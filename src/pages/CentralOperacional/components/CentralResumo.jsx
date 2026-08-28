@@ -25,17 +25,14 @@ export default function CentralResumo({ resumo }) {
       />
 
       <ResumoCard
-        label="Sem localização"
-        valor={resumo?.sem_localizacao}
+        label="Manutenção interna"
+        valor={resumo?.manutencao_interna}
         destaque="central-resumo-pendente"
       />
 
       <ResumoCard
-        label="Divergências"
-        valor={resumo?.divergencias}
-        destaque={
-          resumo?.divergencias > 0 ? 'central-resumo-divergencia' : ''
-        }
+        label="Manutenção externa"
+        valor={resumo?.manutencao_externa}
       />
     </section>
   )

@@ -7,8 +7,8 @@ export default function CategoriaCard({
     total = 0,
     com_policial = 0,
     no_cofre = 0,
-    sem_localizacao = 0,
-    divergencias = 0
+    manutencao_interna = 0,
+    manutencao_externa = 0
   } = categoria ?? {}
 
   return (
@@ -46,13 +46,13 @@ export default function CategoriaCard({
         </div>
 
         <div>
-          <strong>{sem_localizacao}</strong>
-          <span>Sem localização</span>
+          <strong>{manutencao_interna}</strong>
+          <span>Manutenção interna</span>
         </div>
 
-        <div className={divergencias > 0 ? 'central-metrica-alerta' : ''}>
-          <strong>{divergencias}</strong>
-<span>Divergências</span>
+        <div>
+          <strong>{manutencao_externa}</strong>
+          <span>Manutenção externa</span>
         </div>
       </div>
     </button>

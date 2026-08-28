@@ -5,9 +5,15 @@ import {
   listarManutencoes,
   STATUS_MANUTENCAO
 } from '../../services/manutencoesService'
+import { encaminharManutencaoAoP4 } from '../../services/manutencaoEncaminhamentoService'
+import {
+  listarManutencoesExternas,
+  retornarManutencaoExterna
+} from '../../services/manutencoesExternasService'
 import FiltrosManutencao from './components/FiltrosManutencao'
 import ManutencaoCard from './components/ManutencaoCard'
 import ManutencaoDetalhes from './components/ManutencaoDetalhes'
+import HTManutencaoExternaModal from '../HT/components/HTManutencaoExternaModal'
 import './Manutencoes.css'
 
 const FILTROS_INICIAIS = {
@@ -101,26 +107,47 @@ function dentroDoPeriodo(item, dataInicial, dataFinal) {
 
 export default function Manutencoes({ user, onVoltar }) {
   const [manutencoes, setManutencoes] = useState([])
+  const [manutencoesExternas, setManutencoesExternas] = useState([])
   const [filtros, setFiltros] = useState(FILTROS_INICIAIS)
   const [selecionada, setSelecionada] = useState(null)
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
+  const [manutencaoExternaSelecionada, setManutencaoExternaSelecionada] = useState(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     setErro('')
 
     try {
-      const resposta = await listarManutencoes({
-        modulo: filtros.modulo || null,
-        status: filtros.status || null,
-        pesquisa: filtros.pesquisa || null,
-        limite: 200
-      })
+      const [resposta, respostaExternas] = await Promise.all([
+        listarManutencoes({
+          modulo: filtros.modulo || null,
+          status: filtros.status || null,
+          pesquisa: filtros.pesquisa || null,
+          limite: 200
+        }),
+        listarManutencoesExternas({
+          modulo: filtros.modulo || null,
+          pagina: 1,
+          limite: 5000
+        }).catch((errorExterna) => {
+          console.warn(
+            'Não foi possível carregar as manutenções externas para classificação:',
+            errorExterna
+          )
+          return []
+        })
+      ])
 
       setManutencoes(resposta.data || [])
+      setManutencoesExternas(
+        respostaExternas?.data ||
+        respostaExternas?.itens ||
+        respostaExternas ||
+        []
+      )
     } catch (error) {
       console.error('Erro ao carregar manutenções:', error)
       setErro(error?.message || 'Não foi possível carregar as manutenções.')
@@ -134,28 +161,105 @@ export default function Manutencoes({ user, onVoltar }) {
     return () => window.clearTimeout(timer)
   }, [carregar])
 
+  const manutencoesExternasAtivasPorManutencao = useMemo(() => {
+    const mapa = new Map()
+
+    for (const externa of manutencoesExternas || []) {
+      const status = normalizarTexto(externa?.status)
+
+      if (
+        ['CONCLUIDA', 'CANCELADA', 'REPROVADA', 'RETORNADA'].includes(status)
+      ) {
+        continue
+      }
+
+      const itens = [
+        externa,
+        ...(externa?.itens || []),
+        ...(externa?.sigmo_manutencoes_externas_itens || [])
+      ]
+
+      for (const item of itens) {
+        const manutencaoId =
+          item?.manutencao_id ||
+          item?.manutencao_interna_id ||
+          null
+
+        if (!manutencaoId) continue
+
+        mapa.set(String(manutencaoId), {
+          ...externa,
+          ...item,
+          status_externo: externa?.status || item?.status || null
+        })
+      }
+    }
+
+    return mapa
+  }, [manutencoesExternas])
+
   const listaFiltrada = useMemo(() => {
     const setorUsuario = obterSetorDoUsuario(user)
 
-    return manutencoes.filter((item) => {
-      if (!dentroDoPeriodo(item, filtros.dataInicial, filtros.dataFinal)) {
-        return false
-      }
+    return manutencoes
+      .map((item) => {
+        const externa = manutencoesExternasAtivasPorManutencao.get(
+          String(item?.id || '')
+        )
 
-      // A Central de Manutenções é operacionalmente separada por origem:
-      // P4 vê somente registros originados no P4;
-      // SVDD vê somente registros originados no SVDD.
-      // Outros perfis mantêm a visão geral já existente.
-      if (!setorUsuario) return true
+        if (!externa) return item
 
-      return obterSetorManutencao(item) === setorUsuario
-    })
-  }, [manutencoes, filtros.dataInicial, filtros.dataFinal, user])
+        // Mantém o registro na Central de Manutenções para acompanhamento,
+        // mas o classifica explicitamente como manutenção externa.
+        return {
+          ...item,
+          manutencao_externa: true,
+          manutencao_externa_status:
+            externa?.status_externo ||
+            externa?.status ||
+            null,
+          status_externo:
+            externa?.status_externo ||
+            externa?.status ||
+            null,
+          manutencao_externa_id:
+            externa?.manutencao_externa_id ||
+            externa?.id ||
+            null,
+          origem_institucional: 'P4'
+        }
+      })
+      .filter((item) => {
+        if (!dentroDoPeriodo(item, filtros.dataInicial, filtros.dataFinal)) {
+          return false
+        }
+
+        // A manutenção externa permanece em acompanhamento do P4.
+        if (item?.manutencao_externa === true) {
+          return !setorUsuario || setorUsuario === 'P4'
+        }
+
+        // As manutenções internas continuam separadas por responsabilidade.
+        if (!setorUsuario) return true
+
+        return obterSetorManutencao(item) === setorUsuario
+      })
+  }, [
+    manutencoes,
+    manutencoesExternasAtivasPorManutencao,
+    filtros.dataInicial,
+    filtros.dataFinal,
+    user
+  ])
 
   const resumo = useMemo(() => {
     return listaFiltrada.reduce(
       (acc, item) => {
-        if (item.status === STATUS_MANUTENCAO.EM_MANUTENCAO) acc.abertas += 1
+        if (
+          item.status === STATUS_MANUTENCAO.EM_MANUTENCAO
+        ) {
+          acc.abertas += 1
+        }
         if (item.status === STATUS_MANUTENCAO.CONCLUIDA) acc.concluidas += 1
         if (item.status === STATUS_MANUTENCAO.CANCELADA) acc.canceladas += 1
         acc.total += 1
@@ -165,12 +269,39 @@ export default function Manutencoes({ user, onVoltar }) {
     )
   }, [listaFiltrada])
 
-  async function finalizar(observacoes) {
+  async function finalizar(observacoes, contexto = {}) {
     if (!selecionada) return
+
+    const manutencaoExternaId =
+      contexto?.manutencaoExternaId ||
+      selecionada?.manutencao_externa_id ||
+      null
+
+    const externaAtiva =
+      Boolean(contexto?.manutencaoExternaAtiva) &&
+      Boolean(manutencaoExternaId)
+
+    if (
+      externaAtiva &&
+      !window.confirm(
+        'Confirma o retorno deste HT da manutenção externa? O retorno será registrado no histórico e o HT voltará ao Cofre do P4.'
+      )
+    ) {
+      return
+    }
+
     setSalvando(true)
     setErro('')
 
     try {
+      if (externaAtiva) {
+        await retornarManutencaoExterna({
+          manutencaoExternaId,
+          servicoExecutado: observacoes,
+          observacoes
+        })
+      }
+
       const atualizada = await concluirManutencao({
         manutencaoId: selecionada.id,
         observacoes,
@@ -178,10 +309,51 @@ export default function Manutencoes({ user, onVoltar }) {
       })
 
       setSelecionada(atualizada)
-      setMensagem('Manutenção concluída com sucesso.')
+      setMensagem(
+        externaAtiva
+          ? 'Retorno da manutenção externa registrado. HT devolvido ao Cofre do P4.'
+          : 'Manutenção concluída com sucesso.'
+      )
       await carregar()
     } catch (error) {
-      setErro(error?.message || 'Não foi possível concluir a manutenção.')
+      setErro(
+        error?.message ||
+        (externaAtiva
+          ? 'Não foi possível registrar o retorno da manutenção externa.'
+          : 'Não foi possível concluir a manutenção.')
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  function abrirManutencaoExterna() {
+    if (!selecionada) return
+
+    setManutencaoExternaSelecionada(selecionada)
+    setSelecionada(null)
+  }
+
+  async function encaminharAoP4(observacao) {
+    if (!selecionada) return
+
+    if (!window.confirm('Confirma o encaminhamento deste HT em manutenção ao P4? A manutenção permanecerá aberta.')) return
+
+    setSalvando(true)
+    setErro('')
+
+    try {
+      await encaminharManutencaoAoP4({
+        manutencao: selecionada,
+        user,
+        observacao
+      })
+
+      setMensagem('Encaminhamento ao P4 criado. O HT permanece em manutenção até o recebimento pelo P4.')
+      setSelecionada(null)
+      await carregar()
+    } catch (error) {
+      setErro(error?.message || 'Não foi possível encaminhar a manutenção ao P4.')
     } finally {
       setSalvando(false)
     }
@@ -290,8 +462,26 @@ export default function Manutencoes({ user, onVoltar }) {
         onFechar={() => setSelecionada(null)}
         onConcluir={finalizar}
         onCancelar={cancelar}
+        onEncaminharP4={encaminharAoP4}
+        onEnviarManutencaoExterna={abrirManutencaoExterna}
+        user={user}
         salvando={salvando}
       />
+
+      {manutencaoExternaSelecionada && (
+        <HTManutencaoExternaModal
+          user={user}
+          manutencaoInicial={manutencaoExternaSelecionada}
+          onClose={() => setManutencaoExternaSelecionada(null)}
+          onCreated={async (solicitacao) => {
+            setMensagem(
+              `Solicitação ${solicitacao?.protocolo || ''} enviada para aprovação do Cmt de Cia.`
+            )
+            setManutencaoExternaSelecionada(null)
+            await carregar()
+          }}
+        />
+      )}
     </main>
   )
 }

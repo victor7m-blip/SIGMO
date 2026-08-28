@@ -4,6 +4,9 @@ import {
   listarFotosManutencao,
   buscarNovidadePatrimonialDaManutencao
 } from '../../../services/manutencoesService'
+import {
+  buscarHistoricoManutencaoExterna
+} from '../../../services/manutencoesExternasService'
 
 function dataHora(valor) {
   if (!valor) return 'Não informado'
@@ -20,6 +23,9 @@ export default function ManutencaoDetalhes({
   onFechar,
   onConcluir,
   onCancelar,
+  onEncaminharP4,
+  onEnviarManutencaoExterna,
+  user,
   salvando
 }) {
   const [observacoes, setObservacoes] = useState('')
@@ -27,6 +33,7 @@ export default function ManutencaoDetalhes({
   const [novidadeUsuario, setNovidadeUsuario] = useState(null)
   const [fotosUsuario, setFotosUsuario] = useState([])
   const [fotoAmpliada, setFotoAmpliada] = useState(null)
+  const [historicoExterno, setHistoricoExterno] = useState(null)
 
   useEffect(() => {
     async function carregarHistorico() {
@@ -34,23 +41,31 @@ export default function ManutencaoDetalhes({
         setFotos([])
         setNovidadeUsuario(null)
         setFotosUsuario([])
+        setHistoricoExterno(null)
         return
       }
 
       try {
-        const [fotosManutencao, registroUsuario] = await Promise.all([
+        const [
+          fotosManutencao,
+          registroUsuario,
+          registroExterno
+        ] = await Promise.all([
           listarFotosManutencao(manutencao.id),
-          buscarNovidadePatrimonialDaManutencao(manutencao)
+          buscarNovidadePatrimonialDaManutencao(manutencao),
+          buscarHistoricoManutencaoExterna(manutencao.id)
         ])
 
         setFotos(fotosManutencao || [])
         setNovidadeUsuario(registroUsuario?.novidade || null)
         setFotosUsuario(registroUsuario?.fotos || [])
+        setHistoricoExterno(registroExterno || null)
       } catch (erro) {
         console.error('Erro ao carregar histórico completo da manutenção:', erro)
         setFotos([])
         setNovidadeUsuario(null)
         setFotosUsuario([])
+        setHistoricoExterno(null)
       }
     }
 
@@ -60,6 +75,53 @@ export default function ManutencaoDetalhes({
 if (!manutencao) return null
 
   const ativa = manutencao.status === STATUS_MANUTENCAO.EM_MANUTENCAO
+
+  const statusExterno = String(
+    historicoExterno?.status || ''
+  ).trim().toUpperCase()
+
+  const emManutencaoExterna =
+    Boolean(historicoExterno) &&
+    ['APROVADA', 'EM_MANUTENCAO_EXTERNA'].includes(statusExterno)
+
+  const manutencaoInternaAtiva =
+    ativa && !emManutencaoExterna
+
+  const temSolicitacaoExternaAtiva =
+    Boolean(manutencao?.manutencao_externa) ||
+    (Boolean(historicoExterno) &&
+      !['CONCLUIDA', 'CANCELADA', 'REPROVADA', 'RETORNADA'].includes(statusExterno))
+
+  const perfilUsuario = String(
+    user?.perfil_efetivo || user?.perfil || user?.role || user?.tipo_perfil || ''
+  ).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase()
+
+  const origemInstitucional = String(
+    manutencao?.origem_institucional ||
+    manutencao?.origem_institucional_local ||
+    manutencao?.origem ||
+    ''
+  ).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase()
+
+  const podeEncaminharP4 =
+    manutencaoInternaAtiva &&
+    manutencao.modulo === 'HT' &&
+    (perfilUsuario.includes('SVDD') || perfilUsuario.includes('SERVICO DE DIA')) &&
+    (origemInstitucional.includes('SVDD') || origemInstitucional.includes('SERVICO DE DIA'))
+
+  const podeEnviarManutencaoExterna =
+    manutencaoInternaAtiva &&
+    !temSolicitacaoExternaAtiva &&
+    manutencao.modulo === 'HT' &&
+    perfilUsuario.includes('P4') &&
+    origemInstitucional.includes('P4')
+
+  const podeRegistrarRetornoExterno =
+    ativa &&
+    emManutencaoExterna &&
+    manutencao.modulo === 'HT' &&
+    perfilUsuario.includes('P4') &&
+    Boolean(historicoExterno?.id)
 
   return (
     <div className="manutencao-drawer-camada" role="presentation">
@@ -73,7 +135,11 @@ if (!manutencao) return null
       <aside className="manutencao-drawer" aria-label="Detalhes da manutenção">
         <header>
           <div>
-            <span>CENTRAL DE MANUTENÇÕES</span>
+            <span>
+              {emManutencaoExterna
+                ? 'MANUTENÇÃO EXTERNA'
+                : 'CENTRAL DE MANUTENÇÕES'}
+            </span>
             <h2>
               {manutencao.tipo_material || 'Material'}
               {(manutencao.numero_serie || manutencao.patrimonio) && (
@@ -274,9 +340,162 @@ if (!manutencao) return null
             )}
           </section>
 
+          {historicoExterno && (
+            <section
+              className="manutencao-detalhe-texto"
+              style={{
+                border: '1px solid #bfdbfe',
+                borderRadius: '12px',
+                padding: '14px',
+                background: '#eff6ff',
+                marginBottom: '16px'
+              }}
+            >
+              <h3>Histórico P4 / manutenção externa</h3>
+
+              {historicoExterno?.recebimento_p4 && (
+                <div style={{ marginTop: '12px' }}>
+                  <strong>1. Recebimento pelo P4</strong>
+                  <p style={{ marginTop: '4px' }}>
+                    Recebido no sistema por{' '}
+                    <strong>
+                      {historicoExterno.recebimento_p4.aceito_por_nome ||
+                        historicoExterno.recebimento_p4.executado_por_nome ||
+                        'P4'}
+                    </strong>
+                    {' · '}
+                    {dataHora(
+                      historicoExterno.recebimento_p4.data_recebimento
+                    )}
+                  </p>
+                  <p>
+                    {historicoExterno.recebimento_p4.local_origem || 'Origem não informada'}
+                    {' → '}
+                    {historicoExterno.recebimento_p4.local_destino || 'P4'}
+                  </p>
+                  {historicoExterno.recebimento_p4.protocolo && (
+                    <p>Movimentação: <strong>{historicoExterno.recebimento_p4.protocolo}</strong></p>
+                  )}
+                </div>
+              )}
+
+              <div style={{ marginTop: '14px' }}>
+                <strong>2. Solicitação de manutenção externa pelo P4</strong>
+                <p style={{ marginTop: '4px' }}>
+                  {historicoExterno.solicitada_por_nome || 'P4'}
+                  {' · '}
+                  {dataHora(historicoExterno.solicitada_em)}
+                </p>
+                <p>
+                  Destino: <strong>{historicoExterno.destino_nome || 'Não informado'}</strong>
+                </p>
+                {historicoExterno.destino_tipo && (
+                  <p>Tipo: {historicoExterno.destino_tipo}</p>
+                )}
+                {historicoExterno.destino_contato && (
+                  <p>Contato: {historicoExterno.destino_contato}</p>
+                )}
+                {historicoExterno.motivo && (
+                  <p>Motivo: {historicoExterno.motivo}</p>
+                )}
+                {historicoExterno.servico_solicitado && (
+                  <p>Serviço solicitado: {historicoExterno.servico_solicitado}</p>
+                )}
+              </div>
+
+              <div style={{ marginTop: '14px' }}>
+                <strong>3. Documento de encaminhamento</strong>
+                <p style={{ marginTop: '4px' }}>
+                  Tipo: <strong>{historicoExterno.tipo_documento || 'Não informado'}</strong>
+                </p>
+                <p>
+                  Número: <strong>{historicoExterno.numero_documento || historicoExterno.destino_documento || 'Não informado'}</strong>
+                </p>
+                <p>Data: {historicoExterno.data_documento
+                  ? new Intl.DateTimeFormat('pt-BR').format(new Date(`${historicoExterno.data_documento}T12:00:00`))
+                  : 'Não informada'}
+                </p>
+                {historicoExterno.protocolo && (
+                  <p>Protocolo SIGMO: <strong>{historicoExterno.protocolo}</strong></p>
+                )}
+              </div>
+
+              <div style={{ marginTop: '14px' }}>
+                <strong>4. Encaminhado para aprovação do Cmt de Cia</strong>
+                <p style={{ marginTop: '4px' }}>
+                  {dataHora(historicoExterno.solicitada_em)}
+                </p>
+              </div>
+
+              {historicoExterno.decidida_em && (
+                <div style={{ marginTop: '14px' }}>
+                  <strong>5. Decisão do Cmt de Cia</strong>
+                  <p style={{ marginTop: '4px' }}>
+                    <strong>
+                      {String(
+                        historicoExterno.decisao ||
+                        historicoExterno.status ||
+                        ''
+                      ).replaceAll('_', ' ')}
+                    </strong>
+                    {' · '}
+                    {historicoExterno.decidida_por_nome || 'Cmt de Cia'}
+                    {' · '}
+                    {dataHora(historicoExterno.decidida_em)}
+                  </p>
+                  {historicoExterno.decisao_observacoes && (
+                    <p>Observações: {historicoExterno.decisao_observacoes}</p>
+                  )}
+                </div>
+              )}
+
+              {['APROVADA', 'EM_MANUTENCAO_EXTERNA'].includes(
+                String(historicoExterno.status || '').toUpperCase()
+              ) && (
+                <div style={{ marginTop: '14px' }}>
+                  <strong>6. Situação atual</strong>
+                  <p style={{ marginTop: '4px' }}>
+                    <strong>MANUTENÇÃO EXTERNA</strong>
+                    {' · '}
+                    {historicoExterno.destino_nome || 'Destino não informado'}
+                  </p>
+                  {historicoExterno.previsao_retorno && (
+                    <p>
+                      Previsão de retorno: {dataHora(historicoExterno.previsao_retorno)}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {historicoExterno.retornada_em && (
+                <div style={{ marginTop: '14px' }}>
+                  <strong>6. Retorno da manutenção externa</strong>
+                  <p style={{ marginTop: '4px' }}>
+                    Recebido por <strong>{historicoExterno.retornada_por_nome || 'P4'}</strong>
+                    {' · '}
+                    {dataHora(historicoExterno.retornada_em)}
+                  </p>
+                  {historicoExterno.servico_executado && (
+                    <p>Serviço executado: {historicoExterno.servico_executado}</p>
+                  )}
+                  {historicoExterno.observacoes_retorno && (
+                    <p>Observações do retorno: {historicoExterno.observacoes_retorno}</p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
           <section className="manutencao-detalhe-grade">
             <div><span>Módulo</span><strong>{manutencao.modulo || 'OUTROS'}</strong></div>
-            <div><span>Status</span><strong>{String(manutencao.status || '').replaceAll('_', ' ')}</strong></div>
+            <div>
+              <span>Status</span>
+              <strong>
+                {emManutencaoExterna
+                  ? 'MANUTENÇÃO EXTERNA'
+                  : String(manutencao.status || '').replaceAll('_', ' ')}
+              </strong>
+            </div>
             <div><span>Quantidade</span><strong>{manutencao.quantidade || 1}</strong></div>
             <div><span>Policial</span><strong>{manutencao.policial_nome || 'Não vinculado'}</strong></div>
             <div><span>RE</span><strong>{manutencao.policial_re || 'Não informado'}</strong></div>
@@ -289,7 +508,7 @@ if (!manutencao) return null
             <p>{manutencao.observacoes || 'Nenhuma observação registrada.'}</p>
           </section>
 
-          {ativa && (
+          {(manutencaoInternaAtiva || podeRegistrarRetornoExterno) && (
             <label className="manutencao-observacoes-finais">
               <span>Observações finais</span>
               <textarea
@@ -302,28 +521,69 @@ if (!manutencao) return null
           )}
         </div>
 
-        {ativa && (
+        {(manutencaoInternaAtiva || podeRegistrarRetornoExterno) && (
           <footer>
-            <button
-              type="button"
-              className="manutencoes-btn-perigo"
-              disabled={salvando}
-              onClick={() => onCancelar(observacoes)}
-            >
-              Cancelar manutenção
-            </button>
-            <button
-              type="button"
-              className="manutencoes-btn-primario"
-              disabled={salvando}
-              onClick={() => onConcluir(observacoes)}
-            >
-              {salvando
-                ? 'Salvando...'
-                : manutencao.modulo === 'HT'
-                  ? 'Aprovar saída da manutenção'
-                  : 'Concluir manutenção'}
-            </button>
+            {podeRegistrarRetornoExterno ? (
+              <button
+                type="button"
+                className="manutencoes-btn-primario"
+                disabled={salvando}
+                onClick={() =>
+                  onConcluir(observacoes, {
+                    manutencaoExternaAtiva: true,
+                    manutencaoExternaId: historicoExterno.id
+                  })
+                }
+              >
+                {salvando ? 'Registrando retorno...' : 'Registrar retorno da manutenção externa'}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="manutencoes-btn-perigo"
+                  disabled={salvando}
+                  onClick={() => onCancelar(observacoes)}
+                >
+                  Cancelar manutenção
+                </button>
+
+                {podeEncaminharP4 && (
+                  <button
+                    type="button"
+                    className="manutencoes-btn-secundario"
+                    disabled={salvando}
+                    onClick={() => onEncaminharP4?.(observacoes)}
+                  >
+                    {salvando ? 'Encaminhando...' : 'Encaminhar ao P4'}
+                  </button>
+                )}
+
+                {podeEnviarManutencaoExterna && (
+                  <button
+                    type="button"
+                    className="manutencoes-btn-secundario"
+                    disabled={salvando}
+                    onClick={() => onEnviarManutencaoExterna?.()}
+                  >
+                    Enviar para manutenção externa
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="manutencoes-btn-primario"
+                  disabled={salvando}
+                  onClick={() => onConcluir(observacoes)}
+                >
+                  {salvando
+                    ? 'Salvando...'
+                    : manutencao.modulo === 'HT'
+                      ? 'Aprovar saída da manutenção'
+                      : 'Concluir manutenção'}
+                </button>
+              </>
+            )}
           </footer>
         )}
       </aside>

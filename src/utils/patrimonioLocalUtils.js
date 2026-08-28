@@ -62,13 +62,9 @@ export function formatarLocalPatrimonial(valor, fallback = 'Não informado') {
   return normalizarLocalPatrimonial(valor) || fallback
 }
 
-/**
- * Adapta registros antigos ao valor utilizado pelo select de cadastro.
- * A lista LOCAIS_HT usa os códigos P4 e SVDD.
- */
 export function normalizarLocalParaFormulario(valor) {
-  if (ehCofreP4(valor)) return 'P4'
-  if (ehCofreSVDD(valor)) return 'SVDD'
+  if (ehCofreP4(valor)) return LOCAIS_PATRIMONIAIS.P4
+  if (ehCofreSVDD(valor)) return LOCAIS_PATRIMONIAIS.SVDD
 
   return String(valor ?? '').trim().toUpperCase()
 }

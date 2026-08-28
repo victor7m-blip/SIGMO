@@ -555,6 +555,221 @@ async function aplicarEntradaManutencaoArma({
   }
 }
 
+
+async function aplicarEntradaManutencaoHT({
+  referenciaId,
+  user = null
+}) {
+  const { data: ht, error } = await supabase
+    .from('sigmo_hts')
+    .select('*')
+    .eq('id', referenciaId)
+    .single()
+
+  if (error) throw error
+
+  const statusAtual = maiusculo(ht.status_operacional)
+
+  if (statusAtual === 'MANUTENCAO') {
+    throw new Error('O HT já está registrado como em manutenção.')
+  }
+
+  const payloadAnterior = {
+    status_operacional: ht.status_operacional,
+    local_atual: ht.local_atual,
+    equipe_vinculada: ht.equipe_vinculada,
+    viatura_vinculada: ht.viatura_vinculada,
+    ativo: ht.ativo
+  }
+
+  const payloadNovo = {
+    status_operacional: 'MANUTENCAO',
+    local_atual: ht.local_atual,
+    equipe_vinculada: null,
+    viatura_vinculada: null,
+    ativo: true
+  }
+
+  const { data: atualizado, error: updateError } = await supabase
+    .from('sigmo_hts')
+    .update(payloadNovo)
+    .eq('id', ht.id)
+    .select()
+    .single()
+
+  if (updateError) throw updateError
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo: 'ht',
+      referencia_id: atualizado.id,
+      dados: atualizado,
+      user,
+      local_atual: atualizado.local_atual,
+      companhia_atual: atualizado.unidade || ''
+    })
+  } catch (error) {
+    await supabase
+      .from('sigmo_hts')
+      .update(payloadAnterior)
+      .eq('id', ht.id)
+
+    throw error
+  }
+
+  return {
+    ht: atualizado,
+    rollback: async () => {
+      const { data: restaurado, error: rollbackError } = await supabase
+        .from('sigmo_hts')
+        .update(payloadAnterior)
+        .eq('id', ht.id)
+        .select()
+        .single()
+
+      if (rollbackError) throw rollbackError
+
+      await criarOuAtualizarPatrimonio({
+        tipo: 'ht',
+        referencia_id: restaurado.id,
+        dados: restaurado,
+        user,
+        local_atual: restaurado.local_atual,
+        companhia_atual: restaurado.unidade || ''
+      })
+    }
+  }
+}
+
+
+async function registrarNovidadePatrimonialManutencaoDireta({
+  modulo,
+  tipoMaterial,
+  patrimonioId,
+  referenciaId,
+  tipoNovidade,
+  descricao,
+  fotos = [],
+  user = null
+}) {
+  if (!patrimonioId) {
+    return null
+  }
+
+  // Se já existe uma novidade patrimonial aberta para este patrimônio,
+  // ela deve continuar sendo a origem da manutenção (casos vindos de
+  // devolução/recebimento). Assim evitamos criar novidade duplicada.
+  const { data: novidadesExistentes, error: buscaError } = await supabase
+    .from('sigmo_patrimonio_novidades')
+    .select('id, patrimonio_id, titulo, status, created_at')
+    .eq('patrimonio_id', patrimonioId)
+    .eq('status', 'registrada')
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (buscaError) throw buscaError
+
+  const existente = novidadesExistentes?.[0] || null
+
+  if (existente?.id) {
+    return {
+      ...existente,
+      criada_agora: false
+    }
+  }
+
+  const titulo =
+    maiusculo(tipoNovidade) ||
+    'NOVIDADE IDENTIFICADA EM MANUTENÇÃO'
+
+  const descricaoOficial =
+    [
+      maiusculo(descricao) || 'SEM DESCRIÇÃO',
+      'PROVIDÊNCIA: MANUTENÇÃO INTERNA'
+    ]
+      .filter(Boolean)
+      .join(' | ')
+
+  const tipoPatrimonio =
+    maiusculo(tipoMaterial) ||
+    maiusculo(modulo) ||
+    'MATERIAL'
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_registrar_patrimonio_novidade',
+    {
+      p_patrimonio_id: patrimonioId,
+      p_tipo_patrimonio: tipoPatrimonio,
+      p_titulo: titulo,
+      p_descricao: descricaoOficial,
+      p_gravidade: 'baixa',
+      p_registrado_por_id: obterUsuarioId(user),
+      p_registrado_por_nome: maiusculo(obterUsuarioNome(user)) || null
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      `Não foi possível registrar a novidade patrimonial da manutenção: ${error.message}`
+    )
+  }
+
+  const novidadeId =
+    Array.isArray(data)
+      ? (
+          data[0]?.id ||
+          data[0]?.sigmo_registrar_patrimonio_novidade ||
+          data[0] ||
+          null
+        )
+      : (
+          data?.id ||
+          data?.sigmo_registrar_patrimonio_novidade ||
+          data ||
+          null
+        )
+
+  if (!novidadeId) {
+    return null
+  }
+
+  const fotosValidas = (Array.isArray(fotos) ? fotos : [])
+    .filter((item) => item?.foto_url)
+
+  if (fotosValidas.length > 0) {
+    const registrosFotos = fotosValidas.map((item, indice) => ({
+      novidade_id: novidadeId,
+      foto_url: item.foto_url,
+      foto_caminho: item.foto_caminho || null,
+      nome_original: item?.arquivo?.name || null,
+      tipo_arquivo: item?.arquivo?.type || null,
+      tamanho_bytes: Number(item?.arquivo?.size || 0) || null,
+      principal: item.principal === true || indice === 0,
+      ordem: inteiroPositivo(item.ordem, indice + 1)
+    }))
+
+    const { error: fotosError } = await supabase
+      .from('sigmo_patrimonio_novidades_fotos')
+      .insert(registrosFotos)
+
+    if (fotosError) {
+      throw new Error(
+        `A novidade patrimonial foi criada, mas não foi possível vincular as fotos: ${fotosError.message}`
+      )
+    }
+  }
+
+  return {
+    id: novidadeId,
+    patrimonio_id: patrimonioId,
+    referencia_id: referenciaId || null,
+    tipo_patrimonio: tipoPatrimonio,
+    titulo,
+    status: 'registrada',
+    criada_agora: true
+  }
+}
+
 export async function registrarManutencao({
   modulo,
   tipoMaterial,
@@ -613,6 +828,7 @@ export async function registrarManutencao({
   const fotosEnviadas = []
   let manutencaoCriada = null
   let movimentacaoPatrimonial = null
+  let novidadePatrimonial = null
 
   try {
     for (
@@ -657,6 +873,23 @@ export async function registrarManutencao({
         foto_caminho: null
       }
 
+    // Manutenção aberta diretamente no módulo (sem novidade prévia) deve
+    // gerar também a novidade patrimonial oficial. Para HTs vindos de
+    // devolução/recebimento, a novidade já existe e apenas é reutilizada.
+    if (moduloValido === MODULOS_MANUTENCAO.HT) {
+      novidadePatrimonial =
+        await registrarNovidadePatrimonialManutencaoDireta({
+          modulo: moduloValido,
+          tipoMaterial: tipoValido,
+          patrimonioId: patrimonioId || null,
+          referenciaId: referenciaValida,
+          tipoNovidade,
+          descricao,
+          fotos: todasFotosEntrada,
+          user
+        })
+    }
+
     const payload = {
       modulo:
         moduloValido,
@@ -685,7 +918,14 @@ export async function registrarManutencao({
         null,
 
       observacoes:
-        maiusculo(observacoes) ||
+        [
+          maiusculo(observacoes) || null,
+          novidadePatrimonial?.id
+            ? `NOVIDADE PATRIMONIAL: ${novidadePatrimonial.id}`
+            : null
+        ]
+          .filter(Boolean)
+          .join(' | ') ||
         null,
 
       origem:
@@ -791,6 +1031,13 @@ export async function registrarManutencao({
 
     if (moduloValido === MODULOS_MANUTENCAO.ARMAS) {
       movimentacaoPatrimonial = await aplicarEntradaManutencaoArma({
+        referenciaId: referenciaValida,
+        user
+      })
+    }
+
+    if (moduloValido === MODULOS_MANUTENCAO.HT) {
+      movimentacaoPatrimonial = await aplicarEntradaManutencaoHT({
         referenciaId: referenciaValida,
         user
       })
@@ -1064,19 +1311,42 @@ export async function listarManutencoes({
     })
 
     const origemCautela = maiusculo(cautela?.origem_local)
+    const origemGravada = maiusculo(item?.origem)
+
     let origemInstitucional = null
+    let origemInstitucionalLocal =
+      cautela?.origem_local ||
+      item?.origem ||
+      null
 
     if (
       origemCautela.includes('P4') ||
       origemCautela.includes('DEPÓSITO') ||
       origemCautela.includes('DEPOSITO') ||
-      origemCautela.includes('GUARDA DO QUARTEL')
+      origemCautela.includes('GUARDA DO QUARTEL') ||
+      origemCautela.includes('COFRE DO P4')
     ) {
       origemInstitucional = 'P4'
     } else if (
       origemCautela.includes('SVDD') ||
       origemCautela.includes('SERVIÇO DE DIA') ||
-      origemCautela.includes('SERVICO DE DIA')
+      origemCautela.includes('SERVICO DE DIA') ||
+      origemCautela.includes('COFRE DO SVDD')
+    ) {
+      origemInstitucional = 'SVDD'
+    } else if (
+      origemGravada.includes('P4') ||
+      origemGravada.includes('DEPÓSITO') ||
+      origemGravada.includes('DEPOSITO') ||
+      origemGravada.includes('GUARDA DO QUARTEL') ||
+      origemGravada.includes('COFRE DO P4')
+    ) {
+      origemInstitucional = 'P4'
+    } else if (
+      origemGravada.includes('SVDD') ||
+      origemGravada.includes('SERVIÇO DE DIA') ||
+      origemGravada.includes('SERVICO DE DIA') ||
+      origemGravada.includes('COFRE DO SVDD')
     ) {
       origemInstitucional = 'SVDD'
     }
@@ -1084,7 +1354,7 @@ export async function listarManutencoes({
     return {
       ...item,
       origem_institucional: origemInstitucional,
-      origem_institucional_local: cautela?.origem_local || null,
+      origem_institucional_local: origemInstitucionalLocal,
       origem_institucional_movimentacao_id: cautela?.id || null
     }
   })
@@ -1151,7 +1421,7 @@ export async function listarManutencoes({
   if (referenciasHT.length > 0) {
     const { data: hts, error: htsError } = await supabase
       .from('sigmo_hts')
-      .select('id, patrimonio, numero_serie, marca, modelo, tipo_ht')
+      .select('id, patrimonio, numero_serie, marca, modelo, tipo_ht, status_operacional, local_atual')
       .in('id', referenciasHT)
 
     if (htsError) {
@@ -1229,14 +1499,38 @@ export async function listarManutencoes({
         const ht = htsPorId.get(referenciaId)
         if (!ht) return item
 
-        return {
-          ...item,
-          patrimonio: ht.patrimonio || null,
-          numero_serie: ht.numero_serie || null,
-          marca: ht.marca || null,
-          modelo: ht.modelo || null,
-          tipo_ht: ht.tipo_ht || null
-        }
+        const localAtualHT = maiusculo(ht.local_atual)
+
+let origemInstitucionalHT = item.origem_institucional
+
+if (
+  localAtualHT.includes('P4') ||
+  localAtualHT.includes('DEPÓSITO') ||
+  localAtualHT.includes('DEPOSITO') ||
+  localAtualHT.includes('GUARDA DO P4') ||
+  localAtualHT.includes('GUARDA DO QUARTEL')
+) {
+  origemInstitucionalHT = 'P4'
+} else if (
+  localAtualHT.includes('SVDD') ||
+  localAtualHT.includes('SERVIÇO DE DIA') ||
+  localAtualHT.includes('SERVICO DE DIA')
+) {
+  origemInstitucionalHT = 'SVDD'
+}
+
+return {
+  ...item,
+  patrimonio: ht.patrimonio || null,
+  numero_serie: ht.numero_serie || null,
+  marca: ht.marca || null,
+  modelo: ht.modelo || null,
+  tipo_ht: ht.tipo_ht || null,
+  status_operacional: ht.status_operacional || null,
+  local_atual: ht.local_atual || null,
+  origem_institucional: origemInstitucionalHT,
+  origem_institucional_local: ht.local_atual || item.origem_institucional_local
+}
       }
 
       if (item.modulo === MODULOS_MANUTENCAO.TPD) {
@@ -1698,7 +1992,7 @@ async function aplicarRetornoHT(manutencao, user) {
 
   const payloadNovo = {
     status_operacional: 'RESERVA',
-    local_atual: retornoAoSVDD ? 'COFRE DO SVDD' : 'DEPÓSITO P4',
+    local_atual: retornoAoSVDD ? 'COFRE DO SVDD' : 'COFRE DO P4',
     equipe_vinculada: null,
     viatura_vinculada: null,
     ativo: true

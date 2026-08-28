@@ -1476,7 +1476,8 @@ function PainelDashboard({
     visaoSVDD
       ? 0
       : Number(vitrine.armas.p4 || 0) +
-        Number(vitrine.tonfas.p4 || 0)
+        Number(vitrine.tonfas.p4 || 0) +
+        Number(vitrine.individuais?.p4 || 0)
 
   const svddIntegrado =
     Number(vitrine.patrimonios?.noCofre || 0) +

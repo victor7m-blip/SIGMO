@@ -12,6 +12,7 @@ import HTBaixaModal from './components/HTBaixaModal'
 import HTAprovacoesModal from './components/HTAprovacoesModal'
 import HTOperacaoModal from './components/HTOperacaoModal'
 import HTDetalhesModal from './components/HTDetalhesModal'
+import HTManutencaoExternaModal from './components/HTManutencaoExternaModal'
 
 import { enviarHTParaManutencao, excluirHT, listarHTs } from '../../services/htsService'
 import { listarFotosHT } from '../../services/htsFotosService'
@@ -25,6 +26,7 @@ import {
   recusarTransferenciaHT
 } from '../../services/htsTransferenciaService'
 import { decidirBaixaHT, listarSolicitacoesBaixa, solicitarBaixaHT } from '../../services/patrimonioBaixasService'
+import { listarManutencoesExternas } from '../../services/manutencoesExternasService'
 import { listarPoliciais } from '../../services/policiaisService'
 import {
   listarEntregasHTAtivas,
@@ -63,6 +65,33 @@ function normalizar(valor) {
     .toUpperCase()
 }
 
+function maskRE(valor) {
+  const limpo = String(valor || '')
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, '')
+    .slice(0, 7)
+
+  const numeros = limpo
+    .slice(0, 6)
+    .replace(/\D/g, '')
+
+  const digito = limpo.slice(6, 7)
+
+  if (numeros.length < 6) {
+    return numeros
+  }
+
+  return digito
+    ? `${numeros}-${digito}`
+    : `${numeros}-`
+}
+
+function reCompleto(valor) {
+  return /^[0-9]{6}-[0-9A-Z]$/.test(
+    String(valor || '').trim().toUpperCase()
+  )
+}
+
 function formatarStatus(valor) {
   const nomes = {
     RESERVA: 'Reserva',
@@ -78,7 +107,34 @@ function formatarStatus(valor) {
   return nomes[chave] || String(valor || 'Sem status').replaceAll('_', ' ')
 }
 
-function resumirHTs(lista = []) {
+function resumirHTs(lista = [], manutencoesExternas = []) {
+  const idsExternos = new Set(
+    (manutencoesExternas || [])
+      .filter((item) => {
+        const status = normalizar(item?.status)
+        return !['CONCLUIDA', 'CONCLUÍDA', 'CANCELADA', 'REPROVADA'].includes(status)
+      })
+      .flatMap((item) => [
+        item?.referencia_id,
+        item?.ht_id,
+        item?.item_id,
+        ...(item?.itens || []).flatMap((subitem) => [
+          subitem?.referencia_id,
+          subitem?.ht_id,
+          subitem?.item_id
+        ]),
+        ...(item?.sigmo_manutencoes_externas_itens || []).flatMap(
+          (subitem) => [
+            subitem?.referencia_id,
+            subitem?.ht_id,
+            subitem?.item_id
+          ]
+        )
+      ])
+      .filter(Boolean)
+      .map(String)
+  )
+
   const resumo = {
     total: lista.length,
     p4: 0,
@@ -86,8 +142,9 @@ function resumirHTs(lista = []) {
     emServico: 0,
     cargaPermanente: 0,
     cautelas: 0,
-    manutencao: 0,
-    naoLocalizados: 0,
+    manutencaoP4: 0,
+    manutencaoSVDD: 0,
+    manutencaoExterna: 0,
     recolhidos: 0,
     baixados: 0,
     aguardandoAprovacao: 0,
@@ -97,6 +154,7 @@ function resumirHTs(lista = []) {
   lista.forEach((ht) => {
     const status = normalizar(ht?.status_operacional || ht?.status)
     const local = normalizar(ht?.local_atual)
+    const htId = String(ht?.id || '')
 
     if (status === 'AGUARDANDO_APROVACAO_BAIXA') {
       resumo.aguardandoAprovacao += 1
@@ -108,22 +166,28 @@ function resumirHTs(lista = []) {
       return
     }
 
+    const manutencaoExterna =
+      idsExternos.has(htId) ||
+      local.includes('MANUTENCAO EXTERNA') ||
+      local.includes('MANUTENÇÃO EXTERNA') ||
+      status.includes('MANUTENCAO_EXTERNA')
+
+    if (manutencaoExterna) {
+      resumo.manutencaoExterna += 1
+      return
+    }
+
     if (status === 'MANUTENCAO' || local.includes('MANUTENCAO')) {
-      resumo.manutencao += 1
+      if (local.includes('SVDD') || local.includes('SERVICO DE DIA')) {
+        resumo.manutencaoSVDD += 1
+      } else {
+        resumo.manutencaoP4 += 1
+      }
       return
     }
 
     if (status === 'RECOLHIDO') {
       resumo.recolhidos += 1
-      return
-    }
-
-    if (
-      status.includes('NAO_LOCALIZ') ||
-      local.includes('NAO_LOCALIZ') ||
-      !local
-    ) {
-      resumo.naoLocalizados += 1
       return
     }
 
@@ -138,8 +202,6 @@ function resumirHTs(lista = []) {
     }
 
     if (status === 'EM_SERVICO') {
-      // Para o HT, o equipamento em serviço representa uma cautela ativa.
-      // Mantemos uma única categoria operacional para evitar contagem duplicada.
       resumo.cautelas += 1
       return
     }
@@ -165,7 +227,6 @@ function resumirHTs(lista = []) {
 
   return resumo
 }
-
 
 function correspondeAoResumo(ht, tipo) {
   const status = normalizar(ht?.status_operacional || ht?.status)
@@ -196,6 +257,29 @@ function correspondeAoResumo(ht, tipo) {
 
   if (tipo === 'CAUTELA') {
     return status === 'EM_SERVICO' || status.includes('CAUTELA')
+  }
+
+  if (tipo === 'MANUTENCAO_P4') {
+    return (
+      (status === 'MANUTENCAO' || local.includes('MANUTENCAO')) &&
+      !local.includes('SVDD') &&
+      !local.includes('SERVICO DE DIA') &&
+      !local.includes('MANUTENCAO EXTERNA')
+    )
+  }
+
+  if (tipo === 'MANUTENCAO_SVDD') {
+    return (
+      (status === 'MANUTENCAO' || local.includes('MANUTENCAO')) &&
+      (local.includes('SVDD') || local.includes('SERVICO DE DIA'))
+    )
+  }
+
+  if (tipo === 'MANUTENCAO_EXTERNA') {
+    return (
+      local.includes('MANUTENCAO EXTERNA') ||
+      status.includes('MANUTENCAO_EXTERNA')
+    )
   }
 
   if (tipo === 'MANUTENCAO') {
@@ -381,9 +465,14 @@ export default function HT({ user }) {
   const [transferenciaModalAberta, setTransferenciaModalAberta] = useState(false)
   const [destinoTransferenciaSelecionado, setDestinoTransferenciaSelecionado] = useState('')
   const [destinoTransferenciaOutro, setDestinoTransferenciaOutro] = useState('')
+  const [reRecebedorTransferencia, setReRecebedorTransferencia] = useState('')
+  const [recebedorTransferencia, setRecebedorTransferencia] = useState(null)
+  const [buscandoRecebedorTransferencia, setBuscandoRecebedorTransferencia] = useState(false)
+  const [erroRecebedorTransferencia, setErroRecebedorTransferencia] = useState('')
   const [cancelamentoTransferenciaModalAberto, setCancelamentoTransferenciaModalAberto] = useState(false)
   const [transferenciasCancelaveis, setTransferenciasCancelaveis] = useState([])
   const [loadingTransferenciasCancelaveis, setLoadingTransferenciasCancelaveis] = useState(false)
+  const [htIdsTransferenciaPendente, setHTIdsTransferenciaPendente] = useState(new Set())
   const [recebimentoModalAberta, setRecebimentoModalAberta] = useState(false)
   const [pesquisaTransferencia, setPesquisaTransferencia] = useState('')
   const [htsSelecionadosTransferencia, setHTsSelecionadosTransferencia] = useState([])
@@ -403,6 +492,8 @@ export default function HT({ user }) {
   const [salvandoOperacao, setSalvandoOperacao] = useState(false)
   const [policiaisOperacao, setPoliciaisOperacao] = useState([])
   const [entregasAtivas, setEntregasAtivas] = useState([])
+  const [manutencaoExternaModalAberta, setManutencaoExternaModalAberta] = useState(false)
+  const [manutencoesExternasResumo, setManutencoesExternasResumo] = useState([])
 
   const [fotosVisualizacao, setFotosVisualizacao] = useState([])
   const [carregandoFotos, setCarregandoFotos] = useState(false)
@@ -440,7 +531,15 @@ export default function HT({ user }) {
     [total]
   )
 
-  const resumo = useMemo(() => resumirHTs(todosHTs), [todosHTs])
+  const htsResumoPorPerfil = useMemo(() => {
+    if (ehPerfilSVDD) {
+      return todosHTs.filter((ht) => pertenceAoEscopoSVDD(ht))
+    }
+
+    return todosHTs
+  }, [todosHTs, ehPerfilSVDD, ehPerfilP4])
+
+  const resumo = useMemo(() => resumirHTs(htsResumoPorPerfil, manutencoesExternasResumo), [htsResumoPorPerfil, manutencoesExternasResumo])
 
   const htsDisponiveisOperacao = useMemo(() => {
     return todosHTs.filter((ht) => {
@@ -453,13 +552,79 @@ export default function HT({ user }) {
     })
   }, [todosHTs, ehPerfilSVDD, ehPerfilP4])
 
+  const htIdsManutencaoExterna = useMemo(() => {
+    return new Set(
+      (manutencoesExternasResumo || [])
+        .filter((item) => {
+          const status = normalizar(item?.status)
+          return !['CONCLUIDA', 'CONCLUÍDA', 'CANCELADA', 'REPROVADA'].includes(status)
+        })
+        .flatMap((item) => [
+          item?.referencia_id,
+          item?.ht_id,
+          item?.item_id,
+          ...(item?.itens || []).flatMap((subitem) => [
+            subitem?.referencia_id,
+            subitem?.ht_id,
+            subitem?.item_id
+          ]),
+          ...(item?.sigmo_manutencoes_externas_itens || []).flatMap(
+            (subitem) => [
+              subitem?.referencia_id,
+              subitem?.ht_id,
+              subitem?.item_id
+            ]
+          )
+        ])
+        .filter(Boolean)
+        .map(String)
+    )
+  }, [manutencoesExternasResumo])
+
   const itensResumoModal = useMemo(() => {
     if (!resumoModal?.tipo) return []
 
     const termo = normalizar(buscaResumoModal)
 
     return todosHTs
-      .filter((ht) => correspondeAoResumo(ht, resumoModal.tipo))
+      .filter((ht) => {
+        if (resumoModal.tipo === 'MANUTENCAO_EXTERNA') {
+          return (
+            htIdsManutencaoExterna.has(String(ht?.id || '')) ||
+            correspondeAoResumo(ht, resumoModal.tipo)
+          )
+        }
+
+        if (resumoModal.tipo === 'MANUTENCAO_P4' && htIdsManutencaoExterna.has(String(ht?.id || ''))) {
+          return false
+        }
+
+        if (resumoModal.tipo === 'MANUTENCAO') {
+          if (htIdsManutencaoExterna.has(String(ht?.id || ''))) return false
+
+          const status = normalizar(ht?.status_operacional || ht?.status)
+          const local = normalizar(ht?.local_atual)
+          const emManutencaoInterna = status === 'MANUTENCAO' || local.includes('MANUTENCAO')
+
+          if (!emManutencaoInterna) return false
+
+          if (ehPerfilP4) {
+            return (
+              local.includes('P4') ||
+              local.includes('DEPOSITO') ||
+              local.includes('GUARDA')
+            )
+          }
+
+          if (ehPerfilSVDD) {
+            return local.includes('SVDD') || local.includes('SERVICO DE DIA')
+          }
+
+          return true
+        }
+
+        return correspondeAoResumo(ht, resumoModal.tipo)
+      })
       .filter((ht) => !ehPerfilSVDD || pertenceAoEscopoSVDD(ht))
       .filter((ht) => {
         if (!termo) return true
@@ -474,15 +639,14 @@ export default function HT({ user }) {
           ht?.status_operacional
         ].some((valor) => normalizar(valor).includes(termo))
       })
-  }, [todosHTs, resumoModal, buscaResumoModal, ehPerfilSVDD])
+  }, [todosHTs, resumoModal, buscaResumoModal, ehPerfilSVDD, htIdsManutencaoExterna])
 
   const dadosGrafico = useMemo(() => {
     if (ehPerfilSVDD) {
       return [
         { label: 'Cofre do SVDD', valor: resumo.svdd, cor: '#3b82f6' },
         { label: 'Cautelas ativas', valor: resumo.cautelas, cor: '#eab308' },
-        { label: 'Manutenção', valor: resumo.manutencao, cor: '#ef4444' },
-        { label: 'Não localizados', valor: resumo.naoLocalizados, cor: '#dc2626' }
+        { label: 'Manutenção SVDD', valor: resumo.manutencaoSVDD, cor: '#ef4444' }
       ]
     }
 
@@ -491,8 +655,9 @@ export default function HT({ user }) {
       { label: 'Cofre do SVDD', valor: resumo.svdd, cor: '#3b82f6' },
       { label: 'Carga permanente', valor: resumo.cargaPermanente, cor: '#f97316' },
       { label: 'Cautelas ativas', valor: resumo.cautelas, cor: '#eab308' },
-      { label: 'Manutenção', valor: resumo.manutencao, cor: '#ef4444' },
-      { label: 'Não localizados', valor: resumo.naoLocalizados, cor: '#dc2626' },
+      { label: 'Manutenção P4', valor: resumo.manutencaoP4, cor: '#ef4444' },
+      { label: 'Manutenção SVDD', valor: resumo.manutencaoSVDD, cor: '#dc2626' },
+      { label: 'Manutenção externa', valor: resumo.manutencaoExterna, cor: '#7c3aed' },
       { label: 'Outras situações', valor: resumo.recolhidos + resumo.outros, cor: '#64748b' }
     ]
   }, [ehPerfilSVDD, resumo])
@@ -501,6 +666,18 @@ export default function HT({ user }) {
     () => dadosGrafico.reduce((soma, item) => soma + Number(item.valor || 0), 0),
     [dadosGrafico]
   )
+
+  const htsParaTabela = useMemo(() => {
+    return hts.map((ht) => {
+      if (!htIdsManutencaoExterna.has(String(ht?.id || ''))) return ht
+
+      return {
+        ...ht,
+        status_operacional: 'MANUTENCAO_EXTERNA',
+        local_atual: 'MANUTENÇÃO EXTERNA'
+      }
+    })
+  }, [hts, htIdsManutencaoExterna])
 
   const htsElegiveisManutencao = useMemo(() => {
   const termo = normalizar(buscaSeletorManutencao)
@@ -558,6 +735,50 @@ export default function HT({ user }) {
   ehPerfilP4
 ])
 
+  const carregarHTsComTransferenciaPendente = useCallback(async () => {
+    if (!podeMovimentarHT) {
+      setHTIdsTransferenciaPendente(new Set())
+      return []
+    }
+
+    try {
+      const itens = await listarTransferenciasHTCriadasPendentes({
+        origemCodigo: origemTransferencia,
+        limite: 500
+      })
+
+      const ids = new Set(
+        (itens || [])
+          .map((movimentacao) => {
+            const dados =
+              movimentacao?.dados ||
+              movimentacao?.metadata?.dados_engine ||
+              {}
+
+            return (
+              dados?.ht_id ||
+              dados?.referencia_id ||
+              movimentacao?.metadata?.patrimonio?.referencia_id ||
+              null
+            )
+          })
+          .filter(Boolean)
+          .map(String)
+      )
+
+      setHTIdsTransferenciaPendente(ids)
+      return itens || []
+    } catch (error) {
+      console.warn('Não foi possível identificar HTs com transferência pendente:', error)
+      setHTIdsTransferenciaPendente(new Set())
+      return []
+    }
+  }, [podeMovimentarHT, origemTransferencia])
+
+  useEffect(() => {
+    carregarHTsComTransferenciaPendente()
+  }, [carregarHTsComTransferenciaPendente])
+
   const htsDisponiveisTransferencia = useMemo(() => {
     const termo = normalizar(pesquisaTransferencia)
 
@@ -568,13 +789,27 @@ export default function HT({ user }) {
         ? local.includes('P4') || local.includes('DEPOSITO') || local.includes('GUARDA')
         : local.includes('SVDD') || local.includes('SERVICO DE DIA')
 
-      if (!estaNaOrigem || ['MANUTENCAO', 'BAIXADO', 'CAUTELADO', 'CARGA'].includes(status)) return false
+      const transferenciaManutencaoSVDDP4 =
+        origemTransferencia === 'SVDD' &&
+        destinoTransferencia === 'P4' &&
+        status === 'MANUTENCAO'
+
+      if (!estaNaOrigem) return false
+      if (htIdsTransferenciaPendente.has(String(ht?.id || ''))) return false
+      if (['BAIXADO', 'CAUTELADO', 'CARGA'].includes(status)) return false
+      if (status === 'MANUTENCAO' && !transferenciaManutencaoSVDDP4) return false
       if (!termo) return true
 
       return [ht.patrimonio, ht.numero_serie, ht.marca, ht.modelo, ht.unidade]
         .some((valor) => normalizar(valor).includes(termo))
     })
-  }, [todosHTs, pesquisaTransferencia, origemTransferencia])
+  }, [
+    todosHTs,
+    pesquisaTransferencia,
+    origemTransferencia,
+    destinoTransferencia,
+    htIdsTransferenciaPendente
+  ])
 
   const htsElegiveisBaixa = useMemo(() => todosHTs.filter((ht) => {
     const status = normalizar(ht?.status_operacional || ht?.status)
@@ -612,6 +847,20 @@ export default function HT({ user }) {
       })
 
       setTodosHTs(resultado.data || [])
+
+      try {
+        const externas = await listarManutencoesExternas({
+          modulo: 'HT',
+          pagina: 1,
+          limite: LIMITE_RESUMO
+        })
+        setManutencoesExternasResumo(
+          externas?.data || externas?.itens || externas || []
+        )
+      } catch (errorExterna) {
+        console.warn('Não foi possível carregar as manutenções externas dos HTs:', errorExterna)
+        setManutencoesExternasResumo([])
+      }
     } catch (error) {
       console.warn('Não foi possível carregar o resumo dos HTs:', error)
     } finally {
@@ -856,11 +1105,15 @@ export default function HT({ user }) {
     carregarTransferenciasPendentes()
   }, [carregarTransferenciasPendentes])
 
-  function abrirTransferenciaHT() {
+  async function abrirTransferenciaHT() {
+    await carregarHTsComTransferenciaPendente()
     setPesquisaTransferencia('')
     setHTsSelecionadosTransferencia([])
     setDestinoTransferenciaSelecionado(contextoOrigemSVDD ? 'P4' : '')
     setDestinoTransferenciaOutro('')
+    setReRecebedorTransferencia('')
+    setRecebedorTransferencia(null)
+    setErroRecebedorTransferencia('')
     setTransferenciaModalAberta(true)
     setMensagemSucesso('')
   }
@@ -903,7 +1156,12 @@ export default function HT({ user }) {
         limite: 200
       })
       setTransferenciasCancelaveis(itens || [])
-      await Promise.all([carregarHTs(), carregarResumo(), carregarTransferenciasPendentes()])
+      await Promise.all([
+        carregarHTs(),
+        carregarResumo(),
+        carregarTransferenciasPendentes(),
+        carregarHTsComTransferenciaPendente()
+      ])
     } catch (error) {
       console.error('Erro ao cancelar transferência:', error)
       setErro(error?.message || 'Não foi possível cancelar a transferência.')
@@ -916,6 +1174,49 @@ export default function HT({ user }) {
     setHTsSelecionadosTransferencia((atuais) =>
       atuais.includes(id) ? atuais.filter((item) => item !== id) : [...atuais, id]
     )
+  }
+
+  async function buscarRecebedorExternoTransferencia(reInformado = null) {
+    const re = String(
+      reInformado || reRecebedorTransferencia || ''
+    )
+      .trim()
+      .toUpperCase()
+    if (!re) {
+      setRecebedorTransferencia(null)
+      setErroRecebedorTransferencia('Informe o RE do recebedor.')
+      return
+    }
+
+    try {
+      setBuscandoRecebedorTransferencia(true)
+      setErroRecebedorTransferencia('')
+      const resultado = await listarPoliciais({
+        filtros: { re, perfil: 'USUARIO EXTERNO' },
+        pagina: 1,
+        limite: 20,
+        sortBy: 'nome_guerra',
+        sortDirection: 'asc'
+      })
+      const alvo = normalizar(re).replace(/[^0-9A-Z]/g, '')
+      const encontrado = (resultado?.data || []).find((item) =>
+        normalizar(item?.re).replace(/[^0-9A-Z]/g, '') === alvo &&
+        normalizar(item?.perfil) === 'USUARIO EXTERNO' &&
+        normalizar(item?.situacao || 'ATIVO') !== 'INATIVO'
+      )
+      if (!encontrado) {
+        setRecebedorTransferencia(null)
+        setErroRecebedorTransferencia('Usuário externo ativo não encontrado para este RE. Cadastre-o antes da transferência.')
+        return
+      }
+      setRecebedorTransferencia(encontrado)
+    } catch (error) {
+      console.error('Erro ao localizar recebedor externo:', error)
+      setRecebedorTransferencia(null)
+      setErroRecebedorTransferencia('Não foi possível localizar o usuário externo.')
+    } finally {
+      setBuscandoRecebedorTransferencia(false)
+    }
   }
 
   async function confirmarTransferenciaHT() {
@@ -932,6 +1233,11 @@ export default function HT({ user }) {
       return
     }
 
+    if (destinoTransferencia === 'OUTROS' && !recebedorTransferencia?.id) {
+      setErro('Localize o usuário externo que receberá o material antes de criar a transferência.')
+      return
+    }
+
     const destinoNome = destinoTransferencia === 'OUTROS'
       ? destinoTransferenciaOutro.trim()
       : DESTINOS_TRANSFERENCIA_P4.find((item) => item.codigo === destinoTransferencia)?.nome || destinoTransferencia
@@ -945,6 +1251,7 @@ export default function HT({ user }) {
           origemCodigo: origemTransferencia,
           destinoCodigo: destinoTransferencia,
           destinoNome,
+          recebedor: destinoTransferencia === 'OUTROS' ? recebedorTransferencia : null,
           user
         })
       }
@@ -954,7 +1261,15 @@ export default function HT({ user }) {
       setHTsSelecionadosTransferencia([])
       setDestinoTransferenciaSelecionado('')
       setDestinoTransferenciaOutro('')
-      await Promise.all([carregarHTs(), carregarResumo(), carregarTransferenciasPendentes()])
+      setReRecebedorTransferencia('')
+      setRecebedorTransferencia(null)
+      setErroRecebedorTransferencia('')
+      await Promise.all([
+        carregarHTs(),
+        carregarResumo(),
+        carregarTransferenciasPendentes(),
+        carregarHTsComTransferenciaPendente()
+      ])
     } catch (error) {
       console.error('Erro ao transferir HT:', error)
       setErro(error?.message || 'Não foi possível transferir o HT.')
@@ -969,7 +1284,12 @@ export default function HT({ user }) {
       setErro('')
       await aceitarTransferenciaHT({ movimentacaoId: movimentacao.id, user })
       setMensagemSucesso('Recebimento do HT confirmado.')
-      await Promise.all([carregarHTs(), carregarResumo(), carregarTransferenciasPendentes()])
+      await Promise.all([
+        carregarHTs(),
+        carregarResumo(),
+        carregarTransferenciasPendentes(),
+        carregarHTsComTransferenciaPendente()
+      ])
     } catch (error) {
       setErro(error?.message || 'Não foi possível receber o HT.')
     } finally {
@@ -985,7 +1305,10 @@ export default function HT({ user }) {
       setProcessandoTransferenciaId(movimentacao.id)
       await recusarTransferenciaHT({ movimentacaoId: movimentacao.id, motivo, user })
       setMensagemSucesso('Transferência recusada.')
-      await carregarTransferenciasPendentes()
+      await Promise.all([
+        carregarTransferenciasPendentes(),
+        carregarHTsComTransferenciaPendente()
+      ])
     } catch (error) {
       setErro(error?.message || 'Não foi possível recusar a transferência.')
     } finally {
@@ -1247,20 +1570,31 @@ export default function HT({ user }) {
           tone="yellow"
           onClick={() => abrirResumoModal('CAUTELA', 'Cautelas ativas', 'Rádios HT entregues temporariamente e ainda não devolvidos.')}
         />
+        {!ehPerfilSVDD && (
+          <ResumoCard
+            titulo="Manutenção P4"
+            valor={resumo.manutencaoP4}
+            detalhe="em manutenção sob responsabilidade do P4"
+            tone="red"
+            onClick={() => abrirResumoModal('MANUTENCAO_P4', 'HTs em manutenção no P4', 'Equipamentos em manutenção sob responsabilidade do P4.')}
+          />
+        )}
         <ResumoCard
-          titulo="Manutenção"
-          valor={resumo.manutencao}
-          detalhe="temporariamente indisponíveis"
+          titulo="Manutenção SVDD"
+          valor={resumo.manutencaoSVDD}
+          detalhe="em manutenção sob responsabilidade do SVDD"
           tone="red"
-          onClick={() => abrirResumoModal('MANUTENCAO', 'HTs em manutenção', 'Equipamentos indisponíveis por reparo ou avaliação técnica.')}
+          onClick={() => abrirResumoModal('MANUTENCAO_SVDD', 'HTs em manutenção no SVDD', 'Equipamentos em manutenção sob responsabilidade do Serviço de Dia.')}
         />
-        <ResumoCard
-          titulo="Não localizados"
-          valor={resumo.naoLocalizados}
-          detalhe="localização pendente"
-          tone="slate"
-          onClick={() => abrirResumoModal('NAO_LOCALIZADO', 'HTs não localizados', 'Equipamentos com localização pendente ou divergente.')}
-        />
+        {!ehPerfilSVDD && (
+          <ResumoCard
+            titulo="Manutenção externa"
+            valor={resumo.manutencaoExterna}
+            detalhe="fora da Cia para reparo"
+            tone="approval"
+            onClick={() => abrirResumoModal('MANUTENCAO_EXTERNA', 'HTs em manutenção externa', 'Equipamentos enviados para assistência externa.')}
+          />
+        )}
         {!ehPerfilSVDD && (
           <ResumoCard
             titulo="Baixados"
@@ -1297,32 +1631,40 @@ export default function HT({ user }) {
         <div className="ht-operation-groups">
           <GrupoOperacao
             icone="📦"
-            titulo="Distribuir patrimônio"
-            descricao="Transferências e entregas de rádios HT."
+            titulo="Saídas e movimentações"
+            descricao="Distribuição e movimentação externa de rádios HT."
             className="ht-operation-group-distribute"
           >
             <button type="button" disabled={!podeMovimentarHT} onClick={abrirTransferenciaHT}>
-              <strong>{contextoOrigemSVDD ? 'Devolver ao P4' : 'Transferir'}</strong>
-              <span>{contextoOrigemSVDD ? 'Selecionar um ou vários HTs e devolver ao P4' : 'Escolher o destino e selecionar um ou vários HTs'}</span>
+              <strong>{contextoOrigemSVDD ? 'Devolver ao P4' : 'Transferir patrimônio'}</strong>
+              <span>
+                {contextoOrigemSVDD
+                  ? 'Selecionar um ou vários HTs e devolver ao P4'
+                  : 'Escolher o destino e selecionar um ou vários HTs'}
+              </span>
             </button>
+
             <button type="button" disabled={!podeMovimentarHT} onClick={abrirCancelamentoTransferencia}>
-              <strong>Cancelar transferência</strong>
-              <span>Cancelar uma movimentação que ainda não foi recebida</span>
+              <strong>Cancelar movimentação</strong>
+              <span>Cancelar uma transferência que ainda não foi recebida</span>
             </button>
           </GrupoOperacao>
 
-          <GrupoOperacao icone="📥" titulo="Receber patrimônio" descricao="Devoluções e retornos patrimoniais.">
+          <GrupoOperacao
+            icone="📥"
+            titulo="Entradas e recebimentos"
+            descricao="Entrada, devolução e retorno de patrimônio."
+          >
+            <button type="button" onClick={abrirNovoCadastro}>
+              <strong>Receber material novo</strong>
+              <span>Cadastrar um novo rádio HT recebido pelo P4</span>
+            </button>
+
             <button type="button" disabled={!podeMovimentarHT} onClick={() => abrirOperacao('DEVOLUCAO')}>
               <strong>Receber devolução</strong>
               <span>Encerrar carga ou cautela e receber o rádio HT</span>
             </button>
-            <button
-              type="button"
-              onClick={() => abrirResumoModal('MANUTENCAO', 'HTs em manutenção', 'Equipamentos em reparo e disponíveis para acompanhamento do retorno.')}
-            >
-              <strong>Receber manutenção</strong>
-              <span>Visualizar equipamentos em reparo e acompanhar o retorno</span>
-            </button>
+
             <button
               type="button"
               disabled={!podeMovimentarHT}
@@ -1332,19 +1674,53 @@ export default function HT({ user }) {
               }}
             >
               <strong>{ehPerfilP4 ? 'Receber do SVDD' : 'Receber do P4'}</strong>
-              <span>{ehPerfilP4 ? 'Confirmar HT devolvido pelo SVDD' : 'Confirmar HT enviado ao Cofre do SVDD'}</span>
+              <span>
+                {ehPerfilP4
+                  ? 'Confirmar HT devolvido pelo SVDD'
+                  : 'Confirmar HT enviado ao Cofre do SVDD'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                abrirResumoModal(
+                  'MANUTENCAO',
+                  'HTs em manutenção',
+                  'Equipamentos em reparo e disponíveis para acompanhamento do retorno.'
+                )
+              }
+            >
+              <strong>Receber manutenção</strong>
+              <span>Visualizar equipamentos em reparo e acompanhar o retorno</span>
             </button>
           </GrupoOperacao>
 
-          <GrupoOperacao icone="⚙️" titulo="Gestão patrimonial" descricao="Manutenção, regularização e baixa.">
+          <GrupoOperacao
+            icone="⚙️"
+            titulo="Gestão patrimonial"
+            descricao="Manutenção, regularização e baixa patrimonial."
+          >
             <button type="button" onClick={abrirSeletorManutencao}>
               <strong>Enviar manutenção</strong>
               <span>Selecionar um HT e registrar a saída para reparo</span>
             </button>
+
+            {ehPerfilP4 && (
+              <button
+                type="button"
+                onClick={() => setManutencaoExternaModalAberta(true)}
+              >
+                <strong>Enviar manutenção externa</strong>
+                <span>Selecionar HTs já em manutenção no P4 e solicitar saída da Cia</span>
+              </button>
+            )}
+
             <button type="button" disabled={!podeMovimentarHT} onClick={() => abrirOperacao('REGULARIZAR')}>
               <strong>Regularizar</strong>
-              <span>Prorrogar cautela vencida ou solicitar providência</span>
+              <span>Registrar providência para situação patrimonial pendente</span>
             </button>
+
             <button
               type="button"
               disabled={!ehPerfilP4 || htsElegiveisBaixa.length === 0}
@@ -1352,7 +1728,32 @@ export default function HT({ user }) {
               onClick={() => setBaixaModalAberta(true)}
             >
               <strong>Baixar patrimônio</strong>
-              <span>{ehPerfilP4 ? 'Solicitar baixa com observações e fotos para aprovação do Comandante' : 'Operação exclusiva do P4'}</span>
+              <span>
+                {ehPerfilP4
+                  ? 'Solicitar baixa patrimonial definitiva'
+                  : 'Operação exclusiva do P4'}
+              </span>
+            </button>
+          </GrupoOperacao>
+
+          <GrupoOperacao
+            icone="🗂️"
+            titulo="Cadastro patrimonial"
+            descricao="Ferramentas administrativas de entrada e histórico patrimonial."
+          >
+            <button type="button" onClick={abrirNovoCadastro}>
+              <strong>Novo HT</strong>
+              <span>Abrir o cadastro patrimonial de um rádio HT</span>
+            </button>
+
+            <button type="button" disabled>
+              <strong>Importar planilha</strong>
+              <span>Importação em lote pelo modelo oficial do SIGMO — próxima etapa</span>
+            </button>
+
+            <button type="button" disabled>
+              <strong>Histórico patrimonial</strong>
+              <span>Entradas, saídas externas e retornos — próxima etapa</span>
             </button>
           </GrupoOperacao>
         </div>
@@ -1455,7 +1856,7 @@ export default function HT({ user }) {
         </div>
 
         <HTTable
-          hts={hts}
+          hts={htsParaTabela}
           loading={loading}
           sortBy={sortBy}
           sortDirection={sortDirection}
@@ -1595,12 +1996,58 @@ export default function HT({ user }) {
                     ))}
                   </select>
                   {destinoTransferenciaSelecionado === 'OUTROS' && (
-                    <input
-                      type="text"
-                      value={destinoTransferenciaOutro}
-                      onChange={(event) => setDestinoTransferenciaOutro(event.target.value)}
-                      placeholder="Informe o destino, órgão ou local"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        value={destinoTransferenciaOutro}
+                        onChange={(event) => setDestinoTransferenciaOutro(event.target.value.toUpperCase())}
+                        placeholder="Informe o destino, órgão ou local"
+                      />
+
+                      <div className="ht-transfer-receiver">
+                      <label htmlFor="ht-re-recebedor-transferencia">RE do recebedor</label>
+                      <div className="ht-transfer-receiver-search">
+                        <input
+                          id="ht-re-recebedor-transferencia"
+                          type="text"
+                          value={reRecebedorTransferencia}
+                          onChange={(event) => {
+                            const novoRE = maskRE(event.target.value)
+
+                            setReRecebedorTransferencia(novoRE)
+                            setRecebedorTransferencia(null)
+                            setErroRecebedorTransferencia('')
+
+                            if (reCompleto(novoRE)) {
+                              setTimeout(() => {
+                                buscarRecebedorExternoTransferencia(novoRE)
+                              }, 0)
+                            }
+                          }}
+                          onBlur={() => {
+                            if (reRecebedorTransferencia) {
+                              buscarRecebedorExternoTransferencia(
+                                reRecebedorTransferencia
+                              )
+                            }
+                          }}
+                          maxLength={8}
+                          inputMode="text"
+                          placeholder="Ex: 123456-A"
+                        />
+                        <button type="button" className="ht-btn-secondary" onClick={buscarRecebedorExternoTransferencia} disabled={buscandoRecebedorTransferencia}>
+                          {buscandoRecebedorTransferencia ? 'Buscando...' : 'Localizar RE'}
+                        </button>
+                      </div>
+                      {recebedorTransferencia && (
+                        <div className="ht-transfer-receiver-found">
+                          <strong>{recebedorTransferencia.nome_guerra || recebedorTransferencia.nome || 'USUÁRIO EXTERNO'}</strong>
+                          <span>{recebedorTransferencia.re || reRecebedorTransferencia} · {recebedorTransferencia.perfil || 'USUARIO EXTERNO'}</span>
+                        </div>
+                      )}
+                      {erroRecebedorTransferencia && <small className="ht-transfer-receiver-error">{erroRecebedorTransferencia}</small>}
+                      </div>
+                    </>
                   )}
                 </div>
               )}
@@ -1635,7 +2082,7 @@ export default function HT({ user }) {
                 disabled={
                   !htsSelecionadosTransferencia.length ||
                   !destinoTransferencia ||
-                  (destinoTransferencia === 'OUTROS' && !destinoTransferenciaOutro.trim()) ||
+                  (destinoTransferencia === 'OUTROS' && (!destinoTransferenciaOutro.trim() || !recebedorTransferencia?.id)) ||
                   Boolean(processandoTransferenciaId)
                 }
               >
@@ -1871,6 +2318,19 @@ export default function HT({ user }) {
         onClose={() => { if (!salvandoRetorno) setRetornoManutencao(null) }}
         onConfirm={confirmarRetornoManutencao}
       />
+
+      {manutencaoExternaModalAberta && (
+        <HTManutencaoExternaModal
+          user={user}
+          onClose={() => setManutencaoExternaModalAberta(false)}
+          onCreated={async (solicitacao) => {
+            setMensagemSucesso(
+              `Solicitação ${solicitacao?.protocolo || ''} enviada para aprovação do Cmt de Cia.`
+            )
+            await Promise.all([carregarHTs(), carregarResumo()])
+          }}
+        />
+      )}
 
       {htVisualizando && (
         <HTDetalhesModal

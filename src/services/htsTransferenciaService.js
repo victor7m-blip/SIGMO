@@ -49,7 +49,7 @@ async function sincronizarHT(ht, user) {
     referencia_id: ht.id,
     dados: ht,
     user,
-    local_atual: ht.local_atual || 'GUARDA DO P4',
+    local_atual: ht.local_atual || 'COFRE DO P4',
     companhia_atual: ht.unidade || ''
   })
 }
@@ -58,7 +58,7 @@ function localDoCodigo(codigo, nomePersonalizado = null) {
   const codigoNormalizado = upper(codigo)
   const nome = texto(nomePersonalizado)
   if (codigoNormalizado === 'SVDD') return 'COFRE DO SVDD'
-  if (codigoNormalizado === 'P4') return 'GUARDA DO P4'
+  if (codigoNormalizado === 'P4') return 'COFRE DO P4'
   if (codigoNormalizado === 'OUTROS') return nome || 'OUTROS'
   return nome || codigoNormalizado
 }
@@ -68,6 +68,7 @@ export async function criarTransferenciaHTPendente({
   origemCodigo,
   destinoCodigo,
   destinoNome = null,
+  recebedor = null,
   user = null
 }) {
   const ht = await buscarHT(htId)
@@ -84,6 +85,9 @@ export async function criarTransferenciaHTPendente({
   if (destino === 'OUTROS' && !texto(destinoNome)) {
     throw new Error('Informe o destino da transferência.')
   }
+  if (destino === 'OUTROS' && !recebedor?.id) {
+    throw new Error('Informe o usuário externo que receberá o material.')
+  }
 
   if (origem === destino) {
     throw new Error('A origem e o destino não podem ser iguais.')
@@ -98,8 +102,43 @@ export async function criarTransferenciaHTPendente({
     throw new Error(`Este HT não está atualmente no ${origem}.`)
   }
 
-  if (['MANUTENCAO', 'BAIXADO', 'CAUTELADO', 'CARGA'].includes(upper(ht.status_operacional))) {
+  const statusAtual = upper(ht.status_operacional)
+  const transferenciaManutencaoSVDDP4 =
+    origem === 'SVDD' &&
+    destino === 'P4' &&
+    statusAtual === 'MANUTENCAO'
+
+  if (['BAIXADO', 'CAUTELADO', 'CARGA'].includes(statusAtual)) {
     throw new Error('Este HT não está disponível para transferência.')
+  }
+
+  if (statusAtual === 'MANUTENCAO' && !transferenciaManutencaoSVDDP4) {
+    throw new Error('HT em manutenção somente pode ser transferido do SVDD para o P4.')
+  }
+
+  const pendentesExistentes = await listarMovimentacoesPendentes({
+    limite: 500
+  })
+
+  const jaPossuiTransferenciaPendente = (pendentesExistentes || []).some((item) => {
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    return (
+      upper(dados?.modulo || dados?.categoria) === 'HT' &&
+      String(
+        dados?.ht_id ||
+        dados?.referencia_id ||
+        item?.metadata?.patrimonio?.referencia_id ||
+        ''
+      ) === String(ht.id)
+    )
+  })
+
+  if (jaPossuiTransferenciaPendente) {
+    throw new Error('Este HT já possui uma transferência pendente.')
   }
 
   const localDestino = localDoCodigo(destino, destinoNome)
@@ -124,6 +163,9 @@ export async function criarTransferenciaHTPendente({
       referencia_id: ht.id,
       quantidade: 1,
       status_movimentacao: STATUS_MOVIMENTACAO.PENDENTE,
+      preservar_status_operacional: transferenciaManutencaoSVDDP4,
+      status_operacional_origem: statusAtual,
+      manutencao_em_transferencia: transferenciaManutencaoSVDDP4,
       guardiao_origem: {
         tipo: 'SETOR',
         codigo: origem,
@@ -140,7 +182,12 @@ export async function criarTransferenciaHTPendente({
       numero_serie: ht.numero_serie || null,
       marca: ht.marca || null,
       modelo: ht.modelo || null,
-      destino_nome: localDestino
+      destino_nome: localDestino,
+      recebedor_id: recebedor?.id || null,
+      recebedor_re: upper(recebedor?.re) || null,
+      recebedor_nome: upper(recebedor?.nome_guerra || recebedor?.nome || recebedor?.nome_completo) || null,
+      recebedor_perfil: upper(recebedor?.perfil) || null,
+      recebedor_tipo: recebedor?.id ? 'USUARIO_EXTERNO' : null
     },
     user
   })
@@ -189,10 +236,18 @@ export async function aceitarTransferenciaHT({
       dadosMovimentacao?.destino_nome
   )
 
+  const preservarStatusOperacional =
+    dadosMovimentacao?.preservar_status_operacional === true ||
+    dadosMovimentacao?.manutencao_em_transferencia === true
+
+  const statusDestino = preservarStatusOperacional
+    ? upper(dadosMovimentacao?.status_operacional_origem || ht.status_operacional) || 'MANUTENCAO'
+    : 'RESERVA'
+
   const { data, error } = await supabase
     .from(TABLE)
     .update({
-      status_operacional: 'RESERVA',
+      status_operacional: statusDestino,
       local_atual: localDestino,
       equipe_vinculada: null,
       viatura_vinculada: null

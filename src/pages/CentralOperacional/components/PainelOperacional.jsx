@@ -9,6 +9,15 @@ import {
   finalizarDevolucaoCargaP4
 } from '../../../services/armasService'
 
+import {
+  decidirManutencaoExterna
+} from '../../../services/centralOperacionalService'
+
+import {
+  aceitarTransferenciaHT,
+  recusarTransferenciaHT
+} from '../../../services/htsTransferenciaService'
+
 function texto(valor) {
   return String(valor ?? '').trim()
 }
@@ -131,8 +140,59 @@ function ehTransferencia(secao) {
   return secao?.key === 'transferencias'
 }
 
+function ehTransferenciaHTEngine(item, secao) {
+  if (!ehTransferencia(secao)) return false
+
+  const dados =
+    item?.dados ||
+    item?.metadata?.dados_engine ||
+    {}
+
+  const modulo = normalizarOperacional(
+    item?.modulo ||
+    item?.categoria ||
+    dados?.modulo ||
+    dados?.categoria
+  )
+
+  const origemTransferencia = normalizarOperacional(
+    item?.origem_transferencia
+  )
+
+  const destino = normalizarOperacional(
+    item?.destino_codigo ||
+    item?.destino_guardiao_codigo ||
+    item?.destino_local ||
+    item?.destino_nome ||
+    dados?.guardiao_destino?.codigo ||
+    dados?.guardiao_destino?.nome
+  )
+
+  return (
+    modulo === 'HT' &&
+    origemTransferencia === 'ENGINE_PATRIMONIAL' &&
+    (
+      destino === 'P4' ||
+      destino.includes('COFRE DO P4') ||
+      destino.includes('GUARDA DO P4')
+    )
+  )
+}
+
 function ehAprovacao(secao) {
-  return secao?.key === 'aprovacoes'
+  return ['aprovacoes', 'aprovacoes-comandante'].includes(secao?.key)
+}
+
+function ehAprovacaoComandante(secao) {
+  return secao?.key === 'aprovacoes-comandante'
+}
+
+function itemEhManutencaoExterna(item) {
+  return normalizarOperacional(item?.origem_aprovacao) === 'MANUTENCAO_EXTERNA'
+}
+
+function ehManutencaoExterna(secao) {
+  return ['manutencao-externa-acompanhamento', 'manutencao-externa-aprovacoes'].includes(secao?.key)
 }
 
 function ehNovidade(secao) {
@@ -158,6 +218,10 @@ function tituloItem(item, secao) {
 
   if (ehAprovacao(secao) && item?.origem_aprovacao === 'BAIXA_PATRIMONIAL') {
     return `Baixa de ${item?.modulo || 'patrimônio'} — ${item?.patrimonio || item?.numero_serie || 'item'}`
+  }
+
+  if (ehManutencaoExterna(secao) || itemEhManutencaoExterna(item)) {
+    return item?.protocolo || `Manutenção externa — ${item?.destino_nome || 'destino não informado'}`
   }
 
   if (ehNovidade(secao)) {
@@ -289,6 +353,15 @@ function detalheItem(item, secao) {
     ].map(texto).filter(Boolean).join(' • ')
   }
 
+  if (ehManutencaoExterna(secao)) {
+    return [
+      item?.destino_nome ? `DESTINO: ${item.destino_nome}` : '',
+      item?.servico_solicitado || item?.motivo,
+      item?.solicitada_por_nome ? `SOLICITADA POR: ${item.solicitada_por_nome}` : '',
+      item?.status
+    ].map(texto).filter(Boolean).join(' • ')
+  }
+
   if (ehTransferencia(secao)) {
     const metadata = item?.metadata && typeof item.metadata === 'object' ? item.metadata : {}
     const material =
@@ -331,9 +404,54 @@ function detalheItem(item, secao) {
 }
 
 export default function PainelOperacional({ dados, carregando, user, onAtualizar }) {
+  const [decidindoManutencaoExternaId, setDecidindoManutencaoExternaId] = useState(null)
+
+  async function decidirExterna(item, decisao) {
+    if (!item?.id || decidindoManutencaoExternaId) return
+
+    const aprovando = decisao === 'APROVAR'
+    const mensagem = aprovando
+      ? 'Aprovar o envio deste material para manutenção externa?'
+      : 'Reprovar esta solicitação de manutenção externa?'
+
+    if (!window.confirm(mensagem)) return
+
+    let observacoes = null
+
+    if (!aprovando) {
+      observacoes = window.prompt('Informe o motivo da reprovação:') || ''
+      if (!observacoes.trim()) return
+    }
+
+    try {
+      setDecidindoManutencaoExternaId(item.id)
+
+      await decidirManutencaoExterna({
+        manutencaoExternaId: item.id,
+        decisao,
+        observacoes
+      })
+
+      setSelecionado(null)
+      setRegistroAberto(null)
+
+      if (typeof onAtualizar === 'function') {
+        await onAtualizar()
+      }
+    } catch (error) {
+      window.alert(
+        error?.message ||
+        'Não foi possível registrar a decisão da manutenção externa.'
+      )
+    } finally {
+      setDecidindoManutencaoExternaId(null)
+    }
+  }
+
   const [selecionado, setSelecionado] = useState(null)
   const [registroAberto, setRegistroAberto] = useState(null)
   const [recebendoId, setRecebendoId] = useState(null)
+  const [recusandoId, setRecusandoId] = useState(null)
   const [cancelandoId, setCancelandoId] = useState(null)
   const [fotoAmpliada, setFotoAmpliada] = useState(null)
   const secoes = useMemo(
@@ -439,6 +557,93 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
       )
     } finally {
       setCancelandoId(null)
+    }
+  }
+
+  async function receberTransferenciaHTNoP4(item) {
+    if (!item?.id || recebendoId || recusandoId) return
+
+    const confirmou = window.confirm(
+      'Confirmar o recebimento deste HT no P4?'
+    )
+
+    if (!confirmou) return
+
+    try {
+      setRecebendoId(item.id)
+
+      await aceitarTransferenciaHT({
+        movimentacaoId: item.id,
+        user
+      })
+
+      setSelecionado(null)
+      setRegistroAberto(null)
+
+      if (typeof onAtualizar === 'function') {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao receber transferência de HT no P4:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível receber a transferência do HT no P4.'
+      )
+    } finally {
+      setRecebendoId(null)
+    }
+  }
+
+  async function recusarTransferenciaHTNoP4(item) {
+    if (!item?.id || recebendoId || recusandoId) return
+
+    const motivo = window.prompt(
+      'Informe o motivo da recusa da transferência:'
+    )
+
+    if (motivo === null) return
+    if (!motivo.trim()) {
+      window.alert('Informe o motivo da recusa.')
+      return
+    }
+
+    const confirmou = window.confirm(
+      'Confirmar a recusa desta transferência de HT? O material permanecerá sob responsabilidade do SVDD.'
+    )
+
+    if (!confirmou) return
+
+    try {
+      setRecusandoId(item.id)
+
+      await recusarTransferenciaHT({
+        movimentacaoId: item.id,
+        motivo: motivo.trim().toUpperCase(),
+        user
+      })
+
+      setSelecionado(null)
+      setRegistroAberto(null)
+
+      if (typeof onAtualizar === 'function') {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao recusar transferência de HT no P4:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível recusar a transferência do HT.'
+      )
+    } finally {
+      setRecusandoId(null)
     }
   }
 
@@ -692,6 +897,20 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                                 </div>
                               )}
                             </>
+                          ) : itemEhManutencaoExterna(item) ? (
+                            <>
+                              <div><span>Status</span><strong>{item?.status || 'Não informado'}</strong></div>
+                              <div><span>Solicitado por</span><strong>{item?.solicitada_por_nome || 'Não informado'}</strong></div>
+                              <div><span>Assistência / destino</span><strong>{item?.destino_nome || 'Não informado'}</strong></div>
+                              <div><span>Tipo de destino</span><strong>{item?.destino_tipo || 'Não informado'}</strong></div>
+                              <div><span>Contato</span><strong>{item?.destino_contato || 'Não informado'}</strong></div>
+                              <div><span>Previsão de retorno</span><strong>{formatarData(item?.previsao_retorno) || 'Não informada'}</strong></div>
+                              <div className="central-registro-itens"><span>Motivo</span><strong>{item?.motivo || 'Não informado'}</strong></div>
+                              <div className="central-registro-itens"><span>Serviço solicitado</span><strong>{item?.servico_solicitado || 'Não informado'}</strong></div>
+                              {item?.observacoes_saida && (
+                                <div className="central-registro-itens"><span>Observações</span><strong>{item.observacoes_saida}</strong></div>
+                              )}
+                            </>
                           ) : (
                             <>
                               <div><span>Status</span><strong>{item?.status || 'Não informado'}</strong></div>
@@ -756,6 +975,82 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                             ? 'Recebendo...'
                             : 'Receber'}
                         </button>
+                      )}
+
+                      {ehTransferenciaHTEngine(item, selecionado) &&
+                        normalizarOperacional(
+                          user?.perfil_efetivo ||
+                          user?.perfil ||
+                          user?.role ||
+                          user?.tipo_perfil
+                        ) === 'P4' && (
+                        <>
+                          <button
+                            type="button"
+                            className="central-detalhe-button"
+                            disabled={
+                              Boolean(recebendoId) ||
+                              Boolean(recusandoId) ||
+                              Boolean(cancelandoId)
+                            }
+                            onClick={() => recusarTransferenciaHTNoP4(item)}
+                            style={{
+                              borderColor: '#dc2626',
+                              color: '#dc2626',
+                              fontWeight: 800
+                            }}
+                          >
+                            {recusandoId === item.id
+                              ? 'Recusando...'
+                              : 'Recusar'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="central-button central-button-primary"
+                            disabled={
+                              Boolean(recebendoId) ||
+                              Boolean(recusandoId) ||
+                              Boolean(cancelandoId)
+                            }
+                            onClick={() => receberTransferenciaHTNoP4(item)}
+                          >
+                            {recebendoId === item.id
+                              ? 'Recebendo...'
+                              : 'Receber'}
+                          </button>
+                        </>
+                      )}
+
+                      {ehAprovacaoComandante(selecionado) && itemEhManutencaoExterna(item) && (
+                        <>
+                          <button
+                            type="button"
+                            className="central-detalhe-button"
+                            disabled={Boolean(decidindoManutencaoExternaId)}
+                            onClick={() => decidirExterna(item, 'REPROVAR')}
+                            style={{
+                              borderColor: '#dc2626',
+                              color: '#dc2626',
+                              fontWeight: 800
+                            }}
+                          >
+                            {decidindoManutencaoExternaId === item.id
+                              ? 'Processando...'
+                              : 'Reprovar'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="central-button central-button-primary"
+                            disabled={Boolean(decidindoManutencaoExternaId)}
+                            onClick={() => decidirExterna(item, 'APROVAR')}
+                          >
+                            {decidindoManutencaoExternaId === item.id
+                              ? 'Processando...'
+                              : 'Aprovar'}
+                          </button>
+                        </>
                       )}
                     </div>
                   </article>

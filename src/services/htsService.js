@@ -869,7 +869,7 @@ export async function enviarHTParaManutencao({
   const ht = await buscarHTPorId(htId)
 
   if (ht.ativo === false || ht.status_operacional === 'BAIXADO') {
-    throw new Error('Um HT baixado ou inativo não pode ser enviado para manutenção.')
+    throw new Error('Um HT baixado ou inativo não pode ser colocado em manutenção.')
   }
 
   if (ht.status_operacional === 'MANUTENCAO') {
@@ -881,99 +881,37 @@ export async function enviarHTParaManutencao({
   }
 
   const patrimonio = await buscarPatrimonioCentralHT(ht.id)
-  const estadoAnterior = {
-    status_operacional: ht.status_operacional,
-    local_atual: ht.local_atual,
-    equipe_vinculada: ht.equipe_vinculada,
-    viatura_vinculada: ht.viatura_vinculada
-  }
 
-  let htAtualizado = null
+  const manutencao = await registrarManutencao({
+    modulo: MODULOS_MANUTENCAO.HT,
+    tipoMaterial: 'HT',
+    referenciaId: ht.id,
+    patrimonioId: patrimonio?.id || null,
+    quantidade: 1,
+    tipoNovidade,
+    descricao,
+    observacoes: [
+      normalizarTexto(observacoes),
+      `STATUS ANTERIOR: ${ht.status_operacional || 'NÃO INFORMADO'}`,
+      `LOCAL ANTERIOR: ${ht.local_atual || 'NÃO INFORMADO'}`
+    ].filter(Boolean).join(' | '),
+    origem: ht.local_atual || 'P4',
+    destino: 'MANUTENCAO',
+    foto,
+    fotos,
+    user
+  })
 
-  try {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .update({
-        status_operacional: 'MANUTENCAO',
-        local_atual: 'MANUTENÇÃO',
-        equipe_vinculada: null,
-        viatura_vinculada: null
-      })
-      .eq('id', ht.id)
-      .select()
-      .single()
+  const htAtualizado = await buscarHTPorId(ht.id)
 
-    if (error) throw error
+  await notificarP4EntradaManutencao({
+    ht: htAtualizado,
+    manutencao,
+    user
+  })
 
-    htAtualizado = normalizarHT(data)
-
-    await criarOuAtualizarPatrimonio({
-      tipo: 'ht',
-      referencia_id: htAtualizado.id,
-      dados: htAtualizado,
-      user,
-      local_atual: 'MANUTENÇÃO',
-      companhia_atual: htAtualizado.unidade || ''
-    })
-
-    const manutencao = await registrarManutencao({
-      modulo: MODULOS_MANUTENCAO.HT,
-      tipoMaterial: 'HT',
-      referenciaId: htAtualizado.id,
-      patrimonioId: patrimonio?.id || null,
-      quantidade: 1,
-      tipoNovidade,
-      descricao,
-      observacoes: [
-        normalizarTexto(observacoes),
-        `STATUS ANTERIOR: ${estadoAnterior.status_operacional || 'NÃO INFORMADO'}`,
-        `LOCAL ANTERIOR: ${estadoAnterior.local_atual || 'NÃO INFORMADO'}`
-      ].filter(Boolean).join(' | '),
-      origem: estadoAnterior.local_atual || 'P4',
-      destino: 'MANUTENCAO',
-      foto,
-      fotos,
-      user
-    })
-
-    await notificarP4EntradaManutencao({
-      ht: htAtualizado,
-      manutencao,
-      user
-    })
-
-    return {
-      ht: htAtualizado,
-      manutencao
-    }
-  } catch (error) {
-    if (htAtualizado) {
-      try {
-        const { data: restaurado, error: rollbackError } = await supabase
-          .from(TABLE)
-          .update(estadoAnterior)
-          .eq('id', ht.id)
-          .select()
-          .single()
-
-        if (rollbackError) throw rollbackError
-
-        const htRestaurado = normalizarHT(restaurado)
-
-        await criarOuAtualizarPatrimonio({
-          tipo: 'ht',
-          referencia_id: htRestaurado.id,
-          dados: htRestaurado,
-          user,
-          local_atual: definirLocalPatrimonial(htRestaurado),
-          companhia_atual: htRestaurado.unidade || ''
-        })
-      } catch (rollbackError) {
-        console.error('Erro ao desfazer envio do HT para manutenção:', rollbackError)
-      }
-    }
-
-    throw error
+  return {
+    ht: htAtualizado,
+    manutencao
   }
 }
-

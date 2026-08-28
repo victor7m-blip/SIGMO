@@ -27,6 +27,14 @@ function localEhValido(local) {
 }
 
 function obterStatusOperacional(item) {
+  if (item.manutencao_externa) {
+    return 'MANUTENÇÃO EXTERNA'
+  }
+
+  if (item.manutencao_interna) {
+    return 'MANUTENÇÃO INTERNA'
+  }
+
   if (item.com_policial) {
     return 'COM POLICIAL'
   }
@@ -100,43 +108,22 @@ export default function CategoriaDetalhes({
 
         <div>
           <span>Com policial</span>
-          <strong>
-            {categoria.com_policial ??
-              categoria.comPolicial ??
-              0}
-          </strong>
+          <strong>{categoria.com_policial ?? categoria.comPolicial ?? 0}</strong>
         </div>
 
         <div>
           <span>No cofre</span>
-          <strong>
-            {categoria.no_cofre ??
-              categoria.noCofre ??
-              0}
-          </strong>
+          <strong>{categoria.no_cofre ?? categoria.noCofre ?? 0}</strong>
         </div>
 
         <div>
-          <span>Localizados</span>
-          <strong>
-            {categoria.localizados ??
-              categoria.localizado ??
-              0}
-          </strong>
+          <span>Manutenção interna</span>
+          <strong>{categoria.manutencao_interna ?? 0}</strong>
         </div>
 
         <div>
-          <span>Sem localização</span>
-          <strong>
-            {categoria.sem_localizacao ??
-              categoria.semLocalizacao ??
-              0}
-          </strong>
-        </div>
-
-        <div>
-          <span>Divergências</span>
-          <strong>{categoria.divergencias ?? 0}</strong>
+          <span>Manutenção externa</span>
+          <strong>{categoria.manutencao_externa ?? 0}</strong>
         </div>
       </div>
 

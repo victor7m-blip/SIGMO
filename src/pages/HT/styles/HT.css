@@ -1091,9 +1091,13 @@ button.ht-summary-card:hover { transform: translateY(-2px); border-color: #9fb3c
 
 .ht-charts-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns: 1fr;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.ht-chart-bars-card {
+  width: 100%;
 }
 
 .ht-chart-card {
@@ -1219,7 +1223,7 @@ button.ht-summary-card:hover { transform: translateY(-2px); border-color: #9fb3c
 
 .ht-chart-bars {
   display: grid;
-  grid-template-columns: repeat(6, minmax(56px, 1fr));
+  grid-template-columns: repeat(8, minmax(72px, 1fr));
   align-items: end;
   gap: 12px;
   min-height: 300px;
@@ -1325,7 +1329,7 @@ button.ht-summary-card:hover { transform: translateY(-2px); border-color: #9fb3c
   }
 
   .ht-chart-bars {
-    grid-template-columns: repeat(3, minmax(64px, 1fr));
+    grid-template-columns: repeat(8, minmax(76px, 1fr));
     min-height: auto;
     overflow-x: auto;
   }
@@ -1715,4 +1719,113 @@ button.ht-summary-card:hover { transform: translateY(-2px); border-color: #9fb3c
   .ht-operation-group-distribute .ht-operation-actions { grid-template-columns: 1fr; }
   .ht-cancel-transfer-item { align-items: stretch; flex-direction: column; }
   .ht-cancel-transfer-item > button { width: 100%; }
+}
+
+
+/* =====================================================
+   AJUSTE — modal de transferência com lista rolável
+   Mantém destino/RE/busca e rodapé visíveis.
+   ===================================================== */
+.ht-transfer-modal {
+  height: min(760px, calc(100vh - 44px));
+}
+
+.ht-transfer-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px 22px 0;
+}
+
+/* Campos de destino/RE não devem encolher quando a lista cresce */
+.ht-transfer-body > .ht-transfer-destination,
+.ht-transfer-body > .ht-transfer-receiver,
+.ht-transfer-body > .ht-transfer-receiver-search,
+.ht-transfer-body > input {
+  flex: 0 0 auto;
+}
+
+/* Quando a lista está dentro do body, ela ocupa somente o espaço restante */
+.ht-transfer-body > .ht-transfer-list {
+  min-height: 120px;
+  max-height: none;
+  flex: 1 1 auto;
+  margin-top: 14px;
+  padding: 0 4px 18px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Compatibilidade com o nome usado no campo de recebedor */
+.ht-transfer-receiver {
+  flex: 0 0 auto;
+}
+
+.ht-transfer-receiver-search {
+  flex: 0 0 auto;
+}
+
+/* Rodapé nunca é comprimido */
+.ht-transfer-modal > header,
+.ht-transfer-modal > footer {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 560px) {
+  .ht-transfer-modal {
+    height: 92vh;
+  }
+
+  .ht-transfer-body > .ht-transfer-list {
+    min-height: 100px;
+  }
+}
+
+
+/* =====================================================
+   AJUSTE FINAL — transferência HT
+   Remove a rolagem interna da lista de HTs.
+   O conteúdo central do modal rola como um todo e o rodapé permanece visível.
+   ===================================================== */
+.ht-transfer-modal {
+  height: auto;
+  max-height: calc(100vh - 24px);
+}
+
+.ht-transfer-body {
+  display: block;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 18px 22px 0;
+  scrollbar-gutter: stable;
+}
+
+.ht-transfer-body > .ht-transfer-list {
+  display: grid;
+  min-height: 0;
+  max-height: none;
+  margin-top: 14px;
+  padding: 0 0 18px;
+  overflow: visible;
+}
+
+.ht-transfer-modal > header,
+.ht-transfer-modal > footer {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 560px) {
+  .ht-transfer-modal {
+    height: auto;
+    max-height: 96vh;
+  }
+
+  .ht-transfer-body {
+    overflow-y: auto;
+  }
 }
