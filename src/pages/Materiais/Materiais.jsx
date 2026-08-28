@@ -93,6 +93,17 @@ const categorias = [
 },
 
   {
+    id: 'viaturas',
+    rota: 'viaturas',
+    icone: '🚓',
+    titulo: 'Viaturas',
+    descricao:
+      'Cadastre e consulte viaturas da unidade, prefixos, placas, modelos, anos e situações.',
+    status: 'disponivel',
+    destaque: 'azul'
+  },
+
+  {
     id: 'outros',
     icone: '📦',
     titulo: 'Outros Materiais',

@@ -53,6 +53,7 @@ import BaixarMaterial from './BaixarMaterial/BaixarMaterial'
 import CentralOperacional from './CentralOperacional'
 import Manutencoes from './Manutencoes/Manutencoes'
 import HT from './HT/HT'
+import Viaturas from './Viaturas/Viaturas'
 import './DashboardV2.css'
 
 const ROUTE_STORAGE_KEY =
@@ -4268,6 +4269,9 @@ if (route === 'ht') {
   return <HT user={user} />
 }
 
+if (route === 'viaturas') {
+  return <Viaturas user={user} />
+}
 
 if (route === 'tasers') {
   return <Taser user={user} />

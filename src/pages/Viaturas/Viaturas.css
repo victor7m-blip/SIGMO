@@ -1,0 +1,1095 @@
+.viaturas-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  color: #eaf4ff;
+}
+
+.viaturas-hero,
+.viaturas-painel,
+.viaturas-resumo button {
+  border: 1px solid rgba(102, 162, 218, 0.28);
+  background: linear-gradient(145deg, rgba(4, 25, 48, 0.98), rgba(2, 17, 34, 0.98));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+}
+
+.viaturas-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 26px;
+  border-radius: 12px;
+}
+
+.viaturas-kicker {
+  color: #73b9ff;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.viaturas-hero h1 {
+  margin: 4px 0 0;
+  color: #4ca7ff;
+  font-size: clamp(1.7rem, 3vw, 2.35rem);
+  text-transform: uppercase;
+}
+
+.viaturas-hero p {
+  margin: 7px 0 0;
+  color: #d7e4f1;
+}
+
+.viaturas-hero button,
+.viatura-card__editar,
+.viatura-card__ficha,
+.viaturas-modal__acoes button,
+.viatura-ficha button,
+.viatura-ficha__upload {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid rgba(83, 173, 255, .5);
+  border-radius: 7px;
+  background: rgba(8, 48, 84, .92);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.viaturas-resumo {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.viaturas-resumo button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 88px;
+  padding: 14px 16px;
+  border-radius: 9px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.viaturas-resumo small {
+  color: #72bfff;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.viaturas-resumo strong {
+  margin-top: 8px;
+  font-size: 1.55rem;
+}
+
+.viaturas-painel {
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.viaturas-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.viaturas-toolbar--3 {
+  grid-template-columns: minmax(0, 1fr) 210px 260px;
+}
+
+.viaturas-toolbar input,
+.viaturas-toolbar select,
+.viaturas-modal input,
+.viaturas-modal select,
+.viatura-card select {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(102, 162, 218, .35);
+  border-radius: 7px;
+  outline: none;
+  background: #071d35;
+  color: #fff;
+  font: inherit;
+}
+
+.viaturas-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.viatura-card {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(102, 162, 218, .28);
+  border-radius: 10px;
+  background: linear-gradient(165deg, rgba(8, 33, 59, .82), rgba(2, 17, 32, .95));
+}
+
+.viatura-card--clicavel {
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease;
+}
+
+.viatura-card--clicavel:hover {
+  transform: translateY(-2px);
+  border-color: rgba(76, 167, 255, .62);
+}
+
+.viatura-card__foto {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 13px;
+  overflow: hidden;
+  border: 1px solid rgba(76, 167, 255, .3);
+  border-radius: 9px;
+  background: rgba(1, 15, 30, .62);
+}
+
+.viatura-card__foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.viatura-card__foto span {
+  font-size: 3.4rem;
+}
+
+.viatura-card__topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.viatura-card__topo small {
+  color: #72bfff;
+  font-size: .65rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.viatura-card h2 {
+  margin: 3px 0 0;
+  color: #fff;
+  font-size: 1.35rem;
+}
+
+.viatura-card dl {
+  margin: 15px 0;
+}
+
+.viatura-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(102, 162, 218, .13);
+}
+
+.viatura-card dt {
+  color: #9fb1c4;
+}
+
+.viatura-card dd {
+  margin: 0;
+  color: #fff;
+  font-weight: 800;
+  text-align: right;
+}
+
+.viatura-card__situacao {
+  display: grid;
+  gap: 6px;
+}
+
+.viatura-card__situacao span {
+  color: #72bfff;
+  font-size: .72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.viatura-status {
+  margin: 10px 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(102, 162, 218, .25);
+  border-radius: 6px;
+  color: #dcecff;
+  background: rgba(2, 17, 34, .75);
+  font-size: .74rem;
+  font-weight: 850;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.viatura-status--disponivel {
+  border-color: rgba(89, 190, 120, .5);
+  color: #8ee6aa;
+}
+
+.viatura-status--manutencao_interna,
+.viatura-status--manutencao_externa {
+  border-color: rgba(255, 193, 23, .5);
+  color: #ffd86a;
+}
+
+.viatura-status--processo_descarga {
+  border-color: rgba(255, 92, 92, .5);
+  color: #ff9b9b;
+}
+
+.viatura-card__acoes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.viatura-card__editar,
+.viatura-card__ficha {
+  width: 100%;
+}
+
+.viatura-card__ficha {
+  background: rgba(16, 72, 111, .9);
+}
+
+.viaturas-vazio,
+.viaturas-erro {
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.viaturas-vazio {
+  color: #aebed0;
+}
+
+.viaturas-erro {
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 92, 92, .5);
+  background: rgba(100, 20, 20, .25);
+  color: #ffb1b1;
+}
+
+.viaturas-modal-backdrop,
+.viatura-ficha-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 8, 18, .78);
+}
+
+.viaturas-modal {
+  width: min(680px, 100%);
+  padding: 20px;
+  border: 1px solid rgba(102, 162, 218, .4);
+  border-radius: 12px;
+  background: #061b31;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .45);
+}
+
+.viaturas-modal__header,
+.viatura-ficha__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.viaturas-modal__header small,
+.viatura-ficha__header small,
+.viatura-ficha__secao small,
+.viatura-ficha__riv small {
+  color: #72bfff;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+
+.viaturas-modal__header h2,
+.viatura-ficha__header h2 {
+  margin: 4px 0 0;
+  color: #fff;
+}
+
+.viaturas-modal__header > button,
+.viatura-ficha__header > button {
+  border: 0;
+  background: transparent;
+  color: #b9c9d9;
+  font-size: 1.8rem;
+  cursor: pointer;
+}
+
+.viaturas-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.viaturas-form-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.viaturas-form-grid label span {
+  color: #9fcfff;
+  font-size: .75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.viaturas-form-grid__full {
+  grid-column: 1 / -1;
+}
+
+.viaturas-modal__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Ficha individual */
+.viatura-ficha {
+  width: min(1120px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid rgba(102, 162, 218, .4);
+  border-radius: 13px;
+  background: #061b31;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .48);
+}
+
+.viatura-ficha__header p {
+  margin: 5px 0 0;
+  color: #aebed0;
+}
+
+.viatura-ficha__dados {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.viatura-ficha__dados > div {
+  display: grid;
+  gap: 4px;
+  padding: 13px;
+  border: 1px solid rgba(102, 162, 218, .23);
+  border-radius: 8px;
+  background: rgba(3, 20, 38, .78);
+}
+
+.viatura-ficha__dados small {
+  color: #72bfff;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.viatura-ficha__secao,
+.viatura-ficha__riv {
+  padding: 16px;
+  border: 1px solid rgba(102, 162, 218, .24);
+  border-radius: 10px;
+  background: rgba(2, 17, 34, .68);
+}
+
+.viatura-ficha__titulo,
+.viatura-ficha__riv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.viatura-ficha__titulo h3,
+.viatura-ficha__riv h3 {
+  margin: 4px 0;
+}
+
+.viatura-ficha__titulo p,
+.viatura-ficha__riv p {
+  margin: 0;
+  color: #aebed0;
+}
+
+.viatura-ficha__upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.viatura-ficha__upload input {
+  display: none;
+}
+
+.viatura-ficha__contador {
+  margin: 14px 0 10px;
+  color: #8fb9de;
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.viatura-ficha__galeria {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.viatura-ficha__foto {
+  overflow: hidden;
+  border: 1px solid rgba(102, 162, 218, .26);
+  border-radius: 9px;
+  background: rgba(2, 17, 34, .9);
+}
+
+.viatura-ficha__foto.is-principal {
+  border-color: rgba(76, 167, 255, .9);
+  box-shadow: 0 0 0 1px rgba(76, 167, 255, .22);
+}
+
+.viatura-ficha__foto img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.viatura-ficha__foto-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+}
+
+.viatura-ficha__foto-info span {
+  color: #8ed0ff;
+  font-size: .7rem;
+  font-weight: 900;
+}
+
+.viatura-ficha__foto-info small {
+  color: #8da3b9;
+  font-weight: 600;
+}
+
+.viatura-ficha__foto-acoes {
+  display: flex;
+  gap: 7px;
+  padding: 0 10px 10px;
+}
+
+.viatura-ficha__foto-acoes button {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: .76rem;
+}
+
+.viatura-ficha__sem-fotos {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  border: 1px dashed rgba(102, 162, 218, .28);
+  border-radius: 9px;
+  color: #8fa4b8;
+}
+
+.viatura-ficha__riv {
+  margin-top: 14px;
+}
+
+.viatura-ficha__riv button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+@media (max-width: 1200px) {
+  .viaturas-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .viaturas-resumo {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .viaturas-toolbar--3,
+  .viatura-ficha__dados {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .viatura-ficha__galeria {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .viatura-ficha__titulo,
+  .viatura-ficha__riv {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 780px) {
+  .viaturas-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .viaturas-toolbar,
+  .viaturas-grid,
+  .viaturas-resumo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .viaturas-toolbar,
+  .viaturas-toolbar--3,
+  .viaturas-grid,
+  .viaturas-resumo,
+  .viaturas-form-grid,
+  .viatura-ficha__dados,
+  .viatura-ficha__galeria,
+  .viatura-card__acoes {
+    grid-template-columns: 1fr;
+  }
+
+  .viaturas-form-grid__full {
+    grid-column: auto;
+  }
+}
+
+
+/* =========================================================
+   RIV — Registro Individual de Viatura
+   ========================================================= */
+.viatura-ficha__abas {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 5px;
+  border: 1px solid rgba(102, 162, 218, .24);
+  border-radius: 9px;
+  background: rgba(2, 17, 34, .72);
+}
+
+.viatura-ficha__abas button {
+  flex: 1;
+  min-height: 42px;
+  border-color: transparent;
+  background: transparent;
+  color: #9fb3c7;
+}
+
+.viatura-ficha__abas button.is-ativa {
+  border-color: rgba(76, 167, 255, .5);
+  background: rgba(8, 48, 84, .92);
+  color: #fff;
+}
+
+.riv {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.riv__topo,
+.riv__secao {
+  padding: 16px;
+  border: 1px solid rgba(102, 162, 218, .24);
+  border-radius: 10px;
+  background: rgba(2, 17, 34, .68);
+}
+
+.riv__topo {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.riv__topo > div {
+  display: grid;
+  gap: 4px;
+}
+
+.riv__topo small,
+.riv__secao small,
+.riv__modal small {
+  color: #72bfff;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+
+.riv__topo strong {
+  font-size: 1.75rem;
+  color: #fff;
+}
+
+.riv__km-form {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) 140px;
+  gap: 8px;
+}
+
+.riv input,
+.riv select,
+.riv textarea,
+.riv__modal input,
+.riv__modal textarea {
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid rgba(102, 162, 218, .34);
+  border-radius: 7px;
+  outline: none;
+  background: #071d35;
+  color: #fff;
+  font: inherit;
+}
+
+.riv textarea,
+.riv__modal textarea {
+  padding-top: 9px;
+  resize: vertical;
+}
+
+.riv button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid rgba(83, 173, 255, .48);
+  border-radius: 7px;
+  background: rgba(8, 48, 84, .92);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.riv__secao-titulo {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.riv__secao-titulo h3 {
+  margin: 4px 0 0;
+}
+
+.riv__manut-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.riv__manut-card {
+  padding: 14px;
+  border: 1px solid rgba(102, 162, 218, .24);
+  border-radius: 9px;
+  background: rgba(5, 28, 51, .72);
+}
+
+.riv__manut-card-topo {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.riv__manut-card h4 {
+  margin: 4px 0 0;
+}
+
+.riv__alerta {
+  align-self: flex-start;
+  padding: 6px 8px;
+  border: 1px solid rgba(102, 162, 218, .28);
+  border-radius: 6px;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+.riv__alerta--ok {
+  border-color: rgba(89, 190, 120, .52);
+  color: #8ee6aa;
+}
+
+.riv__alerta--atencao {
+  border-color: rgba(255, 193, 23, .56);
+  color: #ffd86a;
+}
+
+.riv__alerta--vencido {
+  border-color: rgba(255, 92, 92, .6);
+  color: #ff9b9b;
+}
+
+.riv__alerta--sem_registro {
+  color: #9fb1c4;
+}
+
+.riv__manut-card dl {
+  margin: 14px 0;
+}
+
+.riv__manut-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(102, 162, 218, .12);
+}
+
+.riv__manut-card dt {
+  color: #9fb1c4;
+}
+
+.riv__manut-card dd {
+  margin: 0;
+  color: #fff;
+  font-weight: 750;
+  text-align: right;
+}
+
+.riv__ocorrencia-form {
+  display: grid;
+  grid-template-columns: 150px 220px minmax(0, 1fr) 110px;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.riv__timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.riv__timeline-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border-left: 3px solid #4ca7ff;
+  border-radius: 6px;
+  background: rgba(5, 28, 51, .72);
+}
+
+.riv__timeline-item.is-resolvida {
+  border-left-color: #59be78;
+  background: rgba(5, 28, 51, .58);
+}
+
+.riv__timeline-item h4 {
+  margin: 4px 0;
+}
+
+.riv__timeline-item p {
+  margin: 0 0 5px;
+  color: #d7e4f1;
+}
+
+.riv__timeline-item span {
+  color: #8da3b9;
+  font-size: .76rem;
+}
+
+.riv__km-historico {
+  display: grid;
+  gap: 7px;
+}
+
+.riv__km-historico > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border: 1px solid rgba(102, 162, 218, .16);
+  border-radius: 6px;
+  background: rgba(5, 28, 51, .56);
+}
+
+.riv__km-historico span {
+  color: #8da3b9;
+  font-size: .78rem;
+}
+
+.riv__modal-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 8, 18, .8);
+}
+
+.riv__modal {
+  width: min(700px, 100%);
+  padding: 20px;
+  border: 1px solid rgba(102, 162, 218, .4);
+  border-radius: 12px;
+  background: #061b31;
+}
+
+.riv__modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.riv__modal-header h3 {
+  margin: 4px 0 0;
+}
+
+.riv__modal-header > button {
+  border: 0;
+  background: transparent;
+  color: #b9c9d9;
+  font-size: 1.8rem;
+}
+
+.riv__modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.riv__modal-grid label,
+.riv__modal-full {
+  display: grid;
+  gap: 5px;
+}
+
+.riv__modal-grid span,
+.riv__modal-full span {
+  color: #9fcfff;
+  font-size: .74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.riv__modal-full {
+  margin-top: 10px;
+}
+
+.riv__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .riv__topo,
+  .riv__km-form,
+  .riv__ocorrencia-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .riv__manut-grid,
+  .riv__modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .riv__timeline-item,
+  .riv__km-historico > div {
+    flex-direction: column;
+  }
+}
+
+/* RIV v1.1 */
+.riv__secao-titulo > button {
+  align-self: center;
+}
+
+.riv__btn-correcao {
+  border-color: rgba(255, 193, 23, .55) !important;
+  color: #ffd86a !important;
+}
+
+.riv__correcao-aviso {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 193, 23, .35);
+  border-radius: 7px;
+  background: rgba(255, 193, 23, .08);
+  color: #ffe39a;
+}
+
+.riv__km-historico > div.is-correcao {
+  border-color: rgba(255, 193, 23, .42);
+}
+
+.riv__km-historico > div.is-corrigido {
+  opacity: .58;
+}
+
+.riv__km-historico > div > div {
+  display: grid;
+  gap: 3px;
+}
+
+.riv__km-historico small {
+  color: #9fb1c4;
+  font-size: .72rem;
+}
+
+.riv__km-corrigido {
+  color: #ffb0b0 !important;
+  font-weight: 900;
+}
+
+
+/* RIV v1.2 — fotos documentais */
+.riv__foto-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid rgba(37, 99, 235, .28);
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.riv__foto-btn input { display: none; }
+.riv__foto-btn--depois { background: #ecfdf5; color: #047857; border-color: rgba(5, 150, 105, .25); }
+.riv__foto-contagem { align-self: center; color: #64748b; font-weight: 700; }
+.riv__registro-fotos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.riv__foto-thumb { position: relative; width: 78px; height: 62px; padding: 0; overflow: hidden; border-radius: 8px; border: 1px solid #dbe4f0; background: #fff; }
+.riv__foto-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.riv__foto-thumb span { position: absolute; left: 3px; bottom: 3px; padding: 2px 4px; border-radius: 4px; background: rgba(15,23,42,.78); color: #fff; font-size: 8px; font-weight: 900; }
+.riv__foto-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.riv__foto-modal { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 30px; background: rgba(2,6,23,.88); }
+.riv__foto-modal img { max-width: min(1100px, 92vw); max-height: 82vh; object-fit: contain; border-radius: 10px; }
+.riv__foto-modal > button { position: fixed; top: 18px; right: 24px; border: 0; background: transparent; color: #fff; font-size: 38px; cursor: pointer; }
+.riv__foto-modal > span { color: #fff; font-size: 12px; font-weight: 900; letter-spacing: .08em; }
+
+
+/* RIV v1.3 — fechamento, visualização e histórico de manutenção */
+.riv__registro-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.riv__status-manut {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 5px;
+  padding: 3px 7px;
+  border: 1px solid rgba(102, 162, 218, .28);
+  border-radius: 999px;
+  font-size: .66rem !important;
+  font-weight: 900;
+}
+.riv__status-manut.is-aberta { color: #ffd86a; border-color: rgba(255,193,23,.45); }
+.riv__status-manut.is-fechada { color: #8ee6aa; border-color: rgba(89,190,120,.48); }
+.riv__btn-concluir { border-color: rgba(89,190,120,.55) !important; color: #9ff0b8 !important; }
+.riv__btn-reabrir { border-color: rgba(255,193,23,.55) !important; color: #ffd86a !important; }
+.riv__modal--visualizar { width: min(820px, 100%); max-height: calc(100vh - 44px); overflow: auto; }
+.riv__visualizar-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px;
+}
+.riv__visualizar-grid > div,
+.riv__visualizar-descricao,
+.riv__visualizar-fotos,
+.riv__historico-manut {
+  padding: 11px;
+  border: 1px solid rgba(102,162,218,.18);
+  border-radius: 7px;
+  background: rgba(5,28,51,.56);
+}
+.riv__visualizar-grid > div { display: grid; gap: 4px; }
+.riv__visualizar-grid small,
+.riv__visualizar-descricao > small,
+.riv__visualizar-fotos > small,
+.riv__historico-manut > small { color: #72bfff; font-weight: 900; }
+.riv__visualizar-descricao,
+.riv__visualizar-fotos,
+.riv__historico-manut { margin-top: 10px; }
+.riv__visualizar-descricao p { margin: 7px 0 0; color: #d7e4f1; white-space: pre-wrap; }
+.riv__historico-evento {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(102,162,218,.13);
+}
+.riv__historico-evento:last-child { border-bottom: 0; }
+.riv__historico-evento p { margin: 3px 0 0; color: #d7e4f1; }
+.riv__historico-evento span { color: #8da3b9; font-size: .76rem; text-align: right; }
+@media (max-width: 650px) {
+  .riv__visualizar-grid { grid-template-columns: 1fr; }
+  .riv__historico-evento { flex-direction: column; }
+  .riv__historico-evento span { text-align: left; }
+}
+
+
+/* RIV v1.5 — fechamento transacional de avaria + visualização consolidada */
+.riv__fechamento-resumo {
+  margin: 8px 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(89,190,120,.35);
+  border-radius: 7px;
+  background: rgba(89,190,120,.07);
+}
+.riv__fechamento-resumo strong { color: #8ee6aa; font-size: .7rem; }
+.riv__fechamento-resumo p { margin: 4px 0 !important; }
+.riv__fechamento-resumo small { color: #b9c9d9 !important; font-weight: 600 !important; }
+.riv__visualizar-fechamento {
+  border-color: rgba(89,190,120,.32);
+  background: rgba(89,190,120,.06);
+}
+
+
+/* RIV v1.5.3 — feedback de fechamento da avaria */
+.riv__erro-modal {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(238, 99, 99, .55);
+  border-radius: 7px;
+  background: rgba(133, 29, 29, .20);
+  color: #ffd1d1;
+  font-weight: 800;
+  font-size: .82rem;
+}
+
+.riv__aguardando-cmt {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid rgba(232, 184, 63, .48);
+  border-radius: 7px;
+  background: rgba(232, 184, 63, .10);
+  color: #f0c95d;
+  font-weight: 900;
+  font-size: .82rem;
+}
