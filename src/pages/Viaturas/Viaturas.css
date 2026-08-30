@@ -1093,3 +1093,365 @@
   font-weight: 900;
   font-size: .82rem;
 }
+
+
+/* =========================================================
+   RIV v1.6 — Novidades em VTR / avarias conhecidas
+   ========================================================= */
+.riv__avarias-conhecidas {
+  margin-bottom: 14px;
+  padding: 13px;
+  border: 1px solid rgba(255, 193, 23, .28);
+  border-radius: 9px;
+  background: rgba(255, 193, 23, .045);
+}
+
+.riv__avarias-conhecidas-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.riv__avarias-conhecidas-topo > div {
+  display: grid;
+  gap: 3px;
+}
+
+.riv__avarias-conhecidas-topo strong {
+  color: #fff;
+  font-size: 1rem;
+}
+
+.riv__avarias-conhecidas-topo > span {
+  max-width: 460px;
+  color: #d9c47c;
+  font-size: .78rem;
+  text-align: right;
+}
+
+.riv__avarias-vazio {
+  padding: 12px;
+  border: 1px dashed rgba(102, 162, 218, .22);
+  border-radius: 7px;
+  color: #9fb1c4;
+  text-align: center;
+}
+
+.riv__avarias-lista {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.riv__avaria-conhecida {
+  display: grid;
+  justify-items: start;
+  min-height: 112px !important;
+  padding: 11px !important;
+  border-color: rgba(255, 193, 23, .34) !important;
+  background: rgba(44, 37, 12, .38) !important;
+  text-align: left;
+}
+
+.riv__avaria-conhecida strong {
+  color: #fff;
+  font-size: .82rem;
+}
+
+.riv__avaria-conhecida span {
+  margin-top: 4px;
+  color: #d7e4f1;
+  font-size: .75rem;
+}
+
+.riv__avaria-conhecida small {
+  margin-top: 4px;
+  color: #b9a85e !important;
+  font-size: .68rem;
+}
+
+.riv__avaria-conhecida em {
+  align-self: end;
+  margin-top: 8px;
+  color: #ffd86a;
+  font-size: .7rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.riv__novidade-form {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(76, 167, 255, .24);
+  border-radius: 9px;
+  background: rgba(5, 28, 51, .48);
+}
+
+.riv__novidade-tipo,
+.riv__novidade-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.riv__novidade-tipo label,
+.riv__novidade-grid label,
+.riv__novidade-full {
+  display: grid;
+  gap: 5px;
+}
+
+.riv__novidade-tipo label > span,
+.riv__novidade-grid label > span,
+.riv__novidade-full > span {
+  color: #9fcfff;
+  font-size: .72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.riv__novidade-grid--texto {
+  grid-template-columns: minmax(220px, .8fr) minmax(0, 1.2fr);
+}
+
+.riv__novidade-acoes {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.riv__novidade-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 7px 0;
+}
+
+.riv__novidade-meta span {
+  padding: 3px 6px;
+  border: 1px solid rgba(102, 162, 218, .22);
+  border-radius: 999px;
+  color: #a9c8e4;
+  font-size: .62rem;
+  font-weight: 850;
+}
+
+.riv__novidade-meta span.is-agravamento {
+  border-color: rgba(255, 193, 23, .4);
+  color: #ffd86a;
+}
+
+@media (max-width: 900px) {
+  .riv__avarias-lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .riv__avarias-conhecidas-topo,
+  .riv__novidade-acoes {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .riv__avarias-conhecidas-topo > span {
+    max-width: none;
+    text-align: left;
+  }
+
+  .riv__avarias-lista,
+  .riv__novidade-tipo,
+  .riv__novidade-grid,
+  .riv__novidade-grid--texto {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* =========================================================
+   RIV v1.8 — seleção de Avarias conhecidas + histórico consolidado
+   ========================================================= */
+.riv__historico-divisor {
+  margin: 22px 0 12px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(102, 162, 218, .22);
+}
+
+.riv__historico-divisor h3 {
+  margin: 4px 0 5px;
+}
+
+.riv__historico-divisor p {
+  margin: 0;
+  color: #aebed0;
+}
+
+.riv__btn-destaque {
+  border-color: rgba(255, 193, 23, .38) !important;
+  color: #ffd86a !important;
+}
+
+.riv__btn-destaque.is-ativo {
+  background: rgba(255, 193, 23, .12) !important;
+  border-color: rgba(255, 193, 23, .62) !important;
+}
+
+
+/* =========================================================
+   RIV v1.8 — Avarias abertas primeiro; nova avaria sob demanda
+   ========================================================= */
+.riv__avarias-abertas {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid rgba(76, 167, 255, .24);
+  border-radius: 9px;
+  background: rgba(5, 29, 54, .35);
+}
+
+.riv__avarias-abertas-topo {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.riv__avarias-abertas-topo h3 {
+  margin: 3px 0 0;
+}
+
+.riv__avarias-abertas-topo > span {
+  max-width: 430px;
+  color: #9fb1c4;
+  font-size: .76rem;
+  text-align: right;
+}
+
+.riv__avarias-abertas-lista {
+  display: grid;
+  gap: 10px;
+}
+
+.riv__avaria-aberta-card {
+  padding: 13px;
+  border: 1px solid rgba(102, 162, 218, .24);
+  border-radius: 9px;
+  background: rgba(2, 17, 34, .58);
+}
+
+.riv__avaria-aberta-card.is-destaque {
+  border-color: rgba(255, 193, 23, .38);
+  box-shadow: inset 3px 0 0 rgba(255, 193, 23, .72);
+}
+
+.riv__avaria-aberta-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.riv__avaria-aberta-cabecalho h4 {
+  margin: 3px 0 0;
+  color: #fff;
+}
+
+.riv__avaria-badge-destaque {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 193, 23, .4);
+  border-radius: 999px;
+  background: rgba(255, 193, 23, .10);
+  color: #ffe18a;
+  font-size: .66rem;
+  font-weight: 900;
+}
+
+.riv__avaria-aberta-conteudo > p {
+  margin: 8px 0;
+  color: #d7e4f1;
+}
+
+.riv__avaria-aberta-data {
+  display: block;
+  margin-top: 8px;
+  color: #8fa6ba;
+  font-size: .72rem;
+}
+
+.riv__avaria-aberta-acoes {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(102, 162, 218, .13);
+}
+
+.riv__nova-avaria-rodape {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.riv__btn-nova-avaria {
+  min-height: 42px !important;
+  padding: 0 18px !important;
+  border-color: rgba(76, 167, 255, .62) !important;
+  background: rgba(12, 80, 132, .92) !important;
+  color: #fff !important;
+}
+
+.riv__nova-avaria-painel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(76, 167, 255, .32);
+  border-radius: 10px;
+  background: rgba(3, 25, 47, .72);
+}
+
+.riv__nova-avaria-painel-topo {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.riv__nova-avaria-painel-topo h3 {
+  margin: 3px 0 0;
+}
+
+.riv__btn-cancelar-nova {
+  background: rgba(71, 85, 105, .42) !important;
+  border-color: rgba(148, 163, 184, .30) !important;
+}
+
+@media (max-width: 720px) {
+  .riv__avarias-abertas-topo,
+  .riv__avaria-aberta-cabecalho,
+  .riv__nova-avaria-painel-topo {
+    flex-direction: column;
+  }
+
+  .riv__avarias-abertas-topo > span {
+    max-width: none;
+    text-align: left;
+  }
+}
+
+
+/* RIV v1.9 — manutenção corretiva em andamento */
+.riv__manutencao-atual{display:grid;gap:12px}
+.riv__manutencao-atual-lista{display:grid;gap:11px}
+.riv__manutencao-atual-card{padding:14px;border:1px solid rgba(76,167,255,.28);border-radius:10px;background:rgba(3,25,47,.58)}
+.riv__manutencao-atual-card>header{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.riv__manutencao-atual-card>header h4{margin:3px 0 0;color:#fff}
+.riv__manutencao-atual-card>header>span{padding:5px 8px;border:1px solid rgba(76,167,255,.32);border-radius:999px;background:rgba(12,80,132,.26);color:#bfe1ff;font-size:.68rem;font-weight:900}
+.riv__manutencao-atual-card>p{margin:9px 0;color:#d8e5f1}
+.riv__manutencao-atual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.riv__manutencao-atual-grid>div{padding:9px;border:1px solid rgba(102,162,218,.14);border-radius:8px;background:rgba(2,17,34,.42)}
+.riv__manutencao-atual-grid small{display:block;color:#8fa8bd;font-size:.67rem;text-transform:uppercase}
+.riv__manutencao-atual-grid strong{display:block;margin-top:4px;color:#fff;overflow-wrap:anywhere}
+@media(max-width:720px){.riv__manutencao-atual-card>header{flex-direction:column}.riv__manutencao-atual-grid{grid-template-columns:1fr}}

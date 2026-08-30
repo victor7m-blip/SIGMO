@@ -17,13 +17,33 @@ import {
   concluirManutencaoRiv,
   obterHistoricoOcorrenciaRiv,
   podeReabrirManutencaoRiv,
-  reabrirManutencaoRiv
+  reabrirManutencaoRiv,
+  ORIGENS_NOVIDADE_VTR,
+  SEVERIDADES_NOVIDADE_VTR,
+  DISPONIBILIDADES_NOVIDADE_VTR,
+  RESPONSABILIDADES_NOVIDADE_VTR,
+  podeGerenciarAvariasConhecidas,
+  definirAvariaConhecidaRiv
 } from '../../services/viaturasRivService'
+
+import {
+  enviarDocumentoNovidadeVtr
+} from '../../services/novidadesVtrService'
 
 const OCORRENCIA_VAZIA = {
   tipo: 'AVARIA',
   titulo: '',
-  descricao: ''
+  descricao: '',
+  modoAvaria: 'NOVA',
+  origemConstatacao: 'DURANTE_SERVICO',
+  localAvaria: '',
+  componenteAvariado: '',
+  severidade: 'BAIXA',
+  disponibilidadeVtr: 'NAO_AVALIADA',
+  responsabilidadeStatus: 'NAO_DEFINIDA',
+  ocorrenciaPaiId: '',
+  agravamentoDescricao: '',
+  documentoConstatacao: ''
 }
 
 function formatarData(valor) {
@@ -53,6 +73,7 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState('')
   const [fotosNovaOcorrencia, setFotosNovaOcorrencia] = useState([])
+  const [arquivoDocumentoNovaOcorrencia, setArquivoDocumentoNovaOcorrencia] = useState(null)
   const [fotosRiv, setFotosRiv] = useState([])
   const [fotoAmpliada, setFotoAmpliada] = useState(null)
   const [visualizandoRegistro, setVisualizandoRegistro] = useState(null)
@@ -62,6 +83,9 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
   const [fechandoAvaria, setFechandoAvaria] = useState(null)
   const [reabrindoAvaria, setReabrindoAvaria] = useState(null)
   const [erroFechamentoAvaria, setErroFechamentoAvaria] = useState('')
+  const [abaRiv, setAbaRiv] = useState('RESUMO')
+  const [formNovaAvariaAberto, setFormNovaAvariaAberto] = useState(false)
+  const [formNovaManutencaoAberto, setFormNovaManutencaoAberto] = useState(false)
 
   async function carregar() {
     try {
@@ -106,8 +130,92 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
     return [...padroes, ...personalizados]
   }, [dados.manutencoes, dados.quilometragemAtual])
 
+  const avariasAbertas = useMemo(
+    () => dados.ocorrencias.filter(
+      (item) =>
+        item.tipo === 'AVARIA' &&
+        !item.resolvida &&
+        !item.agravamento &&
+        !item.ocorrencia_pai_id
+    ),
+    [dados.ocorrencias]
+  )
+
+  const avariasConhecidas = useMemo(
+    () => avariasAbertas.filter((item) => item.exibir_avaria_conhecida === true),
+    [avariasAbertas]
+  )
+
+  const manutencoesEmAndamento = useMemo(
+    () =>
+      dados.ocorrencias.filter((item) => {
+        const status = String(item.manutencao_status || '').toUpperCase()
+
+        if (item.resolvida || status === 'CONCLUIDA' || status === 'CANCELADA') {
+          return false
+        }
+
+        if (item.tipo === 'MANUTENCAO') {
+          return true
+        }
+
+        return item.tipo === 'AVARIA' && item.encaminhada_manutencao === true
+      }),
+    [dados.ocorrencias]
+  )
+
+  const registrosHistoricos = useMemo(
+    () =>
+      dados.ocorrencias.filter((item) => {
+        if (item.tipo === 'AVARIA') {
+          // Agravamento é um evento do histórico da avaria original,
+          // e não uma nova avaria independente em aberto.
+          return Boolean(item.resolvida || item.agravamento || item.ocorrencia_pai_id)
+        }
+
+        if (item.tipo === 'MANUTENCAO') {
+          const status = String(item.manutencao_status || '').toUpperCase()
+          return Boolean(
+            item.resolvida ||
+            status === 'CONCLUIDA' ||
+            status === 'CANCELADA'
+          )
+        }
+
+        // Observações e demais registros factuais permanecem no histórico.
+        return true
+      }),
+    [dados.ocorrencias]
+  )
+
+  const resumoRiv = useMemo(() => ({
+    avariasAbertas: avariasAbertas.length,
+    manutencoesAbertas: manutencoesEmAndamento.length,
+    preventivasVencidas: alertas.filter((item) => item.status.nivel === 'VENCIDO').length,
+    preventivasAtencao: alertas.filter((item) => item.status.nivel === 'ATENCAO').length,
+    registros: dados.ocorrencias.length
+  }), [avariasAbertas.length, manutencoesEmAndamento.length, alertas, dados.ocorrencias.length])
+
   const podeCorrigirKm = podeCorrigirQuilometragem(user)
   const podeReabrirManutencao = podeReabrirManutencaoRiv(user)
+  const podeGerenciarConhecidas = podeGerenciarAvariasConhecidas(user)
+
+  async function alternarAvariaConhecida(item) {
+    try {
+      setOcupado(true)
+      setErro('')
+      await definirAvariaConhecidaRiv({
+        item,
+        exibir: item.exibir_avaria_conhecida !== true,
+        user
+      })
+      await carregar()
+    } catch (error) {
+      setErro(error?.message || 'Não foi possível atualizar as avarias conhecidas.')
+    } finally {
+      setOcupado(false)
+    }
+  }
 
   async function salvarKm(event) {
     event.preventDefault()
@@ -216,8 +324,20 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
           quilometragem_atual: dados.quilometragemAtual
         },
         ...ocorrencia,
+        agravamento: ocorrencia.tipo === 'AVARIA' && ocorrencia.modoAvaria === 'AGRAVAMENTO',
+        ocorrenciaPaiId: ocorrencia.modoAvaria === 'AGRAVAMENTO' ? ocorrencia.ocorrenciaPaiId : null,
         user
       })
+
+      if (arquivoDocumentoNovaOcorrencia) {
+        await enviarDocumentoNovidadeVtr({
+          viaturaId: viatura.id,
+          ocorrenciaId: registro.id,
+          etapa: 'CONSTATACAO',
+          arquivo: arquivoDocumentoNovaOcorrencia,
+          user
+        })
+      }
 
       if (fotosNovaOcorrencia.length > 0) {
         await enviarFotosOcorrenciaRiv({
@@ -232,6 +352,9 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
 
       setOcorrencia(OCORRENCIA_VAZIA)
       setFotosNovaOcorrencia([])
+      setArquivoDocumentoNovaOcorrencia(null)
+      setFormNovaAvariaAberto(false)
+      setFormNovaManutencaoAberto(false)
       await carregar()
     } catch (error) {
       setErro(error?.message || 'Não foi possível registrar a ocorrência.')
@@ -361,6 +484,70 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
     <div className="riv">
       {erro && <div className="viaturas-erro">{erro}</div>}
 
+      <nav className="riv__nav" aria-label="Seções do RIV">
+        <button type="button" className={abaRiv === 'RESUMO' ? 'is-ativa' : ''} onClick={() => setAbaRiv('RESUMO')}>Visão geral</button>
+        <button type="button" className={abaRiv === 'KM' ? 'is-ativa' : ''} onClick={() => setAbaRiv('KM')}>Quilometragem</button>
+        <button type="button" className={abaRiv === 'PREVENTIVAS' ? 'is-ativa' : ''} onClick={() => setAbaRiv('PREVENTIVAS')}>Preventivas</button>
+        <button type="button" className={abaRiv === 'NOVIDADES' ? 'is-ativa' : ''} onClick={() => setAbaRiv('NOVIDADES')}>
+          Avarias
+          {resumoRiv.avariasAbertas > 0 && <span>{resumoRiv.avariasAbertas}</span>}
+        </button>
+        <button type="button" className={abaRiv === 'MANUTENCAO' ? 'is-ativa' : ''} onClick={() => setAbaRiv('MANUTENCAO')}>
+          Manutenção
+          {resumoRiv.manutencoesAbertas > 0 && <span>{resumoRiv.manutencoesAbertas}</span>}
+        </button>
+        <button type="button" className={abaRiv === 'HISTORICO' ? 'is-ativa' : ''} onClick={() => setAbaRiv('HISTORICO')}>Histórico</button>
+      </nav>
+
+      {abaRiv === 'RESUMO' && (
+        <section className="riv__resumo-home">
+          <div className="riv__resumo-intro">
+            <div>
+              <small>VISÃO GERAL DO RIV</small>
+              <h3>Situação atual da viatura</h3>
+              <p>Escolha uma área acima para consultar ou registrar informações. Aqui ficam apenas os pontos que exigem atenção.</p>
+            </div>
+          </div>
+
+          <div className="riv__resumo-cards">
+            <button type="button" onClick={() => setAbaRiv('KM')}>
+              <small>QUILOMETRAGEM ATUAL</small>
+              <strong>{formatarKm(dados.quilometragemAtual)}</strong>
+              <span>Registrar ou consultar quilometragem →</span>
+            </button>
+            <button type="button" onClick={() => setAbaRiv('NOVIDADES')} className={resumoRiv.avariasAbertas > 0 ? 'is-atencao' : ''}>
+              <small>AVARIAS ABERTAS</small>
+              <strong>{resumoRiv.avariasAbertas}</strong>
+              <span>{resumoRiv.avariasAbertas > 0 ? 'Ver avarias conhecidas →' : 'Nenhuma avaria aberta'}</span>
+            </button>
+            <button type="button" onClick={() => setAbaRiv('PREVENTIVAS')} className={resumoRiv.preventivasVencidas > 0 ? 'is-critico' : resumoRiv.preventivasAtencao > 0 ? 'is-atencao' : ''}>
+              <small>MANUTENÇÃO PREVENTIVA</small>
+              <strong>{resumoRiv.preventivasVencidas > 0 ? `${resumoRiv.preventivasVencidas} vencida(s)` : resumoRiv.preventivasAtencao > 0 ? `${resumoRiv.preventivasAtencao} próxima(s)` : 'Em dia'}</strong>
+              <span>Consultar programação →</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAbaRiv('MANUTENCAO')}
+              className={resumoRiv.manutencoesAbertas > 0 ? 'is-atencao' : ''}
+            >
+              <small>MANUTENÇÃO EM ANDAMENTO</small>
+              <strong>{resumoRiv.manutencoesAbertas}</strong>
+              <span>
+                {resumoRiv.manutencoesAbertas > 0
+                  ? 'Acompanhar manutenção →'
+                  : 'Nenhuma manutenção aberta'}
+              </span>
+            </button>
+            <button type="button" onClick={() => setAbaRiv('HISTORICO')}>
+              <small>REGISTROS NO RIV</small>
+              <strong>{resumoRiv.registros}</strong>
+              <span>Consultar histórico →</span>
+            </button>
+          </div>
+        </section>
+      )}
+
+      {abaRiv === 'KM' && (
       <section className="riv__topo">
         <div>
           <small>QUILOMETRAGEM ATUAL</small>
@@ -391,7 +578,9 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
           )}
         </form>
       </section>
+      )}
 
+      {abaRiv === 'PREVENTIVAS' && (
       <section className="riv__secao">
         <div className="riv__secao-titulo">
           <div>
@@ -466,79 +655,770 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
           ))}
         </div>
       </section>
+      )}
 
+      {abaRiv === 'NOVIDADES' && (
       <section className="riv__secao">
         <div className="riv__secao-titulo">
           <div>
-            <small>REGISTROS OPERACIONAIS</small>
-            <h3>Avarias e manutenções</h3>
+            <small>NOVIDADES EM VTR</small>
+            <h3>Avarias conhecidas e registros operacionais</h3>
           </div>
         </div>
 
-        <form className="riv__ocorrencia-form" onSubmit={salvarOcorrencia}>
-          <select
-            value={ocorrencia.tipo}
-            onChange={(event) =>
-              setOcorrencia((atual) => ({
-                ...atual,
-                tipo: event.target.value
-              }))
-            }
-          >
-            <option value="AVARIA">Avaria</option>
-            <option value="MANUTENCAO">Manutenção</option>
-            <option value="OBSERVACAO">Observação</option>
-          </select>
+        <div className="riv__avarias-conhecidas">
+          <div className="riv__avarias-conhecidas-topo">
+            <div>
+              <small>AVARIAS JÁ CONHECIDAS</small>
+              <strong>{avariasConhecidas.length} em destaque</strong>
+            </div>
+            <span>Avarias abertas selecionadas pelo P4/SVDD para permanecerem em evidência.</span>
+          </div>
 
-          <input
-            value={ocorrencia.titulo}
-            onChange={(event) =>
-              setOcorrencia((atual) => ({
-                ...atual,
-                titulo: event.target.value.toUpperCase()
-              }))
-            }
-            placeholder="Título"
-            required
-          />
-
-          <input
-            value={ocorrencia.descricao}
-            onChange={(event) =>
-              setOcorrencia((atual) => ({
-                ...atual,
-                descricao: event.target.value.toUpperCase()
-              }))
-            }
-            placeholder="Descrição"
-          />
-
-          <label className="riv__foto-btn">
-            📷 Fotos
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(event) => setFotosNovaOcorrencia(Array.from(event.target.files || []))}
-            />
-          </label>
-
-          {fotosNovaOcorrencia.length > 0 && (
-            <small className="riv__foto-contagem">{fotosNovaOcorrencia.length} foto(s)</small>
+          {avariasConhecidas.length === 0 ? (
+            <div className="riv__avarias-vazio">Nenhuma avaria foi selecionada para destaque nesta VTR.</div>
+          ) : (
+            <div className="riv__avarias-lista">
+              {avariasConhecidas.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  className="riv__avaria-conhecida"
+                  onClick={() => {
+                    setOcorrencia((atual) => ({
+                      ...atual,
+                      tipo: 'AVARIA',
+                      modoAvaria: 'AGRAVAMENTO',
+                      ocorrenciaPaiId: item.id,
+                      titulo: item.titulo || '',
+                      localAvaria: item.local_avaria || '',
+                      componenteAvariado: item.componente_avariado || ''
+                    }))
+                    setFormNovaAvariaAberto(true)
+                  }}
+                >
+                  <strong>{item.titulo}</strong>
+                  <span>{item.local_avaria || item.componente_avariado || 'LOCAL NÃO INFORMADO'}</span>
+                  <small>{item.severidade || 'SEM GRAVIDADE DEFINIDA'} · {formatarKm(item.quilometragem)}</small>
+                  <em>Informar agravamento</em>
+                </button>
+              ))}
+            </div>
           )}
+        </div>
 
-          <button type="submit" disabled={ocupado}>
-            Registrar
-          </button>
-        </form>
+        <div className="riv__avarias-abertas">
+          <div className="riv__avarias-abertas-topo">
+            <div>
+              <small>AVARIAS EM ABERTO</small>
+              <h3>{avariasAbertas.length} avaria(s) aguardando solução</h3>
+            </div>
+            <span>Somente avarias ainda não resolvidas aparecem aqui.</span>
+          </div>
 
-        <div className="riv__timeline">
-          {dados.ocorrencias.length === 0 ? (
-            <div className="viaturas-vazio">
-              Nenhuma ocorrência registrada.
+          {avariasAbertas.length === 0 ? (
+            <div className="riv__avarias-vazio">
+              Nenhuma avaria em aberto nesta VTR.
             </div>
           ) : (
-            dados.ocorrencias.map((item) => (
+            <div className="riv__avarias-abertas-lista">
+              {avariasAbertas.map((item) => (
+                <article
+                  key={item.id}
+                  className={[
+                    'riv__avaria-aberta-card',
+                    item.exibir_avaria_conhecida ? 'is-destaque' : ''
+                  ].join(' ')}
+                >
+                  <div className="riv__avaria-aberta-conteudo">
+                    <div className="riv__avaria-aberta-cabecalho">
+                      <div>
+                        <small>
+                          NOVIDADE / AVARIA · {formatarKm(item.quilometragem)}
+                        </small>
+                        <h4>{item.titulo}</h4>
+                      </div>
+                      {item.exibir_avaria_conhecida && (
+                        <span className="riv__avaria-badge-destaque">★ AVARIA CONHECIDA</span>
+                      )}
+                    </div>
+
+                    {item.descricao && <p>{item.descricao}</p>}
+
+                    <div className="riv__novidade-meta">
+                      {item.origem_constatacao && (
+                        <span>ORIGEM: {item.origem_constatacao.replaceAll('_', ' ')}</span>
+                      )}
+                      {item.local_avaria && <span>LOCAL: {item.local_avaria}</span>}
+                      {item.componente_avariado && <span>COMPONENTE: {item.componente_avariado}</span>}
+                      {item.severidade && <span>GRAVIDADE: {item.severidade}</span>}
+                      {item.responsabilidade_status && (
+                        <span>RESP.: {item.responsabilidade_status.replaceAll('_', ' ')}</span>
+                      )}
+                      {item.agravamento && <span className="is-agravamento">AGRAVAMENTO</span>}
+                    </div>
+
+                    <span className="riv__avaria-aberta-data">
+                      {new Date(item.created_at).toLocaleString('pt-BR')}
+                      {item.criado_por_nome ? ` · ${item.criado_por_nome}` : ''}
+                    </span>
+                  </div>
+
+                  <div className="riv__registro-fotos">
+                    {fotosRiv
+                      .filter((foto) => foto.riv_ocorrencia_id === item.id)
+                      .map((foto) => (
+                        <button
+                          type="button"
+                          className="riv__foto-thumb"
+                          key={foto.id}
+                          onClick={() => setFotoAmpliada(foto)}
+                        >
+                          <img src={foto.url} alt="Registro do RIV" />
+                          <span>{foto.fase_riv === 'DEPOIS' ? 'DEPOIS' : 'ANTES'}</span>
+                        </button>
+                      ))}
+                  </div>
+
+                  <div className="riv__registro-acoes riv__avaria-aberta-acoes">
+                    <button
+                      type="button"
+                      disabled={ocupado}
+                      onClick={() => visualizarRegistro(item)}
+                    >
+                      👁 Visualizar
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={ocupado}
+                      onClick={() => {
+                        setOcorrencia((atual) => ({
+                          ...atual,
+                          tipo: 'AVARIA',
+                          modoAvaria: 'AGRAVAMENTO',
+                          ocorrenciaPaiId: item.id,
+                          titulo: item.titulo || '',
+                          localAvaria: item.local_avaria || '',
+                          componenteAvariado: item.componente_avariado || ''
+                        }))
+                        setFormNovaAvariaAberto(true)
+                      }}
+                    >
+                      Informar agravamento
+                    </button>
+
+                    <label className="riv__foto-btn">
+                      📷 Adicionar foto
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(event) =>
+                          adicionarFotosRegistro(item, event.target.files, 'ANTES')
+                        }
+                      />
+                    </label>
+
+                    <label className="riv__foto-btn riv__foto-btn--depois">
+                      📷 Foto após reparo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(event) =>
+                          adicionarFotosRegistro(item, event.target.files, 'DEPOIS')
+                        }
+                      />
+                    </label>
+
+                    {podeGerenciarConhecidas && (
+                      <button
+                        type="button"
+                        className={
+                          item.exibir_avaria_conhecida
+                            ? 'riv__btn-destaque is-ativo'
+                            : 'riv__btn-destaque'
+                        }
+                        disabled={ocupado}
+                        onClick={() => alternarAvariaConhecida(item)}
+                      >
+                        {item.exibir_avaria_conhecida
+                          ? '★ Remover de Avarias conhecidas'
+                          : '☆ Exibir em Avarias conhecidas'}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="riv__btn-concluir"
+                      disabled={ocupado}
+                      onClick={() => abrirFechamentoAvaria(item)}
+                    >
+                      ✓ Marcar resolvida
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!formNovaAvariaAberto && (
+          <div className="riv__nova-avaria-rodape">
+            <button
+              type="button"
+              className="riv__btn-nova-avaria"
+              onClick={() => {
+                setOcorrencia(OCORRENCIA_VAZIA)
+                setFotosNovaOcorrencia([])
+                setFormNovaAvariaAberto(true)
+              }}
+            >
+              + Registrar nova avaria
+            </button>
+          </div>
+        )}
+
+        {formNovaAvariaAberto && (
+          <div className="riv__nova-avaria-painel">
+            <div className="riv__nova-avaria-painel-topo">
+              <div>
+                <small>NOVO REGISTRO</small>
+                <h3>
+                  {ocorrencia.modoAvaria === 'AGRAVAMENTO'
+                    ? 'Informar agravamento'
+                    : 'Registrar nova avaria'}
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                className="riv__btn-cancelar-nova"
+                disabled={ocupado}
+                onClick={() => {
+                  setOcorrencia(OCORRENCIA_VAZIA)
+                  setFotosNovaOcorrencia([])
+                  setFormNovaAvariaAberto(false)
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+
+        <form className="riv__novidade-form" onSubmit={salvarOcorrencia}>
+          <div className="riv__novidade-tipo">
+            <label>
+              <span>Registro</span>
+              <select
+                value={ocorrencia.modoAvaria}
+                onChange={(event) => setOcorrencia((atual) => ({
+                  ...atual,
+                  tipo: 'AVARIA',
+                  modoAvaria: event.target.value,
+                  ocorrenciaPaiId: '',
+                  agravamentoDescricao: ''
+                }))}
+              >
+                <option value="NOVA">Nova avaria</option>
+                <option value="AGRAVAMENTO">Agravamento de avaria conhecida</option>
+              </select>
+            </label>
+          </div>
+
+          {ocorrencia.tipo === 'AVARIA' && (
+            <>
+              {ocorrencia.modoAvaria === 'AGRAVAMENTO' && (
+                <label className="riv__novidade-full">
+                  <span>Avaria conhecida *</span>
+                  <select
+                    required
+                    value={ocorrencia.ocorrenciaPaiId}
+                    onChange={(event) => {
+                      const conhecida = avariasAbertas.find((item) => item.id === event.target.value)
+                      setOcorrencia((atual) => ({
+                        ...atual,
+                        ocorrenciaPaiId: event.target.value,
+                        titulo: conhecida?.titulo || atual.titulo,
+                        localAvaria: conhecida?.local_avaria || atual.localAvaria,
+                        componenteAvariado: conhecida?.componente_avariado || atual.componenteAvariado
+                      }))
+                    }}
+                  >
+                    <option value="">Selecione a avaria existente...</option>
+                    {avariasAbertas.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.titulo}{item.local_avaria ? ` — ${item.local_avaria}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <div className="riv__novidade-grid">
+                <label>
+                  <span>Constatada em *</span>
+                  <select
+                    required
+                    value={ocorrencia.origemConstatacao}
+                    onChange={(event) => setOcorrencia((atual) => ({ ...atual, origemConstatacao: event.target.value }))}
+                  >
+                    {ORIGENS_NOVIDADE_VTR.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Gravidade</span>
+                  <select
+                    value={ocorrencia.severidade}
+                    onChange={(event) => setOcorrencia((atual) => ({ ...atual, severidade: event.target.value }))}
+                  >
+                    {SEVERIDADES_NOVIDADE_VTR.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Local da avaria</span>
+                  <input
+                    value={ocorrencia.localAvaria}
+                    onChange={(event) => setOcorrencia((atual) => ({ ...atual, localAvaria: event.target.value.toUpperCase() }))}
+                    placeholder="Ex.: PORTA DIANTEIRA DIREITA"
+                  />
+                </label>
+
+                <label>
+                  <span>Componente</span>
+                  <input
+                    value={ocorrencia.componenteAvariado}
+                    onChange={(event) => setOcorrencia((atual) => ({ ...atual, componenteAvariado: event.target.value.toUpperCase() }))}
+                    placeholder="Ex.: LATARIA / RETROVISOR"
+                  />
+                </label>
+
+                <label>
+                  <span>Condição da VTR</span>
+                  <select
+                    value={ocorrencia.disponibilidadeVtr}
+                    onChange={(event) => setOcorrencia((atual) => ({ ...atual, disponibilidadeVtr: event.target.value }))}
+                  >
+                    {DISPONIBILIDADES_NOVIDADE_VTR.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Responsabilidade inicial</span>
+                  <select
+                    value={ocorrencia.responsabilidadeStatus}
+                    onChange={(event) => setOcorrencia((atual) => ({ ...atual, responsabilidadeStatus: event.target.value }))}
+                  >
+                    {RESPONSABILIDADES_NOVIDADE_VTR.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+              </div>
+            </>
+          )}
+
+          <div className="riv__novidade-grid riv__novidade-grid--texto">
+            <label>
+              <span>Título *</span>
+              <input
+                value={ocorrencia.titulo}
+                onChange={(event) => setOcorrencia((atual) => ({ ...atual, titulo: event.target.value.toUpperCase() }))}
+                placeholder={ocorrencia.tipo === 'AVARIA' ? 'Ex.: RISCO NA PORTA DIANTEIRA DIREITA' : 'Título'}
+                required
+              />
+            </label>
+
+            <label>
+              <span>Descrição</span>
+              <textarea
+                rows="3"
+                value={ocorrencia.descricao}
+                onChange={(event) => setOcorrencia((atual) => ({ ...atual, descricao: event.target.value.toUpperCase() }))}
+                placeholder="Descreva o que foi constatado."
+              />
+            </label>
+          </div>
+
+          {ocorrencia.tipo === 'AVARIA' && ocorrencia.modoAvaria === 'AGRAVAMENTO' && (
+            <label className="riv__novidade-full">
+              <span>O que se agravou? *</span>
+              <textarea
+                rows="3"
+                required
+                value={ocorrencia.agravamentoDescricao}
+                onChange={(event) => setOcorrencia((atual) => ({ ...atual, agravamentoDescricao: event.target.value.toUpperCase() }))}
+                placeholder="Ex.: O RISCO EXISTENTE PASSOU A APRESENTAR AMASSAMENTO E DESLOCAMENTO DA PEÇA."
+              />
+            </label>
+          )}
+
+
+          <div className="riv__novidade-grid riv__novidade-grid--texto">
+            <label>
+              <span>Nº do documento da constatação <small>(opcional)</small></span>
+              <input
+                value={ocorrencia.documentoConstatacao || ''}
+                onChange={(event) =>
+                  setOcorrencia((atual) => ({
+                    ...atual,
+                    documentoConstatacao: event.target.value.toUpperCase()
+                  }))
+                }
+                placeholder="Ex.: PARTE Nº 123/2026"
+              />
+            </label>
+
+            <label>
+              <span>Anexar documento <small>(PDF ou imagem)</small></span>
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                onChange={(event) =>
+                  setArquivoDocumentoNovaOcorrencia(event.target.files?.[0] || null)
+                }
+              />
+              {arquivoDocumentoNovaOcorrencia && (
+                <small>{arquivoDocumentoNovaOcorrencia.name}</small>
+              )}
+            </label>
+          </div>
+
+          <div className="riv__novidade-acoes">
+            <label className="riv__foto-btn">
+              📷 Fotos
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) => setFotosNovaOcorrencia(Array.from(event.target.files || []))}
+              />
+            </label>
+
+            {fotosNovaOcorrencia.length > 0 && (
+              <small className="riv__foto-contagem">{fotosNovaOcorrencia.length} foto(s)</small>
+            )}
+
+            <button type="submit" disabled={ocupado}>
+              {ocorrencia.modoAvaria === 'AGRAVAMENTO'
+                ? 'Registrar agravamento'
+                : 'Registrar avaria'}
+            </button>
+          </div>
+        </form>
+        </div>
+        )}
+
+      </section>
+      )}
+
+      {abaRiv === 'MANUTENCAO' && (
+        <section className="riv__manutencao-atual">
+          <div className="riv__secao-titulo">
+            <div>
+              <small>MANUTENÇÃO DA VTR</small>
+              <h3>Manutenções em andamento</h3>
+              <p>
+                Aqui aparecem as manutenções ainda abertas desta viatura.
+                O andamento operacional é tratado pela Central de Manutenção.
+              </p>
+            </div>
+          </div>
+
+          {!formNovaManutencaoAberto && (
+            <div className="riv__nova-avaria-rodape">
+              <button
+                type="button"
+                className="riv__btn-nova-avaria"
+                onClick={() => {
+                  setOcorrencia({
+                    ...OCORRENCIA_VAZIA,
+                    tipo: 'MANUTENCAO',
+                    modoAvaria: 'NOVA'
+                  })
+                  setFotosNovaOcorrencia([])
+                  setFormNovaManutencaoAberto(true)
+                }}
+              >
+                + Registrar manutenção
+              </button>
+            </div>
+          )}
+
+          {formNovaManutencaoAberto && (
+            <div className="riv__nova-avaria-painel">
+              <div className="riv__nova-avaria-painel-topo">
+                <div>
+                  <small>NOVO REGISTRO</small>
+                  <h3>Registrar manutenção</h3>
+                </div>
+
+                <button
+                  type="button"
+                  className="riv__btn-cancelar-nova"
+                  disabled={ocupado}
+                  onClick={() => {
+                    setOcorrencia(OCORRENCIA_VAZIA)
+                    setFotosNovaOcorrencia([])
+                    setFormNovaManutencaoAberto(false)
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              <form className="riv__novidade-form" onSubmit={salvarOcorrencia}>
+                <div className="riv__novidade-grid riv__novidade-grid--texto">
+                  <label>
+                    <span>Título *</span>
+                    <input
+                      value={ocorrencia.titulo}
+                      onChange={(event) =>
+                        setOcorrencia((atual) => ({
+                          ...atual,
+                          tipo: 'MANUTENCAO',
+                          titulo: event.target.value.toUpperCase()
+                        }))
+                      }
+                      placeholder="Ex.: PASTILHAS DE FREIO"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    <span>Descrição</span>
+                    <textarea
+                      rows="3"
+                      value={ocorrencia.descricao}
+                      onChange={(event) =>
+                        setOcorrencia((atual) => ({
+                          ...atual,
+                          tipo: 'MANUTENCAO',
+                          descricao: event.target.value.toUpperCase()
+                        }))
+                      }
+                      placeholder="Descreva a manutenção necessária."
+                    />
+                  </label>
+                </div>
+
+
+                <div className="riv__novidade-grid riv__novidade-grid--texto">
+                  <label>
+                    <span>Nº do documento da constatação <small>(opcional)</small></span>
+                    <input
+                      value={ocorrencia.documentoConstatacao || ''}
+                      onChange={(event) =>
+                        setOcorrencia((atual) => ({
+                          ...atual,
+                          tipo: 'MANUTENCAO',
+                          documentoConstatacao: event.target.value.toUpperCase()
+                        }))
+                      }
+                      placeholder="Ex.: PARTE Nº 123/2026"
+                    />
+                  </label>
+
+                  <label>
+                    <span>Anexar documento <small>(PDF ou imagem)</small></span>
+                    <input
+                      type="file"
+                      accept=".pdf,image/*"
+                      onChange={(event) =>
+                        setArquivoDocumentoNovaOcorrencia(event.target.files?.[0] || null)
+                      }
+                    />
+                    {arquivoDocumentoNovaOcorrencia && (
+                      <small>{arquivoDocumentoNovaOcorrencia.name}</small>
+                    )}
+                  </label>
+                </div>
+
+                <div className="riv__novidade-acoes">
+                  <label className="riv__foto-btn">
+                    📷 Fotos
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(event) =>
+                        setFotosNovaOcorrencia(Array.from(event.target.files || []))
+                      }
+                    />
+                  </label>
+
+                  {fotosNovaOcorrencia.length > 0 && (
+                    <small className="riv__foto-contagem">
+                      {fotosNovaOcorrencia.length} foto(s)
+                    </small>
+                  )}
+
+                  <button type="submit" disabled={ocupado}>
+                    Registrar manutenção
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {manutencoesEmAndamento.length === 0 ? (
+            <div className="viaturas-vazio">
+              Nenhuma manutenção em andamento nesta VTR.
+            </div>
+          ) : (
+            <div className="riv__manutencao-atual-lista">
+              {manutencoesEmAndamento.map((item) => {
+                const status = String(
+                  item.manutencao_status || 'AGUARDANDO_PROVIDENCIA'
+                ).replaceAll('_', ' ')
+
+                return (
+                  <article className="riv__manutencao-atual-card" key={item.id}>
+                    <header>
+                      <div>
+                        <small>
+                          {item.tipo === 'AVARIA'
+                            ? 'AVARIA ENCAMINHADA PARA MANUTENÇÃO'
+                            : 'MANUTENÇÃO CORRETIVA'}
+                        </small>
+                        <h4>{item.titulo || 'Manutenção registrada'}</h4>
+                      </div>
+                      <span>{status}</span>
+                    </header>
+
+                    {item.descricao && <p>{item.descricao}</p>}
+
+                    <div className="riv__manutencao-atual-grid">
+                      <div>
+                        <small>Providência atual</small>
+                        <strong>{item.providencia_atual || 'AGUARDANDO DEFINIÇÃO'}</strong>
+                      </div>
+                      <div>
+                        <small>Tipo</small>
+                        <strong>{String(item.manutencao_tipo || '—').replaceAll('_', ' ')}</strong>
+                      </div>
+                      <div>
+                        <small>Local / oficina</small>
+                        <strong>{item.manutencao_oficina || item.manutencao_local || '—'}</strong>
+                      </div>
+                      <div>
+                        <small>OS / documento</small>
+                        <strong>{item.manutencao_os || '—'}</strong>
+                      </div>
+                      <div>
+                        <small>KM do registro</small>
+                        <strong>{formatarKm(item.quilometragem)}</strong>
+                      </div>
+                      <div>
+                        <small>Registrado em</small>
+                        <strong>{new Date(item.created_at).toLocaleString('pt-BR')}</strong>
+                      </div>
+                    </div>
+
+                    <div className="riv__registro-fotos">
+                      {fotosRiv
+                        .filter((foto) => foto.riv_ocorrencia_id === item.id)
+                        .map((foto) => (
+                          <button
+                            type="button"
+                            className="riv__foto-thumb"
+                            key={foto.id}
+                            onClick={() => setFotoAmpliada(foto)}
+                          >
+                            <img src={foto.url} alt="Registro da manutenção" />
+                            <span>{foto.fase_riv === 'DEPOIS' ? 'DEPOIS' : 'ANTES'}</span>
+                          </button>
+                        ))}
+                    </div>
+
+                    <div className="riv__registro-acoes">
+                      <button
+                        type="button"
+                        disabled={ocupado}
+                        onClick={() => visualizarRegistro(item)}
+                      >
+                        👁 Visualizar registro
+                      </button>
+
+                      <label className="riv__foto-btn">
+                        📷 Adicionar foto
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(event) =>
+                            adicionarFotosRegistro(item, event.target.files, 'ANTES')
+                          }
+                        />
+                      </label>
+
+                      <label className="riv__foto-btn riv__foto-btn--depois">
+                        📷 Foto após serviço
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(event) =>
+                            adicionarFotosRegistro(item, event.target.files, 'DEPOIS')
+                          }
+                        />
+                      </label>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {abaRiv === 'HISTORICO' && (
+      <section className="riv__secao">
+        <div className="riv__secao-titulo">
+          <div>
+            <small>HISTÓRICO</small>
+            <h3>Quilometragem</h3>
+          </div>
+        </div>
+
+        <div className="riv__km-historico">
+          {dados.historicoKm.length === 0 ? (
+            <div className="viaturas-vazio">
+              Nenhuma quilometragem registrada.
+            </div>
+          ) : (
+            dados.historicoKm.map((item) => (
+              <div key={item.id} className={[item.tipo_lancamento === 'CORRECAO' ? 'is-correcao' : '', item.corrigido ? 'is-corrigido' : ''].join(' ')}>
+                <div>
+                  <strong>{item.tipo_lancamento === 'CORRECAO' ? 'CORREÇÃO: ' : ''}{formatarKm(item.quilometragem)}</strong>
+                  {item.corrigido && <small className="riv__km-corrigido">REGISTRO CORRIGIDO</small>}
+                  {item.tipo_lancamento === 'CORRECAO' && item.quilometragem_anterior != null && (
+                    <small>Anterior: {formatarKm(item.quilometragem_anterior)} · Motivo: {item.justificativa_correcao}</small>
+                  )}
+                </div>
+                <span>{new Date(item.created_at).toLocaleString('pt-BR')}{item.criado_por_nome ? ` · ${item.criado_por_nome}` : ''}</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="riv__historico-divisor">
+          <small>REGISTROS DO RIV</small>
+          <h3>Registros concluídos e histórico operacional</h3>
+          <p>
+            Avarias abertas ficam em Novidades / Avarias. Manutenções ainda abertas
+            ficam na Central de Manutenção. Agravamentos permanecem aqui como eventos
+            vinculados à avaria original.
+          </p>
+        </div>
+
+        <div className="riv__timeline">
+          {registrosHistoricos.length === 0 ? (
+            <div className="viaturas-vazio">
+              Nenhum registro concluído no histórico.
+            </div>
+          ) : (
+            registrosHistoricos.map((item) => (
               <article
                 key={item.id}
                 className={[
@@ -548,7 +1428,7 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
               >
                 <div>
                   <small>
-                    {item.tipo} · {formatarKm(item.quilometragem)}
+                    {item.tipo === 'AVARIA' ? 'NOVIDADE / AVARIA' : item.tipo} · {formatarKm(item.quilometragem)}
                   </small>
                   {item.tipo === 'MANUTENCAO' && (
                     <span className={`riv__status-manut ${item.resolvida ? 'is-fechada' : 'is-aberta'}`}>
@@ -557,6 +1437,15 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
                   )}
                   <h4>{item.titulo}</h4>
                   {item.descricao && <p>{item.descricao}</p>}
+                  {item.tipo === 'AVARIA' && (
+                    <div className="riv__novidade-meta">
+                      {item.origem_constatacao && <span>ORIGEM: {item.origem_constatacao.replaceAll('_', ' ')}</span>}
+                      {item.local_avaria && <span>LOCAL: {item.local_avaria}</span>}
+                      {item.severidade && <span>GRAVIDADE: {item.severidade}</span>}
+                      {item.responsabilidade_status && <span>RESP.: {item.responsabilidade_status.replaceAll('_', ' ')}</span>}
+                      {item.agravamento && <span className="is-agravamento">AGRAVAMENTO</span>}
+                    </div>
+                  )}
                   {item.tipo === 'AVARIA' && item.resolvida && item.providencia_fechamento && (
                     <div className="riv__fechamento-resumo">
                       <strong>FECHAMENTO</strong>
@@ -613,11 +1502,6 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
                     </button>
                   )}
 
-                  {item.tipo === 'AVARIA' && !item.resolvida && (
-                    <button type="button" disabled={ocupado} onClick={() => abrirFechamentoAvaria(item)}>
-                      Marcar resolvida
-                    </button>
-                  )}
 
                   {item.tipo === 'AVARIA' && item.resolvida && (
                     <button type="button" className="riv__btn-reabrir" disabled={ocupado} onClick={() => setReabrindoAvaria({ item, justificativa: '' })}>
@@ -630,36 +1514,7 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
           )}
         </div>
       </section>
-
-      <section className="riv__secao">
-        <div className="riv__secao-titulo">
-          <div>
-            <small>HISTÓRICO</small>
-            <h3>Quilometragem</h3>
-          </div>
-        </div>
-
-        <div className="riv__km-historico">
-          {dados.historicoKm.length === 0 ? (
-            <div className="viaturas-vazio">
-              Nenhuma quilometragem registrada.
-            </div>
-          ) : (
-            dados.historicoKm.map((item) => (
-              <div key={item.id} className={[item.tipo_lancamento === 'CORRECAO' ? 'is-correcao' : '', item.corrigido ? 'is-corrigido' : ''].join(' ')}>
-                <div>
-                  <strong>{item.tipo_lancamento === 'CORRECAO' ? 'CORREÇÃO: ' : ''}{formatarKm(item.quilometragem)}</strong>
-                  {item.corrigido && <small className="riv__km-corrigido">REGISTRO CORRIGIDO</small>}
-                  {item.tipo_lancamento === 'CORRECAO' && item.quilometragem_anterior != null && (
-                    <small>Anterior: {formatarKm(item.quilometragem_anterior)} · Motivo: {item.justificativa_correcao}</small>
-                  )}
-                </div>
-                <span>{new Date(item.created_at).toLocaleString('pt-BR')}{item.criado_por_nome ? ` · ${item.criado_por_nome}` : ''}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+      )}
 
       {fechandoAvaria && (
         <div className="riv__modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !ocupado) setFechandoAvaria(null) }}>
@@ -755,6 +1610,12 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
               <div><small>REGISTRADA POR</small><strong>{visualizandoRegistro.criado_por_nome || '—'}</strong></div>
               {visualizandoRegistro.resolvida_em && <div><small>CONCLUÍDA EM</small><strong>{new Date(visualizandoRegistro.resolvida_em).toLocaleString('pt-BR')}</strong></div>}
               {visualizandoRegistro.encerrada_por_nome && <div><small>CONCLUÍDA POR</small><strong>{visualizandoRegistro.encerrada_por_nome}</strong></div>}
+              {visualizandoRegistro.tipo === 'AVARIA' && visualizandoRegistro.origem_constatacao && <div><small>ORIGEM DA CONSTATAÇÃO</small><strong>{visualizandoRegistro.origem_constatacao.replaceAll('_', ' ')}</strong></div>}
+              {visualizandoRegistro.tipo === 'AVARIA' && visualizandoRegistro.local_avaria && <div><small>LOCAL DA AVARIA</small><strong>{visualizandoRegistro.local_avaria}</strong></div>}
+              {visualizandoRegistro.tipo === 'AVARIA' && visualizandoRegistro.componente_avariado && <div><small>COMPONENTE</small><strong>{visualizandoRegistro.componente_avariado}</strong></div>}
+              {visualizandoRegistro.tipo === 'AVARIA' && visualizandoRegistro.severidade && <div><small>GRAVIDADE</small><strong>{visualizandoRegistro.severidade}</strong></div>}
+              {visualizandoRegistro.tipo === 'AVARIA' && visualizandoRegistro.disponibilidade_vtr && <div><small>CONDIÇÃO DA VTR</small><strong>{visualizandoRegistro.disponibilidade_vtr.replaceAll('_', ' ')}</strong></div>}
+              {visualizandoRegistro.tipo === 'AVARIA' && visualizandoRegistro.responsabilidade_status && <div><small>RESPONSABILIDADE</small><strong>{visualizandoRegistro.responsabilidade_status.replaceAll('_', ' ')}</strong></div>}
             </div>
 
             {visualizandoRegistro.descricao && (

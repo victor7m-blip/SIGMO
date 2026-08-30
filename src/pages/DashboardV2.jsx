@@ -1051,6 +1051,66 @@ function PainelDashboard({
   const vitrine =
     useDashboardVitrine(user)
 
+  const [viaturasResumo, setViaturasResumo] = useState({
+    total: 0,
+    disponiveis: 0,
+    manutencaoInterna: 0,
+    manutencaoExterna: 0,
+    outrasUnidades: 0,
+    processoDescarga: 0
+  })
+
+  useEffect(() => {
+    let ativo = true
+
+    async function carregarViaturasResumo() {
+      try {
+        const { data, error } = await supabase
+          .from('sigmo_viaturas')
+          .select('id, situacao')
+
+        if (error) throw error
+        if (!ativo) return
+
+        const lista = Array.isArray(data) ? data : []
+        const situacoes = lista.map((item) =>
+          String(item?.situacao || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toUpperCase()
+        )
+
+        setViaturasResumo({
+          total: lista.length,
+          disponiveis: situacoes.filter((valor) => valor === 'DISPONIVEL').length,
+          manutencaoInterna: situacoes.filter((valor) => valor === 'MANUTENCAO_INTERNA').length,
+          manutencaoExterna: situacoes.filter((valor) => valor === 'MANUTENCAO_EXTERNA').length,
+          outrasUnidades: situacoes.filter((valor) =>
+            valor === 'A_DISPOSICAO_OUTRAS_UNIDADES' ||
+            valor === 'A DISPOSICAO DE OUTRAS UNIDADES' ||
+            valor === 'A_DISPOSICAO_DE_OUTRAS_UNIDADES'
+          ).length,
+          processoDescarga: situacoes.filter((valor) => valor === 'PROCESSO_DESCARGA').length
+        })
+      } catch (error) {
+        console.warn('Não foi possível carregar o resumo de viaturas:', error)
+      }
+    }
+
+    carregarViaturasResumo()
+
+    const timer = window.setInterval(
+      carregarViaturasResumo,
+      5 * 60 * 1000
+    )
+
+    return () => {
+      ativo = false
+      window.clearInterval(timer)
+    }
+  }, [])
+
   const [agora, setAgora] =
     useState(() => new Date())
 
@@ -1609,6 +1669,35 @@ function PainelDashboard({
       tone: 'red'
     }
   ]
+
+  const viaturasGrafico = [
+    {
+      label: 'Disponíveis',
+      value: viaturasResumo.disponiveis,
+      tone: 'green'
+    },
+    {
+      label: 'Manut. interna',
+      value: viaturasResumo.manutencaoInterna,
+      tone: 'yellow'
+    },
+    {
+      label: 'Manut. externa',
+      value: viaturasResumo.manutencaoExterna,
+      tone: 'red'
+    },
+    {
+      label: 'Outras unidades',
+      value: viaturasResumo.outrasUnidades,
+      tone: 'cyan'
+    },
+    {
+      label: 'Processo descarga',
+      value: viaturasResumo.processoDescarga,
+      tone: 'purple'
+    }
+  ]
+
 
   if (
     loading &&
@@ -2665,6 +2754,121 @@ function PainelDashboard({
           </div>
         </article>
 
+        <article className="sigmo-command-panel sigmo-command-viaturas">
+          <div className="sigmo-command-panel-title">
+            <div className="sigmo-command-title-icon sigmo-command-title-icon-cyan">
+              ▱
+            </div>
+
+            <div>
+              <span>VIATURAS</span>
+              <small>Frota operacional</small>
+              <strong>{numero(viaturasResumo.total)}</strong>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavegar('viaturas')}
+            >
+              Abrir módulo
+            </button>
+          </div>
+
+          <div className="sigmo-command-viaturas-summary">
+            <ArmaMiniCard
+              label="Disponíveis"
+              value={viaturasResumo.disponiveis}
+              tone="green"
+              icon="✓"
+            />
+            <ArmaMiniCard
+              label="Manut. interna"
+              value={viaturasResumo.manutencaoInterna}
+              tone="yellow"
+              icon="◆"
+            />
+            <ArmaMiniCard
+              label="Manut. externa"
+              value={viaturasResumo.manutencaoExterna}
+              tone="red"
+              icon="◆"
+            />
+            <ArmaMiniCard
+              label="Outras unidades"
+              value={viaturasResumo.outrasUnidades}
+              tone="cyan"
+              icon="↗"
+            />
+            <ArmaMiniCard
+              label="Proc. descarga"
+              value={viaturasResumo.processoDescarga}
+              tone="purple"
+              icon="▤"
+            />
+          </div>
+
+          <div className="sigmo-command-viaturas-body">
+            <div>
+              <h3>Distribuição da frota</h3>
+
+              <div className="sigmo-command-donut-block sigmo-command-viaturas-donut">
+                <Donut
+                  total={viaturasResumo.total}
+                  values={viaturasGrafico}
+                  label="VTR"
+                />
+
+                <div className="sigmo-command-legend">
+                  {viaturasGrafico.map((item) => (
+                    <LegendaLinha
+                      key={item.label}
+                      label={item.label}
+                      value={item.value}
+                      total={viaturasResumo.total}
+                      tone={item.tone}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="sigmo-command-viaturas-status">
+              <h3>Situação operacional</h3>
+
+              <BarraHorizontal
+                label="Disponíveis"
+                value={viaturasResumo.disponiveis}
+                total={viaturasResumo.total}
+                tone="green"
+              />
+              <BarraHorizontal
+                label="Manut. interna"
+                value={viaturasResumo.manutencaoInterna}
+                total={viaturasResumo.total}
+                tone="yellow"
+              />
+              <BarraHorizontal
+                label="Manut. externa"
+                value={viaturasResumo.manutencaoExterna}
+                total={viaturasResumo.total}
+                tone="red"
+              />
+              <BarraHorizontal
+                label="Outras unidades"
+                value={viaturasResumo.outrasUnidades}
+                total={viaturasResumo.total}
+                tone="cyan"
+              />
+              <BarraHorizontal
+                label="Proc. descarga"
+                value={viaturasResumo.processoDescarga}
+                total={viaturasResumo.total}
+                tone="purple"
+              />
+            </div>
+          </div>
+        </article>
+
         <article className="sigmo-command-panel sigmo-command-tonfas">
           <div className="sigmo-command-panel-title">
             <div className="sigmo-command-title-icon sigmo-command-title-icon-purple">
@@ -3413,8 +3617,7 @@ function PainelDashboard({
             ['▦', 'TPD'],
             ['ϟ', 'Tasers'],
             ['▰', 'Munições'],
-            ['◇', 'Coletes'],
-            ['▱', 'Viaturas']
+            ['◇', 'Coletes']
           ].map(
             ([icon, label]) => (
               <div key={label}>
@@ -3909,6 +4112,7 @@ export default function DashboardV2({
 })
 
   const [policialAbrirRe, setPolicialAbrirRe] = useState('')
+  const [viaturaAbrirId, setViaturaAbrirId] = useState(null)
   const [avisoRecebimento, setAvisoRecebimento] = useState(0)
   const [avisoNotificacao, setAvisoNotificacao] = useState(null)
   const [notificacaoVerificada, setNotificacaoVerificada] = useState(false)
@@ -4121,6 +4325,13 @@ useEffect(() => {
   }
 }
 
+  function abrirRivViatura(viaturaId) {
+    if (!viaturaId) return
+
+    setViaturaAbrirId(viaturaId)
+    setRoute('viaturas')
+  }
+
   function abrirCadastroPolicial(re) {
   const valorRe = String(re || '').trim()
 
@@ -4166,6 +4377,7 @@ useEffect(() => {
         <Manutencoes
           user={user}
           onVoltar={voltarDashboard}
+          onAbrirRivViatura={abrirRivViatura}
         />
       )
     }
@@ -4270,7 +4482,14 @@ if (route === 'ht') {
 }
 
 if (route === 'viaturas') {
-  return <Viaturas user={user} />
+  return (
+    <Viaturas
+      user={user}
+      abrirViaturaId={viaturaAbrirId}
+      abrirDiretoRiv={Boolean(viaturaAbrirId)}
+      onViaturaAberta={() => setViaturaAbrirId(null)}
+    />
+  )
 }
 
 if (route === 'tasers') {

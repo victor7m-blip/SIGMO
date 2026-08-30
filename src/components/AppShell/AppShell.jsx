@@ -62,6 +62,11 @@ const menuItems = [
     icon: '▰'
   },
   {
+    key: 'viaturas',
+    label: 'Viaturas',
+    icon: '▱'
+  },
+  {
     key: 'policiais',
     label: 'Policiais',
     icon: '●'
@@ -76,11 +81,6 @@ const menuItems = [
   label: 'Solicitações Cadastrais',
   icon: '☷'
 },
-  {
-    key: 'viaturas',
-    label: 'Viaturas',
-    icon: '▱'
-  },
   {
     key: 'relatorios',
     label: 'Relatórios',

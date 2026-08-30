@@ -14,6 +14,7 @@ import FiltrosManutencao from './components/FiltrosManutencao'
 import ManutencaoCard from './components/ManutencaoCard'
 import ManutencaoDetalhes from './components/ManutencaoDetalhes'
 import HTManutencaoExternaModal from '../HT/components/HTManutencaoExternaModal'
+import CentralManutencaoVtr from './CentralManutencaoVtr'
 import './Manutencoes.css'
 
 const FILTROS_INICIAIS = {
@@ -105,7 +106,8 @@ function dentroDoPeriodo(item, dataInicial, dataFinal) {
   return true
 }
 
-export default function Manutencoes({ user, onVoltar }) {
+export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
+  const [areaManutencao, setAreaManutencao] = useState('MATERIAIS')
   const [manutencoes, setManutencoes] = useState([])
   const [manutencoesExternas, setManutencoesExternas] = useState([])
   const [filtros, setFiltros] = useState(FILTROS_INICIAIS)
@@ -386,8 +388,24 @@ export default function Manutencoes({ user, onVoltar }) {
     }
   }
 
+  if (areaManutencao === 'VIATURAS') {
+    return (
+      <main className="manutencoes-page">
+        <section className="manutencoes-area-seletor" aria-label="Área de manutenção">
+          <button type="button" onClick={() => setAreaManutencao('MATERIAIS')}>Materiais</button>
+          <button type="button" className="ativo" aria-pressed="true">Viaturas</button>
+        </section>
+        <CentralManutencaoVtr user={user} onVoltar={onVoltar} onAbrirRiv={onAbrirRivViatura} />
+      </main>
+    )
+  }
+
   return (
     <main className="manutencoes-page">
+      <section className="manutencoes-area-seletor" aria-label="Área de manutenção">
+        <button type="button" className="ativo" aria-pressed="true">Materiais</button>
+        <button type="button" onClick={() => setAreaManutencao('VIATURAS')}>Viaturas</button>
+      </section>
       <section className="manutencoes-hero">
         <div>
           <span>CENTRAL GERAL</span>

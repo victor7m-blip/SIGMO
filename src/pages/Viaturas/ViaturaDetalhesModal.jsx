@@ -13,13 +13,14 @@ export default function ViaturaDetalhesModal({
   user,
   viatura,
   onClose,
-  onUpdated
+  onUpdated,
+  abaInicial = 'FOTOS'
 }) {
   const [fotos, setFotos] = useState([])
   const [loading, setLoading] = useState(true)
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState('')
-  const [aba, setAba] = useState('FOTOS')
+  const [aba, setAba] = useState(abaInicial)
 
   const fotosCadastroInicial = useMemo(
     () => fotos.filter((item) => item.origem === 'CADASTRO_INICIAL'),
@@ -39,8 +40,9 @@ export default function ViaturaDetalhesModal({
   }
 
   useEffect(() => {
+    setAba(abaInicial)
     carregarFotos()
-  }, [viatura.id])
+  }, [viatura.id, abaInicial])
 
   async function upload(event) {
     const arquivos = event.target.files

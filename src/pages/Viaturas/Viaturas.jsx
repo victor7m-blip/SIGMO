@@ -10,6 +10,7 @@ import {
 } from '../../services/viaturasService'
 
 import ViaturaDetalhesModal from './ViaturaDetalhesModal'
+import CentralManutencaoVtr from '../Manutencoes/CentralManutencaoVtr'
 
 import './Viaturas.css'
 
@@ -42,7 +43,7 @@ function formatarPlaca(valor) {
   return `${limpo.slice(0, 3)}-${limpo.slice(3)}`
 }
 
-export default function Viaturas({ user }) {
+export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv = false, onViaturaAberta }) {
   const [viaturas, setViaturas] = useState([])
   const [pesquisa, setPesquisa] = useState('')
   const [filtroSituacao, setFiltroSituacao] = useState('TODAS')
@@ -53,6 +54,8 @@ export default function Viaturas({ user }) {
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [abrirRivInicial, setAbrirRivInicial] = useState(false)
+  const [areaViaturas, setAreaViaturas] = useState('FROTA')
 
   async function carregar() {
     try {
@@ -69,6 +72,20 @@ export default function Viaturas({ user }) {
   useEffect(() => {
     carregar()
   }, [])
+
+  useEffect(() => {
+    if (!abrirViaturaId || viaturas.length === 0) return
+
+    const encontrada = viaturas.find(
+      (item) => String(item.id) === String(abrirViaturaId)
+    )
+
+    if (!encontrada) return
+
+    setDetalheViatura(encontrada)
+    setAbrirRivInicial(Boolean(abrirDiretoRiv))
+    onViaturaAberta?.()
+  }, [abrirViaturaId, abrirDiretoRiv, viaturas, onViaturaAberta])
 
   const resumo = useMemo(() => {
     const contar = (situacao) =>
@@ -167,6 +184,21 @@ export default function Viaturas({ user }) {
     }
   }
 
+  function abrirRivPelaManutencao(viaturaId) {
+    const encontrada = viaturas.find(
+      (item) => String(item.id) === String(viaturaId)
+    )
+
+    if (!encontrada) {
+      setErro('Viatura não localizada na frota.')
+      return
+    }
+
+    setAreaViaturas('FROTA')
+    setDetalheViatura(encontrada)
+    setAbrirRivInicial(true)
+  }
+
   async function atualizarAposFotos() {
     await carregar()
 
@@ -183,6 +215,59 @@ export default function Viaturas({ user }) {
 
   return (
     <main className="viaturas-page">
+      <section
+        aria-label="Área de viaturas"
+        style={{
+          display: 'flex',
+          gap: 8,
+          marginBottom: 14,
+          padding: 6,
+          border: '1px solid rgba(148, 163, 184, .18)',
+          borderRadius: 10,
+          background: 'rgba(15, 23, 42, .22)'
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setAreaViaturas('FROTA')}
+          aria-pressed={areaViaturas === 'FROTA'}
+          style={{
+            border: areaViaturas === 'FROTA' ? '1px solid #3b82f6' : '1px solid transparent',
+            borderRadius: 8,
+            padding: '9px 16px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: areaViaturas === 'FROTA' ? '#1d4ed8' : 'transparent',
+            color: '#fff'
+          }}
+        >
+          Frota
+        </button>
+        <button
+          type="button"
+          onClick={() => setAreaViaturas('MANUTENCAO')}
+          aria-pressed={areaViaturas === 'MANUTENCAO'}
+          style={{
+            border: areaViaturas === 'MANUTENCAO' ? '1px solid #3b82f6' : '1px solid transparent',
+            borderRadius: 8,
+            padding: '9px 16px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: areaViaturas === 'MANUTENCAO' ? '#1d4ed8' : 'transparent',
+            color: '#fff'
+          }}
+        >
+          Manutenção
+        </button>
+      </section>
+
+      {areaViaturas === 'MANUTENCAO' ? (
+        <CentralManutencaoVtr
+          user={user}
+          onAbrirRiv={abrirRivPelaManutencao}
+        />
+      ) : (
+        <>
       <header className="viaturas-hero">
         <div>
           <span className="viaturas-kicker">SIGMO · GESTÃO PATRIMONIAL</span>
@@ -267,7 +352,7 @@ export default function Viaturas({ user }) {
               <article
                 className="viatura-card viatura-card--clicavel"
                 key={viatura.id}
-                onClick={() => setDetalheViatura(viatura)}
+                onClick={() => { setAbrirRivInicial(false); setDetalheViatura(viatura) }}
               >
                 <div className="viatura-card__foto">
                   {viatura.foto_principal_url ? (
@@ -335,6 +420,7 @@ export default function Viaturas({ user }) {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation()
+                      setAbrirRivInicial(false)
                       setDetalheViatura(viatura)
                     }}
                   >
@@ -357,6 +443,9 @@ export default function Viaturas({ user }) {
           </div>
         )}
       </section>
+
+        </>
+      )}
 
       {modalAberto && (
         <div
@@ -511,8 +600,12 @@ export default function Viaturas({ user }) {
         <ViaturaDetalhesModal
           user={user}
           viatura={detalheViatura}
-          onClose={() => setDetalheViatura(null)}
+          onClose={() => {
+            setDetalheViatura(null)
+            setAbrirRivInicial(false)
+          }}
           onUpdated={atualizarAposFotos}
+          abaInicial={abrirRivInicial ? 'RIV' : 'FOTOS'}
         />
       )}
     </main>

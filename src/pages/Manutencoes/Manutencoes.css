@@ -612,3 +612,27 @@
   border-color:#0f62fe;
   transform:scale(1.04);
 }
+/* 7.6.17 - seletor isolado Materiais | Viaturas */
+.manutencoes-area-seletor {
+  display: inline-flex;
+  gap: 6px;
+  padding: 5px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .42);
+}
+.manutencoes-area-seletor button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 16px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  color: #cbd5e1;
+  background: transparent;
+}
+.manutencoes-area-seletor button.ativo {
+  color: #fff;
+  background: #1d4ed8;
+}

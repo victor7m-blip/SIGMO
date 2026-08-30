@@ -7,6 +7,36 @@ const TABLE_MANUT = 'sigmo_viaturas_manutencoes_riv'
 const TABLE_OCORRENCIAS = 'sigmo_viaturas_riv_ocorrencias'
 const TABLE_HISTORICO_OCORRENCIAS = 'sigmo_viaturas_riv_ocorrencias_historico'
 
+export const ORIGENS_NOVIDADE_VTR = [
+  { value: 'DURANTE_SERVICO', label: 'Durante o serviço' },
+  { value: 'ASSUNCAO_VTR', label: 'Na assunção da VTR' },
+  { value: 'ENTREGA_VTR', label: 'Na entrega da VTR' },
+  { value: 'FISCALIZACAO', label: 'Fiscalização do Serviço de Dia' },
+  { value: 'OUTRA', label: 'Outra situação' }
+]
+
+export const SEVERIDADES_NOVIDADE_VTR = [
+  { value: 'BAIXA', label: 'Baixa' },
+  { value: 'MEDIA', label: 'Média' },
+  { value: 'ALTA', label: 'Alta' },
+  { value: 'CRITICA', label: 'Crítica' }
+]
+
+export const DISPONIBILIDADES_NOVIDADE_VTR = [
+  { value: 'DISPONIVEL', label: 'VTR disponível' },
+  { value: 'DISPONIVEL_COM_RESTRICAO', label: 'Disponível com restrição' },
+  { value: 'INDISPONIVEL', label: 'VTR indisponível' },
+  { value: 'NAO_AVALIADA', label: 'Ainda não avaliada' }
+]
+
+export const RESPONSABILIDADES_NOVIDADE_VTR = [
+  { value: 'NAO_DEFINIDA', label: 'Responsabilidade não definida' },
+  { value: 'INFORMADA_PELO_MOTORISTA', label: 'Informada pelo próprio motorista' },
+  { value: 'ASSUMIDA', label: 'Responsabilidade assumida' },
+  { value: 'A_APURAR', label: 'Responsabilidade a apurar' },
+  { value: 'NAO_SE_APLICA', label: 'Não se aplica' }
+]
+
 export const ITENS_MANUTENCAO_RIV = [
   { value: 'OLEO_MOTOR', label: 'Óleo do motor', margemKmPadrao: 1000, margemDiasPadrao: 30 },
   { value: 'FREIOS', label: 'Freios / pastilhas', margemKmPadrao: 1000, margemDiasPadrao: 30 }
@@ -14,6 +44,14 @@ export const ITENS_MANUTENCAO_RIV = [
 
 function normalizar(valor) {
   return String(valor || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
+export function podeGerenciarAvariasConhecidas(user) {
+  const perfil = normalizar(user?.perfil || user?.role || user?.tipo_usuario || user?.user_metadata?.perfil)
+  return [
+    'P4', 'SECAO P4', 'GESTOR PATRIMONIAL',
+    'SVDD', 'ENCARREGADO SVDD', 'ENCARREGADO DO SVDD'
+  ].includes(perfil)
 }
 
 export function podeCorrigirQuilometragem(user) {
@@ -118,15 +156,103 @@ export async function salvarManutencaoRiv({ viaturaId, item, nomeItem, itemPerso
   return data
 }
 
-export async function registrarOcorrenciaRiv({ viatura, tipo, titulo, descricao, user }) {
+export async function registrarOcorrenciaRiv({ viatura, tipo, titulo, descricao, user, ...novidade }) {
   if (!viatura?.id) throw new Error('Viatura inválida.')
   if (!tipo) throw new Error('Informe o tipo do registro.')
   if (!String(titulo || '').trim()) throw new Error('Informe o título.')
+
+  if (tipo === 'AVARIA') {
+    const ator = atorDoUsuario(user)
+    const { data, error } = await supabase.rpc('sigmo_registrar_novidade_viatura', {
+      p_viatura_id: viatura.id,
+      p_titulo: String(titulo).trim().toUpperCase(),
+      p_descricao: String(descricao || '').trim().toUpperCase() || null,
+      p_quilometragem: Number(viatura.quilometragem_atual || 0),
+      p_origem_constatacao: novidade.origemConstatacao || 'NAO_INFORMADA',
+      p_local_avaria: String(novidade.localAvaria || '').trim().toUpperCase() || null,
+      p_componente_avariado: String(novidade.componenteAvariado || '').trim().toUpperCase() || null,
+      p_severidade: novidade.severidade || null,
+      p_disponibilidade_vtr: novidade.disponibilidadeVtr || 'NAO_AVALIADA',
+      p_responsabilidade_status: novidade.responsabilidadeStatus || 'NAO_DEFINIDA',
+      p_responsavel_id: null,
+      p_responsavel_nome: null,
+      p_responsavel_re: null,
+      p_assumida_pelo_responsavel: novidade.responsabilidadeStatus === 'ASSUMIDA',
+      p_requer_apuracao: novidade.responsabilidadeStatus === 'A_APURAR',
+      p_providencia_atual: null,
+      p_ocorrencia_pai_id: novidade.ocorrenciaPaiId || null,
+      p_agravamento: Boolean(novidade.agravamento),
+      p_agravamento_descricao: String(novidade.agravamentoDescricao || '').trim().toUpperCase() || null,
+      p_usuario_id: ator.criado_por_id,
+      p_usuario_nome: ator.criado_por_nome,
+      p_usuario_re: user?.re || user?.matricula || null
+    })
+    if (error) throw error
+
+    if (data?.id && String(novidade.documentoConstatacao || '').trim()) {
+      const { data: atualizado, error: docError } = await supabase
+        .from(TABLE_OCORRENCIAS)
+        .update({
+          documento_constatacao: String(novidade.documentoConstatacao).trim().toUpperCase()
+        })
+        .eq('id', data.id)
+        .select()
+        .single()
+
+      if (docError) throw docError
+      return atualizado
+    }
+
+    return data
+  }
+
   const { data, error } = await supabase.from(TABLE_OCORRENCIAS).insert({
-    viatura_id: viatura.id, tipo, titulo: String(titulo).trim().toUpperCase(), descricao: String(descricao || '').trim().toUpperCase() || null,
-    quilometragem: Number(viatura.quilometragem_atual || 0), ...atorDoUsuario(user)
+    viatura_id: viatura.id,
+    tipo,
+    titulo: String(titulo).trim().toUpperCase(),
+    descricao: String(descricao || '').trim().toUpperCase() || null,
+    quilometragem: Number(viatura.quilometragem_atual || 0),
+    documento_constatacao: String(novidade.documentoConstatacao || '').trim().toUpperCase() || null,
+    ...atorDoUsuario(user)
   }).select().single()
   if (error) throw error
+  return data
+}
+
+export async function definirAvariaConhecidaRiv({ item, exibir, user }) {
+  if (!podeGerenciarAvariasConhecidas(user)) {
+    throw new Error('Somente P4 ou Encarregado do SVDD pode alterar o destaque de avarias conhecidas.')
+  }
+  if (!item?.id || item.tipo !== 'AVARIA') throw new Error('Avaria inválida.')
+  if (item.resolvida && exibir) throw new Error('Uma avaria resolvida não pode ser exibida como avaria conhecida.')
+
+  const ator = atorDoUsuario(user)
+  const agora = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from(TABLE_OCORRENCIAS)
+    .update({
+      exibir_avaria_conhecida: Boolean(exibir),
+      avaria_conhecida_atualizada_em: agora,
+      avaria_conhecida_atualizada_por_id: ator.criado_por_id,
+      avaria_conhecida_atualizada_por_nome: ator.criado_por_nome
+    })
+    .eq('id', item.id)
+    .eq('tipo', 'AVARIA')
+    .select()
+    .single()
+
+  if (error) throw error
+
+  await registrarHistoricoOcorrencia({
+    ocorrenciaId: item.id,
+    acao: exibir ? 'DESTACADA_COMO_AVARIA_CONHECIDA' : 'REMOVIDA_DAS_AVARIAS_CONHECIDAS',
+    descricao: exibir
+      ? 'AVARIA SELECIONADA PARA EXIBIÇÃO NO QUADRO DE AVARIAS CONHECIDAS.'
+      : 'AVARIA REMOVIDA DO QUADRO DE AVARIAS CONHECIDAS.',
+    user
+  })
+
   return data
 }
 

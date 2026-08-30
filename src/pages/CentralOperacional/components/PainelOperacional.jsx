@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import {
   cancelarMovimentacao,
@@ -17,6 +17,20 @@ import {
   aceitarTransferenciaHT,
   recusarTransferenciaHT
 } from '../../../services/htsTransferenciaService'
+
+import {
+  listarNovidadesVtrFluxo,
+  registrarCienciaProvidenciaVtr,
+  listarDocumentosNovidadeVtr,
+  enviarDocumentoNovidadeVtr,
+  excluirDocumentoNovidadeVtr
+} from '../../../services/novidadesVtrService'
+
+import {
+  ehEncarregado,
+  ehP4,
+  ehComandante
+} from '../../../services/permissionService'
 
 function texto(valor) {
   return String(valor ?? '').trim()
@@ -405,6 +419,131 @@ function detalheItem(item, secao) {
 
 export default function PainelOperacional({ dados, carregando, user, onAtualizar }) {
   const [decidindoManutencaoExternaId, setDecidindoManutencaoExternaId] = useState(null)
+  const [novidadesVtr, setNovidadesVtr] = useState([])
+  const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
+  const [novidadeVtrAberta, setNovidadeVtrAberta] = useState(null)
+  const [documentosVtr, setDocumentosVtr] = useState([])
+  const [arquivoVtr, setArquivoVtr] = useState(null)
+  const [salvandoCienciaVtr, setSalvandoCienciaVtr] = useState(false)
+  const [formCienciaVtr, setFormCienciaVtr] = useState({
+    providencia: '',
+    observacao: '',
+    documento: ''
+  })
+
+  const perfilVtr = ehEncarregado(user)
+    ? 'SVDD'
+    : ehP4(user)
+    ? 'P4'
+    : ehComandante(user)
+    ? 'CMT'
+    : null
+
+  async function carregarNovidadesVtr() {
+    if (!perfilVtr) {
+      setNovidadesVtr([])
+      return
+    }
+
+    try {
+      setCarregandoNovidadesVtr(true)
+      setNovidadesVtr(await listarNovidadesVtrFluxo())
+    } catch (error) {
+      console.error('Erro ao carregar novidades de VTR:', error)
+    } finally {
+      setCarregandoNovidadesVtr(false)
+    }
+  }
+
+  useEffect(() => {
+    carregarNovidadesVtr()
+  }, [perfilVtr])
+
+  const novidadesVtrExibidas = useMemo(() => {
+    if (!perfilVtr) return []
+
+    if (perfilVtr === 'SVDD') {
+      return novidadesVtr.filter((item) =>
+        String(item.fluxo_novidade_status || '') === 'PENDENTE_SVDD'
+      )
+    }
+
+    if (perfilVtr === 'P4') {
+      return novidadesVtr.filter((item) =>
+        String(item.fluxo_novidade_status || '') === 'PENDENTE_P4'
+      )
+    }
+
+    return novidadesVtr
+  }, [novidadesVtr, perfilVtr])
+
+  async function abrirNovidadeVtr(item) {
+    setNovidadeVtrAberta(item)
+    setFormCienciaVtr({ providencia: '', observacao: '', documento: '' })
+    setArquivoVtr(null)
+    try {
+      setDocumentosVtr(await listarDocumentosNovidadeVtr(item.ocorrencia_id))
+    } catch (error) {
+      console.error('Erro ao carregar documentos da novidade de VTR:', error)
+      setDocumentosVtr([])
+    }
+  }
+
+  async function salvarCienciaVtr() {
+    if (!novidadeVtrAberta || !perfilVtr || perfilVtr === 'CMT') return
+
+    if (!formCienciaVtr.providencia.trim()) {
+      window.alert('Informe a providência adotada.')
+      return
+    }
+
+    try {
+      setSalvandoCienciaVtr(true)
+
+      await registrarCienciaProvidenciaVtr({
+        ocorrenciaId: novidadeVtrAberta.ocorrencia_id,
+        etapa: perfilVtr,
+        providencia: formCienciaVtr.providencia.trim().toUpperCase(),
+        observacao: formCienciaVtr.observacao.trim().toUpperCase(),
+        documento: formCienciaVtr.documento.trim().toUpperCase(),
+        user
+      })
+
+      if (arquivoVtr) {
+        await enviarDocumentoNovidadeVtr({
+          viaturaId: novidadeVtrAberta.viatura_id,
+          ocorrenciaId: novidadeVtrAberta.ocorrencia_id,
+          etapa: perfilVtr,
+          arquivo: arquivoVtr,
+          user
+        })
+      }
+
+      setNovidadeVtrAberta(null)
+      setDocumentosVtr([])
+      setArquivoVtr(null)
+      await carregarNovidadesVtr()
+
+      if (typeof onAtualizar === 'function') {
+        await onAtualizar()
+      }
+    } catch (error) {
+      window.alert(error?.message || 'Não foi possível registrar a ciência/providência.')
+    } finally {
+      setSalvandoCienciaVtr(false)
+    }
+  }
+
+  async function excluirDocumentoVtr(documento) {
+    if (!window.confirm('Excluir este arquivo anexado? A exclusão do arquivo não apaga a trilha da providência.')) return
+
+    try {
+      await excluirDocumentoNovidadeVtr(documento)
+      setDocumentosVtr(await listarDocumentosNovidadeVtr(novidadeVtrAberta.ocorrencia_id))
+    } catch (error) {
+      window.alert(error?.message || 'Não foi possível excluir o documento.')
+    }
+  }
 
   async function decidirExterna(item, decisao) {
     if (!item?.id || decidindoManutencaoExternaId) return
@@ -732,6 +871,38 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
         </div>
 
         <div className="central-operacional-grid central-operacional-grid-secundario">
+          {perfilVtr && (
+            <button
+              type="button"
+              className="central-operacional-card central-operacional-card-secundario"
+              onClick={() => {
+                setSelecionado(null)
+                if (novidadesVtrExibidas.length === 1) {
+                  abrirNovidadeVtr(novidadesVtrExibidas[0])
+                } else {
+                  setSelecionado({
+                    key: 'novidades-vtr',
+                    titulo: 'Novidades de VTR',
+                    total: novidadesVtrExibidas.length,
+                    itens: novidadesVtrExibidas
+                  })
+                }
+              }}
+            >
+              <div className="central-card-topo">
+                <span>Novidades de VTR</span>
+              </div>
+              <strong>{carregandoNovidadesVtr ? '…' : novidadesVtrExibidas.length}</strong>
+              <small>
+                {perfilVtr === 'CMT'
+                  ? 'Visão consolidada'
+                  : novidadesVtrExibidas.length > 0
+                  ? 'Aguardando ciência'
+                  : 'Sem pendências'}
+              </small>
+            </button>
+          )}
+
           {indicadoresExibidos.map((card) => (
             <button
               type="button"
@@ -748,6 +919,195 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
           ))}
         </div>
       </section>
+
+      {novidadeVtrAberta && (
+        <div className="central-modal-backdrop" onMouseDown={() => setNovidadeVtrAberta(null)}>
+          <section
+            className="central-modal"
+            onMouseDown={(event) => event.stopPropagation()}
+            style={{ maxWidth: 980 }}
+          >
+            <header className="central-modal-header">
+              <div>
+                <span className="central-section-eyebrow">Novidade de VTR</span>
+                <h3>
+                  {novidadeVtrAberta.prefixo || 'VTR'} — {novidadeVtrAberta.titulo || 'Novidade'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="central-link-button"
+                onClick={() => setNovidadeVtrAberta(null)}
+              >
+                Fechar
+              </button>
+            </header>
+
+            <div className="central-modal-body">
+              <section className="central-registro-detalhes" style={{ display: 'grid', gap: 12 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span>CONSTATAÇÃO</span>
+                  <strong>{novidadeVtrAberta.descricao || 'Sem descrição.'}</strong>
+                </div>
+                <div>
+                  <span>Constatada por</span>
+                  <strong>
+                    {novidadeVtrAberta.constatada_por_nome || novidadeVtrAberta.criado_por_nome || 'Não informado'}
+                    {novidadeVtrAberta.constatada_por_re ? ` • RE ${novidadeVtrAberta.constatada_por_re}` : ''}
+                  </strong>
+                </div>
+                <div>
+                  <span>Data / hora da constatação</span>
+                  <strong>{formatarData(novidadeVtrAberta.constatada_em || novidadeVtrAberta.created_at)}</strong>
+                </div>
+                <div>
+                  <span>Documento da constatação</span>
+                  <strong>{novidadeVtrAberta.documento_constatacao || 'Não informado'}</strong>
+                </div>
+                <div>
+                  <span>Condição atual</span>
+                  <strong>{String(novidadeVtrAberta.disponibilidade_vtr || 'NAO_AVALIADA').replaceAll('_', ' ')}</strong>
+                </div>
+                {novidadeVtrAberta.observacao_condicao_vtr && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span>Observação operacional</span>
+                    <strong>{novidadeVtrAberta.observacao_condicao_vtr}</strong>
+                  </div>
+                )}
+              </section>
+
+              <section style={{ marginTop: 18 }}>
+                <h4>Providências do SVDD</h4>
+                {novidadeVtrAberta.svdd_ciencia_em ? (
+                  <div className="central-registro-detalhes">
+                    <div><span>Recebido por</span><strong>{novidadeVtrAberta.svdd_usuario_nome || '—'}{novidadeVtrAberta.svdd_usuario_re ? ` • RE ${novidadeVtrAberta.svdd_usuario_re}` : ''}</strong></div>
+                    <div><span>Ciência em</span><strong>{formatarData(novidadeVtrAberta.svdd_ciencia_em)}</strong></div>
+                    <div><span>Documento</span><strong>{novidadeVtrAberta.svdd_documento || '—'}</strong></div>
+                    <div><span>Providência</span><strong>{novidadeVtrAberta.svdd_providencia || '—'}</strong></div>
+                    {novidadeVtrAberta.svdd_observacao && <div className="central-registro-itens"><span>Observação</span><strong>{novidadeVtrAberta.svdd_observacao}</strong></div>}
+                  </div>
+                ) : (
+                  <div className="central-empty">Aguardando ciência do Encarregado do SVDD.</div>
+                )}
+              </section>
+
+              <section style={{ marginTop: 18 }}>
+                <h4>Providências do P4</h4>
+                {novidadeVtrAberta.p4_ciencia_em ? (
+                  <div className="central-registro-detalhes">
+                    <div><span>Recebido por</span><strong>{novidadeVtrAberta.p4_usuario_nome || '—'}{novidadeVtrAberta.p4_usuario_re ? ` • RE ${novidadeVtrAberta.p4_usuario_re}` : ''}</strong></div>
+                    <div><span>Ciência em</span><strong>{formatarData(novidadeVtrAberta.p4_ciencia_em)}</strong></div>
+                    <div><span>Documento</span><strong>{novidadeVtrAberta.p4_documento || '—'}</strong></div>
+                    <div><span>Providência</span><strong>{novidadeVtrAberta.p4_providencia || '—'}</strong></div>
+                    {novidadeVtrAberta.p4_observacao && <div className="central-registro-itens"><span>Observação</span><strong>{novidadeVtrAberta.p4_observacao}</strong></div>}
+                  </div>
+                ) : (
+                  <div className="central-empty">
+                    {novidadeVtrAberta.svdd_ciencia_em
+                      ? 'Aguardando ciência do P4.'
+                      : 'O registro chegará ao P4 após a ciência do SVDD.'}
+                  </div>
+                )}
+              </section>
+
+              {documentosVtr.length > 0 && (
+                <section style={{ marginTop: 18 }}>
+                  <h4>Documentos anexados</h4>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {documentosVtr.map((doc) => (
+                      <div
+                        key={doc.id}
+                        style={{
+                          display: 'flex',
+                          gap: 8,
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: 10,
+                          border: '1px solid #dbe4ee',
+                          borderRadius: 8
+                        }}
+                      >
+                        <div>
+                          <strong>{doc.nome_arquivo}</strong>
+                          <small style={{ display: 'block' }}>{doc.etapa}</small>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <a className="central-detalhe-button" href={doc.url} target="_blank" rel="noreferrer">Visualizar</a>
+                          <a className="central-detalhe-button" href={doc.url} download={doc.nome_arquivo}>Baixar</a>
+                          {(perfilVtr === doc.etapa || perfilVtr === 'CMT') && (
+                            <button type="button" className="central-detalhe-button" onClick={() => excluirDocumentoVtr(doc)}>Excluir</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {perfilVtr !== 'CMT' &&
+                ((perfilVtr === 'SVDD' && !novidadeVtrAberta.svdd_ciencia_em) ||
+                 (perfilVtr === 'P4' && novidadeVtrAberta.svdd_ciencia_em && !novidadeVtrAberta.p4_ciencia_em)) && (
+                <section style={{ marginTop: 20 }}>
+                  <h4>{perfilVtr === 'SVDD' ? 'Tomar ciência — SVDD' : 'Tomar ciência — P4'}</h4>
+
+                  <div className="central-registro-detalhes" style={{ marginTop: 10 }}>
+                    <label style={{ gridColumn: '1 / -1' }}>
+                      <span>Providência *</span>
+                      <textarea
+                        rows={3}
+                        value={formCienciaVtr.providencia}
+                        onChange={(event) => setFormCienciaVtr((atual) => ({ ...atual, providencia: event.target.value.toUpperCase() }))}
+                        placeholder="Informe a providência adotada."
+                      />
+                    </label>
+
+                    <label>
+                      <span>Documento / referência</span>
+                      <input
+                        value={formCienciaVtr.documento}
+                        onChange={(event) => setFormCienciaVtr((atual) => ({ ...atual, documento: event.target.value.toUpperCase() }))}
+                        placeholder="Ex.: MEMORANDO Nº 123/2026"
+                      />
+                    </label>
+
+                    <label>
+                      <span>Anexar documento</span>
+                      <input type="file" accept=".pdf,image/*" onChange={(event) => setArquivoVtr(event.target.files?.[0] || null)} />
+                    </label>
+
+                    <label style={{ gridColumn: '1 / -1' }}>
+                      <span>Observação</span>
+                      <textarea
+                        rows={3}
+                        value={formCienciaVtr.observacao}
+                        onChange={(event) => setFormCienciaVtr((atual) => ({ ...atual, observacao: event.target.value.toUpperCase() }))}
+                        placeholder="Observações complementares."
+                      />
+                    </label>
+                  </div>
+
+                  <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="central-button central-button-primary"
+                      disabled={salvandoCienciaVtr}
+                      onClick={salvarCienciaVtr}
+                    >
+                      {salvandoCienciaVtr ? 'Salvando...' : 'Tomar ciência e registrar providência'}
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              {perfilVtr === 'CMT' && (
+                <div className="central-empty" style={{ marginTop: 20 }}>
+                  Visão consolidada do Comandante de Cia. Nenhuma ciência obrigatória é exigida nesta etapa.
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {selecionado && (
         <div className="central-modal-backdrop" onMouseDown={() => setSelecionado(null)}>
@@ -946,6 +1306,16 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                       >
                         {registroAberto === (item?.id || index) ? 'Ocultar' : 'Ver detalhes'}
                       </button>
+                      {selecionado?.key === 'novidades-vtr' && (
+                        <button
+                          type="button"
+                          className="central-button central-button-primary"
+                          onClick={() => abrirNovidadeVtr(item)}
+                        >
+                          Abrir novidade
+                        </button>
+                      )}
+
                       {ehCancelavelAguardandoUsuario(item, selecionado) && (
                         <button
                           type="button"

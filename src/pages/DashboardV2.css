@@ -1684,3 +1684,95 @@
     min-height: 46px;
   }
 }
+
+/* =========================================================
+   SIGMO 7.6.17 — VIATURAS NA DASHBOARD
+   Viaturas ocupa a segunda coluna ao lado de Armas.
+   Tonfas/Cassetetes passa para a linha seguinte.
+   ========================================================= */
+.sigmo-command-tonfas {
+  grid-column: 1 / -1;
+}
+
+.sigmo-command-viaturas {
+  min-width: 0;
+}
+
+.sigmo-command-viaturas-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 12px 0;
+}
+
+.sigmo-command-viaturas-summary .sigmo-command-arma-mini {
+  min-width: 0;
+}
+
+.sigmo-command-viaturas-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+  gap: 14px;
+  min-height: 266px;
+  padding: 14px 13px 16px;
+}
+
+.sigmo-command-viaturas-body > div {
+  min-width: 0;
+}
+
+.sigmo-command-viaturas-body h3 {
+  margin: 0 0 14px;
+}
+
+.sigmo-command-viaturas-donut {
+  grid-template-columns: 142px minmax(150px, 1fr);
+  gap: 10px;
+}
+
+.sigmo-command-viaturas .sigmo-command-legend-row {
+  grid-template-columns: 8px minmax(82px, 1fr) 26px 34px;
+  gap: 4px;
+}
+
+.sigmo-command-viaturas .sigmo-command-legend-row > span:nth-child(2) {
+  overflow: visible;
+  font-size: .51rem;
+  line-height: 1.12;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.sigmo-command-viaturas-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sigmo-command-viaturas-status .sigmo-command-bar-row {
+  grid-template-columns: 94px minmax(0, 1fr) 24px;
+}
+
+@media (max-width: 1180px) {
+  .sigmo-command-viaturas-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sigmo-command-viaturas-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .sigmo-command-tonfas {
+    grid-column: auto;
+  }
+
+  .sigmo-command-viaturas-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sigmo-command-viaturas-donut {
+    grid-template-columns: 1fr;
+  }
+}
