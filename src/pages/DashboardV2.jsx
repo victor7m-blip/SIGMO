@@ -54,6 +54,7 @@ import CentralOperacional from './CentralOperacional'
 import Manutencoes from './Manutencoes/Manutencoes'
 import HT from './HT/HT'
 import Viaturas from './Viaturas/Viaturas'
+import MapaForca from './MapaForca/MapaForca'
 import './DashboardV2.css'
 
 const ROUTE_STORAGE_KEY =
@@ -4488,6 +4489,15 @@ if (route === 'viaturas') {
       abrirViaturaId={viaturaAbrirId}
       abrirDiretoRiv={Boolean(viaturaAbrirId)}
       onViaturaAberta={() => setViaturaAbrirId(null)}
+    />
+  )
+}
+
+if (route === 'mapa-forca') {
+  return (
+    <MapaForca
+      user={user}
+      onVoltar={voltarDashboard}
     />
   )
 }

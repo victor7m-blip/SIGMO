@@ -67,6 +67,11 @@ const menuItems = [
     icon: '▱'
   },
   {
+    key: 'mapa-forca',
+    label: 'Mapa Força',
+    icon: '▦'
+  },
+  {
     key: 'policiais',
     label: 'Policiais',
     icon: '●'

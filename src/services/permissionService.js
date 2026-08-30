@@ -28,6 +28,7 @@ export const ROTAS = {
   MUNICOES: 'municoes',
   LOCAIS: 'locais',
   VIATURAS: 'viaturas',
+  MAPA_FORCA: 'mapa-forca',
   RELATORIOS: 'relatorios',
   ALERTAS: 'alertas',
   AUDITORIA: 'auditoria',
@@ -344,13 +345,14 @@ const ROTAS_P4 = [
 const ROTAS_AUXILIAR = [
   // Auxiliar do SVDD (permanente ou temporário) possui atuação operacional
   // restrita: dashboard do SVDD, pagamento/recebimento/devolução,
-  // cadastro de usuário externo e consulta da própria carga pessoal.
+  // cadastro de usuário externo, Mapa Força e consulta da própria carga pessoal.
   ROTAS.DASHBOARD,
   ROTAS.PAGAR_MATERIAL,
   ROTAS.RECEBER_MATERIAL,
   ROTAS.DEVOLVER_MATERIAL,
   ROTAS.POLICIAIS,
-  ROTAS.CARGA_PESSOAL
+  ROTAS.CARGA_PESSOAL,
+  ROTAS.MAPA_FORCA
 ]
 
 const ROTAS_ENCARREGADO = [
@@ -376,6 +378,7 @@ const ROTAS_ENCARREGADO = [
   ROTAS.MUNICOES,
   ROTAS.LOCAIS,
   ROTAS.VIATURAS,
+  ROTAS.MAPA_FORCA,
   ROTAS.RELATORIOS,
   ROTAS.ALERTAS,
   ROTAS.AUDITORIA,
