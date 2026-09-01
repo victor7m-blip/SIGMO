@@ -1004,12 +1004,7 @@ export default function useDashboardVitrine(
         setLoading(true)
         setErro('')
 
-        const [
-          armasResultado,
-          tonfasResultado,
-          manutencoesResultado,
-          patrimoniosResumo
-        ] = await Promise.all([
+        const resultados = await Promise.allSettled([
           listarArmas({
             pagina: 1,
             limite: LIMITE
@@ -1031,6 +1026,52 @@ export default function useDashboardVitrine(
           }),
           resumirPatrimoniosIndividualizados(user)
         ])
+
+        const [
+          armasRes,
+          tonfasRes,
+          manutencoesRes,
+          patrimoniosRes
+        ] = resultados
+
+        const falhas = [
+          ['armas', armasRes],
+          ['tonfas/cassetetes', tonfasRes],
+          ['manutenÃ§Ãµes', manutencoesRes],
+          ['patrimÃ´nios individualizados', patrimoniosRes]
+        ].filter(
+          ([, resultado]) =>
+            resultado.status === 'rejected'
+        )
+
+        if (falhas.length > 0) {
+          falhas.forEach(
+            ([origem, resultado]) => {
+              console.warn(
+                `Falha ao carregar ${origem} na Dashboard:`,
+                resultado.reason
+              )
+            }
+          )
+
+          throw new Error(
+            `Falha parcial na Dashboard: ${falhas
+              .map(([origem]) => origem)
+              .join(', ')}`
+          )
+        }
+
+        const armasResultado =
+          armasRes.value
+
+        const tonfasResultado =
+          tonfasRes.value
+
+        const manutencoesResultado =
+          manutencoesRes.value
+
+        const patrimoniosResumo =
+          patrimoniosRes.value
 
         const armasFiltradas =
   filtrarArmasPorPerfil(

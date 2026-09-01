@@ -54,13 +54,6 @@ function pertenceAoPerfil(item, perfil) {
 
 
 async function listarTransferenciasOperacionaisPendentes() {
-  // Há dois fluxos de transferência coexistindo no SIGMO:
-  // 1) tabela operacional legada sigmo_transferencias_patrimoniais;
-  // 2) Engine Patrimonial, que grava em sigmo_patrimonio_movimentacoes.
-  //
-  // A Central consolida ambos. Em especial, transferências de HT feitas
-  // pela Engine (ex.: SVDD -> P4 preservando MANUTENCAO) não existem na
-  // tabela operacional legada.
   const [legadoRes, engineRes] = await Promise.allSettled([
     supabase
       .from('sigmo_transferencias_patrimoniais')
@@ -118,9 +111,6 @@ async function listarTransferenciasOperacionaisPendentes() {
     )
   }
 
-  // Por enquanto entram nesta consolidação somente as transferências de HT
-  // identificadas explicitamente pela Engine. Isso evita alterar o
-  // comportamento dos demais módulos que já usam a tabela operacional.
   const engineHT = engineBruto
     .filter((item) => {
       const dados = item?.dados || {}
@@ -149,8 +139,6 @@ async function listarTransferenciasOperacionaisPendentes() {
 
       return {
         ...item,
-
-        // Shape comum esperado pela Central/PainelOperacional.
         status: item?.status_movimentacao,
         tipo: item?.tipo_movimentacao,
         modulo: 'HT',
@@ -174,7 +162,6 @@ async function listarTransferenciasOperacionaisPendentes() {
           dados?.numero_serie ||
           dadosEngine?.numero_serie ||
           null,
-
         origem_codigo: origemEngine,
         origem_nome:
           dados?.guardiao_origem?.nome ||
@@ -190,15 +177,11 @@ async function listarTransferenciasOperacionaisPendentes() {
           item?.local_destino ||
           null,
         destino_local: item?.local_destino,
-
-        // ordenarRecentes/dataItem reconhece created_at.
         created_at: item?.created_at || item?.criado_em,
-
         origem_transferencia: 'ENGINE_PATRIMONIAL'
       }
     })
 
-  // Evita duplicidade caso algum fluxo seja espelhado nas duas tabelas.
   const resultado = []
   const chaves = new Set()
 
@@ -238,9 +221,6 @@ function transferenciaParaPerfil(item, perfil) {
     item.local_destino
   )
 
-  // A transferência pendente deve ser visível tanto para quem enviou
-  // quanto para quem vai receber. Isso permite ao SVDD acompanhar uma
-  // devolução SVDD -> P4 enquanto ela ainda aguarda recebimento.
   if (perfil.includes('SVDD')) {
     return (
       contem(origem, ['SVDD', 'SERVIÇO DE DIA', 'SERVICO DE DIA', 'COFRE DO SVDD']) ||
@@ -366,9 +346,6 @@ function aprovacoesVisiveisAoPerfil({ movimentacoes = [], baixas = [], perfil })
       origem_aprovacao: 'MOVIMENTACAO'
     }))
 
-  // Baixa patrimonial é decidida pelo Comandante/Admin. P4 e SVDD podem
-  // acompanhar seus próprios fluxos em módulos específicos, mas não recebem
-  // a decisão como pendência operacional na Central.
   const podeDecidirBaixa =
     perfil === 'ADMINISTRADOR' ||
     perfil.includes('COMANDANTE')
@@ -391,10 +368,6 @@ function patrimonioEstaBaixado(item) {
   const status = normalizarSemAcentos(
     item?.status_operacional || item?.status
   )
-
-  // "INATIVO" e "EXCLUIDO" podem representar registros centrais antigos
-  // ou substituídos. O card Baixados deve refletir somente baixa patrimonial
-  // explícita para não misturar histórico técnico com baixa operacional.
   return status === 'BAIXADO'
 }
 
@@ -406,8 +379,6 @@ function patrimonioNaoLocalizado(item) {
   )
   const local = normalizarSemAcentos(item?.local_atual)
 
-  // Mesma convenção já utilizada por Armas/HT/Tonfas: status/local explícito
-  // ou ausência de localização operacional.
   return (
     status.includes('NAO LOCALIZ') ||
     local.includes('NAO LOCALIZ') ||
@@ -428,6 +399,11 @@ async function listarPatrimoniosIndicadores() {
 export async function carregarCentralOperacional({ user } = {}) {
   const perfil = perfilCentral(user)
 
+  const podeConsultarManutencoesExternas =
+    perfil === 'ADMINISTRADOR' ||
+    perfil.includes('COMANDANTE') ||
+    perfil.includes('P4')
+
   const resultados = await Promise.allSettled([
     listarMovimentacoes(),
     listarTransferenciasOperacionaisPendentes(),
@@ -437,7 +413,9 @@ export async function carregarCentralOperacional({ user } = {}) {
     }),
     listarPatrimoniosIndicadores(),
     listarBaixasAguardandoAprovacao(),
-    listarManutencoesExternasAguardandoAprovacao(),
+    podeConsultarManutencoesExternas
+      ? listarManutencoesExternasAguardandoAprovacao()
+      : Promise.resolve([]),
     supabase
       .from('sigmo_manutencoes')
       .select('id, quantidade')
@@ -464,8 +442,6 @@ export async function carregarCentralOperacional({ user } = {}) {
     (item) => normalizarSemAcentos(item?.status) === 'REGISTRADA'
   )
 
-  // A origem da novidade em patrimônio cautelado é a origem da cautela
-  // finalizada mais recente que colocou o item em CAUTELA INDIVIDUAL.
   const patrimonioIds = [
     ...new Set(
       novidadesRegistradas
@@ -503,12 +479,6 @@ export async function carregarCentralOperacional({ user } = {}) {
         if (movsNovidadeError) {
           console.warn('Falha ao carregar cautelas das novidades:', movsNovidadeError)
         } else {
-          const movPorId = new Map(
-            (movsNovidade || []).map((mov) => [mov.id, mov])
-          )
-
-          // Como movsNovidade já vem do mais recente para o mais antigo,
-          // a primeira cautela válida encontrada para cada patrimônio vence.
           const itensPorMovimentacao = new Map()
           for (const item of itensNovidade || []) {
             const lista = itensPorMovimentacao.get(item.movimentacao_id) || []
@@ -570,9 +540,6 @@ export async function carregarCentralOperacional({ user } = {}) {
           ? 'P4'
           : null
 
-    // A responsabilidade operacional atual prevalece sobre a origem histórica
-    // da cautela. A origem da cautela é usada somente como fallback quando o
-    // patrimônio não possui um local atual reconhecido.
     const cargaAtual =
       cargaPeloLocalAtual ||
       cargaPelaCautela ||
@@ -597,10 +564,6 @@ export async function carregarCentralOperacional({ user } = {}) {
     }
   })
 
-  // Regra da Central:
-  // - SVDD vê somente novidades de materiais sob carga/origem SVDD.
-  // - P4 e Administrador podem acompanhar todas as novidades; no P4 a UI
-  //   separa em "Novidades P4" e "Novidades SVDD".
   const novidadesVisiveisAoPerfil =
     perfil.includes('SVDD')
       ? novidadesClassificadas.filter(
@@ -628,8 +591,6 @@ export async function carregarCentralOperacional({ user } = {}) {
   const ehComandante = perfil.includes('COMANDANTE')
   const manutencoesExternasPendentes = ordenarRecentes(manutencoesExternasAprovacao)
 
-  // A Engine usa estados positivos de pendência. Não inferimos pendência
-  // simplesmente por "não estar concluída", pois FINALIZADA é histórico.
   const statusRecebimentoPendente = [
     'AGUARDANDO_RECEBIMENTO',
     'AGUARDANDO RECEBIMENTO',
@@ -648,9 +609,6 @@ export async function carregarCentralOperacional({ user } = {}) {
   const aguardandoRecebimentoBase = movPerfil.filter((item) => {
     if (!contem(item.status, statusRecebimentoPendente)) return false
 
-    // Recebimentos individuais pertencem exclusivamente ao policial
-    // destinatário. O Administrador pode acompanhar o sistema, mas não deve
-    // enxergar/assumir a confirmação de cautela ou entrega de outro usuário.
     if (perfil === 'ADMINISTRADOR') {
       const destino = normalizarSemAcentos(
         item?.destino_local || item?.destino_nome || item?.destino_codigo
@@ -669,8 +627,6 @@ export async function carregarCentralOperacional({ user } = {}) {
     return true
   })
 
-  // Só detalhamos as pendências exibidas na Central. Isso permite mostrar
-  // destinatário, itens e quantidades sem alterar a Engine de movimentação.
   const aguardandoRecebimento = await Promise.all(
     aguardandoRecebimentoBase.map(async (item) => {
       try {

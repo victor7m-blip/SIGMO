@@ -1,461 +1,542 @@
-.mapa-forca-page {
-  min-height: 100%;
-  padding: 26px;
-  color: #eaf4ff;
-  background:
-    radial-gradient(circle at 90% 0%, rgba(30, 112, 194, .20), transparent 30%),
-    linear-gradient(180deg, #06172b 0%, #071d35 100%);
-}
+.mapa-forca-page{min-height:100%;padding:26px;color:#eaf4ff;background:radial-gradient(circle at 90% 0%,rgba(30,112,194,.20),transparent 30%),linear-gradient(180deg,#06172b 0%,#071d35 100%)}
+.mapa-forca-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:28px 30px;border:1px solid rgba(93,170,255,.24);border-radius:22px;background:linear-gradient(135deg,#0b4f91 0%,#0a315d 58%,#071f3d 100%);box-shadow:0 22px 50px rgba(0,0,0,.22)}
+.mapa-forca-hero span,.mapa-forca-turno-title span{font-size:11px;font-weight:900;letter-spacing:.14em;color:#9bd0ff}.mapa-forca-hero h1{margin:6px 0 5px;font-size:clamp(30px,4vw,48px);line-height:1;letter-spacing:-.03em}.mapa-forca-hero p{margin:0;color:#c9dcef}
+.mapa-forca-hero-actions,.mapa-forca-turno-actions{display:flex;gap:10px;flex-wrap:wrap}.mapa-forca-primary,.mapa-forca-secondary,.mapa-forca-grupo-meta button,.mapa-forca-turno-actions button{min-height:42px;padding:0 15px;border-radius:11px;font:inherit;font-weight:800;cursor:pointer}.mapa-forca-primary{border:0;color:#07305a;background:#fff}.mapa-forca-secondary{border:1px solid rgba(255,255,255,.28);color:#fff;background:rgba(255,255,255,.06)}
+.mapa-forca-turno{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(210px,1fr) auto minmax(210px,1fr) auto;align-items:end;gap:14px;margin-top:18px;padding:18px;border:1px solid rgba(124,175,225,.18);border-radius:18px;background:rgba(8,31,57,.92)}.mapa-forca-turno-title{align-self:center}.mapa-forca-turno-title strong{display:block;margin-top:5px;color:#f8c35a}.mapa-forca-turno-title small{display:block;margin-top:5px;color:#8faac4}.mapa-forca-turno label{display:grid;gap:7px}.mapa-forca-turno label span{font-size:12px;font-weight:800;color:#9fb8d0}.mapa-forca-turno input{min-height:42px;padding:0 11px;border:1px solid rgba(129,179,228,.25);border-radius:10px;color:#eef7ff;background:#06182c;font:inherit}.mapa-forca-seta{align-self:center;padding-bottom:4px;color:#63b5ff;font-size:24px}.mapa-forca-turno-actions button{border:1px solid rgba(129,179,228,.18);color:#dbeafe;background:rgba(255,255,255,.06)}.mapa-forca-turno-actions button:disabled{color:#71879c;cursor:not-allowed}
+.mapa-forca-grupo{overflow:hidden;border:1px solid rgba(118,170,220,.18);border-left:4px solid var(--grupo-cor,#4da9ff);border-radius:18px;background:rgba(8,30,54,.92);box-shadow:0 12px 28px rgba(0,0,0,.12)}.mapa-forca-dourado{--grupo-cor:#e5b94f}.mapa-forca-azul{--grupo-cor:#4da9ff}.mapa-forca-roxo{--grupo-cor:#9d7cff}.mapa-forca-ciano{--grupo-cor:#43c7db}.mapa-forca-verde{--grupo-cor:#49d49d}.mapa-forca-amarelo{--grupo-cor:#f2bd55}.mapa-forca-laranja{--grupo-cor:#f28d55}.mapa-forca-vermelho{--grupo-cor:#f36c79}
+.mapa-forca-grupo>header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 18px;border-bottom:1px solid rgba(118,170,220,.12);background:linear-gradient(90deg,color-mix(in srgb,var(--grupo-cor) 9%,transparent),transparent 50%)}.mapa-forca-grupo-identidade{display:flex;align-items:center;gap:12px}.mapa-forca-grupo-icon{display:grid;place-items:center;width:38px;height:38px;border:1px solid color-mix(in srgb,var(--grupo-cor) 50%,transparent);border-radius:11px;color:var(--grupo-cor);background:color-mix(in srgb,var(--grupo-cor) 10%,transparent)}.mapa-forca-grupo h2{margin:0;font-size:16px}.mapa-forca-grupo p{margin:3px 0 0;color:#829eb9;font-size:12px}.mapa-forca-grupo-meta{display:flex;align-items:center;gap:8px}.mapa-forca-grupo-meta button{min-height:36px;border:1px solid rgba(113,174,232,.25);color:#dcedff;background:#0a294a}
+.mapa-forca-us{padding:14px;border:1px solid rgba(118,170,220,.15);border-radius:14px;background:rgba(4,20,38,.62)}.mapa-forca-us-head{display:grid;grid-template-columns:minmax(120px,.65fr) minmax(180px,1fr);gap:10px}.mapa-forca-us-prefixo{padding:10px 12px;border-radius:11px;background:rgba(255,255,255,.04)}.mapa-forca-us-prefixo span,.mapa-forca-vtr small,.mapa-forca-slot small{display:block;color:#7897b5;font-size:9px;font-weight:900;letter-spacing:.1em}.mapa-forca-us-prefixo strong{display:block;margin-top:4px;color:var(--grupo-cor);font-size:18px}
+.mapa-forca-vtr,.mapa-forca-slot{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px dashed rgba(104,171,234,.25);border-radius:11px;color:#ddecfa;text-align:left;background:rgba(11,47,82,.45);cursor:pointer}.mapa-forca-vtr>span{font-size:23px}.mapa-forca-vtr strong,.mapa-forca-slot strong{display:block;margin-top:3px}.mapa-forca-composicao{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}.mapa-forca-slot{min-height:58px;background:rgba(255,255,255,.025)}.mapa-forca-slot-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;color:#071d35;background:#5db5ff;font-weight:900}
+.mapa-forca-equipamentos{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid rgba(118,170,220,.10)}.mapa-forca-equipamentos>span{color:#7897b5;font-size:10px;font-weight:900;text-transform:uppercase}.mapa-forca-equipamentos button{padding:5px 8px;border:1px solid rgba(118,170,220,.12);border-radius:7px;color:#607d98;background:rgba(255,255,255,.025);font-size:9px;font-weight:800}
+.mapa-forca-selecionado{position:relative;border-style:solid;border-color:rgba(73,212,157,.34);background:rgba(73,212,157,.06);cursor:default}.mapa-forca-mini-foto,.mapa-forca-mini-vtr,.mapa-forca-opcao-foto{flex:0 0 auto;overflow:hidden;display:grid;place-items:center;border:1px solid rgba(118,170,220,.18);background:#0a294a}.mapa-forca-mini-foto{width:42px;height:42px;border-radius:50%}.mapa-forca-mini-vtr{width:54px;height:42px;border-radius:8px}.mapa-forca-mini-foto img,.mapa-forca-mini-vtr img,.mapa-forca-opcao-foto img{width:100%;height:100%;object-fit:cover}.mapa-forca-dados-selecionados{min-width:0;flex:1;padding:0;border:0;color:#dceafa;text-align:left;background:transparent;cursor:pointer}.mapa-forca-dados-selecionados small{display:block;color:#7897b5;font-size:9px;font-weight:900}.mapa-forca-dados-selecionados strong,.mapa-forca-dados-selecionados em{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mapa-forca-dados-selecionados em{margin-top:3px;color:#7fa0be;font-size:9px;font-style:normal}.mapa-forca-remover{width:26px;height:26px;padding:0;border:1px solid rgba(243,108,121,.30);border-radius:7px;color:#ff9ca6;background:rgba(243,108,121,.08);cursor:pointer}
+.mapa-forca-us-horario{display:grid;grid-template-columns:minmax(155px,1fr) auto minmax(155px,1fr);align-items:end;gap:8px;margin-top:10px;padding:9px 10px;border:1px solid rgba(118,170,220,.10);border-radius:10px;background:rgba(255,255,255,.02)}.mapa-forca-us-horario label{display:grid;gap:6px}.mapa-forca-us-horario label>span{color:#8faac4;font-size:9px;font-weight:900}.mapa-forca-us-horario input{min-height:38px;padding:0 9px;border:1px solid rgba(129,179,228,.22);border-radius:9px;color:#eef7ff;background:#06182c;font:inherit;font-size:11px}.mapa-forca-us-horario-seta{align-self:center;color:#5db5ff}
+.mapa-forca-modal-backdrop{position:fixed;z-index:1200;inset:0;display:grid;place-items:center;padding:20px;background:rgba(2,10,20,.78);backdrop-filter:blur(4px)}.mapa-forca-modal{display:flex;flex-direction:column;width:min(760px,100%);max-height:min(82vh,760px);overflow:hidden;border:1px solid rgba(93,170,255,.28);border-radius:18px;color:#eaf4ff;background:#071d35;box-shadow:0 30px 80px rgba(0,0,0,.42)}.mapa-forca-modal>header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px}.mapa-forca-modal>header h2{margin:4px 0 0}.mapa-forca-modal>header>button{width:34px;height:34px;border:1px solid rgba(118,170,220,.18);border-radius:9px;color:#dceafa;background:rgba(255,255,255,.04);cursor:pointer}.mapa-forca-modal-pesquisa{min-height:44px;margin:14px 16px 8px;padding:0 13px;border:1px solid rgba(129,179,228,.25);border-radius:10px;color:#eef7ff;background:#06182c;font:inherit}.mapa-forca-modal-lista{display:grid;gap:8px;overflow-y:auto;padding:8px 16px 16px}.mapa-forca-opcao{display:flex;align-items:center;gap:12px;width:100%;min-height:70px;padding:9px 12px;border:1px solid rgba(118,170,220,.14);border-radius:11px;color:#dceafa;text-align:left;background:rgba(255,255,255,.025);cursor:pointer}.mapa-forca-opcao:disabled{opacity:.48;cursor:not-allowed}.mapa-forca-opcao-foto{width:54px;height:54px;border-radius:10px}.mapa-forca-opcao>div:nth-child(2){min-width:0;flex:1}.mapa-forca-opcao strong,.mapa-forca-opcao span{display:block}.mapa-forca-opcao span{margin-top:4px;color:#839fba;font-size:11px}.mapa-forca-opcao>b{color:#5db5ff;font-size:9px}.mapa-forca-modal-aviso{margin:8px 16px 16px;padding:18px;text-align:center}.mapa-forca-excluir-us{min-height:28px!important;padding:0 9px!important;border:1px solid rgba(243,108,121,.28)!important;color:#ff9ca6!important;background:rgba(243,108,121,.07)!important}
+.mapa-forca-footer{display:flex;justify-content:space-between;gap:20px;margin-top:18px;padding:17px 3px 4px;color:#718da8;font-size:11px}.mapa-forca-footer div{display:grid;gap:3px}.mapa-forca-footer strong{color:#9ab7d2}
 
-.mapa-forca-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 28px 30px;
-  border: 1px solid rgba(93, 170, 255, .24);
-  border-radius: 22px;
-  background: linear-gradient(135deg, #0b4f91 0%, #0a315d 58%, #071f3d 100%);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, .22);
-}
 
-.mapa-forca-hero span,
-.mapa-forca-turno-title span {
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: .14em;
-  color: #9bd0ff;
-}
-
-.mapa-forca-hero h1 {
-  margin: 6px 0 5px;
-  font-size: clamp(30px, 4vw, 48px);
-  line-height: 1;
-  letter-spacing: -.03em;
-}
-
-.mapa-forca-hero p {
-  margin: 0;
-  color: #c9dcef;
-}
-
-.mapa-forca-hero-actions,
-.mapa-forca-turno-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.mapa-forca-primary,
-.mapa-forca-secondary,
-.mapa-forca-grupo-meta button,
-.mapa-forca-turno-actions button {
-  min-height: 42px;
-  padding: 0 15px;
-  border-radius: 11px;
-  font: inherit;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.mapa-forca-primary {
-  border: 0;
-  color: #07305a;
-  background: #fff;
-}
-
-.mapa-forca-secondary {
-  border: 1px solid rgba(255, 255, 255, .28);
-  color: #fff;
-  background: rgba(255, 255, 255, .06);
-}
-
-.mapa-forca-turno {
-  display: grid;
-  grid-template-columns: minmax(180px, .8fr) minmax(210px, 1fr) auto minmax(210px, 1fr) auto;
-  align-items: end;
-  gap: 14px;
-  margin-top: 18px;
-  padding: 18px;
-  border: 1px solid rgba(124, 175, 225, .18);
-  border-radius: 18px;
-  background: rgba(8, 31, 57, .92);
-}
-
-.mapa-forca-turno-title {
-  align-self: center;
-}
-
-.mapa-forca-turno-title strong {
-  display: block;
-  margin-top: 5px;
-  color: #f8c35a;
-}
-
-.mapa-forca-turno-title small {
-  display: block;
-  margin-top: 5px;
-  color: #8faac4;
-}
-
-.mapa-forca-turno label {
-  display: grid;
-  gap: 7px;
-}
-
-.mapa-forca-turno label span {
-  font-size: 12px;
-  font-weight: 800;
-  color: #9fb8d0;
-}
-
-.mapa-forca-turno input {
-  min-height: 42px;
-  padding: 0 11px;
-  border: 1px solid rgba(129, 179, 228, .25);
+/* FLUXO — montagem de uma US por vez */
+.mapa-forca-mensagem {
+  margin: 14px 2px;
+  padding: 10px 13px;
+  border: 1px solid rgba(93,170,255,.18);
   border-radius: 10px;
-  color: #eef7ff;
-  background: #06182c;
-  font: inherit;
+  color: #bcd8f1;
+  background: rgba(8,31,57,.68);
+  font-weight: 700;
 }
-
-.mapa-forca-seta {
-  align-self: center;
-  padding-bottom: 4px;
-  color: #63b5ff;
-  font-size: 24px;
-}
-
-.mapa-forca-turno-actions button {
-  border: 1px solid rgba(129, 179, 228, .18);
-  color: #71879c;
-  background: rgba(255, 255, 255, .04);
-  cursor: not-allowed;
-}
-
-.mapa-forca-legenda {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin: 14px 2px 20px;
-  color: #9fb7ce;
-  font-size: 12px;
-}
-
-.mapa-forca-legenda div {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.mapa-forca-legenda i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.mapa-forca-legenda .ok { background: #49d49d; }
-.mapa-forca-legenda .warn { background: #f2bd55; }
-.mapa-forca-legenda .info { background: #5db5ff; }
-
-.mapa-forca-arvore {
-  display: grid;
-  gap: 15px;
-}
-
-.mapa-forca-grupo {
-  overflow: hidden;
-  border: 1px solid rgba(118, 170, 220, .18);
-  border-left: 4px solid var(--grupo-cor, #4da9ff);
+.mapa-forca-montagem,.mapa-forca-visualizacao { margin-top: 16px; }
+.mapa-forca-nova-us,.mapa-forca-sem-us {
+  padding: 24px;
+  border: 1px solid rgba(118,170,220,.18);
   border-radius: 18px;
-  background: rgba(8, 30, 54, .92);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, .12);
+  background: rgba(8,30,54,.92);
+}
+.mapa-forca-nova-us > div:first-child > span,.mapa-forca-visualizacao-head span {
+  color:#8fc9ff;font-size:10px;font-weight:900;letter-spacing:.12em;
+}
+.mapa-forca-nova-us h2,.mapa-forca-visualizacao-head h2 { margin:5px 0; }
+.mapa-forca-nova-us p { margin:0;color:#829eb9; }
+.mapa-forca-tipos-us {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:10px;
+  margin-top:18px;
+}
+.mapa-forca-tipo-card {
+  min-height:92px;
+  padding:14px;
+  border:1px solid color-mix(in srgb,var(--grupo-cor,#4da9ff) 38%,transparent);
+  border-left:4px solid var(--grupo-cor,#4da9ff);
+  border-radius:12px;
+  color:#eaf4ff;
+  text-align:left;
+  background:color-mix(in srgb,var(--grupo-cor,#4da9ff) 7%,#071d35);
+  cursor:pointer;
+}
+.mapa-forca-tipo-card:hover { transform:translateY(-1px);filter:brightness(1.08); }
+.mapa-forca-tipo-card strong,.mapa-forca-tipo-card small { display:block; }
+.mapa-forca-tipo-card small { margin-top:6px;color:#8faac4;line-height:1.35; }
+.mapa-forca-editor-unico { padding:14px; }
+.mapa-forca-editor-actions {
+  display:flex;justify-content:flex-end;gap:10px;margin-top:12px;
+}
+.mapa-forca-us-prefixo input {
+  width:100%;margin-top:4px;padding:6px 8px;border:1px solid rgba(129,179,228,.22);
+  border-radius:8px;color:var(--grupo-cor);background:#06182c;font:inherit;font-size:17px;font-weight:900;
+}
+.mapa-forca-visualizacao-head {
+  display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;
+}
+.mapa-forca-visualizacao-grid { display:grid;gap:14px; }
+.mapa-forca-sem-us { display:grid;gap:5px;text-align:center;color:#8faac4; }
+.mapa-forca-sem-us strong { color:#dceafa; }
+.mapa-forca-us-horario input:disabled { opacity:.82;cursor:default; }
+@media (max-width:760px) {
+  .mapa-forca-visualizacao-head,.mapa-forca-editor-actions { align-items:stretch;flex-direction:column; }
 }
 
-.mapa-forca-azul { --grupo-cor: #4da9ff; }
-.mapa-forca-roxo { --grupo-cor: #9d7cff; }
-.mapa-forca-ciano { --grupo-cor: #43c7db; }
-.mapa-forca-verde { --grupo-cor: #49d49d; }
-.mapa-forca-amarelo { --grupo-cor: #f2bd55; }
-.mapa-forca-laranja { --grupo-cor: #f28d55; }
-.mapa-forca-vermelho { --grupo-cor: #f36c79; }
 
-.mapa-forca-grupo > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 17px 18px;
-  border-bottom: 1px solid rgba(118, 170, 220, .12);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--grupo-cor) 9%, transparent), transparent 50%);
+/* VISUALIZAÇÃO COMPACTA — referência operacional aprovada */
+.mapa-forca-topbar {
+  display:flex;align-items:center;gap:14px;margin-top:16px;padding:12px 14px;
+  border:1px solid rgba(124,175,225,.18);border-radius:15px;background:rgba(8,31,57,.92);
+}
+.mapa-forca-topbar-info { min-width:185px; }
+.mapa-forca-topbar-info>span { display:block;color:#9bd0ff;font-size:9px;font-weight:900;letter-spacing:.12em; }
+.mapa-forca-topbar-info>strong { display:block;margin-top:3px;color:#f8c35a;font-size:11px; }
+.mapa-forca-topbar-info>small { display:block;margin-top:4px;color:#8faac4;font-size:10px; }
+.mapa-forca-topbar-periodo { display:flex;align-items:flex-end;gap:7px;flex:1; }
+.mapa-forca-topbar-periodo label { display:grid;gap:4px;min-width:170px; }
+.mapa-forca-topbar-periodo label span { color:#8faac4;font-size:8px;font-weight:900;letter-spacing:.08em; }
+.mapa-forca-topbar-periodo input { min-height:36px;padding:0 8px;border:1px solid rgba(129,179,228,.22);border-radius:8px;color:#eef7ff;background:#06182c;font:inherit;font-size:10px; }
+.mapa-forca-periodo-seta { padding-bottom:9px;color:#5db5ff; }
+.mapa-forca-topbar-actions { display:flex;gap:7px; }
+.mapa-forca-toolbar-btn { min-height:38px;padding:0 11px;border:1px solid rgba(129,179,228,.22);border-radius:9px;color:#dceafa;background:#0a294a;font:inherit;font-size:9px;font-weight:900;cursor:pointer; }
+.mapa-forca-toolbar-btn:disabled { opacity:.45;cursor:not-allowed; }
+.mapa-forca-toolbar-view { background:#0b4f91;border-color:rgba(93,181,255,.45); }
+.mapa-forca-toolbar-view.ativo { box-shadow:0 0 0 2px rgba(93,181,255,.16); }
+.mapa-forca-toolbar-save { white-space:nowrap; }
+
+.mapa-forca-resumo { display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;margin-bottom:12px; }
+.mapa-forca-resumo-card { display:flex;align-items:center;gap:10px;min-height:66px;padding:10px 12px;border:1px solid rgba(118,170,220,.16);border-radius:11px;background:rgba(8,30,54,.90); }
+.mapa-forca-resumo-card>span { color:#63b5ff;font-size:20px; }
+.mapa-forca-resumo-card small { display:block;color:#829eb9;font-size:7px;font-weight:900;letter-spacing:.06em; }
+.mapa-forca-resumo-card strong { display:block;margin-top:2px;color:#eaf4ff;font-size:20px; }
+
+.mapa-forca-compact-grupos { display:grid;gap:8px; }
+.mapa-forca-compact-grupo { overflow:hidden;border:1px solid rgba(118,170,220,.16);border-left:3px solid var(--grupo-cor,#4da9ff);border-radius:11px;background:rgba(8,30,54,.90); }
+.mapa-forca-compact-grupo>header { display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:7px 10px;border-bottom:1px solid rgba(118,170,220,.10); }
+.mapa-forca-compact-grupo>header>div { display:flex;align-items:center;gap:9px; }
+.mapa-forca-compact-grupo>header strong { font-size:12px;letter-spacing:.02em; }
+.mapa-forca-compact-grupo>header small { color:#8faac4;font-size:8px;font-weight:900; }
+.mapa-forca-compact-numero { display:grid;place-items:center;width:25px;height:25px;border-radius:6px;color:#fff;background:var(--grupo-cor,#4da9ff);font-size:10px;font-weight:900; }
+.mapa-forca-compact-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:7px;padding:7px; }
+.mapa-forca-compact-us { display:block;width:100%;padding:8px;border:1px solid rgba(118,170,220,.13);border-radius:9px;color:#dceafa;text-align:left;background:rgba(4,20,38,.52);cursor:pointer; }
+.mapa-forca-compact-us:hover { border-color:rgba(93,181,255,.38);background:rgba(10,41,74,.68); }
+.mapa-forca-compact-us-top { display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding-bottom:6px;border-bottom:1px solid rgba(118,170,220,.08); }
+.mapa-forca-compact-us-top>div>small { display:block;margin-top:3px;color:#829eb9;font-size:8px; }
+.mapa-forca-compact-prefixo { display:inline-block;padding:4px 7px;border-radius:5px;color:#fff;background:#0b4f91;font-size:10px;font-weight:900; }
+.mapa-forca-compact-status { color:#69d7a8;font-size:7px;font-weight:900;white-space:nowrap; }
+.mapa-forca-compact-efetivo { display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:5px;margin-top:6px; }
+.mapa-forca-compact-policial { display:flex;align-items:center;gap:7px;min-width:0;padding:5px;border-radius:7px;background:rgba(255,255,255,.025); }
+.mapa-forca-compact-foto { flex:0 0 auto;overflow:hidden;display:grid;place-items:center;width:34px;height:39px;border:1px solid rgba(118,170,220,.16);border-radius:6px;background:#0a294a; }
+.mapa-forca-compact-foto img { width:100%;height:100%;object-fit:cover; }
+.mapa-forca-compact-policial>div:last-child { min-width:0; }
+.mapa-forca-compact-policial small { display:block;color:#8fc9ff;font-size:7px;font-weight:900; }
+.mapa-forca-compact-policial strong { display:block;overflow:hidden;margin-top:2px;font-size:8px;text-overflow:ellipsis;white-space:nowrap; }
+.mapa-forca-compact-policial em { display:block;margin-top:2px;color:#7897b5;font-size:7px;font-style:normal; }
+.mapa-forca-compact-rodape { display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding-top:5px;border-top:1px solid rgba(118,170,220,.08);color:#7897b5;font-size:7px; }
+.mapa-forca-compact-rodape strong { color:#63b5ff; }
+
+@media (max-width:1250px) {
+  .mapa-forca-topbar { align-items:stretch;flex-wrap:wrap; }
+  .mapa-forca-topbar-periodo { order:3;flex-basis:100%; }
+  .mapa-forca-topbar-actions { margin-left:auto; }
+  .mapa-forca-resumo { grid-template-columns:repeat(3,1fr); }
+}
+@media (max-width:760px) {
+  .mapa-forca-topbar-periodo,.mapa-forca-topbar-actions { flex-direction:column;align-items:stretch;width:100%; }
+  .mapa-forca-topbar-periodo label { min-width:0; }
+  .mapa-forca-periodo-seta { display:none; }
+  .mapa-forca-resumo { grid-template-columns:1fr 1fr; }
+  .mapa-forca-compact-grid { grid-template-columns:1fr; }
 }
 
-.mapa-forca-grupo-identidade {
-  display: flex;
-  align-items: center;
+
+/* AJUSTE DE ESCALA — visualização compacta mais próxima da referência */
+.mapa-forca-visualizacao-compacta {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.mapa-forca-resumo {
   gap: 12px;
 }
 
-.mapa-forca-grupo-icon {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid color-mix(in srgb, var(--grupo-cor) 50%, transparent);
-  border-radius: 11px;
-  color: var(--grupo-cor);
-  background: color-mix(in srgb, var(--grupo-cor) 10%, transparent);
-}
-
-.mapa-forca-grupo h2 {
-  margin: 0;
-  font-size: 16px;
-  letter-spacing: .02em;
-}
-
-.mapa-forca-grupo p {
-  margin: 3px 0 0;
-  color: #829eb9;
-  font-size: 12px;
-}
-
-.mapa-forca-grupo-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mapa-forca-grupo-meta > span {
-  padding: 6px 9px;
-  border-radius: 999px;
-  color: var(--grupo-cor);
-  background: color-mix(in srgb, var(--grupo-cor) 10%, transparent);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.mapa-forca-grupo-meta button {
-  min-height: 36px;
-  border: 1px solid rgba(113, 174, 232, .25);
-  color: #dcedff;
-  background: #0a294a;
-}
-
-.mapa-forca-us-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 12px;
-  padding: 14px;
-}
-
-.mapa-forca-us {
-  padding: 14px;
-  border: 1px solid rgba(118, 170, 220, .15);
-  border-radius: 14px;
-  background: rgba(4, 20, 38, .62);
-}
-
-.mapa-forca-us-head {
-  display: grid;
-  grid-template-columns: minmax(120px, .65fr) minmax(180px, 1fr);
-  gap: 10px;
-}
-
-.mapa-forca-us-prefixo {
-  padding: 10px 12px;
-  border-radius: 11px;
-  background: rgba(255, 255, 255, .04);
-}
-
-.mapa-forca-us-prefixo span,
-.mapa-forca-vtr small,
-.mapa-forca-slot small {
-  display: block;
-  color: #7897b5;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: .1em;
-}
-
-.mapa-forca-us-prefixo strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--grupo-cor);
-  font-size: 18px;
-}
-
-.mapa-forca-vtr {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 1px dashed rgba(104, 171, 234, .25);
-  border-radius: 11px;
-  color: #ddecfa;
-  text-align: left;
-  background: rgba(11, 47, 82, .45);
-  cursor: pointer;
-}
-
-.mapa-forca-vtr > span {
-  color: #61b5ff;
-  font-size: 23px;
-}
-
-.mapa-forca-vtr strong {
-  display: block;
-  margin-top: 3px;
-}
-
-.mapa-forca-composicao {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.mapa-forca-slot {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 58px;
-  padding: 8px 10px;
-  border: 1px dashed rgba(129, 179, 228, .22);
-  border-radius: 10px;
-  color: #dceafa;
-  text-align: left;
-  background: rgba(255, 255, 255, .025);
-  cursor: pointer;
-}
-
-.mapa-forca-slot-icon {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  color: #071d35;
-  background: #5db5ff;
-  font-weight: 900;
-}
-
-.mapa-forca-slot strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-}
-
-.mapa-forca-equipamentos {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 11px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(118, 170, 220, .10);
-}
-
-.mapa-forca-equipamentos > span {
-  margin-right: 3px;
-  color: #7897b5;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.mapa-forca-equipamentos button {
-  padding: 5px 8px;
-  border: 1px solid rgba(118, 170, 220, .12);
-  border-radius: 7px;
-  color: #607d98;
-  background: rgba(255, 255, 255, .025);
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.mapa-forca-empty {
-  display: grid;
-  place-items: center;
-  width: calc(100% - 28px);
-  min-height: 105px;
-  margin: 14px;
-  border: 1px dashed rgba(118, 170, 220, .20);
+.mapa-forca-resumo-card {
+  min-height: 82px;
+  padding: 13px 15px;
   border-radius: 13px;
-  color: #7f9bb6;
-  background: rgba(255, 255, 255, .018);
-  cursor: pointer;
 }
 
-.mapa-forca-empty > span {
-  color: var(--grupo-cor);
+.mapa-forca-resumo-card > span {
   font-size: 25px;
 }
 
-.mapa-forca-empty strong {
-  color: #d9e8f7;
+.mapa-forca-resumo-card small {
+  font-size: 9px;
 }
 
-.mapa-forca-empty small {
-  margin-top: -8px;
+.mapa-forca-resumo-card strong {
+  margin-top: 4px;
+  font-size: 25px;
 }
 
-.mapa-forca-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  margin-top: 18px;
-  padding: 17px 3px 4px;
-  color: #718da8;
-  font-size: 11px;
+.mapa-forca-compact-grupos {
+  gap: 12px;
 }
 
-.mapa-forca-footer div {
-  display: grid;
-  gap: 3px;
+.mapa-forca-compact-grupo {
+  border-radius: 14px;
 }
 
-.mapa-forca-footer strong {
-  color: #9ab7d2;
+.mapa-forca-compact-grupo > header {
+  min-height: 52px;
+  padding: 9px 13px;
 }
 
-@media (max-width: 1100px) {
-  .mapa-forca-turno {
-    grid-template-columns: 1fr 1fr;
-  }
+.mapa-forca-compact-grupo > header strong {
+  font-size: 15px;
+}
 
-  .mapa-forca-turno-title,
-  .mapa-forca-turno-actions {
-    grid-column: 1 / -1;
-  }
+.mapa-forca-compact-grupo > header small {
+  font-size: 9px;
+}
 
-  .mapa-forca-seta {
-    display: none;
+.mapa-forca-compact-numero {
+  width: 31px;
+  height: 31px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.mapa-forca-compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+  padding: 10px;
+}
+
+.mapa-forca-compact-us {
+  padding: 11px;
+  border-radius: 11px;
+}
+
+.mapa-forca-compact-us-top {
+  padding-bottom: 8px;
+}
+
+.mapa-forca-compact-prefixo {
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.mapa-forca-compact-us-top > div > small {
+  margin-top: 4px;
+  font-size: 9px;
+}
+
+.mapa-forca-compact-status {
+  font-size: 8px;
+}
+
+.mapa-forca-compact-efetivo {
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.mapa-forca-compact-policial {
+  gap: 9px;
+  padding: 7px;
+  border-radius: 8px;
+}
+
+.mapa-forca-compact-foto {
+  width: 45px;
+  height: 52px;
+  border-radius: 7px;
+}
+
+.mapa-forca-compact-policial small {
+  font-size: 8px;
+}
+
+.mapa-forca-compact-policial strong {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.mapa-forca-compact-policial em {
+  margin-top: 3px;
+  font-size: 8px;
+}
+
+.mapa-forca-compact-rodape {
+  margin-top: 8px;
+  padding-top: 7px;
+  font-size: 9px;
+}
+
+.mapa-forca-visualizacao-head {
+  margin: 17px 2px 13px;
+}
+
+.mapa-forca-visualizacao-head h2 {
+  font-size: 20px;
+}
+
+@media (min-width: 1450px) {
+  .mapa-forca-compact-grid {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .mapa-forca-page {
-    padding: 14px;
+  .mapa-forca-resumo-card {
+    min-height: 72px;
   }
 
-  .mapa-forca-hero,
-  .mapa-forca-grupo > header,
-  .mapa-forca-footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .mapa-forca-turno,
-  .mapa-forca-us-head {
+  .mapa-forca-compact-grid {
     grid-template-columns: 1fr;
   }
 
-  .mapa-forca-us-grid {
+  .mapa-forca-compact-efetivo {
     grid-template-columns: 1fr;
-    padding: 10px;
+  }
+}
+
+
+/* =========================================================
+   MAPA FORÇA — VISUAL 3X MAIOR
+   ========================================================= */
+
+.mapa-forca-compact-efetivo {
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)) !important;
+  gap: 14px !important;
+}
+
+.mapa-forca-compact-policial {
+  min-height: 190px !important;
+  gap: 18px !important;
+  padding: 14px !important;
+  align-items: center !important;
+}
+
+.mapa-forca-compact-foto {
+  flex: 0 0 135px !important;
+  width: 135px !important;
+  height: 156px !important;
+  border-radius: 11px !important;
+}
+
+.mapa-forca-compact-foto img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center top !important;
+}
+
+.mapa-forca-compact-policial small {
+  font-size: 18px !important;
+  line-height: 1.2 !important;
+}
+
+.mapa-forca-compact-policial strong {
+  margin-top: 7px !important;
+  font-size: 24px !important;
+  line-height: 1.2 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+
+.mapa-forca-compact-policial em {
+  margin-top: 7px !important;
+  font-size: 18px !important;
+  line-height: 1.2 !important;
+}
+
+.mapa-forca-compact-prefixo {
+  padding: 8px 12px !important;
+  font-size: 18px !important;
+}
+
+.mapa-forca-compact-us-top > div > small {
+  font-size: 14px !important;
+}
+
+.mapa-forca-compact-status {
+  font-size: 12px !important;
+}
+
+.mapa-forca-compact-rodape {
+  font-size: 13px !important;
+}
+
+.mapa-forca-compact-grupo > header {
+  min-height: 64px !important;
+  padding: 12px 16px !important;
+}
+
+.mapa-forca-compact-grupo > header strong {
+  font-size: 18px !important;
+}
+
+.mapa-forca-compact-grupo > header small {
+  font-size: 12px !important;
+}
+
+.mapa-forca-compact-numero {
+  width: 38px !important;
+  height: 38px !important;
+  font-size: 16px !important;
+}
+
+@media (max-width: 760px) {
+  .mapa-forca-compact-efetivo {
+    grid-template-columns: 1fr !important;
   }
 
-  .mapa-forca-grupo-meta {
-    justify-content: space-between;
+  .mapa-forca-compact-foto {
+    flex-basis: 100px !important;
+    width: 100px !important;
+    height: 120px !important;
+  }
+
+  .mapa-forca-compact-policial strong {
+    font-size: 19px !important;
+  }
+
+  .mapa-forca-compact-policial small,
+  .mapa-forca-compact-policial em {
+    font-size: 14px !important;
+  }
+}
+
+
+/* =========================================================
+   MAPA FORÇA — AJUSTE INTERMEDIÁRIO
+   ========================================================= */
+
+.mapa-forca-compact-efetivo {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 9px !important;
+}
+
+.mapa-forca-compact-policial {
+  min-height: 112px !important;
+  gap: 11px !important;
+  padding: 9px !important;
+  align-items: center !important;
+}
+
+.mapa-forca-compact-foto {
+  flex: 0 0 72px !important;
+  width: 72px !important;
+  height: 92px !important;
+  border-radius: 8px !important;
+}
+
+.mapa-forca-compact-foto img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center top !important;
+}
+
+.mapa-forca-compact-policial small {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+.mapa-forca-compact-policial strong {
+  margin-top: 4px !important;
+  font-size: 16px !important;
+  line-height: 1.22 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+
+.mapa-forca-compact-policial em {
+  margin-top: 4px !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+}
+
+.mapa-forca-compact-prefixo {
+  padding: 6px 9px !important;
+  font-size: 14px !important;
+}
+
+.mapa-forca-compact-us-top > div > small {
+  font-size: 10px !important;
+}
+
+.mapa-forca-compact-status {
+  font-size: 9px !important;
+}
+
+.mapa-forca-compact-rodape {
+  font-size: 10px !important;
+}
+
+.mapa-forca-compact-grupo > header {
+  min-height: 52px !important;
+  padding: 9px 13px !important;
+}
+
+.mapa-forca-compact-grupo > header strong {
+  font-size: 15px !important;
+}
+
+.mapa-forca-compact-grupo > header small {
+  font-size: 9px !important;
+}
+
+.mapa-forca-compact-numero {
+  width: 31px !important;
+  height: 31px !important;
+  font-size: 13px !important;
+}
+
+@media (max-width: 760px) {
+  .mapa-forca-compact-efetivo {
+    grid-template-columns: 1fr !important;
+  }
+
+  .mapa-forca-compact-foto {
+    flex-basis: 64px !important;
+    width: 64px !important;
+    height: 82px !important;
+  }
+
+  .mapa-forca-compact-policial strong {
+    font-size: 15px !important;
+  }
+
+  .mapa-forca-compact-policial small {
+    font-size: 11px !important;
+  }
+
+  .mapa-forca-compact-policial em {
+    font-size: 10px !important;
+  }
+}
+
+
+/* =========================================================
+   MAPA FORÇA — CAMPOS DE DATA/HORA DO TURNO MAIS LARGOS
+   ========================================================= */
+
+.mapa-forca-topbar-periodo label {
+  min-width: 205px;
+}
+
+.mapa-forca-topbar-periodo input {
+  min-width: 205px;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .mapa-forca-topbar-periodo label,
+  .mapa-forca-topbar-periodo input {
+    min-width: 0;
+    width: 100%;
   }
 }
