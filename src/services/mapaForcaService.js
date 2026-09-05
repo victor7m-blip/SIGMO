@@ -10,6 +10,33 @@ function isoOuNull(valor) {
   return Number.isNaN(data.getTime()) ? null : data.toISOString()
 }
 
+function dataReferenciaLocal(valor) {
+  if (!valor) return null
+
+  if (typeof valor === 'string') {
+    const correspondencia = valor.match(/^(\\d{4})-(\\d{2})-(\\d{2})/)
+    if (correspondencia) {
+      return `${correspondencia[1]}-${correspondencia[2]}-${correspondencia[3]}`
+    }
+  }
+
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return null
+
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(data)
+
+  const ano = partes.find((parte) => parte.type === 'year')?.value
+  const mes = partes.find((parte) => parte.type === 'month')?.value
+  const dia = partes.find((parte) => parte.type === 'day')?.value
+
+  return ano && mes && dia ? `${ano}-${mes}-${dia}` : null
+}
+
 function cabecalhoMapa({ inicio, fim, user }) {
   const inicioIso = isoOuNull(inicio)
   const fimIso = isoOuNull(fim)
@@ -23,6 +50,7 @@ function cabecalhoMapa({ inicio, fim, user }) {
   }
 
   return {
+    data_referencia: dataReferenciaLocal(inicio),
     inicio_turno: inicioIso,
     fim_turno: fimIso,
     status: 'EM ELABORAÇÃO',
@@ -42,6 +70,7 @@ export async function carregarMapaEmElaboracao() {
     .from(TABLE_MAPA)
     .select('*')
     .eq('status', 'EM ELABORAÇÃO')
+    .order('data_referencia', { ascending: false })
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -51,7 +80,7 @@ export async function carregarMapaEmElaboracao() {
 
   const { data: unidades, error: erroUs } = await supabase
     .from(TABLE_US)
-    .select('*, viatura:sigmo_viaturas(*)')
+    .select('*, viatura:sigmo_viaturas!sigmo_mapa_forca_us_viatura_id_fkey(*), viatura_prevista:sigmo_viaturas!sigmo_mapa_forca_us_viatura_prevista_id_fkey(*)')
     .eq('mapa_id', mapa.id)
     .order('ordem', { ascending: true })
 
@@ -135,6 +164,9 @@ export async function salvarUSMapaForca({
     tipo: unidade.tipo,
     ordem,
     viatura_id: unidade.viatura?.id || null,
+    vtr_diferente_escala: Boolean(unidade.vtrDiferenteEscala),
+    viatura_prevista_id: unidade.vtrDiferenteEscala ? (unidade.viaturaPrevista?.id || null) : null,
+    motivo_troca_vtr: unidade.vtrDiferenteEscala ? String(unidade.motivoTrocaVtr || '').trim().toUpperCase() : null,
     criada_manualmente: true,
     inicio_us: inicioUs,
     fim_us: fimUs,

@@ -517,7 +517,6 @@
   }
 }
 
-
 /* =========================================================
    MAPA FORÇA — CAMPOS DE DATA/HORA DO TURNO MAIS LARGOS
    ========================================================= */
@@ -538,5 +537,83 @@
   .mapa-forca-topbar-periodo input {
     min-width: 0;
     width: 100%;
+  }
+}
+/* MAPA FORÇA — VTR DIFERENTE DA ESCALA */
+.mapa-forca-vtr-escala{margin-top:10px;padding:11px 12px;border:1px solid rgba(118,170,220,.14);border-radius:11px;background:rgba(255,255,255,.02)}
+.mapa-forca-vtr-escala.ativo{border-color:rgba(242,189,85,.55);background:rgba(242,189,85,.06)}
+.mapa-forca-vtr-escala-check{display:flex;align-items:center;gap:10px;cursor:pointer}.mapa-forca-vtr-escala-check input{width:18px;height:18px;accent-color:#f2bd55}
+.mapa-forca-vtr-escala-check span{display:grid;gap:2px}.mapa-forca-vtr-escala-check strong{color:#f2bd55;font-size:12px}.mapa-forca-vtr-escala-check small{color:#8faac4;font-size:9px}
+.mapa-forca-vtr-escala-detalhes{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(280px,1.2fr);gap:10px;margin-top:11px;padding-top:11px;border-top:1px solid rgba(242,189,85,.20)}
+.mapa-forca-vtr-prevista>small,.mapa-forca-vtr-motivo>small{display:block;margin-bottom:6px;color:#d5b35f;font-size:9px;font-weight:900;letter-spacing:.06em}
+.mapa-forca-vtr-prevista-selecionada{display:flex;align-items:center;gap:8px;min-height:42px;padding:8px 10px;border:1px solid rgba(242,189,85,.24);border-radius:9px;background:#06182c}
+.mapa-forca-vtr-prevista-selecionada strong{flex:1}.mapa-forca-vtr-prevista-selecionada button,.mapa-forca-vtr-prevista-btn{min-height:34px;padding:0 10px;border:1px solid rgba(242,189,85,.32);border-radius:8px;color:#f2bd55;background:rgba(242,189,85,.07);font:inherit;font-size:10px;font-weight:800;cursor:pointer}
+.mapa-forca-vtr-prevista-selecionada .remover{width:34px;padding:0;color:#ff9ca6;border-color:rgba(243,108,121,.30);background:rgba(243,108,121,.08)}
+.mapa-forca-vtr-motivo textarea{box-sizing:border-box;width:100%;min-height:70px;resize:vertical;padding:9px 10px;border:1px solid rgba(242,189,85,.24);border-radius:9px;color:#eef7ff;background:#06182c;font:inherit;font-size:11px}
+.mapa-forca-vtr-motivo>strong{display:block;min-height:42px;padding:9px 10px;border-radius:9px;color:#eef7ff;background:rgba(255,255,255,.03)}
+.mapa-forca-compact-vtr-alerta{display:grid;gap:2px;margin-top:6px;padding:7px 9px;border:1px solid rgba(242,189,85,.35);border-radius:7px;background:rgba(242,189,85,.07)}
+.mapa-forca-compact-vtr-alerta strong{color:#f2bd55;font-size:9px}.mapa-forca-compact-vtr-alerta span{color:#c9dcef;font-size:9px}
+@media(max-width:760px){.mapa-forca-vtr-escala-detalhes{grid-template-columns:1fr}}
+
+
+/* =========================================================
+   MAPA FORÇA — DESTAQUE DO PREFIXO DA VIATURA
+   Mesmo tamanho visual do identificador da US (ex.: CGP)
+   ========================================================= */
+.mapa-forca-compact-us-top > div > small {
+  margin-top: 7px !important;
+  color: #dceafa !important;
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+  font-weight: 900 !important;
+  letter-spacing: .01em !important;
+}
+
+
+/* =========================================================
+   MAPA FORÇA — CABEÇALHO COMPACTO DA US EM UMA ÚNICA LINHA
+   CGP + VIATURA + eventual divergência da escala
+   ========================================================= */
+.mapa-forca-compact-us-top > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mapa-forca-compact-us-top > div > .mapa-forca-compact-prefixo {
+  flex: 0 0 auto;
+}
+
+.mapa-forca-compact-us-top > div > small {
+  display: inline-flex !important;
+  align-items: center;
+  margin-top: 0 !important;
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+}
+
+.mapa-forca-compact-vtr-alerta {
+  display: flex !important;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  margin-top: 0 !important;
+  padding: 5px 8px !important;
+}
+
+.mapa-forca-compact-vtr-alerta strong,
+.mapa-forca-compact-vtr-alerta span {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .mapa-forca-compact-us-top > div {
+    align-items: flex-start;
+  }
+
+  .mapa-forca-compact-vtr-alerta {
+    flex-basis: 100%;
   }
 }

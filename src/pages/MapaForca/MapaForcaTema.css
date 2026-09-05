@@ -1,0 +1,273 @@
+
+/* =========================================================
+   MAPA FORÇA — TEMA GLOBAL DA MONTAGEM
+   Arquivo isolado: não altera o MapaForca.css validado.
+   Tema dark continua usando integralmente o visual atual.
+   ========================================================= */
+
+.mapa-forca-page.mapa-forca-theme-light{
+  color:#102a58;
+  background:#f3f6fb;
+}
+
+.mapa-forca-theme-light .mapa-forca-hero{
+  border-color:#d6dfeb;
+  background:linear-gradient(135deg,#ffffff 0%,#edf4fc 100%);
+  box-shadow:0 10px 26px rgba(30,64,175,.06);
+}
+
+.mapa-forca-theme-light .mapa-forca-hero span,
+.mapa-forca-theme-light .mapa-forca-hero p{
+  color:#4f6f96;
+}
+
+.mapa-forca-theme-light .mapa-forca-hero h1{
+  color:#0b326b;
+}
+
+.mapa-forca-theme-light .mapa-forca-secondary{
+  border-color:#cbd7e5;
+  color:#12346d;
+  background:#fff;
+}
+
+.mapa-forca-theme-light .mapa-forca-secondary:hover{
+  background:#f5f8fc;
+}
+
+.mapa-forca-theme-light .mapa-forca-primary{
+  border-color:#0c4f9b;
+  color:#fff;
+  background:linear-gradient(180deg,#1672c9,#0b4d91);
+}
+
+.mapa-forca-theme-light .mapa-forca-topbar,
+.mapa-forca-theme-light .mapa-forca-mensagem,
+.mapa-forca-theme-light .mapa-forca-nova-us,
+.mapa-forca-theme-light .mapa-forca-grupo,
+.mapa-forca-theme-light .mapa-forca-us,
+.mapa-forca-theme-light .mapa-forca-footer{
+  border-color:#d6dfeb;
+  background:#fff;
+  box-shadow:0 1px 2px rgba(13,45,88,.03);
+}
+
+.mapa-forca-theme-light .mapa-forca-topbar-info span,
+.mapa-forca-theme-light .mapa-forca-topbar-info small,
+.mapa-forca-theme-light .mapa-forca-nova-us span,
+.mapa-forca-theme-light .mapa-forca-nova-us p,
+.mapa-forca-theme-light .mapa-forca-grupo p,
+.mapa-forca-theme-light .mapa-forca-footer span{
+  color:#607895;
+}
+
+.mapa-forca-theme-light .mapa-forca-topbar-info strong{
+  color:#b77900;
+}
+
+.mapa-forca-theme-light .mapa-forca-mensagem,
+.mapa-forca-theme-light .mapa-forca-nova-us h2,
+.mapa-forca-theme-light .mapa-forca-grupo h2,
+.mapa-forca-theme-light .mapa-forca-footer strong{
+  color:#12346d;
+}
+
+.mapa-forca-theme-light .mapa-forca-topbar-periodo label span,
+.mapa-forca-theme-light .mapa-forca-us-horario label span{
+  color:#496887;
+}
+
+.mapa-forca-theme-light input,
+.mapa-forca-theme-light textarea{
+  border-color:#cbd7e5;
+  color:#102a58;
+  background:#f8fbff;
+}
+
+.mapa-forca-theme-light input:focus,
+.mapa-forca-theme-light textarea:focus{
+  border-color:#3b82f6;
+  outline:none;
+  box-shadow:0 0 0 3px rgba(59,130,246,.10);
+}
+
+.mapa-forca-theme-light .mapa-forca-toolbar-btn{
+  border-color:#cbd7e5;
+  color:#12346d;
+  background:#fff;
+}
+
+.mapa-forca-theme-light .mapa-forca-toolbar-save,
+.mapa-forca-theme-light .mapa-forca-toolbar-view{
+  border-color:#1766b1;
+  color:#fff;
+  background:linear-gradient(180deg,#1672c9,#0b4d91);
+}
+
+.mapa-forca-theme-light .mapa-forca-tipo-card{
+  background:#fff;
+  box-shadow:0 3px 12px rgba(15,45,85,.05);
+}
+
+.mapa-forca-theme-light .mapa-forca-tipo-card strong{
+  color:#102a58;
+}
+
+.mapa-forca-theme-light .mapa-forca-tipo-card small{
+  color:#5f7794;
+}
+
+.mapa-forca-theme-light .mapa-forca-grupo>header{
+  border-bottom-color:#dbe4ee;
+  background:#f8fbff;
+}
+
+.mapa-forca-theme-light .mapa-forca-grupo-meta button{
+  border-color:#cbd7e5;
+  color:#12346d;
+  background:#fff;
+}
+
+.mapa-forca-theme-light .mapa-forca-us-head,
+.mapa-forca-theme-light .mapa-forca-composicao,
+.mapa-forca-theme-light .mapa-forca-equipamentos{
+  border-color:#dde6f0;
+}
+
+.mapa-forca-theme-light .mapa-forca-us-prefixo span,
+.mapa-forca-theme-light .mapa-forca-dados-selecionados small,
+.mapa-forca-theme-light .mapa-forca-slot small,
+.mapa-forca-theme-light .mapa-forca-equipamentos>span{
+  color:#607895;
+}
+
+.mapa-forca-theme-light .mapa-forca-us-prefixo strong,
+.mapa-forca-theme-light .mapa-forca-dados-selecionados strong,
+.mapa-forca-theme-light .mapa-forca-slot strong{
+  color:#102a58;
+}
+
+.mapa-forca-theme-light .mapa-forca-vtr,
+.mapa-forca-theme-light .mapa-forca-slot,
+.mapa-forca-theme-light .mapa-forca-selecionado{
+  border-color:#d6dfeb;
+  color:#102a58;
+  background:#f8fbff;
+}
+
+.mapa-forca-theme-light .mapa-forca-dados-selecionados{
+  color:#102a58;
+}
+
+.mapa-forca-theme-light .mapa-forca-dados-selecionados em{
+  color:#617a96;
+}
+
+.mapa-forca-theme-light .mapa-forca-mini-foto,
+.mapa-forca-theme-light .mapa-forca-mini-vtr{
+  border-color:#d3dde8;
+  background:#eaf0f7;
+}
+
+.mapa-forca-theme-light .mapa-forca-remover{
+  border-color:#efb5b5;
+  color:#b42318;
+  background:#fff5f5;
+}
+
+.mapa-forca-theme-light .mapa-forca-vtr-escala{
+  border-color:#d6dfeb;
+  background:#f8fbff;
+}
+
+.mapa-forca-theme-light .mapa-forca-vtr-escala.ativo{
+  border-color:#e2c46c;
+  background:#fff9e8;
+}
+
+.mapa-forca-theme-light .mapa-forca-vtr-escala-check strong,
+.mapa-forca-theme-light .mapa-forca-vtr-prevista strong,
+.mapa-forca-theme-light .mapa-forca-vtr-motivo strong{
+  color:#102a58;
+}
+
+.mapa-forca-theme-light .mapa-forca-vtr-escala-check small,
+.mapa-forca-theme-light .mapa-forca-vtr-prevista small,
+.mapa-forca-theme-light .mapa-forca-vtr-motivo small{
+  color:#617a96;
+}
+
+.mapa-forca-theme-light .mapa-forca-vtr-prevista-btn,
+.mapa-forca-theme-light .mapa-forca-vtr-prevista-selecionada button{
+  border-color:#cbd7e5;
+  color:#12346d;
+  background:#fff;
+}
+
+.mapa-forca-theme-light .mapa-forca-equipamentos button,
+.mapa-forca-theme-light .mapa-forca-adicionar-policial{
+  border-color:#bcd4ec;
+  color:#0b4d91;
+  background:#f3f8fe;
+}
+
+.mapa-forca-theme-light .mapa-forca-editor-actions{
+  border-top-color:#dde6f0;
+}
+
+.mapa-forca-theme-light .mapa-forca-modal-backdrop{
+  background:rgba(15,23,42,.48);
+}
+
+.mapa-forca-theme-light .mapa-forca-modal{
+  border-color:#d6dfeb;
+  color:#102a58;
+  background:#fff;
+}
+
+.mapa-forca-theme-light .mapa-forca-modal header{
+  border-bottom-color:#dde6f0;
+}
+
+.mapa-forca-theme-light .mapa-forca-modal header small,
+.mapa-forca-theme-light .mapa-forca-opcao span{
+  color:#617a96;
+}
+
+.mapa-forca-theme-light .mapa-forca-modal header h2,
+.mapa-forca-theme-light .mapa-forca-opcao strong{
+  color:#102a58;
+}
+
+.mapa-forca-theme-light .mapa-forca-modal header>button{
+  color:#12346d;
+  background:#f5f8fc;
+}
+
+.mapa-forca-theme-light .mapa-forca-modal-pesquisa{
+  border-color:#cbd7e5;
+  color:#102a58;
+  background:#f8fbff;
+}
+
+.mapa-forca-theme-light .mapa-forca-opcao{
+  border-color:#dde6f0;
+  color:#102a58;
+  background:#fff;
+}
+
+.mapa-forca-theme-light .mapa-forca-opcao:hover:not(:disabled){
+  border-color:#8fb9e5;
+  background:#f4f9ff;
+}
+
+.mapa-forca-theme-light .mapa-forca-opcao b{
+  color:#0b5aa6;
+}
+
+.mapa-forca-theme-light .mapa-forca-modal-aviso{
+  color:#607895;
+}
+
+/* Dark: nenhum override deliberado.
+   Assim, o tema escuro continua exatamente com o CSS validado existente. */

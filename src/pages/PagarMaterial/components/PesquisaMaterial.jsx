@@ -36,6 +36,14 @@ import {
   listarFotosTPD
 } from '../../../services/tpdsFotosService'
 
+import {
+  buscarCOPPorId
+} from '../../../services/copsService'
+
+import {
+  listarFotosCOP
+} from '../../../services/copsFotosService'
+
 import ArmaViewModal
   from '../../Armas/components/ArmaViewModal'
 
@@ -47,6 +55,9 @@ import TaserDetalhesModal
 
 import TPDDetalhesModal
   from '../../TPD/components/TPDDetalhesModal'
+
+import COPDetalhesModal
+  from '../../COP/components/COPDetalhesModal'
 
 const MOSTRAR_COLUNA_PATRIMONIO = false
 
@@ -117,6 +128,29 @@ function ehTPD(material) {
   )
 }
 
+function ehCOP(material) {
+  const campos = [
+    material?.modulo,
+    material?.categoria,
+    material?.tipo,
+    material?.tipo_patrimonio,
+    material?.tipo_material,
+    material?.tabela_origem
+  ].map(normalizarTexto)
+
+  const descricao = normalizarTexto(material?.descricao)
+  const patrimonio = normalizarTexto(material?.patrimonio)
+
+  return (
+    campos.includes('COP') ||
+    campos.includes('COPS') ||
+    campos.includes('SIGMO_COPS') ||
+    descricao === 'COP' ||
+    descricao.startsWith('COP ') ||
+    patrimonio.startsWith('COP ')
+  )
+}
+
 function ehTonfa(material) {
   const campos = [
     material?.modulo,
@@ -153,6 +187,8 @@ function correspondeFiltro(material, filtro) {
       return ehTaser(material)
     case 'TPD':
       return ehTPD(material)
+    case 'COP':
+      return ehCOP(material)
     case 'TONFA':
       return ehTonfa(material)
     case 'CASSETETE':
@@ -199,6 +235,8 @@ export default function PesquisaMaterial({
   const [fotosTaser, setFotosTaser] = useState([])
   const [tpdVisualizando, setTPDVisualizando] = useState(null)
   const [fotosTPD, setFotosTPD] = useState([])
+  const [copVisualizando, setCOPVisualizando] = useState(null)
+  const [fotosCOP, setFotosCOP] = useState([])
   const [carregandoVisualizacao, setCarregandoVisualizacao] = useState(false)
   const [erroVisualizacao, setErroVisualizacao] = useState('')
 
@@ -238,6 +276,8 @@ export default function PesquisaMaterial({
         descricaoResumida(material),
         material.local_atual,
         material.status,
+        material.numero,
+        material.identificacao_equipamento,
         material.numero_serie,
         material.qr_code,
         material.especie,
@@ -261,7 +301,7 @@ export default function PesquisaMaterial({
     const referenciaId =
       material?.referencia_id ||
       (
-        ['SIGMO_ARMAS', 'SIGMO_HTS', 'SIGMO_TASERS', 'SIGMO_TPDS'].includes(tabelaOrigem)
+        ['SIGMO_ARMAS', 'SIGMO_HTS', 'SIGMO_TASERS', 'SIGMO_TPDS', 'SIGMO_COPS'].includes(tabelaOrigem)
           ? material?.id
           : null
       )
@@ -289,6 +329,8 @@ export default function PesquisaMaterial({
         setFotosTaser([])
         setTPDVisualizando(null)
         setFotosTPD([])
+        setCOPVisualizando(null)
+        setFotosCOP([])
         setArmaVisualizando(armaCompleta)
         setFotosArma(fotos || [])
         return
@@ -308,6 +350,8 @@ export default function PesquisaMaterial({
         setFotosTaser([])
         setTPDVisualizando(null)
         setFotosTPD([])
+        setCOPVisualizando(null)
+        setFotosCOP([])
         setHTVisualizando(htCompleto)
         setFotosHT(Array.isArray(fotos) ? fotos : [])
         return
@@ -327,6 +371,8 @@ export default function PesquisaMaterial({
         setFotosHT([])
         setTPDVisualizando(null)
         setFotosTPD([])
+        setCOPVisualizando(null)
+        setFotosCOP([])
         setTaserVisualizando(taserCompleto)
         setFotosTaser(Array.isArray(fotos) ? fotos : [])
         return
@@ -346,8 +392,31 @@ export default function PesquisaMaterial({
         setFotosHT([])
         setTaserVisualizando(null)
         setFotosTaser([])
+        setCOPVisualizando(null)
+        setFotosCOP([])
         setTPDVisualizando(tpdCompleto)
         setFotosTPD(Array.isArray(fotos) ? fotos : [])
+        return
+      }
+
+      if (ehCOP(material)) {
+        setFotosCOP([])
+
+        const [copCompleta, fotos] = await Promise.all([
+          buscarCOPPorId(referenciaId),
+          listarFotosCOP(referenciaId)
+        ])
+
+        setArmaVisualizando(null)
+        setFotosArma([])
+        setHTVisualizando(null)
+        setFotosHT([])
+        setTaserVisualizando(null)
+        setFotosTaser([])
+        setTPDVisualizando(null)
+        setFotosTPD([])
+        setCOPVisualizando(copCompleta)
+        setFotosCOP(Array.isArray(fotos) ? fotos : [])
         return
       }
     } catch (error) {
@@ -364,6 +433,8 @@ export default function PesquisaMaterial({
       setFotosTaser([])
       setTPDVisualizando(null)
       setFotosTPD([])
+      setCOPVisualizando(null)
+      setFotosCOP([])
     } finally {
       setCarregandoVisualizacao(false)
     }
@@ -378,6 +449,8 @@ export default function PesquisaMaterial({
     setFotosTaser([])
     setTPDVisualizando(null)
     setFotosTPD([])
+    setCOPVisualizando(null)
+    setFotosCOP([])
     setErroVisualizacao('')
   }
 
@@ -413,6 +486,7 @@ export default function PesquisaMaterial({
                   ['HT', 'HT'],
                   ['TASER', 'Taser'],
                   ['TPD', 'TPD'],
+                  ['COP', 'COP'],
                   ['TONFA', 'Tonfa'],
                   ['CASSETETE', 'Cassetete']
                 ].map(([valor, rotulo]) => {
@@ -510,7 +584,7 @@ export default function PesquisaMaterial({
                 </tr>
               ) : resultados.map((material) => {
                 const selecionado = estaSelecionado(material)
-                const permiteVisualizar = ehArma(material) || ehHT(material) || ehTaser(material) || ehTPD(material)
+                const permiteVisualizar = ehArma(material) || ehHT(material) || ehTaser(material) || ehTPD(material) || ehCOP(material)
 
                 return (
                   <tr
@@ -639,6 +713,16 @@ export default function PesquisaMaterial({
         <TPDDetalhesModal
           tpd={tpdVisualizando}
           fotos={fotosTPD}
+          carregandoFotos={false}
+          erroFotos={erroVisualizacao}
+          onClose={fecharVisualizacao}
+        />
+      )}
+
+      {copVisualizando && (
+        <COPDetalhesModal
+          cop={copVisualizando}
+          fotos={fotosCOP}
           carregandoFotos={false}
           erroFotos={erroVisualizacao}
           onClose={fecharVisualizacao}

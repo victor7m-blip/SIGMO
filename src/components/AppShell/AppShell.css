@@ -920,3 +920,154 @@
     display: none !important;
   }
 }
+
+
+/* =====================================================
+   MAPA FORÇA — CONTEÚDO SEM BORDAS BRANCAS
+   Escopo exclusivo da rota Mapa Força via :has().
+   Não altera Dashboard nem demais módulos.
+===================================================== */
+@supports selector(.app-content:has(> .mapa-forca-page)) {
+  .app-shell:has(.app-content > .mapa-forca-page) {
+    background: #06172b;
+  }
+
+  .app-content:has(> .mapa-forca-page) {
+    padding: 0;
+    background: #06172b;
+  }
+
+  .app-content:has(> .mapa-forca-page) > .mapa-forca-page {
+    min-height: 100vh;
+  }
+}
+
+@media (max-width: 900px) {
+  @supports selector(.app-content:has(> .mapa-forca-page)) {
+    .app-content:has(> .mapa-forca-page) {
+      padding: 76px 0 0;
+    }
+  }
+}
+
+/* =====================================================
+   SIGMO — TEMA GLOBAL / ETAPA 1
+   O botão existente da Dashboard também controla o AppShell.
+   Nesta etapa, somente Dashboard + estrutura/menu lateral
+   recebem o tema. Demais módulos permanecem inalterados.
+===================================================== */
+
+.app-shell-theme-light {
+  --sigmo-sidebar-bg: #f7faff;
+  --sigmo-sidebar-bg-secondary: #eaf1f9;
+  --sigmo-sidebar-border: rgba(71, 85, 105, 0.16);
+  --sigmo-sidebar-text: #0f172a;
+  --sigmo-sidebar-muted: #64748b;
+  background: #eef4fb;
+}
+
+.app-shell-theme-light .app-sidebar {
+  color: #0f172a;
+  border-right-color: rgba(71, 85, 105, 0.16);
+  background:
+    radial-gradient(circle at 40% 0%, rgba(37, 99, 235, .08), transparent 30%),
+    linear-gradient(180deg, #f8fbff 0%, #eaf1f9 100%);
+}
+
+.app-shell-theme-light .app-sidebar-top,
+.app-shell-theme-light .app-sidebar-footer {
+  border-color: rgba(71, 85, 105, 0.14);
+}
+
+.app-shell-theme-light .app-brand-emblem {
+  border-color: rgba(71, 85, 105, 0.18);
+  background: rgba(255, 255, 255, .72);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .08);
+}
+
+.app-shell-theme-light .app-brand-name strong,
+.app-shell-theme-light .app-brand-unit strong,
+.app-shell-theme-light .app-user-info strong {
+  color: #0f172a;
+}
+
+.app-shell-theme-light .app-menu-item {
+  color: #334155;
+}
+
+.app-shell-theme-light .app-menu-icon {
+  color: #64748b;
+}
+
+.app-shell-theme-light .app-menu-item:hover {
+  border-color: rgba(71, 85, 105, .12);
+  background: rgba(37, 99, 235, .06);
+  color: #0f172a;
+}
+
+.app-shell-theme-light .app-menu-item.active {
+  border-color: rgba(37, 99, 235, .28);
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, .18);
+}
+
+.app-shell-theme-light .app-menu-item.active .app-menu-icon {
+  color: #fff;
+}
+
+.app-shell-theme-light .app-sidebar-footer {
+  background: rgba(226, 232, 240, .42);
+}
+
+.app-shell-theme-light .app-user {
+  border-color: rgba(71, 85, 105, .14);
+  background: rgba(255, 255, 255, .72);
+}
+
+.app-shell-theme-light .app-user-avatar {
+  border-color: rgba(37, 99, 235, .22);
+  background: linear-gradient(145deg, #dbeafe, #bfdbfe);
+  color: #1e3a8a;
+}
+
+.app-shell-theme-light .app-logout {
+  color: #334155;
+}
+
+.app-shell-theme-light .app-logout-icon {
+  color: #64748b;
+}
+
+.app-shell-theme-light .app-version {
+  color: rgba(71, 85, 105, .58);
+}
+
+.app-shell-theme-light .sidebar-collapse-toggle {
+  border-color: rgba(71, 85, 105, .22);
+  background: #eef4fb;
+  color: #334155;
+  box-shadow: 6px 0 16px rgba(15, 23, 42, .08);
+}
+
+.app-shell-theme-light .sidebar-collapse-toggle:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+/* Dashboard acompanha o mesmo tema no fundo do AppShell. */
+.app-shell-theme-light.app-shell-dashboard,
+.app-shell-theme-light.app-shell-dashboard .app-content {
+  background: #eef4fb;
+}
+
+/* Preserva o Mapa Força exatamente como validado nesta etapa. */
+@supports selector(.app-content:has(> .mapa-forca-page)) {
+  .app-shell-theme-light:has(.app-content > .mapa-forca-page) {
+    background: #06172b;
+  }
+
+  .app-shell-theme-light .app-content:has(> .mapa-forca-page) {
+    background: #06172b;
+  }
+}

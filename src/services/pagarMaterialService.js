@@ -53,6 +53,16 @@ const FONTES_REFERENCIA = {
     tabela: 'sigmo_tpds'
   },
 
+  cop: {
+    modulo: 'COP',
+    tabela: 'sigmo_cops'
+  },
+
+  cops: {
+    modulo: 'COP',
+    tabela: 'sigmo_cops'
+  },
+
   taser: {
     modulo: 'TASER',
     tabela: 'sigmo_tasers'
@@ -139,11 +149,29 @@ function obterPatrimonio(
   const dados =
     objeto(patrimonioCentral?.dados)
 
+  const tipo = normalizarTipo(
+    patrimonioCentral?.tipo
+  )
+
+  const numeroCop =
+    referencia?.numero ||
+    dados.numero
+
+  if (
+    ['cop', 'cops'].includes(tipo) &&
+    numeroCop
+  ) {
+    return `COP ${String(numeroCop)
+      .trim()
+      .padStart(2, '0')}`
+  }
+
   return (
     referencia?.patrimonio ||
     referencia?.numero_patrimonio ||
     dados.patrimonio ||
     dados.numero_patrimonio ||
+    patrimonioCentral?.numero_patrimonio ||
     patrimonioCentral?.identificador ||
     referencia?.codigo ||
     referencia?.qr_code ||
@@ -301,6 +329,7 @@ function registroDisponivel({
     'MANUTENCAO',
     'RECOLHIDO',
     'BAIXADO',
+    'BAIXADA',
     'APREENDIDO',
     'INATIVO'
   ].includes(statusNormalizado)
@@ -432,8 +461,10 @@ function normalizarRegistro({
 
     numero_serie:
       normalizarTexto(
+        referencia?.identificacao_equipamento ||
         referencia?.numero_serie ||
         referencia?.serie ||
+        dados.identificacao_equipamento ||
         dados.numero_serie ||
         dados.serie
       ),
@@ -832,6 +863,7 @@ itens = itens.filter((item) => {
       'MANUTENÇÃO',
       'MANUTENCAO',
       'BAIXADO',
+      'BAIXADA',
       'APREENDIDO'
     ].includes(status)
   ) {
@@ -880,6 +912,8 @@ itens = itens.filter((item) => {
           item.local_atual,
           item.status,
           item.modulo,
+          item.numero,
+          item.identificacao_equipamento,
           item.numero_serie,
           item.serie,
           item.qr_code,
@@ -948,6 +982,8 @@ export async function buscarPatrimonioPorQrCode(
         item.qr_code,
         item.patrimonio,
         item.numero_patrimonio,
+        item.numero,
+        item.identificacao_equipamento,
         item.numero_serie,
         item.serie,
         item.codigo,

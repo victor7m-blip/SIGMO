@@ -22,6 +22,7 @@ export const ROTAS = {
   CARGA_PESSOAL: 'carga-pessoal',
   ARMAS: 'armas',
   TPD: 'tpd',
+  COP: 'cop',
   HT: 'ht',
   TASERS: 'tasers',
   TONFAS: 'tonfas',
@@ -284,6 +285,70 @@ export function possuiGraduacaoSargentoOuSuperior(user) {
   )
 }
 
+export function possuiGraduacaoSargento(user) {
+  const graduacao = normalizarPostoGraduacao(
+    user?.posto_graduacao ||
+    user?.postoGraduacao ||
+    user?.graduacao ||
+    ''
+  )
+
+  return [
+    '3 SGT PM',
+    '3 SARGENTO',
+    '2 SGT PM',
+    '2 SARGENTO',
+    '1 SGT PM',
+    '1 SARGENTO'
+  ].includes(graduacao)
+}
+
+export function podeGerenciarMapaForca(user) {
+  return perfilEh(
+    user,
+    PERFIS.ADMINISTRADOR,
+    PERFIS.COMANDANTE_CIA,
+    PERFIS.ENCARREGADO_SVDD,
+    PERFIS.AUXILIAR_SVDD
+  )
+}
+
+export function podeVisualizarMapaForca(user) {
+  return (
+    podeGerenciarMapaForca(user) ||
+    ehP4(user) ||
+    possuiGraduacaoSargento(user)
+  )
+}
+
+export function podeVisualizarCOP(user) {
+  return perfilEh(
+    user,
+    PERFIS.ADMINISTRADOR,
+    PERFIS.P4,
+    PERFIS.COMANDANTE_CIA,
+    PERFIS.ENCARREGADO_SVDD,
+    PERFIS.AUXILIAR_SVDD
+  )
+}
+
+export function podeEditarCOP(user) {
+  return perfilEh(
+    user,
+    PERFIS.ADMINISTRADOR,
+    PERFIS.P4
+  )
+}
+
+export function podeOperarCOP(user) {
+  return perfilEh(
+    user,
+    PERFIS.ADMINISTRADOR,
+    PERFIS.ENCARREGADO_SVDD,
+    PERFIS.AUXILIAR_SVDD
+  )
+}
+
 export function podeGerenciarSolicitacoesCadastrais(user) {
   return perfilEh(
     user,
@@ -332,12 +397,14 @@ const ROTAS_P4 = [
   ROTAS.CARGA_PESSOAL,
   ROTAS.ARMAS,
   ROTAS.TPD,
+  ROTAS.COP,
   ROTAS.HT,
   ROTAS.TASERS,
   ROTAS.TONFAS,
   ROTAS.MUNICOES,
   ROTAS.LOCAIS,
   ROTAS.VIATURAS,
+  ROTAS.MAPA_FORCA,
   ROTAS.RELATORIOS,
   ROTAS.ALERTAS
 ]
@@ -352,6 +419,8 @@ const ROTAS_AUXILIAR = [
   ROTAS.DEVOLVER_MATERIAL,
   ROTAS.POLICIAIS,
   ROTAS.CARGA_PESSOAL,
+  ROTAS.COP,
+  ROTAS.MUNICOES,
   ROTAS.MAPA_FORCA
 ]
 
@@ -372,6 +441,7 @@ const ROTAS_ENCARREGADO = [
   ROTAS.CARGA_PESSOAL,
   ROTAS.ARMAS,
   ROTAS.TPD,
+  ROTAS.COP,
   ROTAS.HT,
   ROTAS.TASERS,
   ROTAS.TONFAS,
@@ -427,19 +497,31 @@ export function obterRotasPermitidas(user) {
     ROTAS_POR_PERFIL[perfil] ||
     ROTAS_USUARIO
 
+  const rotasPermitidas = [...rotasBase]
+
+  if (
+    podeVisualizarMapaForca(user) &&
+    !rotasPermitidas.includes(
+      ROTAS.MAPA_FORCA
+    )
+  ) {
+    rotasPermitidas.push(
+      ROTAS.MAPA_FORCA
+    )
+  }
+
   if (
     podeAcessarRecuperacaoPin(user) &&
-    !rotasBase.includes(
+    !rotasPermitidas.includes(
       ROTAS.SOLICITACOES_CADASTRAIS
     )
   ) {
-    return [
-      ...rotasBase,
+    rotasPermitidas.push(
       ROTAS.SOLICITACOES_CADASTRAIS
-    ]
+    )
   }
 
-  return rotasBase
+  return rotasPermitidas
 }
 
 export function podeAcessarRota(

@@ -397,6 +397,7 @@ export default function ReceberMaterial({
   ] = useState(null)
 
   const erroRef = useRef(null)
+  const etapaIdentificacaoRef = useRef(null)
 
   useEffect(() => {
     if (!erro || !erroRef.current) return
@@ -1408,6 +1409,18 @@ function alterarQuantidade(id, valor) {
     setMensagem('')
   }
 
+  function rolarParaIdentificacao() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        etapaIdentificacaoRef.current
+          ?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          })
+      })
+    })
+  }
+
 const recebimentoEmAndamento = useRef(false)
 
 async function confirmarRecebimento() {
@@ -1813,23 +1826,6 @@ async function confirmarRecebimento() {
           } com sucesso.`
     )
 
-    const chavesItensRecebidos =
-      new Set(
-        itensSelecionados.map(
-          criarChaveItem
-        )
-      )
-
-    setPatrimonios(
-      (listaAtual) =>
-        listaAtual.filter(
-          (item) =>
-            !chavesItensRecebidos.has(
-              criarChaveItem(item)
-            )
-        )
-    )
-
     itensSelecionados.forEach(
       (item) => {
         ;(
@@ -1845,11 +1841,19 @@ async function confirmarRecebimento() {
       }
     )
 
+    setReEntregador('')
+    setPolicialEntregador(null)
+    setPatrimonios([])
     setItensSelecionados([])
+    setDevolucaoPendente(null)
     setBusca('')
     setDocumento('')
     setObservacoes('')
-    
+    setLocalRetorno(
+      LOCAL_RETORNO_PADRAO
+    )
+
+    rolarParaIdentificacao()
 
     onConcluido?.(
       resultadoFinal
@@ -1934,7 +1938,10 @@ async function confirmarRecebimento() {
 
       <section className="pagar-material-layout">
         <div className="pagar-material-main">
-          <section className="pagar-material-card">
+          <section
+            ref={etapaIdentificacaoRef}
+            className="pagar-material-card"
+          >
             <div className="pagar-material-card-header">
               <div>
                 <span>

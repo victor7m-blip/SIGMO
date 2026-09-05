@@ -21,7 +21,8 @@ import {
   ehEncarregado,
   ehAuxiliar,
   obterRotaInicial,
-  podeAcessarRota
+  podeAcessarRota,
+  podeGerenciarMapaForca
 } from '../services/permissionService'
 import {
   listarCautelasAguardandoUsuario,
@@ -39,6 +40,7 @@ import Locais from './Locais/Locais'
 import Materiais from './Materiais/Materiais'
 import Armas from './Armas/Armas'
 import TPD from './TPD/TPD'
+import COP from './COP/COP'
 import Policiais from './Policiais'
 import CargaPessoal from './CargaPessoal/CargaPessoal'
 import Taser from './Taser/Taser'
@@ -74,6 +76,7 @@ const NOMES_MODULOS = {
   policiais: 'Policiais',
   taser: 'Taser',
   tpd: 'TPD',
+  cop: 'COP',
   colete: 'Coletes',
   coletes: 'Coletes',
   ht: 'HT',
@@ -1036,7 +1039,9 @@ async function listarMateriaisEmServicoConsolidado() {
 function PainelDashboard({
   user,
   dashboard,
-  onNavegar
+  onNavegar,
+  temaDashboard,
+  onAlternarTema
 }) {
   const {
     cards,
@@ -1114,42 +1119,6 @@ function PainelDashboard({
 
   const [agora, setAgora] =
     useState(() => new Date())
-
-  const [temaDashboard, setTemaDashboard] =
-    useState(() => {
-      try {
-        return (
-          localStorage.getItem(
-            DASHBOARD_THEME_STORAGE_KEY
-          ) === 'light'
-            ? 'light'
-            : 'dark'
-        )
-      } catch {
-        return 'dark'
-      }
-    })
-
-  function alternarTemaDashboard() {
-    setTemaDashboard((temaAtual) => {
-      const novoTema =
-        temaAtual === 'dark'
-          ? 'light'
-          : 'dark'
-
-      try {
-        localStorage.setItem(
-          DASHBOARD_THEME_STORAGE_KEY,
-          novoTema
-        )
-      } catch {
-        // Mantém a troca funcionando mesmo
-        // se o storage estiver indisponível.
-      }
-
-      return novoTema
-    })
-  }
 
   const [
     novidadeSelecionada,
@@ -1752,7 +1721,7 @@ function PainelDashboard({
           <button
             type="button"
             className="sigmo-command-theme-toggle"
-            onClick={alternarTemaDashboard}
+            onClick={onAlternarTema}
             aria-label={
               temaDashboard === 'dark'
                 ? 'Ativar tema claro'
@@ -4114,9 +4083,35 @@ export default function DashboardV2({
 
   const [policialAbrirRe, setPolicialAbrirRe] = useState('')
   const [viaturaAbrirId, setViaturaAbrirId] = useState(null)
+  const [contextoPagarMaterialMapa, setContextoPagarMaterialMapa] = useState(null)
+  const [rascunhoMapaForca, setRascunhoMapaForca] = useState(null)
   const [avisoRecebimento, setAvisoRecebimento] = useState(0)
   const [avisoNotificacao, setAvisoNotificacao] = useState(null)
   const [notificacaoVerificada, setNotificacaoVerificada] = useState(false)
+
+  const [temaSigmo, setTemaSigmo] = useState(() => {
+    try {
+      return localStorage.getItem(DASHBOARD_THEME_STORAGE_KEY) === 'light'
+        ? 'light'
+        : 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
+
+  function alternarTemaSigmo() {
+    setTemaSigmo((temaAtual) => {
+      const novoTema = temaAtual === 'dark' ? 'light' : 'dark'
+
+      try {
+        localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, novoTema)
+      } catch {
+        // Mantém a troca funcionando mesmo sem storage.
+      }
+
+      return novoTema
+    })
+  }
 
   const dashboard = useDashboard()
 
@@ -4344,6 +4339,24 @@ useEffect(() => {
   setRouteState('policiais')
 }
 
+  function abrirPagarMaterialPeloMapa(contexto) {
+    if (!contexto?.policial?.id) return
+
+    setContextoPagarMaterialMapa(contexto)
+    setRoute('pagar-material')
+  }
+
+  function voltarDoPagarMaterial() {
+    if (contextoPagarMaterialMapa?.policial?.id) {
+      setContextoPagarMaterialMapa(null)
+      setRoute('mapa-forca')
+      dashboard.atualizar()
+      return
+    }
+
+    voltarDashboard()
+  }
+
   function renderPage() {
     if (route === 'dashboard') {
       if (ehUsuario(user)) {
@@ -4360,6 +4373,8 @@ useEffect(() => {
           user={user}
           dashboard={dashboard}
           onNavegar={setRoute}
+          temaDashboard={temaSigmo}
+          onAlternarTema={alternarTemaSigmo}
         />
       )
     }
@@ -4387,9 +4402,16 @@ useEffect(() => {
       return (
         <PagarMaterial
           user={user}
-          onVoltar={voltarDashboard}
+          onVoltar={voltarDoPagarMaterial}
+          recebedorInicial={contextoPagarMaterialMapa?.policial || null}
+          contextoMapaForca={contextoPagarMaterialMapa}
           onConcluido={() => {
             dashboard.atualizar()
+
+            if (contextoPagarMaterialMapa?.policial?.id) {
+              setContextoPagarMaterialMapa(null)
+              setRoute('mapa-forca')
+            }
           }}
         />
       )
@@ -4478,6 +4500,10 @@ useEffect(() => {
   return <TPD user={user} />
 }
 
+if (route === 'cop') {
+  return <COP user={user} />
+}
+
 if (route === 'ht') {
   return <HT user={user} />
 }
@@ -4494,10 +4520,25 @@ if (route === 'viaturas') {
 }
 
 if (route === 'mapa-forca') {
+  const somenteLeituraMapaForca =
+    !podeGerenciarMapaForca(user)
+
   return (
     <MapaForca
       user={user}
       onVoltar={voltarDashboard}
+      onPagarMaterial={
+        somenteLeituraMapaForca
+          ? null
+          : abrirPagarMaterialPeloMapa
+      }
+      rascunhoInicial={rascunhoMapaForca}
+      onRascunhoChange={
+        somenteLeituraMapaForca
+          ? null
+          : setRascunhoMapaForca
+      }
+      somenteLeitura={somenteLeituraMapaForca}
     />
   )
 }
@@ -4565,6 +4606,8 @@ if (route === 'tonfas') {
         user={user}
         dashboard={dashboard}
         onNavegar={setRoute}
+        temaDashboard={temaSigmo}
+        onAlternarTema={alternarTemaSigmo}
       />
     )
   }
@@ -4576,6 +4619,7 @@ if (route === 'tonfas') {
         route={route}
         setRoute={setRoute}
         onLogout={onLogout}
+        tema={temaSigmo}
       >
         {renderPage()}
       </AppShell>

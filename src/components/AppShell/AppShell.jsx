@@ -30,6 +30,11 @@ const menuItems = [
     icon: '⌂'
   },
   {
+    key: 'mapa-forca',
+    label: 'Mapa Força',
+    icon: '▦'
+  },
+  {
     key: 'central-operacional',
     label: 'Central Operacional',
     icon: '▦'
@@ -65,11 +70,6 @@ const menuItems = [
     key: 'viaturas',
     label: 'Viaturas',
     icon: '▱'
-  },
-  {
-    key: 'mapa-forca',
-    label: 'Mapa Força',
-    icon: '▦'
   },
   {
     key: 'policiais',
@@ -134,6 +134,7 @@ export default function AppShell({
   route,
   setRoute,
   onLogout,
+  tema = 'dark',
   children
 }) {
   const [
@@ -345,6 +346,7 @@ const tempoRestanteTemporario =
       className={[
         'app-shell',
         `app-shell-${route}`,
+        `app-shell-theme-${tema === 'light' ? 'light' : 'dark'}`,
         sidebarRecolhida
           ? 'app-shell-sidebar-collapsed'
           : ''

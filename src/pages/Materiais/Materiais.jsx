@@ -63,11 +63,12 @@ const categorias = [
 },
   {
     id: 'cop',
+    rota: 'cop',
     icone: '📹',
     titulo: 'COP (Câmera Corporal)',
     descricao:
-      'Controle câmeras operacionais portáteis, bases, baterias e informações de uso.',
-    status: 'ativo',
+      'Consulte câmeras operacionais portáteis por número, ID, status, fotos e histórico.',
+    status: 'disponivel',
     destaque: 'ciano'
   },
   {

@@ -803,7 +803,7 @@ async function resumirPatrimoniosIndividualizados(user) {
     .from('sigmo_patrimonios')
     .select('id, tipo, status, local_atual, ativo')
     .eq('ativo', true)
-    .in('tipo', ['arma', 'ht', 'tpd', 'taser'])
+    .in('tipo', ['arma', 'ht', 'tpd', 'taser', 'cop'])
 
   if (error) {
     throw error
@@ -1128,14 +1128,14 @@ const manutencoesAtivas =
 // ajustamos a vitrine sem depender exclusivamente de sigmo_patrimonios.
 const manutencoesPatrimoniaisAtivas =
   manutencoesAtivas.filter((item) =>
-    ['ARMAS', 'HT', 'TPD', 'TASER'].includes(
+    ['ARMAS', 'HT', 'TPD', 'TASER', 'COP'].includes(
       normalizar(item?.modulo)
     )
   )
 
 const manutencoesIndividuaisAtivas =
   manutencoesAtivas.filter((item) =>
-    ['HT', 'TPD', 'TASER'].includes(
+    ['HT', 'TPD', 'TASER', 'COP'].includes(
       normalizar(item?.modulo)
     )
   )

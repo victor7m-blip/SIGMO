@@ -202,35 +202,43 @@ export async function criarMovimentacao({
   solicitante,
   recebedor,
   observacoes = '',
+  inicio_turno_servico = null,
   fim_turno_servico = null,
   previsao_entrega = null
 }) {
+  const parametrosRpc = {
+    p_tipo_movimentacao:
+      tipo_movimentacao,
+    p_origem_local:
+      origem_local,
+    p_destino_local:
+      destino_local,
+    p_solicitante_id:
+      solicitante?.id || null,
+    p_solicitante_nome:
+      obterNomeUsuario(solicitante),
+    p_solicitante_perfil:
+      solicitante?.perfil || '',
+    p_recebedor_id:
+      recebedor?.id || null,
+    p_recebedor_nome:
+      obterNomeUsuario(recebedor),
+    p_observacoes:
+      observacoes,
+    p_fim_turno_servico:
+      fim_turno_servico || null,
+    p_previsao_entrega:
+      previsao_entrega || null
+  }
+
+  if (inicio_turno_servico) {
+    parametrosRpc.p_inicio_turno_servico =
+      inicio_turno_servico
+  }
+
   const { data, error } = await supabase.rpc(
     'sigmo_criar_movimentacao',
-    {
-      p_tipo_movimentacao:
-        tipo_movimentacao,
-      p_origem_local:
-        origem_local,
-      p_destino_local:
-        destino_local,
-      p_solicitante_id:
-        solicitante?.id || null,
-      p_solicitante_nome:
-        obterNomeUsuario(solicitante),
-      p_solicitante_perfil:
-        solicitante?.perfil || '',
-      p_recebedor_id:
-        recebedor?.id || null,
-      p_recebedor_nome:
-        obterNomeUsuario(recebedor),
-      p_observacoes:
-        observacoes,
-      p_fim_turno_servico:
-        fim_turno_servico || null,
-      p_previsao_entrega:
-        previsao_entrega || null
-    }
+    parametrosRpc
   )
 
   if (error) {

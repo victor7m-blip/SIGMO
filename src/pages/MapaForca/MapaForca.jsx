@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import './MapaForca.css'
+import MapaForcaVisualizacao from './MapaForcaVisualizacao'
 
 import { listarPoliciais } from '../../services/policiaisService'
 import { listarViaturas } from '../../services/viaturasService'
+import { listarMateriaisEmServicoUsuario } from '../../services/cautelasUsuarioService'
 import {
   carregarMapaEmElaboracao,
   excluirUSMapaForca,
   salvarCabecalhoMapaForca,
   salvarUSMapaForca
 } from '../../services/mapaForcaService'
+
+const EQUIPES_SERVICO = ['A', 'B', 'C', 'D']
+const SERVICOS_DIA = ['SD27501', 'SD27502', 'SD27503', 'SD27504', 'SD27505']
 
 const TIPOS_US = [
   { id: 'comando-cia', titulo: 'COMANDO DE CIA', subtitulo: 'Comando da Companhia no turno', tom: 'dourado', prefixo: 'CMT DE CIA', tipo: 'VIATURA', campos: ['COMANDANTE', 'MOTORISTA', 'AUXILIAR'] },
@@ -17,7 +22,7 @@ const TIPOS_US = [
   { id: 'radio-patrulhamento', titulo: 'RÁDIO PATRULHAMENTO', subtitulo: 'Viaturas de patrulhamento territorial', tom: 'ciano', prefixo: 'RP', tipo: 'VIATURA', campos: ['ENCARREGADO', 'MOTORISTA / AUXILIAR'] },
   { id: 'ronda-escolar', titulo: 'RONDA ESCOLAR', subtitulo: 'Policiamento escolar', tom: 'verde', prefixo: 'RONDA ESCOLAR', tipo: 'VIATURA', campos: ['ENCARREGADO', 'MOTORISTA / AUXILIAR'] },
   { id: 'base-comunitaria', titulo: 'BASE COMUNITÁRIA MÓVEL', subtitulo: 'Policiamento comunitário', tom: 'amarelo', prefixo: 'BCM', tipo: 'VIATURA', campos: ['ENCARREGADO', 'MOTORISTA / AUXILIAR'] },
-  { id: 'pop', titulo: 'POP', subtitulo: 'Postos e equipes operacionais', tom: 'laranja', prefixo: 'POP27501', tipo: 'EQUIPE', campos: ['ENCARREGADO', 'PARCEIRO'] },
+  { id: 'pop', titulo: 'POP', subtitulo: 'Postos e equipes operacionais', tom: 'laranja', prefixo: 'POP', tipo: 'EQUIPE', campos: ['ENCARREGADO', 'PARCEIRO'] },
   { id: 'rpm', titulo: 'RPM', subtitulo: 'Radiopatrulhamento com motocicletas', tom: 'vermelho', prefixo: 'M-27509-11', tipo: 'MOTOCICLETA', campos: ['POLICIAL'] }
 ]
 
@@ -53,6 +58,42 @@ function modeloTipo(id) {
   return TIPOS_US.find((item) => item.id === id) || null
 }
 
+function normalizarEquipamento(valor) {
+  return String(valor || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function rotuloEquipamento(item) {
+  const texto = normalizarEquipamento([
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.categoria,
+    item?.descricao
+  ].filter(Boolean).join(' '))
+
+  if (texto.includes('CASSETETE')) return 'CASSETETE'
+  if (texto.includes('TONFA')) return 'TONFA'
+  if (texto.includes('TASER')) return 'TASER'
+  if (texto.includes('TPD')) return 'TPD'
+  if (texto.includes('HT') || texto.includes('RADIO')) return 'HT'
+  if (
+    texto.includes('ARMA') ||
+    texto.includes('PISTOLA') ||
+    texto.includes('REVOLVER') ||
+    texto.includes('FUZIL') ||
+    texto.includes('CARABINA')
+  ) return 'ARMA'
+
+  return item?.tipo ? normalizarEquipamento(item.tipo) : 'EQUIPAMENTO'
+}
+
+function resumirEquipamentos(itens = []) {
+  return Array.from(new Set((itens || []).map(rotuloEquipamento).filter(Boolean)))
+}
+
 function proximoCampoExtra(campos = []) {
   let numero = 1
 
@@ -78,6 +119,10 @@ function criarUnidade(tipo, inicio, fim) {
     inicioUs: inicio,
     fimUs: fim,
     viatura: null,
+    vtrDiferenteEscala: false,
+    viaturaPrevista: null,
+    motivoTrocaVtr: '',
+    localPop: '',
     policiais: {}
   }
 }
@@ -116,6 +161,10 @@ function reconstruirUnidades(unidades, efetivo, inicioPadrao, fimPadrao) {
         inicioUs: dataInputValor(registro.inicio_us) || inicioPadrao,
         fimUs: dataInputValor(registro.fim_us) || fimPadrao,
         viatura: registro.viatura || null,
+        vtrDiferenteEscala: Boolean(registro.vtr_diferente_escala),
+        viaturaPrevista: registro.viatura_prevista || null,
+        motivoTrocaVtr: registro.motivo_troca_vtr || '',
+        localPop: registro.local_pop || '',
         policiais
       },
       ordem: Number(registro.ordem || 0)
@@ -153,55 +202,132 @@ function CampoComposicao({ label, policial, onSelecionar, onRemover, somenteLeit
 }
 
 function UnidadeServico({
+  grupoId,
   unidade,
   onPolicial,
   onRemoverPolicial,
   onAdicionarPolicial,
   onViatura,
   onRemoverViatura,
+  onVtrDiferenteEscala,
+  onViaturaPrevista,
+  onRemoverViaturaPrevista,
+  onMotivoTrocaVtr,
   onHorario,
   onPrefixo,
+  onLocalPop,
+  onPagarMaterial,
   somenteLeitura = false
 }) {
   return (
     <article className="mapa-forca-us">
       <div className="mapa-forca-us-head">
         <label className="mapa-forca-us-prefixo">
-          <span>{unidade.tipo}</span>
-          {somenteLeitura
-            ? <strong>{unidade.prefixo}</strong>
-            : <input value={unidade.prefixo || ''} onChange={(e) => onPrefixo(e.target.value.toUpperCase())} />}
+          <span>
+            {grupoId === 'cgp'
+              ? 'SUPERVISÃO'
+              : grupoId === 'pop'
+                ? 'POP'
+                : unidade.tipo}
+          </span>
+
+          {somenteLeitura ? (
+            <strong>{unidade.prefixo}</strong>
+          ) : grupoId === 'servico-dia' ? (
+            <select
+              value={unidade.prefixo || 'SD27501'}
+              onChange={(e) => onPrefixo(e.target.value)}
+            >
+              {SERVICOS_DIA.map((servico) => (
+                <option key={servico} value={servico}>{servico}</option>
+              ))}
+            </select>
+          ) : grupoId === 'pop' ? (
+            <strong>POP</strong>
+          ) : grupoId === 'cgp' ? (
+            <strong>CGP</strong>
+          ) : grupoId === 'radio-patrulhamento' ? (
+            <strong>RP</strong>
+          ) : (
+            <input
+              value={unidade.prefixo || ''}
+              onChange={(e) => onPrefixo(e.target.value.toUpperCase())}
+            />
+          )}
         </label>
 
-        {unidade.viatura ? (
-          <div className="mapa-forca-vtr mapa-forca-selecionado">
-            <div className="mapa-forca-mini-vtr">
-              {unidade.viatura.foto_principal_url
-                ? <img src={unidade.viatura.foto_principal_url} alt={unidade.viatura.prefixo} />
-                : <span>{unidade.viatura.tipo_veiculo === 'MOTOCICLETA' ? '🏍️' : '🚓'}</span>}
+        {grupoId === 'pop' && (
+          <label className="mapa-forca-us-prefixo">
+            <span>LOCAL DO POP</span>
+            {somenteLeitura
+              ? <strong>{unidade.localPop || 'Não informado'}</strong>
+              : (
+                <input
+                  value={unidade.localPop || ''}
+                  onChange={(e) => onLocalPop?.(e.target.value.toUpperCase())}
+                  placeholder="Ex.: RUA / PRAÇA / AVENIDA..."
+                />
+              )}
+          </label>
+        )}
+
+        {!['servico-dia', 'pop'].includes(grupoId) && (
+          unidade.viatura ? (
+            <div className="mapa-forca-vtr mapa-forca-selecionado">
+              <div className="mapa-forca-mini-vtr">
+                {unidade.viatura.foto_principal_url
+                  ? <img src={unidade.viatura.foto_principal_url} alt={unidade.viatura.prefixo} />
+                  : <span>{unidade.viatura.tipo_veiculo === 'MOTOCICLETA' ? '🏍️' : '🚓'}</span>}
+              </div>
+              <button type="button" className="mapa-forca-dados-selecionados" onClick={somenteLeitura ? undefined : onViatura}>
+                <small>VIATURA</small>
+                <strong>{unidade.viatura.prefixo}</strong>
+                {!somenteLeitura && <em>trocar</em>}
+              </button>
+              {!somenteLeitura && <button type="button" className="mapa-forca-remover" onClick={onRemoverViatura}>×</button>}
             </div>
-            <button type="button" className="mapa-forca-dados-selecionados" onClick={somenteLeitura ? undefined : onViatura}>
-              <small>VIATURA / RECURSO</small>
-              <strong>{unidade.viatura.prefixo}</strong>
-              <em>{unidade.viatura.modelo || '—'} • {unidade.viatura.placa || '—'}{somenteLeitura ? '' : ' • trocar'}</em>
+          ) : somenteLeitura ? (
+            <div className="mapa-forca-vtr"><span>▱</span><div><small>VIATURA</small><strong>Não definida</strong></div></div>
+          ) : (
+            <button type="button" className="mapa-forca-vtr" onClick={onViatura}>
+              <span>{unidade.tipo === 'MOTOCICLETA' ? '🏍️' : '▱'}</span>
+              <div><small>VIATURA</small><strong>Selecionar</strong></div>
             </button>
-            {!somenteLeitura && <button type="button" className="mapa-forca-remover" onClick={onRemoverViatura}>×</button>}
-          </div>
-        ) : somenteLeitura ? (
-          <div className="mapa-forca-vtr"><span>▱</span><div><small>VIATURA / RECURSO</small><strong>Não definida</strong></div></div>
-        ) : (
-          <button type="button" className="mapa-forca-vtr" onClick={onViatura}>
-            <span>{unidade.tipo === 'MOTOCICLETA' ? '🏍️' : '▱'}</span>
-            <div><small>VIATURA / RECURSO</small><strong>Selecionar</strong></div>
-          </button>
+          )
         )}
       </div>
 
-      <div className="mapa-forca-us-horario">
-        <label><span>INÍCIO DA US</span><input type="datetime-local" value={unidade.inicioUs || ''} disabled={somenteLeitura} onChange={(e) => onHorario?.('inicioUs', e.target.value)} /></label>
-        <div className="mapa-forca-us-horario-seta">→</div>
-        <label><span>TÉRMINO DA US</span><input type="datetime-local" value={unidade.fimUs || ''} disabled={somenteLeitura} onChange={(e) => onHorario?.('fimUs', e.target.value)} /></label>
-      </div>
+      {!['servico-dia', 'pop'].includes(grupoId) && unidade.viatura && (
+        <div className={`mapa-forca-vtr-escala ${unidade.vtrDiferenteEscala ? 'ativo' : ''}`}>
+          <label className="mapa-forca-vtr-escala-check">
+            <input type="checkbox" checked={Boolean(unidade.vtrDiferenteEscala)} disabled={somenteLeitura}
+              onChange={(e) => onVtrDiferenteEscala?.(e.target.checked)} />
+            <span><strong>VTR diferente da escala</strong><small>Marque quando a viatura empregada for diferente da prevista na escala.</small></span>
+          </label>
+          {unidade.vtrDiferenteEscala && (
+            <div className="mapa-forca-vtr-escala-detalhes">
+              <div className="mapa-forca-vtr-prevista">
+                <small>VIATURA PREVISTA NA ESCALA</small>
+                {unidade.viaturaPrevista ? (
+                  <div className="mapa-forca-vtr-prevista-selecionada">
+                    <strong>{unidade.viaturaPrevista.prefixo}</strong>
+                    {!somenteLeitura && <><button type="button" onClick={onViaturaPrevista}>Trocar</button><button type="button" className="remover" onClick={onRemoverViaturaPrevista}>×</button></>}
+                  </div>
+                ) : somenteLeitura ? <strong>Não informada</strong> : (
+                  <button type="button" className="mapa-forca-vtr-prevista-btn" onClick={onViaturaPrevista}>Selecionar viatura prevista</button>
+                )}
+              </div>
+              <label className="mapa-forca-vtr-motivo">
+                <small>MOTIVO DA ALTERAÇÃO</small>
+                {somenteLeitura ? <strong>{unidade.motivoTrocaVtr || 'Não informado'}</strong> : (
+                  <textarea value={unidade.motivoTrocaVtr || ''} onChange={(e) => onMotivoTrocaVtr?.(e.target.value.toUpperCase())}
+                    placeholder="Informe o motivo da troca da viatura..." rows={3} />
+                )}
+              </label>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mapa-forca-composicao">
         {unidade.campos.map((campo) => (
@@ -218,8 +344,33 @@ function UnidadeServico({
       </div>
 
       <div className="mapa-forca-equipamentos">
-        <span>Equipamentos</span>
-        {['ARMA', 'HT', 'TASER', 'TPD', 'TONFA'].map((item) => <button type="button" key={item} disabled>+ {item}</button>)}
+        <span>Equipamentos / cautelas</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {unidade.campos.map((campo) => {
+            const policial = unidade.policiais?.[campo]
+            if (!policial?.id) return null
+
+            return (
+              <button
+                type="button"
+                key={`equip-${unidade.id}-${campo}`}
+                onClick={() => onPagarMaterial?.({
+                  policial,
+                  funcao: campo,
+                  unidade: {
+                    id: unidade.id,
+                    prefixo: unidade.prefixo,
+                    inicioUs: unidade.inicioUs,
+                    fimUs: unidade.fimUs
+                  }
+                })}
+                disabled={typeof onPagarMaterial !== 'function'}
+              >
+                + {policial.nome_guerra || policial.nome || policial.re || campo}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </article>
   )
@@ -246,7 +397,9 @@ function resumoMapa(salvas) {
   }
 }
 
-function CartaoPolicialCompacto({ funcao, policial }) {
+function CartaoPolicialCompacto({ funcao, policial, materiais = [] }) {
+  const equipamentos = resumirEquipamentos(materiais)
+
   return (
     <div className="mapa-forca-compact-policial">
       <div className="mapa-forca-compact-foto">
@@ -256,30 +409,54 @@ function CartaoPolicialCompacto({ funcao, policial }) {
         <small>{funcao}</small>
         <strong>{policial ? nomePolicial(policial) : 'NÃO DEFINIDO'}</strong>
         {policial && <em>RE {policial.re || '—'}</em>}
+        {policial && equipamentos.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '7px' }}>
+            {equipamentos.map((equipamento) => (
+              <span
+                key={`${policial.id}-${equipamento}`}
+                style={{
+                  border: '1px solid rgba(56, 189, 248, .28)',
+                  background: 'rgba(56, 189, 248, .08)',
+                  borderRadius: '999px',
+                  padding: '2px 7px',
+                  fontSize: '10px',
+                  fontStyle: 'normal',
+                  fontWeight: 800,
+                  letterSpacing: '.04em'
+                }}
+              >
+                {equipamento}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function UnidadeCompacta({ item, onDetalhes, onExcluir }) {
+function UnidadeCompacta({
+  item,
+  materiaisPorPolicial = {},
+  onEditar = null,
+  onExcluir = null
+}) {
   const { unidade } = item
   return (
     <div
       className="mapa-forca-compact-us"
-      role="button"
-      tabIndex={0}
-      onClick={onDetalhes}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onDetalhes?.()
-        }
-      }}
     >
       <div className="mapa-forca-compact-us-top">
         <div>
           <span className="mapa-forca-compact-prefixo">{unidade.prefixo}</span>
-          {unidade.viatura && <small>{unidade.viatura.modelo || 'VIATURA'} • {unidade.viatura.placa || '—'}</small>}
+          {unidade.viatura && <small>VIATURA: {unidade.viatura.prefixo}</small>}
+          {unidade.vtrDiferenteEscala && (
+            <div className="mapa-forca-compact-vtr-alerta">
+              <strong>⚠ VTR DIFERENTE DA ESCALA</strong>
+              <span>Prevista: {unidade.viaturaPrevista?.prefixo || 'NÃO INFORMADA'}</span>
+              <span>Motivo: {unidade.motivoTrocaVtr || 'NÃO INFORMADO'}</span>
+            </div>
+          )}
         </div>
         <span className="mapa-forca-compact-status">● EM ELABORAÇÃO</span>
       </div>
@@ -290,33 +467,30 @@ function UnidadeCompacta({ item, onDetalhes, onExcluir }) {
             key={`${unidade.id}-${funcao}`}
             funcao={funcao}
             policial={unidade.policiais?.[funcao]}
+            materiais={materiaisPorPolicial[String(unidade.policiais?.[funcao]?.id || '')] || []}
           />
         ))}
       </div>
 
       <div className="mapa-forca-compact-rodape">
         <span>{dataInputValor(unidade.inicioUs).slice(11)} → {dataInputValor(unidade.fimUs).slice(11)}</span>
-        <span className="mapa-forca-compact-acoes">
+        <span className="mapa-forca-compact-acoes" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
             type="button"
-            className="mapa-forca-compact-excluir"
-            onClick={(e) => {
-              e.stopPropagation()
-              onExcluir?.()
-            }}
-            style={{
-              border: '1px solid rgba(239, 68, 68, .45)',
-              background: 'rgba(239, 68, 68, .10)',
-              color: '#ef4444',
-              borderRadius: '8px',
-              padding: '6px 10px',
-              fontWeight: 800,
-              cursor: 'pointer'
-            }}
+            className="mapa-forca-toolbar-btn"
+            onClick={() => onEditar?.(item)}
+            disabled={typeof onEditar !== 'function'}
           >
-            Excluir
+            ✎ EDITAR US
           </button>
-          <strong>Ver detalhes ›</strong>
+          <button
+            type="button"
+            className="mapa-forca-toolbar-btn"
+            onClick={() => onExcluir?.(item)}
+            disabled={typeof onExcluir !== 'function'}
+          >
+            EXCLUIR
+          </button>
         </span>
       </div>
     </div>
@@ -336,8 +510,23 @@ function ModalSelecao({ selecao, itens, pesquisa, setPesquisa, loading, erro, oc
     <div className="mapa-forca-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <section className="mapa-forca-modal">
         <header><div><small>MAPA FORÇA</small><h2>{selecao.tipo === 'POLICIAL' ? `Selecionar policial • ${selecao.campo}` : `Selecionar ${selecao.tipoVeiculo === 'MOTOCICLETA' ? 'motocicleta' : 'viatura'}`}</h2></div><button type="button" onClick={onClose}>×</button></header>
-        <input autoFocus className="mapa-forca-modal-pesquisa" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)}
-          placeholder={selecao.tipo === 'POLICIAL' ? 'Pesquisar nome, posto ou RE...' : 'Pesquisar prefixo, modelo ou placa...'} />
+        <input
+          autoFocus
+          className="mapa-forca-modal-pesquisa"
+          value={pesquisa}
+          onChange={(e) => {
+            const valor = e.target.value
+
+            if (selecao.tipo === 'POLICIAL' && /^\d*$/.test(valor)) {
+              setPesquisa(valor.slice(0, 6))
+              return
+            }
+
+            setPesquisa(valor)
+          }}
+          inputMode={selecao.tipo === 'POLICIAL' && /^\d*$/.test(pesquisa || '') ? 'numeric' : undefined}
+          placeholder={selecao.tipo === 'POLICIAL' ? 'Pesquisar nome, posto ou RE...' : 'Pesquisar prefixo, modelo ou placa...'}
+        />
         {erro ? <div className="mapa-forca-modal-aviso erro">{erro}</div>
           : loading ? <div className="mapa-forca-modal-aviso">Carregando...</div>
           : lista.length === 0 ? <div className="mapa-forca-modal-aviso">Nenhum registro disponível.</div>
@@ -357,17 +546,28 @@ function ModalSelecao({ selecao, itens, pesquisa, setPesquisa, loading, erro, oc
   )
 }
 
-export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) {
+export default function MapaForca({
+  user,
+  onVoltar,
+  onPagarMaterial = null,
+  modoInicial = 'montagem',
+  rascunhoInicial = null,
+  onRascunhoChange = null,
+  somenteLeitura = false
+}) {
   const turnoInicial = useMemo(() => criarTurnoInicial(), [])
   const [inicio, setInicio] = useState(turnoInicial.inicio)
   const [fim, setFim] = useState(turnoInicial.fim)
   const [horarioPadraoInicio, setHorarioPadraoInicio] = useState(turnoInicial.inicio)
   const [horarioPadraoFim, setHorarioPadraoFim] = useState(turnoInicial.fim)
   const [status, setStatus] = useState('EM ELABORAÇÃO')
+  const [equipeServico, setEquipeServico] = useState('')
   const [mapaId, setMapaId] = useState(null)
   const [salvas, setSalvas] = useState([])
-  const [editor, setEditor] = useState(null)
-  const [modo, setModo] = useState(modoInicial === 'visualizacao' ? 'visualizacao' : 'montagem')
+  const [editor, setEditor] = useState(() => rascunhoInicial || null)
+  const [modo, setModo] = useState(
+    somenteLeitura || modoInicial === 'visualizacao' ? 'visualizacao' : 'montagem'
+  )
   const [policiais, setPoliciais] = useState([])
   const [viaturas, setViaturas] = useState([])
   const [loadingPoliciais, setLoadingPoliciais] = useState(true)
@@ -379,6 +579,11 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
   const [salvando, setSalvando] = useState(false)
   const [carregandoMapa, setCarregandoMapa] = useState(true)
   const [mensagemMapa, setMensagemMapa] = useState('')
+  const [materiaisPorPolicial, setMateriaisPorPolicial] = useState({})
+
+  useEffect(() => {
+    onRascunhoChange?.(editor)
+  }, [editor, onRascunhoChange])
 
   async function recarregarMapa() {
     const salvo = await carregarMapaEmElaboracao()
@@ -395,6 +600,7 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
     setHorarioPadraoInicio(inicioMapa)
     setHorarioPadraoFim(fimMapa)
     setStatus(salvo.mapa.status || 'EM ELABORAÇÃO')
+    setEquipeServico(salvo.mapa.equipe_servico || '')
     setSalvas(reconstruirUnidades(salvo.unidades, salvo.efetivo, inicioMapa, fimMapa))
   }
 
@@ -429,15 +635,65 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
   }, [])
 
   useEffect(() => {
+    let ativo = true
+    const policiaisDoMapa = new Map()
+
+    salvas.forEach((item) => {
+      Object.values(item?.unidade?.policiais || {}).forEach((policial) => {
+        if (policial?.id) policiaisDoMapa.set(String(policial.id), policial)
+      })
+    })
+
+    Object.values(editor?.unidade?.policiais || {}).forEach((policial) => {
+      if (policial?.id) policiaisDoMapa.set(String(policial.id), policial)
+    })
+
+    if (policiaisDoMapa.size === 0) {
+      setMateriaisPorPolicial({})
+      return () => { ativo = false }
+    }
+
+    Promise.all(
+      Array.from(policiaisDoMapa.entries()).map(async ([id, policial]) => {
+        try {
+          const itens = await listarMateriaisEmServicoUsuario(policial)
+          return [id, itens || []]
+        } catch (error) {
+          console.warn(`Não foi possível carregar cautelas do policial ${policial?.re || id}:`, error)
+          return [id, []]
+        }
+      })
+    ).then((registros) => {
+      if (ativo) setMateriaisPorPolicial(Object.fromEntries(registros))
+    })
+
+    return () => { ativo = false }
+  }, [salvas, editor])
+
+  useEffect(() => {
     if (carregandoMapa || policiais.length === 0) return
     const porId = new Map(policiais.filter((p) => p?.id).map((p) => [String(p.id), p]))
     setSalvas((atuais) => atuais.map((item) => ({
       ...item,
       unidade: {
         ...item.unidade,
-        policiais: Object.fromEntries(Object.entries(item.unidade.policiais || {}).map(([funcao, policial]) => [
-          funcao, porId.get(String(policial?.id || '')) || policial
-        ]))
+        policiais: Object.fromEntries(Object.entries(item.unidade.policiais || {}).map(([funcao, policial]) => {
+          const atual = porId.get(String(policial?.id || ''))
+
+          return [
+            funcao,
+            atual
+              ? {
+                  ...policial,
+                  ...atual,
+                  foto_url:
+                    atual.foto_url ||
+                    policial?.foto_url ||
+                    null
+                }
+              : policial
+          ]
+        }))
       }
     })))
   }, [policiais, carregandoMapa])
@@ -504,6 +760,17 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
     setSelecao(null)
   }
 
+  function abrirViaturaPrevista() {
+    if (!editor) return
+    setPesquisaSelecao('')
+    setSelecao({ tipo: 'VIATURA_PREVISTA', tipoVeiculo: editor.grupo.id === 'rpm' ? 'MOTOCICLETA' : 'VIATURA' })
+  }
+
+  function selecionarViaturaPrevista(viatura) {
+    atualizarEditor((u) => ({ ...u, viaturaPrevista: viatura }))
+    setSelecao(null)
+  }
+
   function removerPolicial(campo) {
     atualizarEditor((u) => {
       const novos = { ...(u.policiais || {}) }
@@ -530,7 +797,7 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
     setSalvando(true)
     setMensagemMapa('')
     try {
-      const id = await salvarCabecalhoMapaForca({ mapaId, inicio, fim, user })
+      const id = await salvarCabecalhoMapaForca({ mapaId, inicio, fim, user, equipeServico })
       setMapaId(id)
       setMensagemMapa('Horário do mapa salvo.')
     } catch (error) {
@@ -546,21 +813,32 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
       const prefixo = String(editor.unidade.prefixo || '').trim()
       if (!prefixo) throw new Error('Informe o prefixo/identificação da US.')
 
+      if (editor.unidade.vtrDiferenteEscala) {
+        if (!editor.unidade.viaturaPrevista?.id) throw new Error('Selecione a viatura prevista originalmente na escala.')
+        if (!String(editor.unidade.motivoTrocaVtr || '').trim()) throw new Error('Informe o motivo da troca da viatura.')
+      }
+
+      const unidadeParaSalvar = {
+        ...editor.unidade,
+        inicioUs: inicio,
+        fimUs: fim
+      }
+
       const resultado = await salvarUSMapaForca({
         mapaId,
         inicio,
         fim,
         user,
         grupo: editor.grupo,
-        unidade: editor.unidade,
+        unidade: unidadeParaSalvar,
         ordem: editor.unidade.persistido
           ? (salvas.find((item) => item.unidade.id === editor.unidade.id)?.ordem || 0)
           : (salvas.reduce((maior, item) => Math.max(maior, Number(item.ordem || 0)), -1) + 1)
       })
 
       setMapaId(resultado.mapaId)
-      setHorarioPadraoInicio(editor.unidade.inicioUs)
-      setHorarioPadraoFim(editor.unidade.fimUs)
+      setHorarioPadraoInicio(inicio)
+      setHorarioPadraoFim(fim)
       await recarregarMapa()
       setEditor(null)
       setMensagemMapa('US salva. A tela está pronta para montar a próxima equipe.')
@@ -571,7 +849,22 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
   }
 
   function editarUS(item) {
-    setEditor({ grupo: item.grupo, unidade: { ...item.unidade, policiais: { ...(item.unidade.policiais || {}) } } })
+    const inicioUs = item.unidade.inicioUs || inicio
+    const fimUs = item.unidade.fimUs || fim
+
+    setInicio(inicioUs)
+    setFim(fimUs)
+    setHorarioPadraoInicio(inicioUs)
+    setHorarioPadraoFim(fimUs)
+    setEditor({
+      grupo: item.grupo,
+      unidade: {
+        ...item.unidade,
+        inicioUs,
+        fimUs,
+        policiais: { ...(item.unidade.policiais || {}) }
+      }
+    })
     setModo('montagem')
     setMensagemMapa(`Editando ${item.unidade.prefixo}.`)
   }
@@ -594,9 +887,23 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
     setFim(turno.fim)
     setHorarioPadraoInicio(turno.inicio)
     setHorarioPadraoFim(turno.fim)
+    setEquipeServico('')
     setEditor(null)
     setModo('montagem')
     setMensagemMapa('Tela de montagem limpa. O mapa salvo anteriormente foi preservado.')
+  }
+
+  if (modo === 'visualizacao') {
+    return (
+      <main className="mapa-forca-page mapa-forca-page-visualizacao">
+        <MapaForcaVisualizacao
+          salvas={salvas}
+          policiaisCadastro={policiais}
+          materiaisPorPolicial={materiaisPorPolicial}
+          onVoltarMontagem={somenteLeitura ? onVoltar : () => setModo('montagem')}
+        />
+      </main>
+    )
   }
 
   return (
@@ -616,39 +923,92 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
           <small>Responsável: {nomeUsuario(user)} • {salvas.length} US salva(s)</small>
         </div>
 
-        <div className="mapa-forca-topbar-periodo">
+        <div
+          className="mapa-forca-topbar-periodo"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '58px 172px 16px 172px max-content max-content',
+            alignItems: 'end',
+            justifyContent: 'start',
+            columnGap: '3px',
+            rowGap: '0',
+            flex: '0 0 auto',
+            width: 'auto',
+            minWidth: 0
+          }}
+        >
+          <label
+            style={{
+              width: '58px',
+              minWidth: '58px',
+              maxWidth: '58px',
+              flex: '0 0 58px',
+              margin: 0,
+              padding: 0
+            }}
+          >
+            <span>EQUIPE DE SERVIÇO</span>
+            <select
+              value={equipeServico}
+              onChange={(e) => setEquipeServico(e.target.value)}
+              style={{
+                width: '54px',
+                minWidth: '54px',
+                maxWidth: '54px',
+                height: '38px',
+                padding: '0 8px',
+                background: '#0b3f75',
+                color: '#ffffff',
+                border: '1px solid #2b6ea6',
+                borderRadius: '8px',
+                fontWeight: 800,
+                textAlign: 'center',
+                textAlignLast: 'center'
+              }}
+            >
+              <option value="">—</option>
+              {EQUIPES_SERVICO.map((equipe) => (
+                <option key={equipe} value={equipe}>{equipe}</option>
+              ))}
+            </select>
+          </label>
           <label>
             <span>INÍCIO</span>
-            <input type="datetime-local" value={inicio} onChange={(e) => { setInicio(e.target.value); setHorarioPadraoInicio(e.target.value) }} />
+            <input
+              type="datetime-local"
+              value={inicio}
+              style={{ width: '172px', minWidth: 0 }}
+              onChange={(e) => { setInicio(e.target.value); setHorarioPadraoInicio(e.target.value) }}
+            />
           </label>
           <span className="mapa-forca-periodo-seta">→</span>
           <label>
             <span>TÉRMINO</span>
-            <input type="datetime-local" value={fim} onChange={(e) => { setFim(e.target.value); setHorarioPadraoFim(e.target.value) }} />
+            <input
+              type="datetime-local"
+              value={fim}
+              style={{ width: '172px', minWidth: 0 }}
+              onChange={(e) => { setFim(e.target.value); setHorarioPadraoFim(e.target.value) }}
+            />
           </label>
           <button type="button" className="mapa-forca-toolbar-btn mapa-forca-toolbar-save" onClick={salvarCabecalho} disabled={salvando}>
             {salvando ? 'SALVANDO...' : 'SALVAR HORÁRIO'}
           </button>
-        </div>
 
-        <div className="mapa-forca-topbar-actions">
           <button
             type="button"
             className={`mapa-forca-toolbar-btn mapa-forca-toolbar-view ${modo === 'visualizacao' ? 'ativo' : ''}`}
             onClick={() => setModo(modo === 'visualizacao' ? 'montagem' : 'visualizacao')}
+            style={{ marginLeft: 0 }}
           >
-            <span aria-hidden="true">◉</span>
             {modo === 'visualizacao' ? 'MONTAR US' : 'VISUALIZAR MAPA FORÇA'}
-          </button>
-          <button type="button" className="mapa-forca-toolbar-btn" disabled title="Será implementado na etapa de relatórios">
-            ▤ GERAR RELATÓRIO
           </button>
         </div>
       </section>
 
       {mensagemMapa && <div className="mapa-forca-mensagem">{mensagemMapa}</div>}
 
-      {modo === 'montagem' ? (
+      {(
         <section className="mapa-forca-montagem">
           {!editor ? (
             <div className="mapa-forca-nova-us">
@@ -666,12 +1026,24 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
               <header><div className="mapa-forca-grupo-identidade"><span className="mapa-forca-grupo-icon">▦</span><div><h2>{editor.grupo.titulo}</h2><p>{editor.grupo.subtitulo}</p></div></div>
                 <div className="mapa-forca-grupo-meta"><button type="button" onClick={() => setEditor(null)}>Cancelar</button></div></header>
               <div className="mapa-forca-editor-unico">
-                <UnidadeServico unidade={editor.unidade}
+                <UnidadeServico
+                  grupoId={editor.grupo.id}
+                  unidade={{
+                    ...editor.unidade,
+                    inicioUs: inicio,
+                    fimUs: fim
+                  }}
                   onPolicial={abrirPolicial} onRemoverPolicial={removerPolicial}
                   onAdicionarPolicial={adicionarPolicialExtra}
                   onViatura={abrirViatura} onRemoverViatura={() => atualizarEditor((u) => ({ ...u, viatura: null }))}
+                  onVtrDiferenteEscala={(marcado) => atualizarEditor((u) => ({ ...u, vtrDiferenteEscala: marcado, viaturaPrevista: marcado ? u.viaturaPrevista : null, motivoTrocaVtr: marcado ? u.motivoTrocaVtr : '' }))}
+                  onViaturaPrevista={abrirViaturaPrevista}
+                  onRemoverViaturaPrevista={() => atualizarEditor((u) => ({ ...u, viaturaPrevista: null }))}
+                  onMotivoTrocaVtr={(valor) => atualizarEditor((u) => ({ ...u, motivoTrocaVtr: valor }))}
                   onHorario={(campo, valor) => atualizarEditor((u) => ({ ...u, [campo]: valor }))}
-                  onPrefixo={(valor) => atualizarEditor((u) => ({ ...u, prefixo: valor }))} />
+                  onPrefixo={(valor) => atualizarEditor((u) => ({ ...u, prefixo: valor }))}
+                  onLocalPop={(valor) => atualizarEditor((u) => ({ ...u, localPop: valor }))}
+                  onPagarMaterial={onPagarMaterial} />
                 <div className="mapa-forca-editor-actions">
                   <button type="button" className="mapa-forca-secondary" onClick={() => setEditor(null)}>Cancelar</button>
                   <button type="button" className="mapa-forca-primary" onClick={salvarUS} disabled={salvando}>{salvando ? 'Salvando...' : editor.unidade.persistido ? 'Salvar alterações da US' : 'Salvar US'}</button>
@@ -680,63 +1052,43 @@ export default function MapaForca({ user, onVoltar, modoInicial = 'montagem' }) 
             </section>
           )}
         </section>
-      ) : (
-        <section className="mapa-forca-visualizacao mapa-forca-visualizacao-compacta">
-          <div className="mapa-forca-resumo">
-            {[
-              ['▣', 'UNIDADES DE SERVIÇO', resumoMapa(salvas).us],
-              ['♟', 'POLICIAIS ESCALADOS', resumoMapa(salvas).policiais],
-              ['▱', 'VIATURAS EMPREGADAS', resumoMapa(salvas).viaturas],
-              ['♟', "POP'S ATIVOS", resumoMapa(salvas).pops],
-              ['◇', 'EQUIPAMENTOS ENTREGUES', '—']
-            ].map(([icone, label, valor]) => (
-              <div className="mapa-forca-resumo-card" key={label}>
-                <span>{icone}</span>
-                <div><small>{label}</small><strong>{valor}</strong></div>
-              </div>
-            ))}
-          </div>
+      )}
 
-          <div className="mapa-forca-visualizacao-head">
-            <div><span>MAPA COMPLETO</span><h2>Composição operacional</h2></div>
-            <button type="button" className="mapa-forca-primary" onClick={() => { setEditor(null); setModo('montagem') }}>+ Nova US</button>
-          </div>
-
-          {salvas.length === 0 ? (
-            <div className="mapa-forca-sem-us"><strong>Nenhuma US salva.</strong><span>Volte para a montagem e crie a primeira equipe.</span></div>
-          ) : (
-            <div className="mapa-forca-compact-grupos">
-              {TIPOS_US.map((grupo) => {
-                const unidadesGrupo = salvas.filter((item) => item.grupo.id === grupo.id)
-                if (!unidadesGrupo.length) return null
-
-                return (
-                  <section className={`mapa-forca-compact-grupo mapa-forca-${grupo.tom}`} key={grupo.id}>
-                    <header>
-                      <div><span className="mapa-forca-compact-numero">{unidadesGrupo.length}</span><strong>{grupo.titulo}</strong></div>
-                      <small>{unidadesGrupo.length} {unidadesGrupo.length === 1 ? 'UNIDADE' : 'UNIDADES'}</small>
-                    </header>
-                    <div className="mapa-forca-compact-grid">
-                      {unidadesGrupo.map((item) => (
-                        <UnidadeCompacta key={item.unidade.id} item={item} onDetalhes={() => editarUS(item)} onExcluir={() => excluirUS(item)} />
-                      ))}
-                    </div>
-                  </section>
-                )
-              })}
+      {salvas.length > 0 && (
+        <section className="mapa-forca-montagem" style={{ marginBottom: '18px' }}>
+          <div className="mapa-forca-nova-us">
+            <div>
+              <span>EQUIPES / US JÁ SALVAS</span>
+              <h2>Gerenciar equipes do mapa atual</h2>
+              <p>
+                Selecione uma equipe para alterar policiais, viatura, horários, cautelas ou excluir a US.
+                A visualização branca permanece separada no botão “Visualizar Mapa Força”.
+              </p>
             </div>
-          )}
+
+            <div style={{ display: 'grid', gap: '14px', marginTop: '14px' }}>
+              {salvas.map((item) => (
+                <UnidadeCompacta
+                  key={`salva-${item.unidade.id}`}
+                  item={item}
+                  materiaisPorPolicial={materiaisPorPolicial}
+                  onEditar={editarUS}
+                  onExcluir={excluirUS}
+                />
+              ))}
+            </div>
+          </div>
         </section>
       )}
 
       {selecao && <ModalSelecao selecao={selecao}
-        itens={selecao.tipo === 'POLICIAL' ? policiais : viaturas.filter((v) => v.situacao === 'DISPONIVEL' && v.tipo_veiculo === selecao.tipoVeiculo)}
+        itens={selecao.tipo === 'POLICIAL' ? policiais : viaturas.filter((v) => (selecao.tipo === 'VIATURA_PREVISTA' || v.situacao === 'DISPONIVEL') && v.tipo_veiculo === selecao.tipoVeiculo)}
         pesquisa={pesquisaSelecao} setPesquisa={setPesquisaSelecao}
         loading={selecao.tipo === 'POLICIAL' ? loadingPoliciais : loadingViaturas}
         erro={selecao.tipo === 'POLICIAL' ? erroPoliciais : erroViaturas}
-        ocupados={selecao.tipo === 'POLICIAL' ? policiaisOcupados : viaturasOcupadas}
+        ocupados={selecao.tipo === 'POLICIAL' ? policiaisOcupados : (selecao.tipo === 'VIATURA_PREVISTA' ? new Set() : viaturasOcupadas)}
         onClose={() => setSelecao(null)}
-        onSelecionar={selecao.tipo === 'POLICIAL' ? selecionarPolicial : selecionarViatura} />}
+        onSelecionar={selecao.tipo === 'POLICIAL' ? selecionarPolicial : (selecao.tipo === 'VIATURA_PREVISTA' ? selecionarViaturaPrevista : selecionarViatura)} />}
 
       <footer className="mapa-forca-footer"><div><strong>MAPA FORÇA • MONTAGEM POR US</strong><span>Uma equipe por vez. Cautelas e ativação operacional permanecem para a próxima etapa.</span></div><span>Mapa Força • SIGMO</span></footer>
     </main>

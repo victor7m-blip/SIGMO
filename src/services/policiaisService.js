@@ -198,8 +198,8 @@ async function anexarFotosPrincipais(
          * mantemos foto_url do policial.
          */
         foto_url:
-          foto?.url ||
           policial.foto_url ||
+          foto?.url ||
           null,
 
         foto_principal:
@@ -235,7 +235,16 @@ export async function obterPolicialPorId(
     throw error
   }
 
-  return data || null
+  if (!data) {
+    return null
+  }
+
+  const [policialComFoto] =
+    await anexarFotosPrincipais([
+      data
+    ])
+
+  return policialComFoto || data
 }
 
 export async function listarPoliciais({

@@ -36,6 +36,7 @@ export async function iniciarMovimentacao({
   solicitante,
   recebedor,
   observacoes = '',
+  inicioTurnoServico = null,
   fimTurnoServico = null,
   previsaoEntrega = null
 }) {
@@ -64,6 +65,7 @@ export async function iniciarMovimentacao({
     solicitante,
     recebedor,
     observacoes,
+    inicio_turno_servico: inicioTurnoServico,
     fim_turno_servico: fimTurnoServico,
     previsao_entrega: previsaoEntrega
   })
@@ -137,6 +139,7 @@ export async function criarMovimentacaoCompleta({
   solicitante,
   recebedor,
   observacoes = '',
+  inicioTurnoServico = null,
   fimTurnoServico = null,
   previsaoEntrega = null,
   itens = [],
@@ -151,6 +154,7 @@ export async function criarMovimentacaoCompleta({
       solicitante,
       recebedor,
       observacoes,
+      inicioTurnoServico,
       fimTurnoServico,
       previsaoEntrega
     })

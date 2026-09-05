@@ -8,10 +8,37 @@ function texto(valor) {
     .trim()
 }
 
+function ehCOP(tipo) {
+  return texto(tipo).toUpperCase() === 'COP'
+}
+
+function numeroCOP(dados = {}) {
+  const numero = texto(dados.numero)
+
+  if (!numero) return ''
+
+  return /^\d{1,2}$/.test(numero)
+    ? numero.padStart(2, '0')
+    : numero.toUpperCase()
+}
+
 function montarDescricao({
   tipo,
   dados
 }) {
+  if (ehCOP(tipo)) {
+    const numero = numeroCOP(dados)
+    const marca = texto(dados.marca)
+      .toUpperCase()
+
+    return [
+      numero ? `COP ${numero}` : 'COP',
+      marca
+    ]
+      .filter(Boolean)
+      .join(' - ')
+  }
+
   const partes = [
     dados.especie,
     dados.marca,
@@ -105,12 +132,20 @@ export async function criarOuAtualizarPatrimonio({
       }),
 
     numero_patrimonio:
-      texto(dados.patrimonio) ||
-      null,
+      ehCOP(tipo)
+        ? numeroCOP(dados)
+          ? `COP ${numeroCOP(dados)}`
+          : null
+        : texto(dados.patrimonio) ||
+          null,
 
     numero_serie:
-      texto(dados.numero_serie) ||
-      null,
+      ehCOP(tipo)
+        ? texto(
+            dados.identificacao_equipamento
+          ) || null
+        : texto(dados.numero_serie) ||
+          null,
 
     status:
       normalizarStatus(dados),
@@ -131,7 +166,7 @@ export async function criarOuAtualizarPatrimonio({
       texto(dados.unidade) ||
       null,
 
-    ativo: true,
+    ativo: dados.ativo !== false,
 
     dados,
 

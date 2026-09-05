@@ -20,7 +20,8 @@ export default function RecebedorCard({
   const [policial, setPolicial] = useState(null)
 
   useEffect(() => {
-    const numero = String(re || '').replace(/\D/g, '')
+    const numeroCompleto = String(re || '').replace(/\D/g, '')
+    const numero = numeroCompleto.slice(0, 6)
 
     if (numero.length < 6) {
       setPolicial(null)
@@ -78,7 +79,7 @@ export default function RecebedorCard({
         RE
 
         <input
-          value={re}
+          value={String(re || '').replace(/\D/g, '').slice(0, 6)}
           maxLength={6}
           inputMode="numeric"
           placeholder="000000"

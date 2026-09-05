@@ -132,7 +132,8 @@ function patrimonioPermiteResponsavelAtual(patrimonio) {
   // operacionalmente a policial por causa de carga antiga em `dados`.
   if (
     statusAtual.includes('RESERVA') ||
-    localAtual.includes('COFRE')
+    localAtual.includes('COFRE') ||
+    localAtual === 'SVDD'
   ) {
     return false
   }
@@ -260,7 +261,10 @@ function normalizarPatrimonio(patrimonio) {
 
   const noCofre =
     !emManutencao &&
-    localAtualNormalizado.includes('COFRE')
+    (
+      localAtualNormalizado.includes('COFRE') ||
+      localAtualNormalizado === 'SVDD'
+    )
 
   const estadoDeCautela =
     !statusAtual.includes('CARGA') &&

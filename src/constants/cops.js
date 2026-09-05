@@ -1,0 +1,31 @@
+export const STATUS_COP = [
+  'RESERVA',
+  'EM_SERVICO',
+  'MANUTENCAO',
+  'BAIXADA'
+]
+
+export const CONDICOES_COP = [
+  'SEM_AVARIAS',
+  'COM_AVARIAS',
+  'NAO_VERIFICADO'
+]
+
+export const TIPOS_MOVIMENTACAO_COP = [
+  'RETIRADA_SERVICO',
+  'DEVOLUCAO_SERVICO',
+  'ENVIO_MANUTENCAO',
+  'RETORNO_MANUTENCAO',
+  'BAIXA'
+]
+
+export const MARCAS_COP = [
+  'MOTOROLA'
+]
+
+export const LOCAIS_COP = [
+  'SVDD',
+  'EM SERVICO',
+  'MANUTENCAO',
+  'BAIXADA'
+]

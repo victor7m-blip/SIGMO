@@ -1,15 +1,1049 @@
-.municoes-step-box {
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
+.municoes-page {
+  width: 100%;
+  min-height: 100%;
   padding: 24px;
-  background: var(--color-surface);
+  background: #f4f7fb;
+  color: #172033;
 }
 
-.municoes-step-box h2 {
-  margin: 0 0 12px;
+/* =====================================================
+   Cabeçalho — padrão HT
+   ===================================================== */
+.municoes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+  padding: 24px 26px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #061a32, #092544);
+  color: #ffffff;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
 }
 
-.municoes-step-box p {
-  margin: 0 0 12px;
-  color: var(--color-muted);
+.municoes-eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #93c5fd;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.municoes-header h1 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  line-height: 1.05;
+}
+
+.municoes-header p {
+  max-width: 760px;
+  margin: 9px 0 0;
+  color: #dbeafe;
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.municoes-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* =====================================================
+   Botões
+   ===================================================== */
+.municoes-btn-primary,
+.municoes-btn-secondary {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 17px;
+  border-radius: 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  transition: 0.18s ease;
+}
+
+.municoes-btn-primary {
+  border: 1px solid #184f90;
+  background: linear-gradient(135deg, #1f5fa8, #17477f);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(29, 79, 145, 0.22);
+}
+
+.municoes-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 11px 22px rgba(29, 79, 145, 0.28);
+}
+
+.municoes-btn-secondary {
+  border: 1px solid #cbd6e3;
+  background: #ffffff;
+  color: #344054;
+}
+
+.municoes-btn-secondary:hover:not(:disabled) {
+  border-color: #9eb0c7;
+  background: #f7f9fc;
+}
+
+.municoes-btn-primary:disabled,
+.municoes-btn-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.municoes-btn-small {
+  min-height: 34px;
+  padding: 7px 11px;
+  font-size: 0.75rem;
+}
+
+/* =====================================================
+   Alertas
+   ===================================================== */
+.municoes-alert {
+  margin-bottom: 16px;
+  padding: 13px 15px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.municoes-alert-error {
+  border: 1px solid #f0b4b4;
+  background: #fff1f1;
+  color: #9f2727;
+}
+
+.municoes-alert-success {
+  border: 1px solid #9fd5b7;
+  background: #effaf3;
+  color: #17643a;
+}
+
+/* =====================================================
+   Cards-resumo — padrão HT
+   ===================================================== */
+.municoes-resumo-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.municoes-resumo-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 116px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid #d9e2ec;
+  border-radius: 14px;
+  background: #ffffff;
+  color: inherit;
+  text-align: left;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.municoes-resumo-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--municoes-tone, #1d5a9e);
+}
+
+.municoes-resumo-card:nth-child(1) {
+  --municoes-tone: #1d5a9e;
+}
+
+.municoes-resumo-card:nth-child(2) {
+  --municoes-tone: #0f7894;
+}
+
+.municoes-resumo-card:nth-child(3) {
+  --municoes-tone: #26845a;
+}
+
+.municoes-resumo-card:nth-child(4) {
+  --municoes-tone: #b66b15;
+}
+
+.municoes-resumo-card:nth-child(5) {
+  --municoes-tone: #7450a8;
+}
+
+.municoes-resumo-card:nth-child(6) {
+  --municoes-tone: #b83b45;
+}
+
+.municoes-resumo-card > span {
+  display: block;
+  color: #536175;
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.municoes-resumo-card > strong {
+  display: block;
+  margin-top: 5px;
+  color: #132238;
+  font-size: 1.72rem;
+  line-height: 1;
+}
+
+.municoes-resumo-card > small {
+  display: block;
+  margin-top: 7px;
+  color: #7b8797;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+/* =====================================================
+   Gráficos — preparado para o próximo Municoes.jsx
+   ===================================================== */
+.municoes-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.municoes-chart-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #d7e0eb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.municoes-chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.municoes-chart-header span {
+  display: block;
+  margin-bottom: 4px;
+  color: #1d5a9b;
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.municoes-chart-header h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 1.08rem;
+}
+
+.municoes-chart-donut-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1.2fr);
+  align-items: center;
+  gap: 20px;
+}
+
+.municoes-chart-donut {
+  position: relative;
+  width: min(230px, 100%);
+  aspect-ratio: 1;
+  justify-self: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.municoes-chart-donut::after {
+  content: '';
+  position: absolute;
+  inset: 24%;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #e3e9f0, 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.municoes-chart-donut > div {
+  position: absolute;
+  z-index: 1;
+  inset: 24%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.municoes-chart-donut strong {
+  color: #10213a;
+  font-size: clamp(1.75rem, 4vw, 2.45rem);
+  line-height: 1;
+}
+
+.municoes-chart-donut span {
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.municoes-chart-legend {
+  display: grid;
+  gap: 8px;
+}
+
+.municoes-chart-legend > div {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto 48px;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: #475569;
+  font-size: 0.74rem;
+}
+
+.municoes-chart-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.municoes-chart-legend span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.municoes-chart-legend strong {
+  color: #172033;
+  font-size: 0.76rem;
+}
+
+.municoes-chart-legend small {
+  color: #718096;
+  text-align: right;
+}
+
+.municoes-chart-bars {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(72px, 1fr));
+  align-items: end;
+  gap: 12px;
+  min-height: 300px;
+  padding: 16px 8px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid #cfd9e5;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 59px,
+    #edf1f6 60px
+  );
+}
+
+.municoes-chart-bar-item {
+  display: grid;
+  grid-template-rows: 22px 210px auto 18px;
+  align-items: end;
+  min-width: 72px;
+  text-align: center;
+}
+
+.municoes-chart-bar-value {
+  color: #172033;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.municoes-chart-bar-track {
+  display: flex;
+  height: 100%;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.municoes-chart-bar-track i {
+  display: block;
+  width: min(48px, 72%);
+  min-height: 3px;
+  border-radius: 8px 8px 2px 2px;
+  background: linear-gradient(180deg, #2b73bd, #17477f);
+  box-shadow: 0 5px 12px rgba(15, 23, 42, 0.12);
+}
+
+.municoes-chart-bar-item > strong {
+  display: -webkit-box;
+  min-height: 34px;
+  overflow: hidden;
+  color: #344054;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.municoes-chart-bar-item > small {
+  color: #718096;
+  font-size: 0.64rem;
+}
+
+/* =====================================================
+   Operações — padrão HT preparado para o JSX seguinte
+   ===================================================== */
+.municoes-operations-section {
+  margin-bottom: 18px;
+  padding: 20px;
+  border: 1px solid #d7e0eb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.municoes-operations-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+
+.municoes-operations-title span {
+  display: block;
+  margin-bottom: 4px;
+  color: #1d5a9b;
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.municoes-operations-title h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 1.12rem;
+}
+
+.municoes-operation-groups {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.municoes-operation-group {
+  overflow: hidden;
+  border: 1px solid #dbe3ed;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.municoes-operation-group-header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 17px;
+  border-bottom: 1px solid #e1e7ef;
+  background: #ffffff;
+}
+
+.municoes-operation-group-icon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #163e69;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #061a32, #0b315a);
+  color: #ffffff;
+  font-size: 1.15rem;
+}
+
+.municoes-operation-group-header h3 {
+  margin: 0;
+  color: #172033;
+  font-size: 1.02rem;
+}
+
+.municoes-operation-group-header p {
+  margin: 4px 0 0;
+  color: #65748a;
+  font-size: 0.8rem;
+}
+
+.municoes-operation-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+  padding: 13px;
+}
+
+.municoes-operation-actions > button {
+  display: flex;
+  min-height: 88px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 15px;
+  border: 1px solid #d5deea;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #172033;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.municoes-operation-actions > button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: #8fb0d4;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.09);
+}
+
+.municoes-operation-actions > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.municoes-operation-actions strong {
+  color: #153d6d;
+  font-size: 0.84rem;
+}
+
+.municoes-operation-actions span {
+  color: #68778a;
+  font-size: 0.72rem;
+  line-height: 1.38;
+}
+
+/* =====================================================
+   Área de estoque / inventário
+   ===================================================== */
+.municoes-estoque-section {
+  overflow: hidden;
+  margin-bottom: 18px;
+  border: 1px solid #d7e0eb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.municoes-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 19px 21px;
+  border-bottom: 1px solid #e5eaf1;
+}
+
+.municoes-section-header h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 1.12rem;
+}
+
+.municoes-section-header .municoes-eyebrow {
+  color: #1d5a9b;
+}
+
+.municoes-pesquisa {
+  width: min(320px, 100%);
+}
+
+.municoes-input,
+.municoes-select,
+.municoes-textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid #cbd6e3;
+  border-radius: 9px;
+  outline: none;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.municoes-input:focus,
+.municoes-select:focus,
+.municoes-textarea:focus {
+  border-color: #3f78b5;
+  box-shadow: 0 0 0 3px rgba(63, 120, 181, 0.12);
+}
+
+.municoes-textarea {
+  resize: vertical;
+}
+
+.municoes-input-readonly {
+  background: #f7f9fc;
+}
+
+.municoes-loading,
+.municoes-empty {
+  padding: 30px 18px;
+  color: #68778a;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.municoes-calibres-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.municoes-calibre-card {
+  overflow: hidden;
+  border: 1px solid #dbe3ed;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.municoes-calibre-main {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.35fr) repeat(4, minmax(90px, 0.7fr)) minmax(250px, 1.8fr);
+  align-items: center;
+  gap: 12px;
+  padding: 15px 16px;
+  background: #ffffff;
+}
+
+.municoes-calibre-main-svdd {
+  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(100px, 0.8fr));
+}
+
+.municoes-calibre-identificacao small,
+.municoes-saldo-item small {
+  display: block;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.municoes-calibre-identificacao strong {
+  display: block;
+  margin-top: 4px;
+  color: #153f70;
+  font-size: 1.15rem;
+}
+
+.municoes-calibre-identificacao span {
+  display: block;
+  margin-top: 4px;
+  color: #68778a;
+  font-size: 0.74rem;
+}
+
+.municoes-saldo-item strong {
+  display: block;
+  margin-top: 4px;
+  color: #172033;
+  font-size: 1.08rem;
+}
+
+.municoes-calibre-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.municoes-lotes-area {
+  padding: 0 15px 15px;
+}
+
+.municoes-lotes-box {
+  overflow: hidden;
+  border: 1px solid #dce4ee;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.municoes-lotes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e1e7ef;
+}
+
+.municoes-lotes-header strong {
+  color: #153f70;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+}
+
+.municoes-lotes-header small {
+  color: #68778a;
+  font-size: 0.72rem;
+}
+
+/* =====================================================
+   Tabelas
+   ===================================================== */
+.municoes-table-wrap {
+  overflow-x: auto;
+}
+
+.municoes-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.municoes-table th,
+.municoes-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.municoes-table th {
+  background: #f7f9fc;
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.municoes-table td {
+  color: #344054;
+  font-size: 0.8rem;
+}
+
+.municoes-table tbody tr:hover {
+  background: #f9fbfd;
+}
+
+.municoes-table td strong {
+  color: #172033;
+}
+
+/* =====================================================
+   Modal — padrão HT
+   ===================================================== */
+.municoes-modal-backdrop {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(9, 18, 31, 0.68);
+  backdrop-filter: blur(3px);
+}
+
+.municoes-modal {
+  display: flex;
+  width: min(620px, 100%);
+  max-height: calc(100vh - 44px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 28px 80px rgba(8, 18, 34, 0.38);
+}
+
+.municoes-modal-wide {
+  width: min(820px, 100%);
+}
+
+.municoes-modal-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, #061a32, #092544);
+  color: #ffffff;
+}
+
+.municoes-modal-header .municoes-eyebrow {
+  color: #93c5fd;
+}
+
+.municoes-modal-header h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.35rem;
+}
+
+.municoes-modal-header p {
+  margin: 6px 0 0;
+  color: #dbeafe;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.municoes-modal-close {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d6dee8;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #475467;
+  cursor: pointer;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.municoes-modal-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 22px 24px;
+  scrollbar-gutter: stable;
+}
+
+.municoes-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.municoes-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: #344054;
+  font-size: 0.73rem;
+  font-weight: 800;
+}
+
+.municoes-field > span {
+  color: #344054;
+}
+
+.municoes-field-full {
+  grid-column: 1 / -1;
+}
+
+.municoes-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e5eaf1;
+}
+
+.municoes-modal-empty {
+  padding: 30px 18px;
+  border: 1px dashed #c9d5e3;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #68778a;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+/* =====================================================
+   Estados de validade — serão usados no próximo JSX
+   ===================================================== */
+.municoes-validade-badge {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.municoes-validade-ok {
+  border: 1px solid #a7d7ba;
+  background: #effaf3;
+  color: #17643a;
+}
+
+.municoes-validade-alerta {
+  border: 1px solid #f0ca91;
+  background: #fff8e8;
+  color: #9a5c0c;
+}
+
+.municoes-validade-vencida {
+  border: 1px solid #efb0b4;
+  background: #fff1f1;
+  color: #a72831;
+}
+
+/* =====================================================
+   Responsivo
+   ===================================================== */
+@media (max-width: 1320px) {
+  .municoes-calibre-main {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .municoes-calibre-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 1180px) {
+  .municoes-resumo-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .municoes-operation-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .municoes-page {
+    padding: 14px;
+  }
+
+  .municoes-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .municoes-header-actions {
+    width: 100%;
+  }
+
+  .municoes-header-actions button {
+    flex: 1;
+  }
+
+  .municoes-resumo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .municoes-chart-donut-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .municoes-chart-bars {
+    grid-template-columns: repeat(8, minmax(76px, 1fr));
+    min-height: auto;
+  }
+
+  .municoes-chart-bar-item {
+    grid-template-rows: 22px 160px auto 18px;
+  }
+
+  .municoes-operation-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .municoes-section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .municoes-pesquisa {
+    width: 100%;
+  }
+
+  .municoes-calibre-main,
+  .municoes-calibre-main-svdd {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .municoes-resumo-grid,
+  .municoes-calibre-main,
+  .municoes-calibre-main-svdd,
+  .municoes-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .municoes-header-actions {
+    flex-direction: column;
+  }
+
+  .municoes-header-actions button {
+    width: 100%;
+  }
+
+  .municoes-calibre-actions {
+    flex-direction: column;
+  }
+
+  .municoes-calibre-actions button {
+    width: 100%;
+  }
+
+  .municoes-operations-section,
+  .municoes-chart-card {
+    padding: 15px;
+  }
+
+  .municoes-field-full {
+    grid-column: auto;
+  }
+
+  .municoes-modal-backdrop {
+    padding: 10px;
+  }
+
+  .municoes-modal {
+    max-height: 96vh;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .municoes-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .municoes-modal-actions button {
+    width: 100%;
+  }
+
+  .municoes-chart-legend > div {
+    grid-template-columns: 10px minmax(0, 1fr) auto 42px;
+  }
 }

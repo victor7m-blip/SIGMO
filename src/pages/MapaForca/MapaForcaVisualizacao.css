@@ -1,0 +1,663 @@
+.mfv-root{
+  width:100%;
+  min-height:100vh;
+  padding:10px 14px 28px;
+  box-sizing:border-box;
+  color:#0b2d62;
+  background:#f7f9fc;
+  font-family:inherit;
+}
+
+.mfv-topo{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:24px;
+  padding:0 0 12px;
+}
+
+.mfv-titulo h1{
+  margin:0;
+  color:#0b326b;
+  font-size:32px;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:-.02em;
+}
+
+.mfv-titulo h2{
+  margin:8px 0 4px;
+  color:#102f63;
+  font-size:21px;
+  line-height:1.05;
+  font-weight:900;
+}
+
+.mfv-titulo>strong{
+  display:block;
+  color:#18376b;
+  font-size:14px;
+  font-weight:900;
+}
+
+.mfv-acoes{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.mfv-data,
+.mfv-acoes button{
+  height:42px;
+  box-sizing:border-box;
+  border:1px solid #d6dfeb;
+  border-radius:7px;
+  background:#fff;
+  color:#0b2d62;
+  font:inherit;
+  font-size:12px;
+  font-weight:900;
+}
+
+.mfv-data{
+  min-width:180px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:22px;
+  padding:0 16px;
+  font-size:15px;
+}
+
+.mfv-acoes button{
+  padding:0 18px;
+  cursor:pointer;
+}
+
+.mfv-btn-principal{
+  border-color:#0a3a78 !important;
+  color:#fff !important;
+  background:linear-gradient(180deg,#0e4b93,#082e67) !important;
+}
+
+.mfv-resumo{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(140px,1fr));
+  gap:14px;
+  margin-bottom:14px;
+}
+
+.mfv-resumo-card{
+  min-height:80px;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  padding:10px 18px;
+  box-sizing:border-box;
+  border:1px solid #d7e0eb;
+  border-radius:7px;
+  background:#fff;
+  box-shadow:0 1px 2px rgba(13,45,88,.03);
+}
+
+.mfv-resumo-card>span{
+  min-width:38px;
+  color:#0b3b7c;
+  font-size:30px;
+  text-align:center;
+}
+
+.mfv-resumo-card small{
+  display:block;
+  color:#17376b;
+  font-size:10px;
+  line-height:1.15;
+  font-weight:900;
+}
+
+.mfv-resumo-card strong{
+  display:block;
+  margin-top:3px;
+  color:#0b326b;
+  font-size:28px;
+  line-height:1;
+  font-weight:900;
+}
+
+.mfv-grupos{
+  display:grid;
+  gap:7px;
+}
+
+.mfv-grupo{
+  overflow:hidden;
+  border:1px solid #d5dfeb;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 1px 2px rgba(13,45,88,.025);
+}
+
+.mfv-grupo-cabecalho{
+  min-height:48px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:5px 12px;
+  box-sizing:border-box;
+  border-bottom:1px solid #dce4ed;
+}
+
+.mfv-grupo-cabecalho>div{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+
+.mfv-numero{
+  width:32px;
+  height:32px;
+  display:grid;
+  place-items:center;
+  flex:0 0 32px;
+  border-radius:5px;
+  color:#fff;
+  background:linear-gradient(180deg,#104b90,#092e66);
+  font-size:15px;
+  font-weight:900;
+}
+
+.mfv-grupo-icone{
+  color:#0a326c;
+  font-size:22px;
+  line-height:1;
+}
+
+.mfv-grupo-cabecalho strong{
+  color:#12346d;
+  font-size:16px;
+  font-weight:900;
+}
+
+.mfv-grupo-status{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:#15376b;
+  font-size:10px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+.mfv-grupo-status i,
+.mfv-status i{
+  width:7px;
+  height:7px;
+  flex:0 0 7px;
+  border-radius:50%;
+  background:#10a44a;
+}
+
+.mfv-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:8px;
+  padding:7px;
+}
+
+.mfv-grid-compacto{
+  grid-template-columns:repeat(auto-fit,minmax(245px,1fr));
+}
+
+.mfv-us{
+  min-width:0;
+  overflow:hidden;
+  border:1px solid #dce4ed;
+  border-radius:7px;
+  background:#fff;
+}
+
+.mfv-us-cabecalho{
+  min-height:36px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:5px 9px;
+  box-sizing:border-box;
+  border-bottom:1px solid #e5ebf2;
+}
+
+.mfv-us-identificacao{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+
+.mfv-prefixo{
+  padding:5px 10px;
+  border-radius:4px;
+  color:#fff;
+  background:#0a3b7c;
+  font-size:11px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+.mfv-vtr{
+  color:#16366a;
+  font-size:11px;
+  font-weight:800;
+}
+
+.mfv-vtr b{
+  color:#0b326b;
+}
+
+.mfv-status{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:#18376a;
+  font-size:9px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+.mfv-alerta-vtr{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px 14px;
+  padding:6px 9px;
+  border-bottom:1px solid #ead9a9;
+  color:#71530b;
+  background:#fff9e8;
+  font-size:9px;
+}
+
+.mfv-alerta-vtr>b{
+  color:#8a5d00;
+}
+
+.mfv-efetivo{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:7px;
+  padding:7px;
+}
+
+.mfv-grid-compacto .mfv-efetivo{
+  grid-template-columns:1fr;
+}
+
+.mfv-policial{
+  min-width:0;
+  min-height:142px;
+  padding:7px 9px 8px;
+  box-sizing:border-box;
+  border:1px solid #dce4ed;
+  border-radius:7px;
+  background:#fff;
+}
+
+.mfv-funcao{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-bottom:6px;
+  color:#12366f;
+  font-size:11px;
+  line-height:1;
+  font-weight:900;
+}
+
+.mfv-funcao-icone{
+  font-size:14px;
+}
+
+.mfv-policial-corpo{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  min-width:0;
+}
+
+.mfv-foto{
+  width:78px;
+  height:98px;
+  flex:0 0 78px;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  border:1px solid #d3dbe5;
+  border-radius:7px;
+  color:#27466f;
+  background:#e9edf2;
+  font-size:28px;
+}
+
+.mfv-foto img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center top;
+}
+
+.mfv-policial-dados{
+  min-width:0;
+  flex:1;
+}
+
+.mfv-identificacao-policial,
+.mfv-nome{
+  display:block;
+  overflow:hidden;
+  color:#102a58;
+  text-overflow:ellipsis;
+}
+
+.mfv-identificacao-policial{
+  font-size:15px;
+  line-height:1.2;
+  white-space:nowrap;
+}
+
+.mfv-nome{
+  margin-top:2px;
+  font-size:17px;
+  line-height:1.15;
+  font-weight:900;
+}
+
+.mfv-equipamentos{
+  display:flex;
+  align-items:flex-start;
+  flex-wrap:wrap;
+  gap:8px 16px;
+  margin-top:13px;
+  padding-top:8px;
+  border-top:1px solid #e6ebf1;
+}
+
+.mfv-equipamento{
+  min-width:46px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:2px;
+  color:#101820;
+  text-align:center;
+}
+
+.mfv-equipamento-icone{
+  height:25px;
+  display:grid;
+  place-items:center;
+  color:#111;
+  font-size:23px;
+  line-height:1;
+}
+
+.mfv-equipamento b{
+  display:block;
+  color:#14284d;
+  font-size:9px;
+  line-height:1.05;
+}
+
+.mfv-equipamento small{
+  display:block;
+  max-width:92px;
+  margin-top:1px;
+  overflow:hidden;
+  color:#263a5a;
+  font-size:8px;
+  line-height:1.05;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.mfv-horario-us{
+  padding:3px 8px 5px;
+  color:#718096;
+  font-size:8px;
+  font-weight:800;
+  text-align:right;
+}
+
+.mfv-us-compacta .mfv-us-cabecalho{
+  min-height:34px;
+}
+
+.mfv-us-compacta .mfv-policial{
+  min-height:126px;
+  padding:6px;
+}
+
+.mfv-us-compacta .mfv-foto{
+  width:58px;
+  height:76px;
+  flex-basis:58px;
+}
+
+.mfv-us-compacta .mfv-identificacao-policial{
+  font-size:11px;
+}
+
+.mfv-us-compacta .mfv-nome{
+  font-size:12px;
+}
+
+.mfv-us-compacta .mfv-funcao{
+  font-size:9px;
+}
+
+.mfv-us-compacta .mfv-equipamentos{
+  gap:5px 9px;
+  margin-top:7px;
+  padding-top:6px;
+}
+
+.mfv-us-compacta .mfv-equipamento-icone{
+  height:18px;
+  font-size:17px;
+}
+
+.mfv-us-compacta .mfv-equipamento b{
+  font-size:7px;
+}
+
+.mfv-us-compacta .mfv-equipamento small{
+  max-width:58px;
+  font-size:7px;
+}
+
+.mfv-vazio{
+  display:grid;
+  gap:5px;
+  padding:30px;
+  border:1px solid #d5dfeb;
+  border-radius:8px;
+  color:#66788f;
+  text-align:center;
+  background:#fff;
+}
+
+.mfv-vazio strong{
+  color:#12346d;
+}
+
+@media(max-width:1180px){
+  .mfv-resumo{
+    grid-template-columns:repeat(3,1fr);
+  }
+
+  .mfv-topo{
+    flex-direction:column;
+  }
+
+  .mfv-acoes{
+    width:100%;
+    justify-content:flex-start;
+  }
+}
+
+@media(max-width:760px){
+  .mfv-root{
+    padding:10px;
+  }
+
+  .mfv-titulo h1{
+    font-size:26px;
+  }
+
+  .mfv-titulo h2{
+    font-size:17px;
+  }
+
+  .mfv-resumo{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .mfv-acoes{
+    align-items:stretch;
+    flex-direction:column;
+  }
+
+  .mfv-data,
+  .mfv-acoes button{
+    width:100%;
+  }
+
+  .mfv-grid-compacto,
+  .mfv-efetivo{
+    grid-template-columns:1fr;
+  }
+
+  .mfv-policial{
+    min-height:0;
+  }
+}
+
+@media(max-width:520px){
+  .mfv-resumo{
+    grid-template-columns:1fr;
+  }
+
+  .mfv-grupo-cabecalho{
+    align-items:flex-start;
+  }
+
+  .mfv-grupo-status{
+    margin-top:8px;
+  }
+}
+
+
+/* =========================================================
+   CABEÇALHO DAS US — aproximação da arte de referência
+   Somente visualização. Não altera montagem nem dados.
+   ========================================================= */
+
+.mfv-us-cabecalho{
+  min-height:30px;
+  padding:4px 8px;
+  background:#fff;
+}
+
+.mfv-us-identificacao{
+  gap:8px;
+}
+
+.mfv-vtr-principal{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:3px 10px;
+  border-radius:4px;
+  color:#fff;
+  background:#0a3b7c;
+  font-size:11px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+.mfv-us-tipo{
+  color:#17376b;
+  font-size:9px;
+  line-height:1;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+/* Quando existe viatura, o prefixo da modalidade vira informação secundária.
+   A viatura passa a ser o elemento principal, como na arte. */
+.mfv-grupo-cgp .mfv-us-tipo,
+.mfv-grupo-radio-patrulhamento .mfv-us-tipo,
+.mfv-grupo-ronda-escolar .mfv-us-tipo,
+.mfv-grupo-base-comunitaria .mfv-us-tipo,
+.mfv-grupo-pop .mfv-us-tipo,
+.mfv-grupo-rpm .mfv-us-tipo{
+  opacity:.72;
+}
+
+/* CGP: reduz a sensação de uma segunda faixa independente. */
+.mfv-grupo-cgp .mfv-grid{
+  padding-top:5px;
+}
+
+.mfv-grupo-cgp .mfv-us{
+  border-top-color:#d3ddea;
+}
+
+/* Mantém o aviso de substituição imediatamente ligado à VTR. */
+.mfv-alerta-vtr{
+  padding-top:4px;
+  padding-bottom:4px;
+}
+
+/* Horário discreto, como rodapé operacional da equipe. */
+.mfv-horario-us{
+  padding-top:2px;
+  padding-bottom:4px;
+}
+
+
+/* =========================================================
+   VISUALIZAÇÃO EM TELA INTEIRA
+   Escopo exclusivo do modo .mapa-forca-page-visualizacao.
+   ========================================================= */
+.mapa-forca-page.mapa-forca-page-visualizacao{
+  width:100%;
+  max-width:none;
+  min-height:100vh;
+  margin:0;
+  padding:0 !important;
+  border:0;
+  border-radius:0;
+  background:#f7f9fc;
+}
+
+.mapa-forca-page-visualizacao > .mfv-root{
+  width:100%;
+  max-width:none;
+  min-height:100vh;
+  margin:0;
+  padding:14px 16px 28px;
+  border:0;
+  border-radius:0;
+  box-sizing:border-box;
+  background:#f7f9fc;
+}
+
+@media(max-width:760px){
+  .mapa-forca-page-visualizacao > .mfv-root{
+    padding:10px;
+  }
+}

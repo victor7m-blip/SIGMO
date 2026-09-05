@@ -145,6 +145,31 @@ function aplicarFimTurnoPadrao(setData, setHora) {
   setHora(formatarHoraInput(limite))
 }
 
+function obterFimTurnoMapaForca(contextoMapaForca) {
+  const valor =
+    contextoMapaForca?.unidade?.fimUs ||
+    contextoMapaForca?.fimUs ||
+    contextoMapaForca?.fim ||
+    null
+
+  if (!valor) return null
+
+  const data = new Date(valor)
+  return Number.isNaN(data.getTime()) ? null : data
+}
+
+function aplicarFimTurnoMapaOuPadrao(contextoMapaForca, setData, setHora) {
+  const fimMapa = obterFimTurnoMapaForca(contextoMapaForca)
+
+  if (fimMapa) {
+    setData(formatarDataInput(fimMapa))
+    setHora(formatarHoraInput(fimMapa))
+    return
+  }
+
+  aplicarFimTurnoPadrao(setData, setHora)
+}
+
 function criarChaveMaterial(material) {
   return [
     material?.tabela_origem || 'patrimonio',
@@ -240,13 +265,15 @@ async function prepararItensPendentes(itens) {
 export default function PagarMaterial({
   user,
   onVoltar = null,
-  onConcluido = null
+  onConcluido = null,
+  recebedorInicial = null,
+  contextoMapaForca = null
 }) {
   const perfil = useMemo(() => obterPerfilUsuario(user), [user])
   const origemSelecionavel = podeEscolherOrigem(perfil)
 
-  const [reRecebedor, setReRecebedor] = useState('')
-  const [policialRecebedor, setPolicialRecebedor] = useState(null)
+  const [reRecebedor, setReRecebedor] = useState(() => recebedorInicial?.re || '')
+  const [policialRecebedor, setPolicialRecebedor] = useState(() => recebedorInicial || null)
   const [localOrigem, setLocalOrigem] = useState(
     origemInicialPorPerfil(perfil)
   )
@@ -254,10 +281,16 @@ export default function PagarMaterial({
   const [localDestino, setLocalDestino] = useState(DESTINO_CAUTELA)
   const [observacoes, setObservacoes] = useState('')
   const [fimTurnoData, setFimTurnoData] = useState(() => {
+    const fimMapa = obterFimTurnoMapaForca(contextoMapaForca)
+    if (fimMapa) return formatarDataInput(fimMapa)
+
     const limite = obterLimiteCautela()
     return formatarDataInput(limite)
   })
   const [fimTurnoHora, setFimTurnoHora] = useState(() => {
+    const fimMapa = obterFimTurnoMapaForca(contextoMapaForca)
+    if (fimMapa) return formatarHoraInput(fimMapa)
+
     const limite = obterLimiteCautela()
     return formatarHoraInput(limite)
   })
@@ -306,6 +339,25 @@ export default function PagarMaterial({
     const origemPerfil = origemInicialPorPerfil(perfil)
     if (!origemSelecionavel) setLocalOrigem(origemPerfil)
   }, [perfil, origemSelecionavel])
+
+  useEffect(() => {
+    if (!recebedorInicial?.id) return
+    setReRecebedor(recebedorInicial.re || '')
+    setPolicialRecebedor(recebedorInicial)
+    setTipoMovimentacao(TIPO_CAUTELA)
+    setLocalDestino(DESTINO_CAUTELA)
+    setItensSelecionados([])
+    setErro('')
+    setMensagem('')
+  }, [recebedorInicial])
+
+  useEffect(() => {
+    const fimMapa = obterFimTurnoMapaForca(contextoMapaForca)
+    if (!fimMapa) return
+
+    setFimTurnoData(formatarDataInput(fimMapa))
+    setFimTurnoHora(formatarHoraInput(fimMapa))
+  }, [contextoMapaForca])
 
   useEffect(() => {
     salvarPreferenciaLocal(
@@ -405,7 +457,7 @@ export default function PagarMaterial({
     setLocalDestino(DESTINO_CAUTELA)
     setObservacoes('')
     setItensSelecionados([])
-    aplicarFimTurnoPadrao(setFimTurnoData, setFimTurnoHora)
+    aplicarFimTurnoMapaOuPadrao(contextoMapaForca, setFimTurnoData, setFimTurnoHora)
     setMensagem('')
     setErro('')
   }
@@ -499,6 +551,24 @@ export default function PagarMaterial({
       return
     }
 
+    const inicioTurnoServico = ehCautela
+      ? (
+          contextoMapaForca?.unidade?.inicioUs ||
+          contextoMapaForca?.inicioUs ||
+          contextoMapaForca?.inicio ||
+          null
+        )
+      : null
+
+    const inicioTurnoServicoIso = inicioTurnoServico
+      ? (() => {
+          const data = new Date(inicioTurnoServico)
+          return Number.isNaN(data.getTime())
+            ? null
+            : data.toISOString()
+        })()
+      : null
+
     const fimTurnoServico = ehCautela
       ? montarDataHoraIso(fimTurnoData, fimTurnoHora)
       : null
@@ -514,17 +584,46 @@ export default function PagarMaterial({
 
     if (ehCautela) {
       const fimTurnoMs = new Date(fimTurnoServico).getTime()
-      const agoraMs = Date.now()
-      const limiteMs = agoraMs + DURACAO_MAXIMA_CAUTELA_MS
+      const inicioMapa =
+        contextoMapaForca?.unidade?.inicioUs ||
+        contextoMapaForca?.inicioUs ||
+        contextoMapaForca?.inicio ||
+        null
 
-      if (fimTurnoMs <= agoraMs) {
+      const inicioMapaMs = inicioMapa
+        ? new Date(inicioMapa).getTime()
+        : null
+
+      const agoraMs = Date.now()
+      const baseLimiteMs =
+        inicioMapaMs && !Number.isNaN(inicioMapaMs)
+          ? inicioMapaMs
+          : agoraMs
+
+      const limiteMs = baseLimiteMs + DURACAO_MAXIMA_CAUTELA_MS
+
+      if (
+        inicioMapaMs &&
+        !Number.isNaN(inicioMapaMs) &&
+        fimTurnoMs <= inicioMapaMs
+      ) {
+        mostrarErroConfirmacao('O término da cautela deve ser posterior ao início do serviço.')
+        return
+      }
+
+      if (
+        (!inicioMapaMs || Number.isNaN(inicioMapaMs)) &&
+        fimTurnoMs <= agoraMs
+      ) {
         mostrarErroConfirmacao('O término da cautela deve ser posterior ao horário atual.')
         return
       }
 
       if (fimTurnoMs > limiteMs) {
         mostrarErroConfirmacao(
-          'A cautela inicial não pode ultrapassar 12h30. Se necessário, o SVDD deverá estender o turno posteriormente.'
+          inicioMapaMs && !Number.isNaN(inicioMapaMs)
+            ? 'A duração da cautela não pode ultrapassar 12h30 a partir do início do serviço.'
+            : 'A cautela inicial não pode ultrapassar 12h30. Se necessário, o SVDD deverá estender o turno posteriormente.'
         )
         return
       }
@@ -557,6 +656,7 @@ export default function PagarMaterial({
           solicitante: user,
           recebedor: policialRecebedor,
           observacoes,
+          inicioTurnoServico: inicioTurnoServicoIso,
           fimTurnoServico,
           previsaoEntrega,
           itens: itensPendentes,
@@ -614,6 +714,7 @@ export default function PagarMaterial({
               ? policialRecebedor
               : null,
             observacoes,
+            inicioTurnoServico: inicioTurnoServicoIso,
             fimTurnoServico,
             previsaoEntrega,
             itens: itensIndividuais,
@@ -626,11 +727,16 @@ export default function PagarMaterial({
         )
       }
 
-      setReRecebedor('')
-      setPolicialRecebedor(null)
+      if (recebedorInicial?.id) {
+        setReRecebedor(recebedorInicial.re || '')
+        setPolicialRecebedor(recebedorInicial)
+      } else {
+        setReRecebedor('')
+        setPolicialRecebedor(null)
+      }
       setItensSelecionados([])
       setObservacoes('')
-      aplicarFimTurnoPadrao(setFimTurnoData, setFimTurnoHora)
+      aplicarFimTurnoMapaOuPadrao(contextoMapaForca, setFimTurnoData, setFimTurnoHora)
       setAtualizarPesquisaEm(Date.now())
 
       window.scrollTo({
@@ -674,6 +780,12 @@ export default function PagarMaterial({
           <strong>{obterNomeUsuario(user)}</strong>
         </div>
       </header>
+
+      {contextoMapaForca?.unidade?.prefixo && recebedorInicial?.id && (
+        <div className="pagar-material-feedback pagar-material-feedback-success">
+          MAPA FORÇA • {contextoMapaForca.unidade.prefixo} • {contextoMapaForca.funcao || 'EFETIVO'} • RE {recebedorInicial.re || '—'}
+        </div>
+      )}
 
       {typeof onVoltar === 'function' && (
         <div className="pagar-material-top-actions">
