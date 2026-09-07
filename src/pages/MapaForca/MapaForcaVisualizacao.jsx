@@ -181,6 +181,18 @@ function resumoMapa(salvas, materiaisPorPolicial) {
 function PolicialVisual({ funcao, policial, materiais = [], compacto = false }) {
   const listaEquipamentos = equipamentos(materiais)
 
+  const cop =
+    listaEquipamentos.find(
+      (equipamento) =>
+        equipamento?.tipo === 'COP'
+    ) || null
+
+  const equipamentosRestantes =
+    listaEquipamentos.filter(
+      (equipamento) =>
+        equipamento?.tipo !== 'COP'
+    )
+
   return (
     <article className={`mfv-policial ${compacto ? 'mfv-policial-compacto' : ''}`}>
       <div className="mfv-funcao">
@@ -203,15 +215,51 @@ function PolicialVisual({ funcao, policial, materiais = [], compacto = false }) 
               <strong className="mfv-identificacao-policial">
                 {identificacaoPolicial(policial) || 'POLICIAL'}
               </strong>
-              <strong className="mfv-nome">{nomePolicial(policial)}</strong>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  minWidth: 0
+                }}
+              >
+                {cop && (
+                  <div
+                    className="mfv-equipamento"
+                    style={{
+                      flex: '0 0 auto',
+                      minWidth: '46px',
+                      margin: 0
+                    }}
+                  >
+                    <span
+                      className="mfv-equipamento-icone"
+                      aria-hidden="true"
+                    >
+                      {iconeEquipamento('COP')}
+                    </span>
+
+                    <span>
+                      <b>COP</b>
+                      <small>
+                        {cop.identificacao || 'COP'}
+                      </small>
+                    </span>
+                  </div>
+                )}
+
+                <strong className="mfv-nome">
+                  {nomePolicial(policial)}
+                </strong>
+              </div>
             </>
           ) : (
             <strong className="mfv-nome">NÃO DEFINIDO</strong>
           )}
 
-          {policial && listaEquipamentos.length > 0 && (
+          {policial && equipamentosRestantes.length > 0 && (
             <div className="mfv-equipamentos">
-              {listaEquipamentos.map((equipamento, index) => (
+              {equipamentosRestantes.map((equipamento, index) => (
                 <div
                   className="mfv-equipamento"
                   key={`${policial.id}-${equipamento.tipo}-${equipamento.identificacao}-${index}`}
@@ -255,10 +303,6 @@ function UnidadeVisual({ item, materiaisPorPolicial, compacto = false }) {
           )}
         </div>
 
-        <span className="mfv-status">
-          <i />
-          EM SERVIÇO
-        </span>
       </header>
 
       {unidade.vtrDiferenteEscala && (
@@ -405,8 +449,20 @@ export default function MapaForcaVisualizacao({
 
             return (
               <section className={`mfv-grupo mfv-grupo-${grupo.id}`} key={grupo.id}>
-                <header className="mfv-grupo-cabecalho">
-                  <div>
+                <header
+                  className="mfv-grupo-cabecalho"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+                    alignItems: 'center',
+                    gap: '14px'
+                  }}
+                >
+                  <div
+                    style={{
+                      justifySelf: 'start'
+                    }}
+                  >
                     <span className="mfv-numero">{indice + 1}</span>
                     <span className="mfv-grupo-icone" aria-hidden="true">
                       {ICONE_GRUPO[grupo.id] || '◆'}
@@ -414,7 +470,48 @@ export default function MapaForcaVisualizacao({
                     <strong>{grupo.titulo}</strong>
                   </div>
 
-                  <span className="mfv-grupo-status">
+                  {(() => {
+                    const viaturasEmUso = unidadesGrupo
+                      .map((item) => item?.unidade?.viatura?.prefixo)
+                      .filter(Boolean)
+
+                    if (viaturasEmUso.length === 0) {
+                      return <span />
+                    }
+
+                    return (
+                      <div
+                        style={{
+                          justifySelf: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '7px',
+                          minHeight: '30px',
+                          padding: '4px 11px',
+                          border: '1px solid #d7e0eb',
+                          borderRadius: '6px',
+                          background: '#f7f9fc',
+                          color: '#12346d',
+                          fontSize: '11px',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <span aria-hidden="true">🚓</span>
+                        <span>VIATURA EM USO:</span>
+                        <strong>
+                          {viaturasEmUso.join(' • ')}
+                        </strong>
+                      </div>
+                    )
+                  })()}
+
+                  <span
+                    className="mfv-grupo-status"
+                    style={{
+                      justifySelf: 'end'
+                    }}
+                  >
                     {unidadesGrupo.length > 1 ? (
                       <>{unidadesGrupo.length} UNIDADES</>
                     ) : (

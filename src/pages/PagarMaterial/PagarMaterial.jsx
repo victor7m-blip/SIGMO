@@ -18,6 +18,10 @@ import {
 } from '../../services/pagarMaterialService'
 
 import {
+  cautelarMunicaoParaPolicial
+} from '../../services/municoesMovimentacoesService'
+
+import {
   obterPerfilEfetivo
 } from '../../services/permissionService'
 
@@ -200,6 +204,39 @@ function destinoAutomatico(tipo, origem) {
   return ''
 }
 
+
+function ehItemMunicao(item) {
+  const modulo =
+    String(
+      item?.modulo ||
+      ''
+    )
+      .trim()
+      .toUpperCase()
+
+  const categoria =
+    String(
+      item?.categoria ||
+      ''
+    )
+      .trim()
+      .toUpperCase()
+
+  return (
+    Boolean(item?.municao_id) ||
+    modulo === 'MUNIÇÃO' ||
+    modulo === 'MUNICAO' ||
+    categoria === 'MUNIÇÃO' ||
+    categoria === 'MUNICAO' ||
+    String(
+      item?.tabela_origem ||
+      ''
+    )
+      .trim()
+      .toLowerCase() ===
+      'sigmo_municoes'
+  )
+}
 
 async function resolverPatrimonioIdItem(item) {
   if (item?.patrimonio_id) {
@@ -523,6 +560,22 @@ export default function PagarMaterial({
       return
     }
 
+    const possuiMunicao =
+      itensSelecionados.some(
+        ehItemMunicao
+      )
+
+    if (
+      possuiMunicao &&
+      tipoMovimentacao !==
+      TIPO_CAUTELA
+    ) {
+      mostrarErroConfirmacao(
+        'Nesta tela, a munição pode ser paga apenas como CAUTELA. Para carga permanente ou outras transferências, utilize o módulo Munições.'
+      )
+      return
+    }
+
     const possuiArma = itensSelecionados.some(
       (item) =>
         String(item?.modulo || '').trim().toUpperCase() === 'ARMA' ||
@@ -644,27 +697,98 @@ export default function PagarMaterial({
         tipoMovimentacao === TIPO_ENTREGA
 
       if (movimentacaoParaUsuario) {
-        const itensPendentes =
-          await prepararItensPendentes(
-            itensSelecionados
+        const itensMunicao =
+          itensSelecionados.filter(
+            ehItemMunicao
           )
 
-        await criarMovimentacaoCompleta({
-          tipo: tipoMovimentacao,
-          origemLocal: localOrigem,
-          destinoLocal: localDestino,
-          solicitante: user,
-          recebedor: policialRecebedor,
-          observacoes,
-          inicioTurnoServico: inicioTurnoServicoIso,
-          fimTurnoServico,
-          previsaoEntrega,
-          itens: itensPendentes,
-          aprovarAutomaticamente: false
-        })
+        const itensPatrimoniais =
+          itensSelecionados.filter(
+            (item) =>
+              !ehItemMunicao(item)
+          )
+
+        /*
+         * Munição é estoque quantitativo próprio.
+         * Não passa pela Engine patrimonial comum e
+         * não possui patrimonio_id individual.
+         *
+         * A RPC cria somente a cautela PENDENTE e
+         * reserva os lotes internamente. O saldo do
+         * SVDD só é baixado quando o policial aceita.
+         */
+        for (
+          const item of
+          itensMunicao
+        ) {
+          const municaoId =
+            item?.municao_id ||
+            item?.referencia_id ||
+            null
+
+          if (!municaoId) {
+            throw new Error(
+              `Não foi possível identificar o calibre de ${item?.descricao || 'munição selecionada'}.`
+            )
+          }
+
+          await cautelarMunicaoParaPolicial({
+            municaoId,
+
+            calibre:
+              item?.calibre ||
+              '',
+
+            policial:
+              policialRecebedor,
+
+            quantidade:
+              Number(
+                item?.quantidade ||
+                1
+              ),
+
+            devolucaoPrevista:
+              fimTurnoServico,
+
+            observacoes,
+
+            user
+          })
+        }
+
+        if (
+          itensPatrimoniais.length >
+          0
+        ) {
+          const itensPendentes =
+            await prepararItensPendentes(
+              itensPatrimoniais
+            )
+
+          await criarMovimentacaoCompleta({
+            tipo: tipoMovimentacao,
+            origemLocal: localOrigem,
+            destinoLocal: localDestino,
+            solicitante: user,
+            recebedor: policialRecebedor,
+            observacoes,
+            inicioTurnoServico: inicioTurnoServicoIso,
+            fimTurnoServico,
+            previsaoEntrega,
+            itens: itensPendentes,
+            aprovarAutomaticamente: false
+          })
+        }
 
         setMensagem(
-          'Carrinho pago com sucesso. Os materiais permanecerão na origem até o usuário confirmar o recebimento.'
+          itensMunicao.length > 0
+            ? (
+                itensPatrimoniais.length > 0
+                  ? 'Carrinho pago com sucesso. Materiais e munições permanecerão na origem até o usuário confirmar o recebimento.'
+                  : 'Cautela de munição criada com sucesso. A munição permanecerá no SVDD até o policial confirmar o recebimento.'
+              )
+            : 'Carrinho pago com sucesso. Os materiais permanecerão na origem até o usuário confirmar o recebimento.'
         )
       } else {
         const itensQuantidade =

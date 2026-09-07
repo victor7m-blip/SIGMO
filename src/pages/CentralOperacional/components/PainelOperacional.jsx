@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { supabase } from '../../../services/supabaseClient'
+import { loadSessionToken } from '../../../services/authService'
+
 import {
   cancelarMovimentacao,
   confirmarRecebimentoMovimentacao
@@ -417,6 +420,104 @@ function detalheItem(item, secao) {
   return [...new Set(partes)].join(' • ')
 }
 
+
+async function cancelarMunicoesVinculadasAoCarrinho(
+  movimentacaoPrincipalId
+) {
+  if (!movimentacaoPrincipalId) {
+    return {
+      canceladas: 0
+    }
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_cancelar_por_movimentacao_principal',
+    {
+      p_token:
+        token,
+
+      p_movimentacao_principal_id:
+        movimentacaoPrincipalId,
+
+      p_motivo:
+        'MOVIMENTAÇÃO PRINCIPAL CANCELADA PELO SETOR RESPONSÁVEL ANTES DO RECEBIMENTO PELO USUÁRIO.'
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return (
+    data && typeof data === 'object'
+      ? data
+      : {
+          canceladas: 0
+        }
+  )
+}
+
+
+async function listarMunicoesVinculadasAosCarrinhos(
+  movimentacaoIds
+) {
+  const ids =
+    (movimentacaoIds || [])
+      .map((id) =>
+        String(id || '').trim()
+      )
+      .filter(Boolean)
+
+  if (ids.length === 0) {
+    return []
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_vinculadas_movimentacoes',
+    {
+      p_token:
+        token,
+
+      p_movimentacao_ids:
+        ids
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return Array.isArray(data)
+    ? data
+    : []
+}
+
+
+
 export default function PainelOperacional({ dados, carregando, user, onAtualizar }) {
   const [decidindoManutencaoExternaId, setDecidindoManutencaoExternaId] = useState(null)
   const [novidadesVtr, setNovidadesVtr] = useState([])
@@ -592,11 +693,178 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   const [recebendoId, setRecebendoId] = useState(null)
   const [recusandoId, setRecusandoId] = useState(null)
   const [cancelandoId, setCancelandoId] = useState(null)
+
+  const [
+    municoesVinculadas,
+    setMunicoesVinculadas
+  ] = useState({})
+
+  const [
+    carregandoMunicoesVinculadas,
+    setCarregandoMunicoesVinculadas
+  ] = useState(false)
+
   const [fotoAmpliada, setFotoAmpliada] = useState(null)
   const secoes = useMemo(
     () => [...(dados?.alertas ?? []), ...(dados?.indicadores ?? [])],
     [dados]
   )
+
+  useEffect(() => {
+    let ativo = true
+
+    async function carregarMunicoesVinculadas() {
+      if (
+        selecionado?.key !==
+        'recebimentos'
+      ) {
+        if (ativo) {
+          setMunicoesVinculadas({})
+        }
+        return
+      }
+
+      const ids =
+        (selecionado?.itens || [])
+          .map((item) =>
+            item?.id
+          )
+          .filter(Boolean)
+
+      if (ids.length === 0) {
+        if (ativo) {
+          setMunicoesVinculadas({})
+        }
+        return
+      }
+
+      try {
+        setCarregandoMunicoesVinculadas(
+          true
+        )
+
+        const lista =
+          await listarMunicoesVinculadasAosCarrinhos(
+            ids
+          )
+
+        if (!ativo) {
+          return
+        }
+
+        const agrupadas = {}
+
+        for (const transferencia of lista) {
+          const movimentacaoId =
+            String(
+              transferencia
+                ?.movimentacao_principal_id ||
+              ''
+            )
+
+          if (!movimentacaoId) {
+            continue
+          }
+
+          if (!agrupadas[movimentacaoId]) {
+            agrupadas[movimentacaoId] = []
+          }
+
+          agrupadas[movimentacaoId].push(
+            transferencia
+          )
+        }
+
+        setMunicoesVinculadas(
+          agrupadas
+        )
+      } catch (error) {
+        console.error(
+          'Erro ao carregar munições vinculadas aos carrinhos:',
+          error
+        )
+
+        if (ativo) {
+          setMunicoesVinculadas({})
+        }
+      } finally {
+        if (ativo) {
+          setCarregandoMunicoesVinculadas(
+            false
+          )
+        }
+      }
+    }
+
+    carregarMunicoesVinculadas()
+
+    return () => {
+      ativo = false
+    }
+  }, [selecionado])
+
+  function itemComMunicoesVinculadas(item) {
+    if (!item?.id) {
+      return item
+    }
+
+    const municoes =
+      municoesVinculadas[
+        String(item.id)
+      ] || []
+
+    if (municoes.length === 0) {
+      return item
+    }
+
+    const itensMunicao =
+      municoes.map(
+        (transferencia) => ({
+          id:
+            `MUNICAO-${transferencia.transferencia_id}`,
+
+          tipo_patrimonio:
+            'MUNIÇÃO',
+
+          descricao:
+            `MUNIÇÃO ${transferencia.calibre || ''}`
+              .trim(),
+
+          quantidade:
+            Number(
+              transferencia
+                ?.quantidade_total ||
+              0
+            ),
+
+          status:
+            transferencia?.status ||
+            'PENDENTE',
+
+          transferencia_municao_id:
+            transferencia
+              ?.transferencia_id,
+
+          movimentacao_principal_id:
+            transferencia
+              ?.movimentacao_principal_id,
+
+          eh_municao_quantitativa:
+            true
+        })
+      )
+
+    return {
+      ...item,
+
+      itens: [
+        ...(Array.isArray(item?.itens)
+          ? item.itens
+          : []),
+        ...itensMunicao
+      ]
+    }
+  }
 
   const indicadoresExibidos = useMemo(() => {
     const indicadores = dados?.indicadores ?? []
@@ -670,6 +938,16 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
 
     try {
       setCancelandoId(item.id)
+
+      /*
+       * A munição quantitativa usa uma transferência própria, mas
+       * permanece vinculada ao mesmo carrinho pelo
+       * movimentacao_principal_id. Cancelamos primeiro a reserva de
+       * munição para impedir saldo "fantasma" no SVDD.
+       */
+      await cancelarMunicoesVinculadasAoCarrinho(
+        item.id
+      )
 
       await cancelarMovimentacao({
         movimentacao_id: item.id,
@@ -1123,14 +1401,26 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
             </header>
 
             <div className="central-modal-body">
+              {selecionado?.key === 'recebimentos' &&
+                carregandoMunicoesVinculadas && (
+                  <div
+                    className="central-empty"
+                    style={{
+                      marginBottom: 10
+                    }}
+                  >
+                    Carregando munições vinculadas...
+                  </div>
+                )}
+
               {(selecionado.itens ?? []).length === 0 ? (
                 <div className="central-empty">Nenhum registro pendente nesta situação.</div>
               ) : (
                 (selecionado.itens ?? []).map((item, index) => (
                   <article className="central-registro-operacional" key={item?.id || `${selecionado.key}-${index}`}>
                     <div className="central-registro-conteudo">
-                      <strong>{tituloItem(item, selecionado)}</strong>
-                      <p>{detalheItem(item, selecionado) || 'Sem informações complementares.'}</p>
+                      <strong>{tituloItem(itemComMunicoesVinculadas(item), selecionado)}</strong>
+                      <p>{detalheItem(itemComMunicoesVinculadas(item), selecionado) || 'Sem informações complementares.'}</p>
 
                       {ehNovidade(selecionado) && (
                         <div
@@ -1281,15 +1571,34 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               <div><span>Destino</span><strong>{item?.destino_local || item?.destino_nome || item?.destino_codigo || 'Não informado'}</strong></div>
                             </>
                           )}
-                          {Array.isArray(item?.itens) && item.itens.length > 0 && (
+                          {Array.isArray(
+                            itemComMunicoesVinculadas(item)?.itens
+                          ) &&
+                            itemComMunicoesVinculadas(item).itens.length > 0 && (
                             <div className="central-registro-itens">
                               <span>Materiais</span>
-                              {item.itens.map((registro, itemIndex) => (
-                                <strong key={registro?.id || itemIndex}>
-                                  {registro?.descricao || registro?.tipo_patrimonio || 'Material'}
-                                  {Number(registro?.quantidade || 1) > 1 ? ` — ${registro.quantidade} un.` : ''}
-                                </strong>
-                              ))}
+
+                              {itemComMunicoesVinculadas(item).itens.map(
+                                (registro, itemIndex) => (
+                                  <strong
+                                    key={
+                                      registro?.id ||
+                                      itemIndex
+                                    }
+                                  >
+                                    {registro?.descricao ||
+                                      registro?.tipo_patrimonio ||
+                                      'Material'}
+
+                                    {Number(
+                                      registro?.quantidade ||
+                                      1
+                                    ) > 1
+                                      ? ` — ${registro.quantidade} un.`
+                                      : ''}
+                                  </strong>
+                                )
+                              )}
                             </div>
                           )}
                         </div>

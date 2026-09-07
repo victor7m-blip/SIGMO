@@ -15,6 +15,9 @@ const FOTOS_TABLE = 'sigmo_policiais_fotos'
 const USERS_TABLE =
   'sigmo_users'
 
+const SESSIONS_TABLE =
+  'sigmo_sessoes'
+
 const PERFIL_COMANDANTE =
   'COMANDANTE DE CIA'
 
@@ -209,6 +212,111 @@ async function anexarFotosPrincipais(
   )
 }
 
+
+
+export async function buscarPolicialPorRe(
+  re
+) {
+  const reInformado =
+    String(
+      re ?? ''
+    )
+      .trim()
+      .toUpperCase()
+
+  if (!reInformado) {
+    return null
+  }
+
+  /*
+   * Primeiro tenta localizar o RE exatamente
+   * como está cadastrado no SIGMO.
+   *
+   * Exemplo:
+   * 123456-A
+   */
+  let {
+    data,
+    error
+  } = await supabase
+    .from(TABLE)
+    .select('*')
+    .ilike(
+      're',
+      reInformado
+    )
+    .limit(2)
+
+  if (error) {
+    throw error
+  }
+
+  let encontrados =
+    data ?? []
+
+  /*
+   * Compatibilidade com pesquisa pelos seis
+   * primeiros números do RE.
+   *
+   * Se o banco possuir RE com dígito/sufixo
+   * (ex.: 123456-A), permite localizar pelo
+   * prefixo somente quando houver um único
+   * resultado correspondente.
+   */
+  const somenteNumeros =
+    reInformado.replace(
+      /\D/g,
+      ''
+    )
+
+  if (
+    encontrados.length === 0 &&
+    somenteNumeros.length === 6 &&
+    reInformado === somenteNumeros
+  ) {
+    const {
+      data: porPrefixo,
+      error: erroPrefixo
+    } = await supabase
+      .from(TABLE)
+      .select('*')
+      .ilike(
+        're',
+        `${somenteNumeros}%`
+      )
+      .limit(2)
+
+    if (erroPrefixo) {
+      throw erroPrefixo
+    }
+
+    encontrados =
+      porPrefixo ?? []
+  }
+
+  if (encontrados.length === 0) {
+    return null
+  }
+
+  if (encontrados.length > 1) {
+    throw new Error(
+      'Mais de um policial foi localizado para este RE. Informe o RE completo.'
+    )
+  }
+
+  const [
+    policialComFoto
+  ] =
+    await anexarFotosPrincipais(
+      encontrados
+    )
+
+  return (
+    policialComFoto ||
+    encontrados[0] ||
+    null
+  )
+}
 
 export async function obterPolicialPorId(
   id
@@ -1139,6 +1247,134 @@ export async function cadastrarPolicial(
   }
 }
 
+
+async function sincronizarUsuarioInternoAposEdicao({
+  policialId,
+  perfil,
+  ativo = true
+}) {
+  if (!policialId) {
+    throw new Error(
+      'Policial não informado para sincronização do acesso.'
+    )
+  }
+
+  const perfilFinal =
+    normalizarTexto(perfil) ||
+    'USUÁRIO'
+
+  const {
+    data: usuarioAtual,
+    error: usuarioAtualError
+  } = await supabase
+    .from(USERS_TABLE)
+    .select(`
+      id,
+      policial_id,
+      perfil,
+      ativo
+    `)
+    .eq(
+      'policial_id',
+      policialId
+    )
+    .maybeSingle()
+
+  if (usuarioAtualError) {
+    throw usuarioAtualError
+  }
+
+  if (!usuarioAtual?.id) {
+    throw new Error(
+      'O policial foi atualizado, mas o usuário de acesso ao SIGMO não foi localizado.'
+    )
+  }
+
+  const perfilAnterior =
+    normalizarTexto(
+      usuarioAtual.perfil
+    )
+
+  const ativoAnterior =
+    Boolean(
+      usuarioAtual.ativo
+    )
+
+  const perfilMudou =
+    perfilAnterior !==
+    perfilFinal
+
+  const ativoMudou =
+    ativoAnterior !==
+    Boolean(ativo)
+
+  if (
+    !perfilMudou &&
+    !ativoMudou
+  ) {
+    return usuarioAtual
+  }
+
+  const {
+    data: usuarioAtualizado,
+    error: usuarioAtualizadoError
+  } = await supabase
+    .from(USERS_TABLE)
+    .update({
+      perfil:
+        perfilFinal,
+
+      ativo:
+        Boolean(ativo)
+    })
+    .eq(
+      'id',
+      usuarioAtual.id
+    )
+    .select(`
+      id,
+      policial_id,
+      perfil,
+      ativo
+    `)
+    .single()
+
+  if (usuarioAtualizadoError) {
+    throw usuarioAtualizadoError
+  }
+
+  /*
+   * Se perfil ou situação mudaram, encerra as sessões
+   * ativas para impedir que permissões antigas continuem
+   * válidas até o próximo timeout.
+   */
+  const {
+    error: sessoesError
+  } = await supabase
+    .from(SESSIONS_TABLE)
+    .update({
+      ativo:
+        false,
+
+      encerrado_em:
+        new Date().toISOString()
+    })
+    .eq(
+      'usuario_id',
+      usuarioAtual.id
+    )
+    .eq(
+      'ativo',
+      true
+    )
+
+  if (sessoesError) {
+    throw sessoesError
+  }
+
+  return usuarioAtualizado
+}
+
 export async function atualizarPolicial(
   id,
   payload,
@@ -1236,14 +1472,29 @@ export async function atualizarPolicial(
   }
 
   if (ehCadastroExterno(data)) {
-  await garantirUsuarioExterno({
-    policialId: data.id,
-    ativo:
-      data.situacao !==
-      'INATIVO',
-    user
-  })
-}
+    await garantirUsuarioExterno({
+      policialId:
+        data.id,
+
+      ativo:
+        data.situacao !==
+        'INATIVO',
+
+      user
+    })
+  } else {
+    await sincronizarUsuarioInternoAposEdicao({
+      policialId:
+        data.id,
+
+      perfil:
+        data.perfil,
+
+      ativo:
+        data.situacao !==
+        'INATIVO'
+    })
+  }
 
   return data
 }

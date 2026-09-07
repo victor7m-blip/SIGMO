@@ -151,6 +151,34 @@ function ehCOP(material) {
   )
 }
 
+function ehMunicao(material) {
+  const campos = [
+    material?.modulo,
+    material?.categoria,
+    material?.tipo,
+    material?.tipo_patrimonio,
+    material?.tipo_material,
+    material?.tabela_origem
+  ].map(normalizarTexto)
+
+  const descricao =
+    normalizarTexto(
+      material?.descricao
+    )
+
+  return (
+    campos.includes('MUNIÇÃO') ||
+    campos.includes('MUNICAO') ||
+    campos.includes('MUNIÇÕES') ||
+    campos.includes('MUNICOES') ||
+    campos.includes('SIGMO_MUNICOES') ||
+    descricao === 'MUNIÇÃO' ||
+    descricao === 'MUNICAO' ||
+    descricao.startsWith('MUNIÇÃO ') ||
+    descricao.startsWith('MUNICAO ')
+  )
+}
+
 function ehTonfa(material) {
   const campos = [
     material?.modulo,
@@ -189,6 +217,8 @@ function correspondeFiltro(material, filtro) {
       return ehTPD(material)
     case 'COP':
       return ehCOP(material)
+    case 'MUNICAO':
+      return ehMunicao(material)
     case 'TONFA':
       return ehTonfa(material)
     case 'CASSETETE':
@@ -487,6 +517,7 @@ export default function PesquisaMaterial({
                   ['TASER', 'Taser'],
                   ['TPD', 'TPD'],
                   ['COP', 'COP'],
+                  ['MUNICAO', 'Munição'],
                   ['TONFA', 'Tonfa'],
                   ['CASSETETE', 'Cassetete']
                 ].map(([valor, rotulo]) => {

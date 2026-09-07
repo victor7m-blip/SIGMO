@@ -679,6 +679,330 @@ export async function transferirMunicaoSvddParaP4({
   return data
 }
 
+
+export async function transferirMunicaoExterna({
+  municaoId = null,
+  calibre = '',
+  quantidade,
+  destinoTipo,
+  destinoNome,
+  documento = null,
+  observacoes = null,
+  user = null
+}) {
+  const valor =
+    numeroInteiro(quantidade)
+
+  if (valor <= 0) {
+    throw new Error(
+      'Informe uma quantidade maior que zero.'
+    )
+  }
+
+  let idMunicao =
+    municaoId
+
+  if (
+    !idMunicao &&
+    texto(calibre)
+  ) {
+    const municao =
+      await buscarMunicao({
+        calibre
+      })
+
+    idMunicao =
+      municao.id
+  }
+
+  if (!idMunicao) {
+    throw new Error(
+      'Munição não informada.'
+    )
+  }
+
+  const tipoDestino =
+    maiusculo(destinoTipo)
+
+  const destinosPermitidos = [
+    'CARGA_PERMANENTE',
+    'OUTRAS_CIAS',
+    'BATALHAO',
+    'OUTRA_UNIDADE'
+  ]
+
+  if (
+    !destinosPermitidos.includes(
+      tipoDestino
+    )
+  ) {
+    throw new Error(
+      'Tipo de destino externo inválido.'
+    )
+  }
+
+  const nomeDestino =
+    maiusculo(destinoNome)
+
+  if (!nomeDestino) {
+    throw new Error(
+      'Informe a unidade ou destino da transferência.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_transferir_externa',
+    {
+      p_token:
+        token,
+
+      p_municao_id:
+        idMunicao,
+
+      p_quantidade:
+        valor,
+
+      p_destino_tipo:
+        tipoDestino,
+
+      p_destino_nome:
+        nomeDestino,
+
+      p_documento:
+        texto(documento)
+          ? maiusculo(documento)
+          : null,
+
+      p_observacoes:
+        texto(observacoes)
+          ? maiusculo(observacoes)
+          : null
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+export async function listarTransferenciasExternasPendentes() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_transferencias_externas_pendentes',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+
+export async function aprovarTransferenciaMunicaoCmt(
+  transferenciaId
+) {
+  if (!transferenciaId) {
+    throw new Error(
+      'Transferência não informada.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_aprovar_transferencia_cmt',
+    {
+      p_token:
+        token,
+
+      p_transferencia_id:
+        transferenciaId
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+
+export async function listarCargasPermanentesPendentesPolicial() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_cargas_pendentes_policial',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+export async function receberCargaPermanenteMunicao(
+  transferenciaId
+) {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  if (!transferenciaId) {
+    throw new Error(
+      'Transferência de munição não informada.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_receber_carga_permanente',
+    {
+      p_token:
+        token,
+
+      p_transferencia_id:
+        transferenciaId
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+export async function listarTransferenciasOutrosRecebidos() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_outros_recebidos',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+export async function confirmarTransferenciaExterna(
+  transferenciaId
+) {
+  if (!transferenciaId) {
+    throw new Error(
+      'Transferência não informada.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_confirmar_transferencia_externa',
+    {
+      p_token:
+        token,
+
+      p_transferencia_id:
+        transferenciaId
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
 export async function cautelarMunicaoParaPolicial({
   municaoId = null,
   calibre = '',
@@ -686,12 +1010,22 @@ export async function cautelarMunicaoParaPolicial({
   quantidade,
   devolucaoPrevista = null,
   movimentacaoPrincipalId = null,
+  documento = null,
   observacoes = null,
   user = null
 }) {
   if (!policial) {
     throw new Error(
       'O policial responsável pela cautela não foi informado.'
+    )
+  }
+
+  const policialId =
+    idPolicial(policial)
+
+  if (!policialId) {
+    throw new Error(
+      'O policial responsável pela cautela não possui identificação válida.'
     )
   }
 
@@ -704,227 +1038,149 @@ export async function cautelarMunicaoParaPolicial({
     )
   }
 
-  const municao =
-    await buscarMunicao({
-      municaoId,
-      calibre
-    })
+  let idMunicao =
+    municaoId
 
-  const lotes =
-    await listarLotesDisponiveis({
-      municaoId:
-        municao.id,
+  if (
+    !idMunicao &&
+    texto(calibre)
+  ) {
+    const municao =
+      await buscarMunicao({
+        calibre
+      })
 
-      campoSaldo:
-        'quantidade_svdd'
-    })
+    idMunicao =
+      municao.id
+  }
 
-  const totalDisponivel =
-    lotes.reduce(
-      (total, lote) =>
-        total +
-        numeroInteiro(
-          lote.quantidade_svdd
-        ),
-      0
-    )
-
-  if (valor > totalDisponivel) {
+  if (!idMunicao) {
     throw new Error(
-      `O Serviço de Dia possui apenas ${totalDisponivel} munição(ões) ${maiusculo(municao.calibre)} disponível(is).`
+      'Munição não informada.'
     )
   }
 
-  const processados = []
-  let restante = valor
+  const token =
+    loadSessionToken()
 
-  try {
-    for (const lote of lotes) {
-      if (restante <= 0) {
-        break
-      }
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
 
-      const saldo =
-        numeroInteiro(
-          lote.quantidade_svdd
-        )
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_criar_cautela_pendente',
+    {
+      p_token:
+        token,
 
-      if (saldo <= 0) {
-        continue
-      }
+      p_municao_id:
+        idMunicao,
 
-      const quantidadeLote =
-        Math.min(
-          saldo,
-          restante
-        )
+      p_policial_id:
+        policialId,
 
-      await atualizarSaldoLote({
-        lote,
-        campoOrigem:
-          'quantidade_svdd',
-        campoDestino:
-          null,
-        quantidade:
-          quantidadeLote
-      })
-
-      const payloadCautela = {
-        municao_id:
-          municao.id,
-
-        lote_id:
-          lote.id,
-
-        policial_id:
-          idPolicial(policial),
-
-        policial_re:
-          rePolicial(policial),
-
-        policial_nome:
-          nomePolicial(policial),
-
-        quantidade:
-          quantidadeLote,
-
-        quantidade_devolvida:
-          0,
-
-        quantidade_consumida:
-          0,
-
-        origem:
-          'SVDD',
-
-        destino:
-          'POLICIAL',
-
-        devolucao_prevista:
-          devolucaoPrevista,
-
-        movimentacao_principal_id:
-          movimentacaoPrincipalId,
-
-        status:
-          STATUS_CAUTELA_MUNICAO.EM_SERVICO,
-
-        observacoes:
-          texto(observacoes)
-            ? maiusculo(observacoes)
-            : null,
-
-        retirado_por_id:
-          user?.id || null,
-
-        retirado_por_nome:
-          nomeUsuario(user)
-      }
-
-      const {
-        data: cautela,
-        error: erroCautela
-      } = await supabase
-        .from(TABLE_CAUTELAS)
-        .insert(payloadCautela)
-        .select('*')
-        .single()
-
-      if (erroCautela) {
-        throw erroCautela
-      }
-
-      const historico =
-        await registrarHistorico({
-          municaoId:
-            municao.id,
-
-          loteId:
-            lote.id,
-
-          cautelaId:
-            cautela.id,
-
-          movimentacaoPrincipalId,
-
-          tipoMovimentacao:
-            'CAUTELA',
-
-          origem:
-            'SVDD',
-
-          destino:
-            'POLICIAL',
-
-          quantidade:
-            quantidadeLote,
-
-          policial,
-          observacoes,
-          user
-        })
-
-      processados.push({
-        lote,
-        cautela,
-        historico,
-        quantidade:
-          quantidadeLote
-      })
-
-      restante -=
-        quantidadeLote
-    }
-
-    if (restante > 0) {
-      throw new Error(
-        'Não foi possível completar a cautela com o estoque disponível.'
-      )
-    }
-
-    return {
-      municao,
-      policial,
-      quantidade:
+      p_quantidade:
         valor,
 
-      cautelas:
-        processados.map(
-          (item) => item.cautela
-        )
+      p_devolucao_prevista:
+        devolucaoPrevista ||
+        null,
+
+      p_movimentacao_principal_id:
+        movimentacaoPrincipalId ||
+        null,
+
+      p_documento:
+        texto(documento)
+          ? maiusculo(documento)
+          : null,
+
+      p_observacoes:
+        texto(observacoes)
+          ? maiusculo(observacoes)
+          : null
     }
-  } catch (error) {
-    for (
-      const item of
-      [...processados].reverse()
-    ) {
-      await apagarRegistro({
-        tabela:
-          TABLE_MOVIMENTACOES,
-        id:
-          item.historico?.id
-      })
+  )
 
-      await apagarRegistro({
-        tabela:
-          TABLE_CAUTELAS,
-        id:
-          item.cautela?.id
-      })
-
-      await restaurarSaldoLote({
-        loteId:
-          item.lote.id,
-        valores: {
-          quantidade_svdd:
-            item.lote.quantidade_svdd
-        }
-      })
-    }
-
+  if (error) {
     throw error
   }
+
+  return data
 }
+
+export async function listarCautelasPendentesPolicial() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_cautelas_pendentes_policial',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+export async function receberCautelaMunicaoPolicial(
+  transferenciaId
+) {
+  if (!transferenciaId) {
+    throw new Error(
+      'Cautela de munição não informada.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_receber_cautela_policial',
+    {
+      p_token:
+        token,
+
+      p_transferencia_id:
+        transferenciaId
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
 
 export async function buscarCautelaMunicaoPorId(
   cautelaId
@@ -1406,6 +1662,196 @@ export async function listarMunicoesEmServico({
     return []
   }
 
+  /*
+   * Primeiro tenta a consulta segura do próprio policial
+   * autenticado. A RPC agrega por calibre/munição e não
+   * expõe lote.
+   *
+   * Se o policial retornado pela sessão não corresponder
+   * ao policial solicitado, mantemos a consulta antiga
+   * como fallback para usos administrativos, como o
+   * Mapa Força consultando outro policial.
+   */
+  const token =
+    loadSessionToken()
+
+  if (token) {
+    const {
+      data: minhasCautelas,
+      error: minhasCautelasError
+    } = await supabase.rpc(
+      'sigmo_municoes_listar_minhas_cautelas',
+      {
+        p_token:
+          token
+      }
+    )
+
+    if (!minhasCautelasError) {
+      const listaSegura =
+        Array.isArray(
+          minhasCautelas
+        )
+          ? minhasCautelas
+          : []
+
+      const correspondeAoSolicitado =
+        listaSegura.some(
+          (item) => {
+            const mesmoId =
+              policialId &&
+              String(
+                item?.policial_id ||
+                ''
+              ) ===
+                String(
+                  policialId
+                )
+
+            const mesmoRe =
+              reNormalizado &&
+              normalizarRe(
+                item?.policial_re
+              ) ===
+                reNormalizado
+
+            return (
+              mesmoId ||
+              mesmoRe
+            )
+          }
+        )
+
+      if (
+        correspondeAoSolicitado ||
+        (
+          listaSegura.length === 0 &&
+          !policialId &&
+          !reNormalizado
+        )
+      ) {
+        return listaSegura
+          .map(
+            (item) => {
+              const quantidade =
+                numeroInteiro(
+                  item?.quantidade_em_posse
+                )
+
+              return {
+                id:
+                  `MUNICAO-${item.municao_id}`,
+
+                patrimonio_id:
+                  null,
+
+                referencia_id:
+                  item.municao_id,
+
+                municao_id:
+                  item.municao_id,
+
+                tipo_registro:
+                  'MUNICAO_QUANTIDADE',
+
+                modulo:
+                  'MUNICAO_QUANTIDADE',
+
+                tipo:
+                  'MUNICAO',
+
+                categoria:
+                  'MUNICAO',
+
+                calibre:
+                  maiusculo(
+                    item?.calibre
+                  ),
+
+                patrimonio:
+                  'ESTOQUE CONTROLADO',
+
+                identificador:
+                  maiusculo(
+                    item?.calibre
+                  ) ||
+                  'MUNIÇÃO',
+
+                descricao:
+                  item?.descricao
+                    ? maiusculo(
+                        item.descricao
+                      )
+                    : `MUNIÇÃO ${
+                        maiusculo(
+                          item?.calibre
+                        )
+                      }`.trim(),
+
+                local_origem:
+                  'CAUTELA INDIVIDUAL',
+
+                local_atual:
+                  'CAUTELA INDIVIDUAL',
+
+                status:
+                  'EM SERVIÇO',
+
+                quantidade,
+
+                saldo:
+                  quantidade,
+
+                policial_id:
+                  item?.policial_id ||
+                  null,
+
+                policial_re:
+                  item?.policial_re ||
+                  null,
+
+                policial_nome:
+                  item?.policial_nome ||
+                  null,
+
+                devolucao_prevista:
+                  item?.devolucao_prevista ||
+                  null,
+
+                primeira_retirada:
+                  item?.primeira_retirada ||
+                  null,
+
+                /*
+                 * Lotes e cautelas individuais não são expostos
+                 * nesta consulta do usuário. A devolução será
+                 * tratada por RPC própria no próximo passo.
+                 */
+                cautelas:
+                  []
+              }
+            }
+          )
+          .filter(
+            (item) =>
+              item.quantidade >
+              0
+          )
+      }
+    } else {
+      console.warn(
+        'Não foi possível consultar as cautelas de munição pela RPC segura. Tentando consulta administrativa de compatibilidade.',
+        minhasCautelasError
+      )
+    }
+  }
+
+  /*
+   * Compatibilidade administrativa:
+   * mantém o comportamento anterior para telas que
+   * consultam outro policial e já possuem permissão
+   * de leitura direta.
+   */
   const {
     data,
     error
@@ -1452,7 +1898,8 @@ export async function listarMunicoesEmServico({
       }
     )
 
-  const porMunicao = new Map()
+  const porMunicao =
+    new Map()
 
   for (const cautela of doPolicial) {
     const chave =
@@ -1560,11 +2007,6 @@ export async function listarMunicoesEmServico({
       cautela_id:
         cautela.id,
 
-      /*
-       * O lote fica presente apenas internamente para
-       * o motor conseguir devolver/consumir corretamente.
-       * A tela de SVDD/Mapa Força não deve exibi-lo.
-       */
       lote_id:
         cautela.lote_id,
 
@@ -1580,6 +2022,7 @@ export async function listarMunicoesEmServico({
     porMunicao.values()
   )
 }
+
 
 export async function listarHistoricoMunicao({
   municaoId = null,

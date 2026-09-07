@@ -9,6 +9,10 @@ import {
 import { supabase } from '../../services/supabaseClient'
 
 import {
+  loadSessionToken
+} from '../../services/authService'
+
+import {
   listarTonfasEmServico
 } from '../../services/tonfasMovimentacoesService'
 
@@ -155,6 +159,16 @@ function obterLocalOrigem(item) {
 }
 
 function criarChaveItem(item) {
+  if (
+    item?.tipo_registro ===
+    'MUNICAO_DEVOLUCAO'
+  ) {
+    return String(
+      item?.devolucao_municao_id ||
+      item?.id
+    )
+  }
+
   if (
     item?.tipo_registro ===
     'TONFA_QUANTIDADE'
@@ -318,6 +332,175 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
   return porPatrimonio
 }
 
+async function listarDevolucoesMunicaoPendentesSvdd() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_devolucoes_pendentes_svdd',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+
+async function receberDevolucaoMunicaoSvdd(
+  devolucaoId
+) {
+  if (!devolucaoId) {
+    throw new Error(
+      'Devolução de munição não informada.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_receber_devolucao',
+    {
+      p_token:
+        token,
+
+      p_devolucao_id:
+        devolucaoId
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+function montarItemDevolucaoMunicao(
+  devolucao
+) {
+  const calibre =
+    normalizarTexto(
+      devolucao?.calibre ||
+      ''
+    )
+
+  return {
+    id:
+      `MUNICAO-DEVOLUCAO-${devolucao.devolucao_id}`,
+
+    patrimonio_id:
+      null,
+
+    referencia_id:
+      devolucao?.municao_id ||
+      null,
+
+    municao_id:
+      devolucao?.municao_id ||
+      null,
+
+    devolucao_municao_id:
+      devolucao?.devolucao_id ||
+      null,
+
+    tipo_registro:
+      'MUNICAO_DEVOLUCAO',
+
+    tipo:
+      'MUNICAO',
+
+    categoria:
+      'MUNIÇÃO',
+
+    modulo:
+      'MUNIÇÃO',
+
+    patrimonio:
+      'ESTOQUE CONTROLADO',
+
+    identificador:
+      calibre ||
+      'MUNIÇÃO',
+
+    descricao:
+      `MUNIÇÃO ${calibre}`.trim(),
+
+    local_origem:
+      'CAUTELA INDIVIDUAL',
+
+    local_atual:
+      'CAUTELA INDIVIDUAL',
+
+    status:
+      'AGUARDANDO RECEBIMENTO',
+
+    quantidade:
+      Math.max(
+        1,
+        Number(
+          devolucao?.quantidade ||
+          1
+        ) || 1
+      ),
+
+    quantidade_receber:
+      Math.max(
+        1,
+        Number(
+          devolucao?.quantidade ||
+          1
+        ) || 1
+      ),
+
+    policial_id:
+      devolucao?.policial_id ||
+      null,
+
+    policial_re:
+      devolucao?.policial_re ||
+      null,
+
+    policial_nome:
+      devolucao?.policial_nome ||
+      null,
+
+    solicitado_em:
+      devolucao?.solicitado_em ||
+      null,
+
+    observacoes:
+      devolucao?.observacoes ||
+      null
+  }
+}
+
+
 export default function ReceberMaterial({
   user,
   onVoltar = null,
@@ -429,6 +612,7 @@ export default function ReceberMaterial({
         try {
           setCarregandoCarga(true)
           setErro('')
+          setMensagem('')
 
           const policialId =
             policialEntregador?.id ||
@@ -436,42 +620,87 @@ export default function ReceberMaterial({
             null
 
           const destinoLocal =
-            obterDestinoRecebimentoOperador(user)
+            obterDestinoRecebimentoOperador(
+              user
+            )
 
-          const devolucao =
-            await buscarDevolucaoPendentePolicial({
+          const [
+            devolucao,
+            devolucoesMunicaoTodas
+          ] = await Promise.all([
+            buscarDevolucaoPendentePolicial({
               policialId,
               destinoLocal
-            })
+            }),
 
-          if (!devolucao?.id) {
-            setDevolucaoPendente(null)
-            setPatrimonios([])
-            setItensSelecionados([])
-            setMensagem('Nenhuma devolução pendente para este policial.')
-            return
-          }
+            destinoLocal ===
+              'COFRE DO SVDD'
+              ? listarDevolucoesMunicaoPendentesSvdd()
+              : Promise.resolve([])
+          ])
 
-          const tonfasEmServico =
-            await listarTonfasEmServico({
-              re: reEntregador,
-              policialId
-            })
+          const devolucoesMunicao =
+            (devolucoesMunicaoTodas || [])
+              .filter(
+                (item) => {
+                  const mesmoId =
+                    policialId &&
+                    String(
+                      item?.policial_id ||
+                      ''
+                    ) ===
+                      String(
+                        policialId
+                      )
 
-          const quantitativos =
-            (tonfasEmServico ?? []).map(normalizarItem)
+                  const mesmoRe =
+                    somenteNumeros(
+                      item?.policial_re
+                    ) ===
+                    reEntregador
+
+                  return (
+                    mesmoId ||
+                    mesmoRe
+                  )
+                }
+              )
+
+          const lista = []
 
           if (devolucao?.id) {
+            const tonfasEmServico =
+              await listarTonfasEmServico({
+                re:
+                  reEntregador,
+
+                policialId
+              })
+
+            const quantitativos =
+              (tonfasEmServico ?? [])
+                .map(
+                  normalizarItem
+                )
+
             const itensPendentes =
-              Array.isArray(devolucao.itens)
+              Array.isArray(
+                devolucao.itens
+              )
                 ? devolucao.itens
                 : []
 
-            const lista = []
-            const tonfasUsadas = new Set()
+            const tonfasUsadas =
+              new Set()
 
-            for (const itemMov of itensPendentes) {
-              const patrimonio = itemMov?.patrimonio || {}
+            for (
+              const itemMov of
+              itensPendentes
+            ) {
+              const patrimonio =
+                itemMov?.patrimonio ||
+                {}
+
               const patrimonioId =
                 itemMov?.patrimonio_id ||
                 patrimonio?.id ||
@@ -484,33 +713,89 @@ export default function ReceberMaterial({
                   ''
                 )
 
-              if (tipoPatrimonio === 'TONFA') {
+              if (
+                tipoPatrimonio ===
+                'TONFA'
+              ) {
                 const tonfaId =
                   patrimonio?.referencia_id ||
                   null
 
-                const candidato = quantitativos.find(
-                  (item) =>
-                    String(item?.tonfa_id || item?.referencia_id || '') ===
-                      String(tonfaId || '') &&
-                    !tonfasUsadas.has(
-                      String(item?.movimentacao_tonfa_id || item?.id)
-                    )
-                )
+                const candidato =
+                  quantitativos.find(
+                    (item) =>
+                      String(
+                        item?.tonfa_id ||
+                        item?.referencia_id ||
+                        ''
+                      ) ===
+                        String(
+                          tonfaId ||
+                          ''
+                        ) &&
+                      !tonfasUsadas.has(
+                        String(
+                          item?.movimentacao_tonfa_id ||
+                          item?.id
+                        )
+                      )
+                  )
 
                 if (candidato) {
                   tonfasUsadas.add(
-                    String(candidato?.movimentacao_tonfa_id || candidato?.id)
+                    String(
+                      candidato?.movimentacao_tonfa_id ||
+                      candidato?.id
+                    )
                   )
 
                   lista.push({
                     ...candidato,
-                    quantidade: Math.min(
-                      Number(candidato?.quantidade || 1),
-                      Math.max(1, Number(itemMov?.quantidade || 1))
-                    ),
-                    devolucao_movimentacao_id: devolucao.id,
-                    devolucao_item_id: itemMov.id
+
+                    /*
+                     * A cautela quantitativa continua EM SERVIÇO
+                     * no banco até o recebimento físico.
+                     * Nesta tela, porém, o item já está numa
+                     * devolução pendente e deve refletir essa etapa.
+                     */
+                    local_origem:
+                      'CAUTELA INDIVIDUAL',
+
+                    local_atual:
+                      'CAUTELA INDIVIDUAL',
+
+                    destino_devolucao:
+                      devolucao?.destino_local ||
+                      null,
+
+                    status:
+                      'AGUARDANDO RECEBIMENTO',
+
+                    status_quantitativo:
+                      candidato?.status ||
+                      'EM SERVIÇO',
+
+                    quantidade:
+                      Math.min(
+                        Number(
+                          candidato?.quantidade ||
+                          1
+                        ),
+
+                        Math.max(
+                          1,
+                          Number(
+                            itemMov?.quantidade ||
+                            1
+                          )
+                        )
+                      ),
+
+                    devolucao_movimentacao_id:
+                      devolucao.id,
+
+                    devolucao_item_id:
+                      itemMov.id
                   })
                 }
 
@@ -520,14 +805,18 @@ export default function ReceberMaterial({
               lista.push(
                 normalizarItem({
                   ...patrimonio,
+
                   id:
                     patrimonio?.id ||
                     patrimonioId,
+
                   patrimonio_id:
                     patrimonioId,
+
                   referencia_id:
                     patrimonio?.referencia_id ||
                     null,
+
                   patrimonio:
                     patrimonio?.identificador ||
                     patrimonio?.numero_patrimonio ||
@@ -535,70 +824,123 @@ export default function ReceberMaterial({
                     patrimonio?.numero_serie ||
                     patrimonio?.referencia_id ||
                     patrimonioId,
+
                   descricao:
                     patrimonio?.descricao ||
                     itemMov?.descricao ||
                     'PATRIMÔNIO',
+
                   categoria:
                     patrimonio?.tipo ||
                     itemMov?.tipo_patrimonio ||
                     'PATRIMÔNIO',
+
                   modulo:
                     patrimonio?.tipo ||
                     itemMov?.tipo_patrimonio ||
                     'PATRIMÔNIO',
+
                   local_origem:
+                    'CAUTELA INDIVIDUAL',
+
+                  destino_devolucao:
                     devolucao?.destino_local ||
                     null,
+
                   local_atual:
-                    patrimonio?.local_atual ||
                     'CAUTELA INDIVIDUAL',
+
                   status:
+                    'AGUARDANDO RECEBIMENTO',
+
+                  status_patrimonial:
                     patrimonio?.status ||
                     'EM SERVIÇO',
+
                   quantidade:
                     Math.max(
                       1,
-                      Number(itemMov?.quantidade || 1) || 1
+                      Number(
+                        itemMov?.quantidade ||
+                        1
+                      ) || 1
                     ),
+
                   devolucao_movimentacao_id:
                     devolucao.id,
+
                   devolucao_item_id:
                     itemMov.id
                 })
               )
             }
-
-            const novidadesPorPatrimonio =
-              await buscarNovidadesPendentesPatrimonios(lista)
-
-            const listaComNovidades =
-              lista.map((item) => ({
-                ...item,
-                novidade_pendente:
-                  novidadesPorPatrimonio.get(
-                    String(item?.patrimonio_id || item?.id || '')
-                  ) || null
-              }))
-
-            setDevolucaoPendente(devolucao)
-            setPatrimonios(listaComNovidades)
-            setItensSelecionados([])
-
-            if (listaComNovidades.length === 0) {
-              setMensagem(
-                'Existe uma devolução pendente, mas os itens não puderam ser conciliados com a carga atual. Atualize a tela e confira a movimentação.'
-              )
-            } else {
-              setMensagem(
-                `Devolução pendente localizada: ${listaComNovidades.length} item(ns) apresentado(s) pelo usuário.`
-              )
-            }
-
-            return
           }
 
+          /*
+           * Munição é quantitativa e não possui patrimonio_id.
+           * Entra na mesma tela como item separado, mas é
+           * confirmada por RPC própria.
+           */
+          for (
+            const devolucaoMunicao of
+            devolucoesMunicao
+          ) {
+            lista.push(
+              montarItemDevolucaoMunicao(
+                devolucaoMunicao
+              )
+            )
+          }
 
+          const novidadesPorPatrimonio =
+            await buscarNovidadesPendentesPatrimonios(
+              lista
+            )
+
+          const listaComNovidades =
+            lista.map(
+              (item) => ({
+                ...item,
+
+                novidade_pendente:
+                  item?.tipo_registro ===
+                  'MUNICAO_DEVOLUCAO'
+                    ? null
+                    : novidadesPorPatrimonio.get(
+                        String(
+                          item?.patrimonio_id ||
+                          item?.id ||
+                          ''
+                        )
+                      ) ||
+                      null
+              })
+            )
+
+          setDevolucaoPendente(
+            devolucao?.id
+              ? devolucao
+              : null
+          )
+
+          setPatrimonios(
+            listaComNovidades
+          )
+
+          setItensSelecionados([])
+
+          if (
+            listaComNovidades.length ===
+            0
+          ) {
+            setMensagem(
+              'Nenhuma devolução pendente para este policial.'
+            )
+          } else {
+            setMensagem(
+              `Devolução pendente localizada: ${listaComNovidades.length} item(ns) apresentado(s) pelo usuário.`
+            )
+          }
         } catch (error) {
           console.error(
             'Erro ao carregar carga patrimonial:',
@@ -1060,6 +1402,13 @@ export default function ReceberMaterial({
   function prepararNovidadeItem(
     item
   ) {
+    if (
+      item?.tipo_registro ===
+      'MUNICAO_DEVOLUCAO'
+    ) {
+      return null
+    }
+
     const novidade =
       item?.novidade
 
@@ -1494,6 +1843,13 @@ async function confirmarRecebimento() {
     setErro('')
     setMensagem('')
 
+    const itensMunicao =
+      itensSelecionados.filter(
+        (item) =>
+          item?.tipo_registro ===
+          'MUNICAO_DEVOLUCAO'
+      )
+
     const itensTonfa =
       itensSelecionados.filter(
         (item) =>
@@ -1563,6 +1919,8 @@ async function confirmarRecebimento() {
         (item) =>
           item?.tipo_registro !==
             'TONFA_QUANTIDADE' &&
+          item?.tipo_registro !==
+            'MUNICAO_DEVOLUCAO' &&
           Boolean(
             localizarMovimentacaoHT(item)
           )
@@ -1580,6 +1938,8 @@ async function confirmarRecebimento() {
         (item) =>
           item?.tipo_registro !==
             'TONFA_QUANTIDADE' &&
+          item?.tipo_registro !==
+            'MUNICAO_DEVOLUCAO' &&
           !chavesHT.has(
             criarChaveItem(item)
           )
@@ -1660,9 +2020,36 @@ async function confirmarRecebimento() {
             item
           )
 
+        const destinoRecebimento =
+          normalizarTexto(
+            item?.destino_devolucao ||
+            localRetorno
+          )
+
+        const itemParaRecebimento = {
+          ...item,
+
+          /*
+           * A tela mantém CAUTELA INDIVIDUAL como local atual
+           * enquanto a devolução está pendente.
+           *
+           * O recebimentoService usa local_origem do item como
+           * destino efetivo quando esse campo existe. Portanto,
+           * somente no payload de confirmação substituímos pelo
+           * destino real da devolução.
+           */
+          local_origem:
+            destinoRecebimento,
+
+          destino_devolucao:
+            destinoRecebimento
+        }
+
         const resultado =
           await receberMateriais({
-            itens: [item],
+            itens: [
+              itemParaRecebimento
+            ],
 
             entregadorRE:
               reEntregador,
@@ -1671,9 +2058,7 @@ async function confirmarRecebimento() {
               nomeEntregador,
 
             localDestino:
-              normalizarTexto(
-                localRetorno
-              ),
+              destinoRecebimento,
 
             documento:
               normalizarTexto(
@@ -1756,6 +2141,29 @@ async function confirmarRecebimento() {
       })
     }
 
+    const resultadosMunicoes = []
+
+    for (
+      const item of
+      itensMunicao
+    ) {
+      if (!item?.devolucao_municao_id) {
+        throw new Error(
+          `A devolução de ${item?.descricao || 'munição'} não possui identificação válida.`
+        )
+      }
+
+      const resultado =
+        await receberDevolucaoMunicaoSvdd(
+          item.devolucao_municao_id
+        )
+
+      resultadosMunicoes.push({
+        item,
+        resultado
+      })
+    }
+
     let resultadoDevolucao = null
 
     if (devolucaoPendente?.id) {
@@ -1787,7 +2195,8 @@ async function confirmarRecebimento() {
     const totalRecebido =
       itensIndividuais.length +
       itensHT.length +
-      itensTonfa.length
+      itensTonfa.length +
+      itensMunicao.length
 
     const resultadoFinal = {
       total:
@@ -1802,10 +2211,14 @@ async function confirmarRecebimento() {
       total_quantitativos:
         itensTonfa.length,
 
+      total_municoes:
+        itensMunicao.length,
+
       resultados: [
         ...resultadosIndividuais,
         ...resultadosHT,
-        ...resultadosTonfas
+        ...resultadosTonfas,
+        ...resultadosMunicoes
       ],
 
       devolucao:
@@ -2019,7 +2432,12 @@ async function confirmarRecebimento() {
             </div>
           </section>
 
-          {devolucaoPendente?.id && (
+          {(devolucaoPendente?.id ||
+            patrimonios.some(
+              (item) =>
+                item?.tipo_registro ===
+                'MUNICAO_DEVOLUCAO'
+            )) && (
             <div className="pagar-material-feedback pagar-material-feedback-success">
               DEVOLUÇÃO PENDENTE LOCALIZADA • somente os itens selecionados pelo usuário estão sendo exibidos.
             </div>
@@ -2252,8 +2670,12 @@ async function confirmarRecebimento() {
     </div>
   )}
 
-  {item.tipo_registro ===
-    'TONFA_QUANTIDADE' && (
+  {[
+    'TONFA_QUANTIDADE',
+    'MUNICAO_DEVOLUCAO'
+  ].includes(
+    item.tipo_registro
+  ) && (
     <small
       style={{
         display: 'block',

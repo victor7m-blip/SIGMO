@@ -1,12 +1,18 @@
+import { supabase } from './supabaseClient'
+
 const STORAGE_KEY = 'sigmo_user'
 const SESSION_VERSION = 3
 
 const INACTIVITY_LIMIT = 15 * 60 * 1000 // 15 minutos
 const SESSION_LIMIT = 2 * 60 * 60 * 1000 // 2 horas
+const SERVER_ACTIVITY_SYNC_INTERVAL = 5 * 60 * 1000 // 5 minutos
 
 let inactivityTimer = null
 let sessionTimer = null
 let listeners = []
+
+let lastServerActivitySyncAt = 0
+let serverActivitySyncPromise = null
 
 function now() {
   return Date.now()
@@ -71,6 +77,83 @@ function updateLastActivity() {
   return true
 }
 
+function isServerSessionError(error) {
+  const message = String(
+    error?.message ||
+    ''
+  )
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  return (
+    message.includes('SESSAO ENCERRADA') ||
+    message.includes('SESSAO EXPIRADA') ||
+    message.includes('SESSAO INVALIDA') ||
+    message.includes('SESSAO NAO INFORMADA')
+  )
+}
+
+async function syncServerActivity({
+  force = false
+} = {}) {
+  const session = readStoredSession()
+
+  if (!isSessionValid(session)) {
+    return false
+  }
+
+  const token =
+    typeof session.sigmoSessionToken === 'string'
+      ? session.sigmoSessionToken.trim()
+      : ''
+
+  if (!token) {
+    return true
+  }
+
+  const currentTime = now()
+
+  if (
+    !force &&
+    lastServerActivitySyncAt > 0 &&
+    currentTime - lastServerActivitySyncAt <
+      SERVER_ACTIVITY_SYNC_INTERVAL
+  ) {
+    return true
+  }
+
+  if (serverActivitySyncPromise) {
+    return serverActivitySyncPromise
+  }
+
+  serverActivitySyncPromise = (async () => {
+    const {
+      error
+    } = await supabase.rpc(
+      'sigmo_tocar_sessao',
+      {
+        p_token: token
+      }
+    )
+
+    if (error) {
+      throw error
+    }
+
+    lastServerActivitySyncAt = now()
+
+    return true
+  })()
+
+  try {
+    return await serverActivitySyncPromise
+  } finally {
+    serverActivitySyncPromise = null
+  }
+}
+
 export function saveSession(user, sigmoSessionToken = null) {
   const createdAt = now()
 
@@ -88,6 +171,9 @@ export function saveSession(user, sigmoSessionToken = null) {
   }
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+
+  lastServerActivitySyncAt = 0
+  serverActivitySyncPromise = null
 }
 
 export function loadSession() {
@@ -114,6 +200,9 @@ export function loadSessionToken() {
 
 export function clearSession() {
   localStorage.removeItem(STORAGE_KEY)
+
+  lastServerActivitySyncAt = 0
+  serverActivitySyncPromise = null
 }
 
 export function startSessionMonitor({ onLogout }) {
@@ -170,6 +259,19 @@ export function startSessionMonitor({ onLogout }) {
     }
 
     scheduleTimers()
+
+    syncServerActivity()
+      .catch((error) => {
+        if (isServerSessionError(error)) {
+          logout('SESSION_TIMEOUT')
+          return
+        }
+
+        console.warn(
+          'Não foi possível sincronizar a atividade da sessão SIGMO:',
+          error
+        )
+      })
   }
 
   const events = [
@@ -193,6 +295,21 @@ export function startSessionMonitor({ onLogout }) {
   })
 
   scheduleTimers()
+
+  syncServerActivity({
+    force: true
+  })
+    .catch((error) => {
+      if (isServerSessionError(error)) {
+        logout('SESSION_TIMEOUT')
+        return
+      }
+
+      console.warn(
+        'Não foi possível validar a atividade inicial da sessão SIGMO:',
+        error
+      )
+    })
 
   return stopSessionMonitor
 }

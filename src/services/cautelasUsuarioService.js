@@ -22,6 +22,11 @@ import {
 
 
 import {
+  listarMunicoesEmServico
+} from './municoesMovimentacoesService'
+
+
+import {
   criarNotificacaoParaPerfil
 } from './notificacoesService'
 
@@ -1008,10 +1013,17 @@ export async function listarMateriaisEmServicoUsuario(
 
   const [
     patrimoniosIndividuais,
-    quantitativosEmServico
+    quantitativosEmServico,
+    municoesEmServico
   ] = await Promise.all([
     listarMinhaCautela(policialId),
+
     listarTonfasEmServico({
+      re: policialRe,
+      policialId
+    }),
+
+    listarMunicoesEmServico({
       re: policialRe,
       policialId
     })
@@ -1075,9 +1087,91 @@ export async function listarMateriaisEmServicoUsuario(
       (item) => Number(item?.saldo ?? item?.quantidade ?? 0) > 0
     )
 
-  if (quantitativosAtivos.length === 0) {
-    return individuais
-  }
+  const municoesAtivas =
+    (municoesEmServico || [])
+      .filter(
+        (item) =>
+          Number(
+            item?.saldo ??
+            item?.quantidade ??
+            0
+          ) > 0
+      )
+      .map(
+        (item) => ({
+          ...item,
+
+          patrimonio_id:
+            null,
+
+          referencia_id:
+            item?.municao_id ||
+            item?.referencia_id ||
+            null,
+
+          tipo_registro:
+            'MUNICAO_QUANTIDADE',
+
+          modulo:
+            'MUNICAO_QUANTIDADE',
+
+          tipo:
+            'MUNICAO',
+
+          categoria:
+            'MUNICAO',
+
+          patrimonio:
+            'ESTOQUE CONTROLADO',
+
+          descricao:
+            item?.descricao ||
+            (
+              item?.calibre
+                ? `MUNIÇÃO ${normalizarMaiusculo(
+                    item.calibre
+                  )}`
+                : 'MUNIÇÃO'
+            ),
+
+          quantidade:
+            Number(
+              item?.saldo ??
+              item?.quantidade ??
+              0
+            ) || 0,
+
+          saldo:
+            Number(
+              item?.saldo ??
+              item?.quantidade ??
+              0
+            ) || 0,
+
+          movimentacao_cautela_id:
+            item?.movimentacao_principal_id ||
+            null,
+
+          fim_turno_servico:
+            item?.devolucao_prevista ||
+            null,
+
+          cautela_criada_em:
+            (
+              Array.isArray(
+                item?.cautelas
+              ) &&
+              item.cautelas.length > 0
+            )
+              ? item.cautelas[0]
+                  ?.criado_em ||
+                null
+              : null,
+
+          status:
+            'EM SERVIÇO'
+        })
+      )
 
   const tonfaIds = [
     ...new Set(
@@ -1169,10 +1263,192 @@ export async function listarMateriaisEmServicoUsuario(
 
   return [
     ...individuais,
-    ...quantitativos
+    ...quantitativos,
+    ...municoesAtivas
   ]
 }
 
+
+
+
+export async function listarCautelasPendentesPolicial() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_cautelas_pendentes_policial',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível consultar as cautelas pendentes de munição.'
+    )
+  }
+
+  return Array.isArray(data)
+    ? data
+    : []
+}
+
+
+export async function receberCautelaMunicaoPolicial(
+  transferenciaId
+) {
+  if (!transferenciaId) {
+    throw new Error(
+      'Cautela de munição não informada.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_receber_cautela_policial',
+    {
+      p_token:
+        token,
+
+      p_transferencia_id:
+        transferenciaId
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível confirmar o recebimento da munição.'
+    )
+  }
+
+  return data
+}
+
+
+export async function buscarUltimaCautelaRecebidaPolicial({
+  policialId = null,
+  policial = null
+} = {}) {
+  const idPolicial =
+    policialId ||
+    policial?.id ||
+    policial?.policial_id ||
+    null
+
+  if (!idPolicial) {
+    throw new Error(
+      'Policial não identificado para consultar a última cautela recebida.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão segura não encontrada. Saia do SIGMO e faça login novamente.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_ultima_cautela_recebida_policial',
+    {
+      p_token:
+        token,
+
+      p_policial_id:
+        idPolicial
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível consultar a última cautela recebida pelo policial.'
+    )
+  }
+
+  const resultado =
+    Array.isArray(data)
+      ? data[0] || null
+      : data || null
+
+  if (!resultado) {
+    return null
+  }
+
+  const itens =
+    Array.isArray(resultado?.itens)
+      ? resultado.itens
+      : []
+
+  return {
+    policial_id:
+      resultado?.policial_id ||
+      idPolicial,
+
+    movimentacao_principal_id:
+      resultado
+        ?.movimentacao_principal_id ||
+      null,
+
+    origem_historico:
+      resultado?.origem_historico ||
+      null,
+
+    referencia_em:
+      resultado?.referencia_em ||
+      null,
+
+    itens:
+      itens
+        .map((item) => ({
+          ...item,
+
+          quantidade:
+            Math.max(
+              1,
+              Number(
+                item?.quantidade ||
+                1
+              ) || 1
+            )
+        }))
+        .filter(
+          (item) =>
+            item?.patrimonio_id ||
+            item?.referencia_id ||
+            item?.municao_id ||
+            item?.tonfa_id
+        )
+  }
+}
 
 export async function listarCautelasVencidasSVDD() {
   const agora = Date.now()
@@ -2262,6 +2538,191 @@ export async function estenderTurnoCautela({
   }
 }
 
+async function solicitarDevolucaoMunicaoPendente({
+  municaoId,
+  quantidade,
+  observacoes = ''
+}) {
+  if (!municaoId) {
+    throw new Error(
+      'Munição não identificada para devolução.'
+    )
+  }
+
+  const valor =
+    Math.max(
+      0,
+      Math.trunc(
+        Number(
+          quantidade ||
+          0
+        )
+      )
+    )
+
+  if (valor <= 0) {
+    throw new Error(
+      'Informe uma quantidade de munição maior que zero.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão segura não encontrada. Saia do SIGMO e faça login novamente.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_solicitar_devolucao',
+    {
+      p_token:
+        token,
+
+      p_municao_id:
+        municaoId,
+
+      p_quantidade:
+        valor,
+
+      p_observacoes:
+        normalizarMaiusculo(
+          observacoes
+        ) || null
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível solicitar a devolução da munição.'
+    )
+  }
+
+  return data
+}
+
+
+async function listarMinhasDevolucoesMunicaoPendentes() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_minhas_devolucoes_pendentes',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível consultar as devoluções pendentes de munição.'
+    )
+  }
+
+  return (data || []).map(
+    (item) => ({
+      id:
+        `MUNICAO-DEVOLUCAO-${item.devolucao_id}`,
+
+      devolucao_municao_id:
+        item.devolucao_id,
+
+      tipo_movimentacao:
+        'DEVOLUCAO',
+
+      tipo_registro:
+        'MUNICAO_DEVOLUCAO',
+
+      status:
+        'aguardando_recebimento',
+
+      created_at:
+        item.solicitado_em ||
+        null,
+
+      itens: [
+        {
+          id:
+            `MUNICAO-${item.municao_id}`,
+
+          patrimonio_id:
+            null,
+
+          referencia_id:
+            item.municao_id,
+
+          municao_id:
+            item.municao_id,
+
+          tipo_registro:
+            'MUNICAO_QUANTIDADE',
+
+          tipo:
+            'MUNICAO',
+
+          tipo_patrimonio:
+            'MUNICAO',
+
+          categoria:
+            'MUNICAO',
+
+          descricao:
+            `MUNIÇÃO ${
+              normalizarMaiusculo(
+                item.calibre
+              )
+            }`.trim(),
+
+          calibre:
+            normalizarMaiusculo(
+              item.calibre
+            ),
+
+          quantidade:
+            Math.max(
+              1,
+              Number(
+                item.quantidade ||
+                1
+              ) || 1
+            ),
+
+          status_item:
+            'aguardando_recebimento',
+
+          observacao:
+            JSON.stringify({
+              tipo_registro:
+                'MUNICAO_QUANTIDADE',
+
+              devolucao_municao_id:
+                item.devolucao_id,
+
+              municao_id:
+                item.municao_id
+            })
+        }
+      ]
+    })
+  )
+}
+
+
 export async function listarDevolucoesPendentesUsuario(
   user
 ) {
@@ -2271,23 +2732,36 @@ export async function listarDevolucoesPendentesUsuario(
     return []
   }
 
-  const movimentacoes =
-    await listarMovimentacoes({
-      solicitante_id: policialId
-    })
+  const [
+    movimentacoes,
+    devolucoesMunicao
+  ] = await Promise.all([
+    listarMovimentacoes({
+      solicitante_id:
+        policialId
+    }),
 
-  return carregarDetalhes(
-    movimentacoes.filter(
-      (movimentacao) =>
-        ehDevolucao(movimentacao) &&
-        statusEh(
-          movimentacao,
-          'aguardando_aprovacao',
-          'aguardando_recebimento',
-          'em_andamento'
-        )
+    listarMinhasDevolucoesMunicaoPendentes()
+  ])
+
+  const devolucoesPatrimoniais =
+    await carregarDetalhes(
+      movimentacoes.filter(
+        (movimentacao) =>
+          ehDevolucao(movimentacao) &&
+          statusEh(
+            movimentacao,
+            'aguardando_aprovacao',
+            'aguardando_recebimento',
+            'em_andamento'
+          )
+      )
     )
-  )
+
+  return [
+    ...devolucoesPatrimoniais,
+    ...(devolucoesMunicao || [])
+  ]
 }
 
 
@@ -3120,17 +3594,86 @@ export async function solicitarDevolucaoCautela({
     )
   }
 
-  if (!Array.isArray(itens) || itens.length === 0) {
+  if (
+    !Array.isArray(itens) ||
+    itens.length === 0
+  ) {
     throw new Error(
       'Nenhum material em serviço foi localizado para devolução.'
     )
   }
 
-  const gruposPorDestino = new Map()
+  const gruposPorDestino =
+    new Map()
+
+  const municoesParaDevolver =
+    []
 
   for (const item of itens) {
+    const tipoRegistro =
+      normalizarMaiusculo(
+        item?.tipo_registro
+      )
+
+    const tipoItem =
+      normalizarMaiusculo(
+        item?.tipo ||
+        item?.categoria ||
+        item?.modulo
+      )
+
+    const ehMunicao =
+      tipoRegistro ===
+        'MUNICAO_QUANTIDADE' ||
+      tipoItem ===
+        'MUNICAO' ||
+      Boolean(
+        item?.municao_id
+      )
+
+    if (ehMunicao) {
+      const municaoId =
+        item?.municao_id ||
+        item?.referencia_id ||
+        null
+
+      if (!municaoId) {
+        throw new Error(
+          `Não foi possível identificar ${item?.descricao || 'a munição selecionada'} para devolução.`
+        )
+      }
+
+      const quantidade =
+        Math.max(
+          0,
+          Math.trunc(
+            Number(
+              item?.quantidade ||
+              0
+            )
+          )
+        )
+
+      if (quantidade <= 0) {
+        throw new Error(
+          `Informe uma quantidade válida para devolver ${item?.descricao || 'a munição'}.`
+        )
+      }
+
+      municoesParaDevolver.push({
+        municaoId,
+        quantidade,
+        descricao:
+          item?.descricao ||
+          item?.calibre ||
+          'MUNIÇÃO'
+      })
+
+      continue
+    }
+
     const quantitativo =
-      item?.tipo_registro ===
+      tipoRegistro ===
       'TONFA_QUANTIDADE'
 
     const patrimonioId =
@@ -3142,12 +3685,13 @@ export async function solicitarDevolucaoCautela({
       continue
     }
 
-    const destinoLocal = quantitativo
-      ? 'COFRE DO SVDD'
-      : await obterDestinoDevolucaoPatrimonio({
-          patrimonioId,
-          policialId
-        })
+    const destinoLocal =
+      quantitativo
+        ? 'COFRE DO SVDD'
+        : await obterDestinoDevolucaoPatrimonio({
+            patrimonioId,
+            policialId
+          })
 
     if (!destinoLocal) {
       throw new Error(
@@ -3155,34 +3699,50 @@ export async function solicitarDevolucaoCautela({
       )
     }
 
-    const observacaoQuantitativo = quantitativo
-      ? JSON.stringify({
-          tipo_registro:
-            'TONFA_QUANTIDADE',
-          movimentacao_tonfa_id:
-            item?.movimentacao_tonfa_id ||
-            null,
-          tonfa_id:
-            item?.tonfa_id ||
-            item?.referencia_id ||
-            null,
-          tipo_material:
-            item?.tipo ||
-            item?.categoria ||
-            null
-        })
-      : item?.observacao || ''
+    const observacaoQuantitativo =
+      quantitativo
+        ? JSON.stringify({
+            tipo_registro:
+              'TONFA_QUANTIDADE',
+
+            movimentacao_tonfa_id:
+              item?.movimentacao_tonfa_id ||
+              null,
+
+            tonfa_id:
+              item?.tonfa_id ||
+              item?.referencia_id ||
+              null,
+
+            tipo_material:
+              item?.tipo ||
+              item?.categoria ||
+              null
+          })
+        : item?.observacao || ''
 
     const itemMovimentacao = {
-      id: item?.id,
-      patrimonio_id: patrimonioId,
+      id:
+        item?.id,
+
+      patrimonio_id:
+        patrimonioId,
+
       quantidade:
-        Number(item?.quantidade || 1) || 1,
+        Number(
+          item?.quantidade ||
+          1
+        ) || 1,
+
       observacao:
         observacaoQuantitativo
     }
 
-    if (!gruposPorDestino.has(destinoLocal)) {
+    if (
+      !gruposPorDestino.has(
+        destinoLocal
+      )
+    ) {
       gruposPorDestino.set(
         destinoLocal,
         []
@@ -3191,33 +3751,59 @@ export async function solicitarDevolucaoCautela({
 
     gruposPorDestino
       .get(destinoLocal)
-      .push(itemMovimentacao)
+      .push(
+        itemMovimentacao
+      )
   }
 
-  if (gruposPorDestino.size === 0) {
+  if (
+    gruposPorDestino.size === 0 &&
+    municoesParaDevolver.length === 0
+  ) {
     throw new Error(
-      'Os materiais não possuem identificação patrimonial válida.'
+      'Os materiais selecionados não possuem identificação válida para devolução.'
     )
   }
 
-  const movimentacoesCriadas = []
+  const movimentacoesCriadas =
+    []
 
-  for (const [destinoLocal, itensMovimentacao] of gruposPorDestino) {
+  const devolucoesMunicaoCriadas =
+    []
+
+  for (
+    const [
+      destinoLocal,
+      itensMovimentacao
+    ] of gruposPorDestino
+  ) {
     const resultado =
       await criarMovimentacaoCompleta({
-        tipo: 'DEVOLUCAO',
+        tipo:
+          'DEVOLUCAO',
+
         origemLocal:
           'CAUTELA INDIVIDUAL',
+
         destinoLocal,
+
         solicitante: {
           ...user,
-          id: policialId
+          id:
+            policialId
         },
-        recebedor: null,
+
+        recebedor:
+          null,
+
         observacoes:
           `DEVOLUÇÃO DOS MATERIAIS SELECIONADOS PELO USUÁRIO PARA ${destinoLocal}.`,
-        itens: itensMovimentacao,
-        aprovarAutomaticamente: false
+
+        itens:
+          itensMovimentacao,
+
+        aprovarAutomaticamente:
+          false
       })
 
     movimentacoesCriadas.push({
@@ -3226,12 +3812,46 @@ export async function solicitarDevolucaoCautela({
     })
   }
 
+  for (
+    const item of
+    municoesParaDevolver
+  ) {
+    const resultado =
+      await solicitarDevolucaoMunicaoPendente({
+        municaoId:
+          item.municaoId,
+
+        quantidade:
+          item.quantidade,
+
+        observacoes:
+          `DEVOLUÇÃO SOLICITADA PELO USUÁRIO: ${normalizarMaiusculo(
+            item.descricao
+          )}.`
+      })
+
+    devolucoesMunicaoCriadas.push(
+      resultado
+    )
+  }
+
   return {
-    sucesso: true,
+    sucesso:
+      true,
+
     movimentacoes:
       movimentacoesCriadas,
+
+    devolucoes_municao:
+      devolucoesMunicaoCriadas,
+
     destinos: [
-      ...gruposPorDestino.keys()
+      ...gruposPorDestino.keys(),
+      ...(
+        devolucoesMunicaoCriadas.length > 0
+          ? ['COFRE DO SVDD']
+          : []
+      )
     ]
   }
 }

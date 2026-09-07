@@ -1,10 +1,17 @@
 import { supabase } from './supabaseClient'
 
+import {
+  listarResumoMunicoes
+} from './municoesService'
+
 const PATRIMONIOS_TABLE =
   'sigmo_patrimonios'
 
 const TONFAS_TABLE =
   'sigmo_tonfas'
+
+const MUNICOES_TABLE =
+  'sigmo_municoes'
 
 const MOVIMENTACOES_TABLE =
   'sigmo_movimentacoes'
@@ -402,13 +409,28 @@ function normalizarRegistro({
       referencia
     })
 
-  const localAtual =
+  let localAtual =
     normalizarTexto(
       obterLocal({
         patrimonioCentral,
         referencia
       })
     )
+
+  const tipoPatrimonio =
+    normalizarTipo(
+      patrimonioCentral.tipo
+    )
+
+  if (
+    ['cop', 'cops'].includes(
+      tipoPatrimonio
+    ) &&
+    localAtual === 'SVDD'
+  ) {
+    localAtual =
+      'COFRE DO SVDD'
+  }
 
   return {
     ...referencia,
@@ -611,6 +633,162 @@ function normalizarTonfaParaEntrega(
       })
   }
 }
+
+
+function normalizarMunicaoParaEntrega({
+  municao,
+  quantidadeDisponivel,
+  origemLocal = 'COFRE DO SVDD'
+}) {
+  const calibre =
+    normalizarTexto(
+      municao?.calibre
+    ) || 'SEM CALIBRE'
+
+  const origemNormalizada =
+    normalizarTexto(
+      origemLocal
+    )
+
+  const localEstoque =
+    origemNormalizada.includes('P4')
+      ? 'COFRE DO P4'
+      : 'COFRE DO SVDD'
+
+  const quantidade =
+    numeroInteiro(
+      quantidadeDisponivel
+    )
+
+  return {
+    ...municao,
+
+    id:
+      `municao-estoque-${municao.id}`,
+
+    patrimonio_id:
+      null,
+
+    referencia_id:
+      municao.id,
+
+    municao_id:
+      municao.id,
+
+    patrimonio:
+      `ESTOQUE-${calibre}`,
+
+    descricao:
+      `MUNIÇÃO ${calibre}`,
+
+    categoria:
+      'MUNIÇÃO',
+
+    calibre,
+
+    modulo:
+      'MUNIÇÃO',
+
+    tabela_origem:
+      MUNICOES_TABLE,
+
+    local_atual:
+      localEstoque,
+
+    status:
+      quantidade > 0
+        ? `DISPONÍVEL - ${localEstoque}`
+        : `SEM SALDO - ${localEstoque}`,
+
+    numero_serie:
+      '',
+
+    qr_code:
+      '',
+
+    controla_quantidade:
+      true,
+
+    quantidade_disponivel:
+      quantidade,
+
+    quantidade_maxima:
+      quantidade,
+
+    quantidade:
+      1,
+
+    disponivel:
+      registroDisponivel({
+        status:
+          'DISPONÍVEL',
+
+        localAtual:
+          localEstoque,
+
+        ativo:
+          municao?.ativo !== false,
+
+        controlaQuantidade:
+          true,
+
+        quantidadeDisponivel:
+          quantidade
+      })
+  }
+}
+
+async function carregarMunicoesPorOrigem(
+  origemLocal = 'COFRE DO SVDD'
+) {
+  try {
+    const resumo =
+      await listarResumoMunicoes({
+        somenteAtivas:
+          true
+      })
+
+    const origemNormalizada =
+      normalizarTexto(
+        origemLocal
+      )
+
+    const campoSaldo =
+      origemNormalizada.includes('P4')
+        ? 'quantidade_p4'
+        : 'quantidade_svdd'
+
+    return (resumo ?? [])
+      .map(
+        (municao) =>
+          normalizarMunicaoParaEntrega({
+            municao,
+
+            quantidadeDisponivel:
+              numeroInteiro(
+                municao?.[
+                  campoSaldo
+                ]
+              ),
+
+            origemLocal
+          })
+      )
+      .filter(
+        (item) =>
+          item.quantidade_disponivel >
+          0
+      )
+  } catch (error) {
+    console.warn(
+      'Não foi possível carregar munições para entrega.',
+      error
+    )
+
+    return []
+  }
+}
+
 
 async function carregarPatrimoniosCentrais() {
   const {
@@ -823,15 +1001,20 @@ export async function listarPatrimoniosParaEntrega({
   const [
     patrimoniosIndividuais,
     estoquesQuantidade,
+    municoesQuantidade,
     patrimoniosComprometidos
   ] = await Promise.all([
     carregarRegistrosNormalizados(),
     carregarTonfasPorOrigem(origemLocal),
+    carregarMunicoesPorOrigem(
+      origemLocal
+    ),
     buscarPatrimoniosComprometidos()
   ])
 
   let itens = [
     ...estoquesQuantidade,
+    ...municoesQuantidade,
     ...patrimoniosIndividuais
   ]
 
@@ -920,7 +1103,8 @@ itens = itens.filter((item) => {
           item.codigo,
           item.id,
           item.referencia_id,
-          item.tonfa_id
+          item.tonfa_id,
+          item.municao_id
         ].some((valor) =>
           normalizarTexto(
             valor
@@ -957,6 +1141,609 @@ itens = itens.filter((item) => {
   )
 }
 
+
+function normalizarComparacao(valor) {
+  return String(valor ?? '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+}
+
+function calibreCanonico(valor) {
+  const texto =
+    normalizarComparacao(valor)
+      .replace(/^CALIBRE\s+/, '')
+
+  if (!texto) return ''
+
+  if (
+    /(^|\D)5[.,]?56(\D|$)/.test(texto) ||
+    texto.includes('556X45')
+  ) {
+    return '556'
+  }
+
+  if (/(^|\D)7[.,]?62(\D|$)/.test(texto)) {
+    return '762'
+  }
+
+  if (texto.includes('380')) {
+    return '380'
+  }
+
+  if (
+    texto.includes('40 S&W') ||
+    texto.includes('40SW') ||
+    /(^|\D)\.?40(\D|$)/.test(texto)
+  ) {
+    return '40'
+  }
+
+  if (
+    texto.includes('45 ACP') ||
+    /(^|\D)\.?45(\D|$)/.test(texto)
+  ) {
+    return '45'
+  }
+
+  if (
+    texto.includes('38 SPL') ||
+    texto.includes('38 SPECIAL') ||
+    /(^|\D)\.?38(\D|$)/.test(texto)
+  ) {
+    return '38'
+  }
+
+  if (
+    texto.includes('9X19') ||
+    /(^|\D)9\s*MM(\D|$)/.test(texto) ||
+    /(^|\D)9(\D|$)/.test(texto)
+  ) {
+    return '9'
+  }
+
+  if (
+    texto.includes('CAL 12') ||
+    texto.includes('GAUGE 12') ||
+    /(^|\D)12(\D|$)/.test(texto)
+  ) {
+    return '12'
+  }
+
+  return texto.replace(/[^A-Z0-9]/g, '')
+}
+
+function tipoHistorico(item) {
+  const texto =
+    normalizarComparacao(
+      [
+        item?.tipo,
+        item?.categoria,
+        item?.modulo,
+        item?.descricao
+      ]
+        .filter(Boolean)
+        .join(' ')
+    )
+
+  if (
+    item?.municao_id ||
+    texto.includes('MUNICAO')
+  ) {
+    return 'MUNICAO'
+  }
+
+  if (
+    item?.tonfa_id ||
+    texto.includes('TONFA')
+  ) {
+    return 'TONFA'
+  }
+
+  if (texto.includes('CASSETETE')) {
+    return 'CASSETETE'
+  }
+
+  if (
+    texto.includes('ARMA') ||
+    texto.includes('PISTOLA') ||
+    texto.includes('REVOLVER') ||
+    texto.includes('FUZIL') ||
+    texto.includes('CARABINA') ||
+    texto.includes('ESPINGARDA')
+  ) {
+    return 'ARMA'
+  }
+
+  if (texto.includes('COP')) {
+    return 'COP'
+  }
+
+  if (texto.includes('TASER')) {
+    return 'TASER'
+  }
+
+  if (texto.includes('TPD')) {
+    return 'TPD'
+  }
+
+  if (
+    texto.includes('HT') ||
+    texto.includes('RADIO')
+  ) {
+    return 'HT'
+  }
+
+  return (
+    normalizarComparacao(item?.tipo) ||
+    'MATERIAL'
+  )
+}
+
+function descricaoKit(item) {
+  return (
+    item?.descricao ||
+    item?.patrimonio ||
+    item?.numero_serie ||
+    item?.categoria ||
+    item?.tipo ||
+    'MATERIAL'
+  )
+}
+
+function quantidadeKit(item) {
+  return Math.max(
+    1,
+    numeroInteiro(
+      item?.quantidade ||
+      1
+    ) || 1
+  )
+}
+
+function quantidadeDisponivelAtual(item) {
+  if (!item) {
+    return 0
+  }
+
+  if (item?.disponivel === false) {
+    return 0
+  }
+
+  if (item?.controla_quantidade) {
+    return numeroInteiro(
+      item?.quantidade_disponivel ??
+      item?.quantidade_maxima ??
+      0
+    )
+  }
+
+  return 1
+}
+
+function itemMesmoTipoAtual(material, historico) {
+  const tipoAtual =
+    tipoHistorico(material)
+
+  const tipoAnterior =
+    tipoHistorico(historico)
+
+  return tipoAtual === tipoAnterior
+}
+
+function encontrarMaterialExato({
+  historico,
+  materiais
+}) {
+  const tipo =
+    tipoHistorico(historico)
+
+  if (tipo === 'MUNICAO') {
+    const calibreHistorico =
+      calibreCanonico(
+        historico?.calibre ||
+        historico?.descricao
+      )
+
+    return (
+      materiais.find((material) => {
+        if (
+          tipoHistorico(material) !==
+          'MUNICAO'
+        ) {
+          return false
+        }
+
+        const calibreAtual =
+          calibreCanonico(
+            material?.calibre ||
+            material?.descricao
+          )
+
+        return Boolean(
+          calibreHistorico &&
+          calibreAtual &&
+          calibreHistorico ===
+            calibreAtual
+        )
+      }) ||
+      null
+    )
+  }
+
+  if (
+    tipo === 'TONFA' ||
+    tipo === 'CASSETETE'
+  ) {
+    const referencia =
+      String(
+        historico?.tonfa_id ||
+        historico?.referencia_id ||
+        ''
+      )
+
+    const exato =
+      referencia
+        ? materiais.find(
+            (material) =>
+              String(
+                material?.tonfa_id ||
+                material?.referencia_id ||
+                ''
+              ) === referencia
+          )
+        : null
+
+    if (exato) {
+      return exato
+    }
+
+    return (
+      materiais.find(
+        (material) =>
+          tipoHistorico(material) === tipo
+      ) ||
+      null
+    )
+  }
+
+  const patrimonioId =
+    String(
+      historico?.patrimonio_id ||
+      ''
+    )
+
+  if (patrimonioId) {
+    const exato =
+      materiais.find(
+        (material) =>
+          String(
+            material?.patrimonio_id ||
+            material?.id ||
+            ''
+          ) === patrimonioId
+      )
+
+    if (exato) {
+      return exato
+    }
+  }
+
+  return null
+}
+
+function alternativasMesmoTipo({
+  historico,
+  materiais,
+  limite = 5
+}) {
+  const tipo =
+    tipoHistorico(historico)
+
+  if (
+    tipo === 'MUNICAO' ||
+    tipo === 'TONFA' ||
+    tipo === 'CASSETETE'
+  ) {
+    return []
+  }
+
+  return materiais
+    .filter(
+      (material) =>
+        itemMesmoTipoAtual(
+          material,
+          historico
+        ) &&
+        quantidadeDisponivelAtual(
+          material
+        ) > 0
+    )
+    .slice(
+      0,
+      Math.max(
+        0,
+        Number(limite || 0)
+      )
+    )
+    .map(
+      (material) => ({
+        id:
+          material?.id ||
+          null,
+
+        patrimonio_id:
+          material?.patrimonio_id ||
+          null,
+
+        referencia_id:
+          material?.referencia_id ||
+          null,
+
+        patrimonio:
+          material?.patrimonio ||
+          null,
+
+        descricao:
+          material?.descricao ||
+          null,
+
+        categoria:
+          material?.categoria ||
+          null,
+
+        modulo:
+          material?.modulo ||
+          null
+      })
+    )
+}
+
+/*
+ * Compara o último kit recebido com a disponibilidade atual.
+ *
+ * IMPORTANTE:
+ * - Patrimônio individual: só seleciona automaticamente o MESMO item.
+ * - Se o patrimônio anterior não estiver disponível, apenas informa
+ *   alternativas; nunca troca silenciosamente.
+ * - Munição: replica calibre + quantidade, nunca lote.
+ * - Tonfa/Cassetete: replica tipo/quantidade do estoque quantitativo.
+ *
+ * `materiaisDisponiveis` deve ser a lista já atualizada pelo chamador.
+ * No Mapa Força ela recebe, inclusive, a disponibilidade segura de munição
+ * (físico - reservas pendentes).
+ */
+export function montarKitUltimoRecebido({
+  itensHistorico = [],
+  materiaisDisponiveis = []
+} = {}) {
+  const historico =
+    Array.isArray(itensHistorico)
+      ? itensHistorico
+      : []
+
+  const atuais =
+    Array.isArray(materiaisDisponiveis)
+      ? materiaisDisponiveis
+      : []
+
+  const selecionados = []
+  const indisponiveis = []
+
+  for (const itemHistorico of historico) {
+    const tipo =
+      tipoHistorico(
+        itemHistorico
+      )
+
+    const quantidadeDesejada =
+      quantidadeKit(
+        itemHistorico
+      )
+
+    const material =
+      encontrarMaterialExato({
+        historico:
+          itemHistorico,
+
+        materiais:
+          atuais
+      })
+
+    if (!material) {
+      indisponiveis.push({
+        motivo:
+          tipo === 'MUNICAO'
+            ? 'CALIBRE NÃO DISPONÍVEL'
+            : (
+                tipo === 'TONFA' ||
+                tipo === 'CASSETETE'
+              )
+              ? 'ESTOQUE QUANTITATIVO INDISPONÍVEL'
+              : 'PATRIMÔNIO ANTERIOR INDISPONÍVEL',
+
+        tipo,
+
+        descricao:
+          descricaoKit(
+            itemHistorico
+          ),
+
+        patrimonio_id:
+          itemHistorico
+            ?.patrimonio_id ||
+          null,
+
+        referencia_id:
+          itemHistorico
+            ?.referencia_id ||
+          null,
+
+        municao_id:
+          itemHistorico
+            ?.municao_id ||
+          null,
+
+        tonfa_id:
+          itemHistorico
+            ?.tonfa_id ||
+          null,
+
+        calibre:
+          itemHistorico
+            ?.calibre ||
+          null,
+
+        quantidade:
+          quantidadeDesejada,
+
+        alternativas:
+          alternativasMesmoTipo({
+            historico:
+              itemHistorico,
+
+            materiais:
+              atuais
+          })
+      })
+
+      continue
+    }
+
+    const disponivel =
+      quantidadeDisponivelAtual(
+        material
+      )
+
+    if (
+      material?.controla_quantidade &&
+      disponivel <
+        quantidadeDesejada
+    ) {
+      indisponiveis.push({
+        motivo:
+          'QUANTIDADE INSUFICIENTE',
+
+        tipo,
+
+        descricao:
+          descricaoKit(
+            itemHistorico
+          ),
+
+        patrimonio_id:
+          itemHistorico
+            ?.patrimonio_id ||
+          null,
+
+        referencia_id:
+          itemHistorico
+            ?.referencia_id ||
+          null,
+
+        municao_id:
+          itemHistorico
+            ?.municao_id ||
+          null,
+
+        tonfa_id:
+          itemHistorico
+            ?.tonfa_id ||
+          null,
+
+        calibre:
+          itemHistorico
+            ?.calibre ||
+          material?.calibre ||
+          null,
+
+        quantidade:
+          quantidadeDesejada,
+
+        quantidade_disponivel:
+          disponivel,
+
+        alternativas: []
+      })
+
+      continue
+    }
+
+    selecionados.push({
+      ...material,
+
+      quantidade:
+        material?.controla_quantidade
+          ? quantidadeDesejada
+          : 1,
+
+      origem_ultimo_recebido:
+        true,
+
+      item_historico: {
+        tipo,
+
+        descricao:
+          descricaoKit(
+            itemHistorico
+          ),
+
+        patrimonio_id:
+          itemHistorico
+            ?.patrimonio_id ||
+          null,
+
+        referencia_id:
+          itemHistorico
+            ?.referencia_id ||
+          null,
+
+        municao_id:
+          itemHistorico
+            ?.municao_id ||
+          null,
+
+        tonfa_id:
+          itemHistorico
+            ?.tonfa_id ||
+          null,
+
+        calibre:
+          itemHistorico
+            ?.calibre ||
+          null,
+
+        quantidade:
+          quantidadeDesejada
+      }
+    })
+  }
+
+  return {
+    completo:
+      historico.length > 0 &&
+      indisponiveis.length === 0,
+
+    vazio:
+      historico.length === 0,
+
+    total_historico:
+      historico.length,
+
+    total_selecionado:
+      selecionados.length,
+
+    total_indisponivel:
+      indisponiveis.length,
+
+    selecionados,
+
+    indisponiveis
+  }
+}
+
 export async function buscarPatrimonioPorQrCode(
   valorQrCode,
   { origemLocal = 'COFRE DO SVDD' } = {}
@@ -989,7 +1776,8 @@ export async function buscarPatrimonioPorQrCode(
         item.codigo,
         item.id,
         item.referencia_id,
-        item.tonfa_id
+        item.tonfa_id,
+        item.municao_id
       ].some(
         (campo) =>
           normalizarTexto(

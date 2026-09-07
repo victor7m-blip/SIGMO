@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import './MapaForca.css'
 import MapaForcaVisualizacao from './MapaForcaVisualizacao'
+import PagarMaterialMapaForca from './components/PagarMaterialMapaForca'
+
+import { supabase } from '../../services/supabaseClient'
+import { loadSessionToken } from '../../services/authService'
+import { criarMovimentacaoCompleta } from '../../services/movimentacaoEngine'
+import { cautelarMunicaoParaPolicial } from '../../services/municoesMovimentacoesService'
 
 import { listarPoliciais } from '../../services/policiaisService'
 import { listarViaturas } from '../../services/viaturasService'
@@ -8,8 +14,11 @@ import { listarMateriaisEmServicoUsuario } from '../../services/cautelasUsuarioS
 import {
   carregarMapaEmElaboracao,
   excluirUSMapaForca,
+  listarCautelasMapaForca,
+  registrarCautelaMapaForca,
   salvarCabecalhoMapaForca,
-  salvarUSMapaForca
+  salvarUSMapaForca,
+  vincularCautelasPendentesAUS
 } from '../../services/mapaForcaService'
 
 const EQUIPES_SERVICO = ['A', 'B', 'C', 'D']
@@ -64,6 +73,666 @@ function normalizarEquipamento(valor) {
     .toUpperCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+}
+
+function numeroInteiro(valor) {
+  const numero = Number(valor)
+
+  if (!Number.isFinite(numero)) {
+    return 0
+  }
+
+  return Math.max(0, Math.trunc(numero))
+}
+
+function ehMunicaoMapa(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tabela_origem
+  ].map(normalizarEquipamento)
+
+  const descricao =
+    normalizarEquipamento(
+      item?.descricao
+    )
+
+  return (
+    Boolean(item?.municao_id) ||
+    campos.includes('MUNICAO') ||
+    campos.includes('MUNICOES') ||
+    campos.includes('SIGMO_MUNICOES') ||
+    descricao.startsWith('MUNICAO ')
+  )
+}
+
+function chaveMaterialPreparado(item) {
+  if (!item) {
+    return ''
+  }
+
+  if (ehMunicaoMapa(item)) {
+    return `MUNICAO:${
+      item?.municao_id ||
+      item?.referencia_id ||
+      item?.id ||
+      ''
+    }`
+  }
+
+  if (item?.patrimonio_id) {
+    return `PATRIMONIO:${item.patrimonio_id}`
+  }
+
+  if (item?.tonfa_id) {
+    return `TONFA:${item.tonfa_id}`
+  }
+
+  if (item?.referencia_id) {
+    return `REFERENCIA:${item.referencia_id}`
+  }
+
+  return `ITEM:${item?.tabela_origem || ''}:${item?.id || ''}`
+}
+
+function mesclarItensPreparados(
+  anteriores = [],
+  novos = []
+) {
+  const mapa = new Map()
+
+  for (const item of anteriores || []) {
+    const chave =
+      chaveMaterialPreparado(item)
+
+    if (!chave) {
+      continue
+    }
+
+    mapa.set(chave, {
+      ...item
+    })
+  }
+
+  for (const item of novos || []) {
+    const chave =
+      chaveMaterialPreparado(item)
+
+    if (!chave) {
+      continue
+    }
+
+    const anterior =
+      mapa.get(chave)
+
+    const quantitativo =
+      Boolean(
+        item?.controla_quantidade ||
+        ehMunicaoMapa(item)
+      )
+
+    if (
+      anterior &&
+      quantitativo
+    ) {
+      mapa.set(chave, {
+        ...anterior,
+        ...item,
+        quantidade:
+          Math.max(
+            1,
+            numeroInteiro(
+              anterior?.quantidade ||
+              0
+            ) +
+            numeroInteiro(
+              item?.quantidade ||
+              0
+            )
+          )
+      })
+
+      continue
+    }
+
+    mapa.set(chave, {
+      ...item
+    })
+  }
+
+  return Array.from(
+    mapa.values()
+  )
+}
+
+async function listarDisponibilidadeMunicaoSvddMapa() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_disponiveis_svdd',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return Array.isArray(data)
+    ? data
+    : []
+}
+
+async function resolverPatrimonioPreparadoMapa(
+  item
+) {
+  if (item?.patrimonio_id) {
+    return item.patrimonio_id
+  }
+
+  if (
+    !item?.controla_quantidade ||
+    !item?.tonfa_id
+  ) {
+    return null
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id')
+    .eq('tipo', 'tonfa')
+    .eq(
+      'referencia_id',
+      item.tonfa_id
+    )
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (!data?.id) {
+    throw new Error(
+      `O patrimônio central de ${
+        item?.descricao ||
+        item?.categoria ||
+        'Tonfa/Cassetete'
+      } não foi localizado.`
+    )
+  }
+
+  return data.id
+}
+
+async function prepararItensPatrimoniaisMapa(
+  itens = []
+) {
+  const preparados = []
+
+  for (const item of itens) {
+    const patrimonioId =
+      await resolverPatrimonioPreparadoMapa(
+        item
+      )
+
+    if (!patrimonioId) {
+      throw new Error(
+        `Não foi possível identificar ${
+          item?.descricao ||
+          item?.categoria ||
+          'um dos materiais'
+        } para a cautela.`
+      )
+    }
+
+    preparados.push({
+      ...item,
+      patrimonio_id:
+        patrimonioId,
+      quantidade:
+        Math.max(
+          1,
+          Number(
+            item?.quantidade ||
+            1
+          ) || 1
+        ),
+      observacao:
+        item?.controla_quantidade
+          ? JSON.stringify({
+              tipo_registro:
+                'TONFA_QUANTIDADE',
+              tonfa_id:
+                item?.tonfa_id ||
+                item?.referencia_id ||
+                null,
+              categoria:
+                item?.categoria ||
+                item?.tipo ||
+                null,
+              quantidade:
+                Math.max(
+                  1,
+                  Number(
+                    item?.quantidade ||
+                    1
+                  ) || 1
+                )
+            })
+          : (
+              item?.observacao ||
+              ''
+            )
+    })
+  }
+
+  return preparados
+}
+
+function extrairIdsTransferenciaMunicaoMapa(
+  resultado
+) {
+  const ids =
+    new Set()
+
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+  function adicionar(valor) {
+    const texto =
+      String(valor || '')
+        .trim()
+
+    if (
+      uuidRegex.test(texto)
+    ) {
+      ids.add(texto)
+    }
+  }
+
+  function visitar(valor) {
+    if (!valor) {
+      return
+    }
+
+    if (typeof valor === 'string') {
+      adicionar(valor)
+      return
+    }
+
+    if (Array.isArray(valor)) {
+      valor.forEach(visitar)
+      return
+    }
+
+    if (typeof valor !== 'object') {
+      return
+    }
+
+    adicionar(
+      valor?.transferencia_id
+    )
+    adicionar(
+      valor?.transferenciaId
+    )
+    adicionar(
+      valor?.id_transferencia
+    )
+
+    if (
+      typeof valor?.transferencia ===
+      'string'
+    ) {
+      adicionar(
+        valor.transferencia
+      )
+    } else {
+      adicionar(
+        valor?.transferencia?.id
+      )
+    }
+
+    for (const campo of [
+      'data',
+      'resultado',
+      'transferencias'
+    ]) {
+      const interno =
+        valor?.[campo]
+
+      if (
+        interno &&
+        interno !== valor
+      ) {
+        visitar(interno)
+      }
+    }
+  }
+
+  visitar(resultado)
+
+  return Array.from(ids)
+}
+
+async function localizarMunicoesVinculadasMapa(
+  movimentacaoPrincipalId
+) {
+  if (!movimentacaoPrincipalId) {
+    return []
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_vinculadas_movimentacoes',
+    {
+      p_token:
+        token,
+      p_movimentacao_ids: [
+        movimentacaoPrincipalId
+      ]
+    }
+  )
+
+  if (error) {
+    console.warn(
+      'Não foi possível localizar as munições vinculadas ao carrinho do Mapa Força:',
+      error
+    )
+
+    return []
+  }
+
+  return (data || [])
+    .map(
+      (item) =>
+        item?.transferencia_id ||
+        item?.id ||
+        null
+    )
+    .filter(Boolean)
+}
+
+async function efetivarMateriaisPreparadosMapa({
+  preparacao,
+  user,
+  unidade
+}) {
+  const itens =
+    Array.isArray(
+      preparacao?.itensPreparados
+    )
+      ? preparacao.itensPreparados
+      : []
+
+  if (itens.length === 0) {
+    return null
+  }
+
+  const policial =
+    preparacao?.policial
+
+  if (!policial?.id) {
+    throw new Error(
+      'O policial do material preparado não foi identificado.'
+    )
+  }
+
+  const fimTurnoServico =
+    unidade?.fimUs
+      ? new Date(
+          unidade.fimUs
+        ).toISOString()
+      : null
+
+  const inicioTurnoServico =
+    unidade?.inicioUs
+      ? new Date(
+          unidade.inicioUs
+        ).toISOString()
+      : null
+
+  if (!fimTurnoServico) {
+    throw new Error(
+      'A US não possui horário de término válido para efetivar a cautela.'
+    )
+  }
+
+  const observacoes = [
+    'MAPA FORÇA',
+    unidade?.prefixo
+      ? `US ${unidade.prefixo}`
+      : null,
+    preparacao?.funcao ||
+      null
+  ]
+    .filter(Boolean)
+    .join(' • ')
+
+  const municoes =
+    itens.filter(
+      ehMunicaoMapa
+    )
+
+  const patrimoniais =
+    itens.filter(
+      (item) =>
+        !ehMunicaoMapa(item)
+    )
+
+  if (municoes.length > 0) {
+    const disponibilidades =
+      await listarDisponibilidadeMunicaoSvddMapa()
+
+    const porMunicao =
+      new Map(
+        disponibilidades.map(
+          (registro) => [
+            String(
+              registro?.municao_id ||
+              ''
+            ),
+            numeroInteiro(
+              registro
+                ?.quantidade_disponivel
+            )
+          ]
+        )
+      )
+
+    for (const item of municoes) {
+      const municaoId =
+        String(
+          item?.municao_id ||
+          item?.referencia_id ||
+          ''
+        )
+
+      const solicitado =
+        Math.max(
+          1,
+          numeroInteiro(
+            item?.quantidade ||
+            1
+          )
+        )
+
+      const disponivel =
+        Math.max(
+          0,
+          numeroInteiro(
+            porMunicao.get(
+              municaoId
+            ) || 0
+          )
+        )
+
+      if (
+        solicitado >
+        disponivel
+      ) {
+        throw new Error(
+          `${
+            item?.calibre ||
+            item?.descricao ||
+            'Munição'
+          }: foram preparados ${solicitado} UN, mas existem somente ${disponivel} UN disponíveis no SVDD.`
+        )
+      }
+    }
+  }
+
+  let movimentacaoPrincipalId =
+    null
+
+  if (patrimoniais.length > 0) {
+    const preparados =
+      await prepararItensPatrimoniaisMapa(
+        patrimoniais
+      )
+
+    const resultado =
+      await criarMovimentacaoCompleta({
+        tipo:
+          'CAUTELA',
+        origemLocal:
+          'COFRE DO SVDD',
+        destinoLocal:
+          'CAUTELA INDIVIDUAL',
+        solicitante:
+          user,
+        recebedor:
+          policial,
+        observacoes,
+        inicioTurnoServico,
+        fimTurnoServico,
+        previsaoEntrega:
+          null,
+        itens:
+          preparados,
+        aprovarAutomaticamente:
+          false
+      })
+
+    movimentacaoPrincipalId =
+      resultado?.movimentacaoId ||
+      null
+
+    if (
+      !movimentacaoPrincipalId &&
+      municoes.length > 0
+    ) {
+      throw new Error(
+        'A cautela patrimonial foi criada sem o identificador necessário para vincular a munição.'
+      )
+    }
+  }
+
+  const transferenciasMunicaoIds =
+    []
+
+  for (const item of municoes) {
+    const municaoId =
+      item?.municao_id ||
+      item?.referencia_id ||
+      null
+
+    if (!municaoId) {
+      throw new Error(
+        'Uma das munições preparadas não possui identificação válida.'
+      )
+    }
+
+    const resultado =
+      await cautelarMunicaoParaPolicial({
+        municaoId,
+        calibre:
+          item?.calibre ||
+          '',
+        policial,
+        quantidade:
+          Math.max(
+            1,
+            Number(
+              item?.quantidade ||
+              1
+            ) || 1
+          ),
+        devolucaoPrevista:
+          fimTurnoServico,
+        movimentacaoPrincipalId,
+        observacoes,
+        user
+      })
+
+    transferenciasMunicaoIds.push(
+      ...extrairIdsTransferenciaMunicaoMapa(
+        resultado
+      )
+    )
+  }
+
+  if (
+    movimentacaoPrincipalId &&
+    municoes.length > 0
+  ) {
+    transferenciasMunicaoIds.push(
+      ...(
+        await localizarMunicoesVinculadasMapa(
+          movimentacaoPrincipalId
+        )
+      )
+    )
+  }
+
+  return {
+    movimentacaoPrincipalId,
+    transferenciasMunicaoIds:
+      Array.from(
+        new Set(
+          transferenciasMunicaoIds
+            .map(
+              (id) =>
+                String(id || '')
+                  .trim()
+            )
+            .filter(Boolean)
+        )
+      ),
+    resumoItens:
+      Array.isArray(
+        preparacao?.resumoItens
+      )
+        ? preparacao.resumoItens
+        : [],
+    quantidadeItens:
+      itens.length
+  }
 }
 
 function rotuloEquipamento(item) {
@@ -172,18 +841,211 @@ function reconstruirUnidades(unidades, efetivo, inicioPadrao, fimPadrao) {
   })
 }
 
-function CampoComposicao({ label, policial, onSelecionar, onRemover, somenteLeitura = false }) {
+
+function resumirCautelaMapa(cautela) {
+  const itens =
+    Array.isArray(cautela?.resumo_itens)
+      ? cautela.resumo_itens
+      : []
+
+  const grupos =
+    new Map()
+
+  for (const item of itens) {
+    const tipo =
+      rotuloEquipamento(item)
+
+    if (!tipo) {
+      continue
+    }
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          item?.quantidade ||
+          1
+        ) || 1
+      )
+
+    grupos.set(
+      tipo,
+      (grupos.get(tipo) || 0) +
+        quantidade
+    )
+  }
+
+  return Array.from(
+    grupos.entries()
+  ).map(
+    ([tipo, quantidade]) =>
+      quantidade > 1
+        ? `${tipo} ${quantidade}`
+        : tipo
+  )
+}
+
+function statusCautelaLabel(cautela) {
+  const status =
+    normalizarEquipamento(
+      cautela?.status_atual ||
+      cautela?.status ||
+      ''
+    )
+
+  if (status === 'PREPARADO') {
+    return '✓ MATERIAL PREPARADO • SALVE A US'
+  }
+
+  if (
+    status.includes(
+      'AGUARDANDO'
+    ) ||
+    status === 'PENDENTE'
+  ) {
+    return '✓ MATERIAL PAGO • AGUARDANDO ACEITE'
+  }
+
+  if (
+    status.includes(
+      'RECEB'
+    ) ||
+    status.includes(
+      'CONCLUID'
+    ) ||
+    status.includes(
+      'EM SERVICO'
+    )
+  ) {
+    return '✓ MATERIAL RECEBIDO'
+  }
+
+  return '✓ MATERIAL PAGO'
+}
+
+function CampoComposicao({
+  label,
+  policial,
+  onSelecionar,
+  onRemover,
+  onPagarMaterial = null,
+  cautelaMapa = null,
+  somenteLeitura = false
+}) {
   if (policial) {
     return (
-      <div className="mapa-forca-slot mapa-forca-selecionado">
+      <div
+        className="mapa-forca-slot mapa-forca-selecionado"
+        style={{ alignItems: 'stretch' }}
+      >
         <div className="mapa-forca-mini-foto">
           {policial.foto_url ? <img src={policial.foto_url} alt={nomePolicial(policial)} /> : <span>👮</span>}
         </div>
-        <button type="button" className="mapa-forca-dados-selecionados" onClick={somenteLeitura ? undefined : onSelecionar}>
-          <small>{label}</small>
-          <strong>{nomePolicial(policial)}</strong>
-          <em>RE {policial.re || '—'}{somenteLeitura ? '' : ' • trocar'}</em>
-        </button>
+
+        <div
+          style={{
+            display: 'flex',
+            flex: 1,
+            minWidth: 0,
+            flexDirection: 'column',
+            gap: '8px'
+          }}
+        >
+          <button
+            type="button"
+            className="mapa-forca-dados-selecionados"
+            onClick={somenteLeitura ? undefined : onSelecionar}
+          >
+            <small>{label}</small>
+            <strong>{nomePolicial(policial)}</strong>
+            <em>RE {policial.re || '—'}{somenteLeitura ? '' : ' • trocar'}</em>
+          </button>
+
+          {cautelaMapa?.ativa && (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '5px',
+                alignItems: 'center'
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  minHeight: '26px',
+                  padding: '4px 8px',
+                  border: '1px solid rgba(52, 211, 153, .38)',
+                  borderRadius: '8px',
+                  background: 'rgba(16, 185, 129, .10)',
+                  color: '#6ee7b7',
+                  fontSize: '10px',
+                  fontWeight: 900,
+                  letterSpacing: '.03em'
+                }}
+              >
+                {statusCautelaLabel(cautelaMapa)}
+              </span>
+
+              {resumirCautelaMapa(cautelaMapa).map(
+                (item) => (
+                  <span
+                    key={`${policial?.id}-${item}`}
+                    style={{
+                      padding: '3px 7px',
+                      border: '1px solid rgba(56, 189, 248, .24)',
+                      borderRadius: '999px',
+                      background: 'rgba(56, 189, 248, .07)',
+                      color: '#bae6fd',
+                      fontSize: '9px',
+                      fontWeight: 800
+                    }}
+                  >
+                    {item}
+                  </span>
+                )
+              )}
+            </div>
+          )}
+
+          {!somenteLeitura && typeof onPagarMaterial === 'function' && (
+            <button
+              type="button"
+              onClick={onPagarMaterial}
+              style={{
+                width: 'fit-content',
+                minHeight: '30px',
+                padding: '6px 11px',
+                border: cautelaMapa?.ativa
+                  ? '1px solid rgba(52, 211, 153, .42)'
+                  : '1px solid rgba(56, 189, 248, .42)',
+                borderRadius: '8px',
+                background: cautelaMapa?.ativa
+                  ? 'rgba(16, 185, 129, .08)'
+                  : 'rgba(56, 189, 248, .10)',
+                color: cautelaMapa?.ativa
+                  ? '#6ee7b7'
+                  : '#7dd3fc',
+                fontSize: '11px',
+                fontWeight: 900,
+                letterSpacing: '.04em',
+                cursor: 'pointer'
+              }}
+            >
+              {normalizarEquipamento(
+                cautelaMapa?.status_atual ||
+                cautelaMapa?.status ||
+                ''
+              ) === 'PREPARADO'
+                ? 'Ver / alterar material'
+                : cautelaMapa?.ativa
+                  ? 'Ver / adicionar material'
+                  : 'Pagar Material'}
+            </button>
+          )}
+        </div>
+
         {!somenteLeitura && <button type="button" className="mapa-forca-remover" onClick={onRemover}>×</button>}
       </div>
     )
@@ -217,6 +1079,7 @@ function UnidadeServico({
   onPrefixo,
   onLocalPop,
   onPagarMaterial,
+  cautelasPorPolicial = {},
   somenteLeitura = false
 }) {
   return (
@@ -330,10 +1193,41 @@ function UnidadeServico({
       )}
 
       <div className="mapa-forca-composicao">
-        {unidade.campos.map((campo) => (
-          <CampoComposicao key={`${unidade.id}-${campo}`} label={campo} policial={unidade.policiais?.[campo]}
-            onSelecionar={() => onPolicial?.(campo)} onRemover={() => onRemoverPolicial?.(campo)} somenteLeitura={somenteLeitura} />
-        ))}
+        {unidade.campos.map((campo) => {
+          const policial = unidade.policiais?.[campo]
+
+          return (
+            <CampoComposicao
+              key={`${unidade.id}-${campo}`}
+              label={campo}
+              policial={policial}
+              onSelecionar={() => onPolicial?.(campo)}
+              onRemover={() => onRemoverPolicial?.(campo)}
+              onPagarMaterial={
+                policial?.id && typeof onPagarMaterial === 'function'
+                  ? () => onPagarMaterial({
+                      policial,
+                      funcao: campo,
+                      unidade: {
+                        id: unidade.id,
+                        prefixo: unidade.prefixo,
+                        inicioUs: unidade.inicioUs,
+                        fimUs: unidade.fimUs
+                      }
+                    })
+                  : null
+              }
+              cautelaMapa={
+                policial?.id
+                  ? cautelasPorPolicial[
+                      String(policial.id)
+                    ] || null
+                  : null
+              }
+              somenteLeitura={somenteLeitura}
+            />
+          )
+        })}
 
         {!somenteLeitura && (
           <button type="button" className="mapa-forca-slot mapa-forca-adicionar-policial" onClick={onAdicionarPolicial}>
@@ -343,35 +1237,6 @@ function UnidadeServico({
         )}
       </div>
 
-      <div className="mapa-forca-equipamentos">
-        <span>Equipamentos / cautelas</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {unidade.campos.map((campo) => {
-            const policial = unidade.policiais?.[campo]
-            if (!policial?.id) return null
-
-            return (
-              <button
-                type="button"
-                key={`equip-${unidade.id}-${campo}`}
-                onClick={() => onPagarMaterial?.({
-                  policial,
-                  funcao: campo,
-                  unidade: {
-                    id: unidade.id,
-                    prefixo: unidade.prefixo,
-                    inicioUs: unidade.inicioUs,
-                    fimUs: unidade.fimUs
-                  }
-                })}
-                disabled={typeof onPagarMaterial !== 'function'}
-              >
-                + {policial.nome_guerra || policial.nome || policial.re || campo}
-              </button>
-            )
-          })}
-        </div>
-      </div>
     </article>
   )
 }
@@ -580,6 +1445,8 @@ export default function MapaForca({
   const [carregandoMapa, setCarregandoMapa] = useState(true)
   const [mensagemMapa, setMensagemMapa] = useState('')
   const [materiaisPorPolicial, setMateriaisPorPolicial] = useState({})
+  const [cautelasMapa, setCautelasMapa] = useState([])
+  const [pagarMaterialMapa, setPagarMaterialMapa] = useState(null)
 
   useEffect(() => {
     onRascunhoChange?.(editor)
@@ -590,6 +1457,7 @@ export default function MapaForca({
     if (!salvo?.mapa) {
       setMapaId(null)
       setSalvas([])
+      setCautelasMapa([])
       return
     }
     const inicioMapa = dataInputValor(salvo.mapa.inicio_turno)
@@ -602,6 +1470,26 @@ export default function MapaForca({
     setStatus(salvo.mapa.status || 'EM ELABORAÇÃO')
     setEquipeServico(salvo.mapa.equipe_servico || '')
     setSalvas(reconstruirUnidades(salvo.unidades, salvo.efetivo, inicioMapa, fimMapa))
+
+    try {
+      const cautelas =
+        await listarCautelasMapaForca({
+          mapaId:
+            salvo.mapa.id
+        })
+
+      setCautelasMapa(
+        Array.isArray(cautelas)
+          ? cautelas
+          : []
+      )
+    } catch (error) {
+      console.warn(
+        'Não foi possível carregar os vínculos de cautela do Mapa Força:',
+        error
+      )
+      setCautelasMapa([])
+    }
   }
 
   useEffect(() => {
@@ -669,6 +1557,353 @@ export default function MapaForca({
 
     return () => { ativo = false }
   }, [salvas, editor])
+
+
+  const cautelasPorPolicial =
+    useMemo(() => {
+      const resultado = {}
+
+      for (const cautela of cautelasMapa || []) {
+        if (
+          !cautela?.ativa ||
+          !cautela?.policial_id
+        ) {
+          continue
+        }
+
+        const chave =
+          String(
+            cautela.policial_id
+          )
+
+        const atual =
+          resultado[chave]
+
+        if (
+          !atual ||
+          new Date(
+            cautela.created_at ||
+            0
+          ).getTime() >=
+            new Date(
+              atual.created_at ||
+              0
+            ).getTime()
+        ) {
+          resultado[chave] =
+            cautela
+        }
+      }
+
+      return resultado
+    }, [cautelasMapa])
+
+
+  const cautelasEditorPorPolicial =
+    useMemo(() => {
+      const resultado = {}
+
+      if (!editor?.unidade) {
+        return resultado
+      }
+
+      const unidade =
+        editor.unidade
+
+      const usAtual =
+        String(
+          unidade?.id ||
+          ''
+        )
+
+      const ehNovaUs =
+        usAtual.startsWith(
+          'nova-'
+        )
+
+      const criadaEmMs =
+        ehNovaUs
+          ? Number(
+              usAtual.replace(
+                /^nova-/,
+                ''
+              )
+            )
+          : null
+
+      const prefixoAtual =
+        normalizarEquipamento(
+          unidade?.prefixo
+        )
+
+      const funcaoPorPolicial =
+        new Map(
+          Object.entries(
+            unidade?.policiais ||
+            {}
+          )
+            .filter(
+              ([, policial]) =>
+                policial?.id
+            )
+            .map(
+              ([
+                funcao,
+                policial
+              ]) => [
+                String(
+                  policial.id
+                ),
+                normalizarEquipamento(
+                  funcao
+                )
+              ]
+            )
+        )
+
+      for (
+        const cautela of
+        cautelasMapa || []
+      ) {
+        if (
+          !cautela?.ativa ||
+          !cautela?.policial_id
+        ) {
+          continue
+        }
+
+        const policialId =
+          String(
+            cautela.policial_id
+          )
+
+        const funcaoAtual =
+          funcaoPorPolicial.get(
+            policialId
+          )
+
+        if (!funcaoAtual) {
+          continue
+        }
+
+        const usCautela =
+          String(
+            cautela?.us_id ||
+            ''
+          )
+
+        let pertence =
+          false
+
+        if (
+          !ehNovaUs &&
+          usAtual
+        ) {
+          pertence =
+            Boolean(
+              usCautela &&
+              usCautela ===
+                usAtual
+            )
+        } else if (
+          ehNovaUs &&
+          !usCautela &&
+          Number.isFinite(
+            criadaEmMs
+          ) &&
+          criadaEmMs > 0
+        ) {
+          const cautelaCriadaEmMs =
+            new Date(
+              cautela?.created_at ||
+              0
+            ).getTime()
+
+          const funcaoCautela =
+            normalizarEquipamento(
+              cautela?.funcao
+            )
+
+          const prefixoCautela =
+            normalizarEquipamento(
+              cautela?.prefixo_us
+            )
+
+          pertence =
+            Number.isFinite(
+              cautelaCriadaEmMs
+            ) &&
+            cautelaCriadaEmMs >=
+              criadaEmMs &&
+            (
+              !funcaoCautela ||
+              funcaoCautela ===
+                funcaoAtual
+            ) &&
+            (
+              !prefixoAtual ||
+              !prefixoCautela ||
+              prefixoCautela ===
+                prefixoAtual
+            )
+        }
+
+        if (!pertence) {
+          continue
+        }
+
+        const atual =
+          resultado[
+            policialId
+          ]
+
+        if (
+          !atual ||
+          new Date(
+            cautela?.created_at ||
+            0
+          ).getTime() >=
+            new Date(
+              atual?.created_at ||
+              0
+            ).getTime()
+        ) {
+          resultado[
+            policialId
+          ] =
+            cautela
+        }
+      }
+
+      return resultado
+    }, [
+      cautelasMapa,
+      editor
+    ])
+
+
+  const cautelasEditorExibidasPorPolicial =
+    useMemo(() => {
+      const resultado = {
+        ...cautelasEditorPorPolicial
+      }
+
+      const preparados =
+        editor?.unidade
+          ?.materiaisPreparados ||
+        {}
+
+      for (
+        const [
+          funcao,
+          preparacao
+        ] of Object.entries(
+          preparados
+        )
+      ) {
+        const policialId =
+          String(
+            preparacao?.policial_id ||
+            preparacao?.policial?.id ||
+            ''
+          )
+
+        if (!policialId) {
+          continue
+        }
+
+        resultado[policialId] = {
+          id:
+            `PREPARADO:${editor?.unidade?.id || 'US'}:${funcao}`,
+          ativa: true,
+          policial_id:
+            policialId,
+          policial_re:
+            preparacao?.policial?.re ||
+            null,
+          policial_nome:
+            nomePolicial(
+              preparacao?.policial
+            ),
+          funcao,
+          prefixo_us:
+            editor?.unidade
+              ?.prefixo ||
+            preparacao?.prefixoUs ||
+            '',
+          us_id:
+            editor?.unidade
+              ?.persistido
+              ? editor.unidade.id
+              : null,
+          status:
+            'PREPARADO',
+          status_atual:
+            'PREPARADO',
+          resumo_itens:
+            preparacao?.resumoItens ||
+            [],
+          quantidade_itens:
+            preparacao
+              ?.quantidadeItens ||
+            0,
+          created_at:
+            preparacao
+              ?.preparado_em ||
+            new Date().toISOString()
+        }
+      }
+
+      return resultado
+    }, [
+      cautelasEditorPorPolicial,
+      editor
+    ])
+
+
+  const materiaisExibidosPorPolicial =
+    useMemo(() => {
+      const resultado = {
+        ...materiaisPorPolicial
+      }
+
+      for (
+        const [
+          policialId,
+          cautela
+        ] of Object.entries(
+          cautelasPorPolicial
+        )
+      ) {
+        const ativos =
+          Array.isArray(
+            resultado[policialId]
+          )
+            ? resultado[policialId]
+            : []
+
+        const resumo =
+          Array.isArray(
+            cautela?.resumo_itens
+          )
+            ? cautela.resumo_itens
+            : []
+
+        if (resumo.length === 0) {
+          continue
+        }
+
+        resultado[policialId] = [
+          ...ativos,
+          ...resumo
+        ]
+      }
+
+      return resultado
+    }, [
+      materiaisPorPolicial,
+      cautelasPorPolicial
+    ])
 
   useEffect(() => {
     if (carregandoMapa || policiais.length === 0) return
@@ -745,13 +1980,48 @@ export default function MapaForca({
   }
 
   function selecionarPolicial(policial) {
-    atualizarEditor((u) => ({
-      ...u,
-      campos: selecao?.novoExtra && !(u.campos || []).includes(selecao.campo)
-        ? [...(u.campos || []), selecao.campo]
-        : u.campos,
-      policiais: { ...(u.policiais || {}), [selecao.campo]: policial }
-    }))
+    atualizarEditor((u) => {
+      const campo =
+        selecao?.campo
+
+      const policialAnterior =
+        u?.policiais?.[campo]
+
+      const trocouPolicial =
+        policialAnterior?.id &&
+        String(policialAnterior.id) !==
+          String(policial?.id || '')
+
+      const materiaisPreparados = {
+        ...(u?.materiaisPreparados || {})
+      }
+
+      if (
+        trocouPolicial &&
+        campo
+      ) {
+        delete materiaisPreparados[campo]
+      }
+
+      return {
+        ...u,
+        campos:
+          selecao?.novoExtra &&
+          !(u.campos || []).includes(campo)
+            ? [
+                ...(u.campos || []),
+                campo
+              ]
+            : u.campos,
+        policiais: {
+          ...(u.policiais || {}),
+          [campo]:
+            policial
+        },
+        materiaisPreparados
+      }
+    })
+
     setSelecao(null)
   }
 
@@ -773,13 +2043,26 @@ export default function MapaForca({
 
   function removerPolicial(campo) {
     atualizarEditor((u) => {
-      const novos = { ...(u.policiais || {}) }
+      const novos = {
+        ...(u.policiais || {})
+      }
+
+      const materiaisPreparados = {
+        ...(u?.materiaisPreparados || {})
+      }
+
       delete novos[campo]
+      delete materiaisPreparados[campo]
+
       return {
         ...u,
         policiais: novos,
+        materiaisPreparados,
         campos: ehCampoExtra(campo)
-          ? (u.campos || []).filter((item) => item !== campo)
+          ? (u.campos || []).filter(
+              (item) =>
+                item !== campo
+            )
           : u.campos
       }
     })
@@ -791,6 +2074,247 @@ export default function MapaForca({
     setPesquisaSelecao('')
     setSelecao({ tipo: 'POLICIAL', campo, novoExtra: true })
   }
+
+
+  async function abrirPagarMaterialMapa(
+    contexto
+  ) {
+    try {
+      setMensagemMapa('')
+
+      let idMapaAtual =
+        mapaId
+
+      if (!idMapaAtual) {
+        idMapaAtual =
+          await salvarCabecalhoMapaForca({
+            mapaId:
+              null,
+            inicio,
+            fim,
+            user,
+            equipeServico
+          })
+
+        setMapaId(
+          idMapaAtual
+        )
+      }
+
+      setPagarMaterialMapa({
+        ...contexto,
+        mapaId:
+          idMapaAtual
+      })
+    } catch (error) {
+      console.error(
+        'Erro ao preparar pagamento de material pelo Mapa Força:',
+        error
+      )
+
+      setMensagemMapa(
+        error?.message ||
+        'Não foi possível preparar o Mapa Força para o pagamento.'
+      )
+    }
+  }
+
+  async function registrarPagamentoNoMapa(
+    resumo
+  ) {
+    const contexto =
+      pagarMaterialMapa
+
+    if (
+      !contexto?.policial?.id
+    ) {
+      return
+    }
+
+    /*
+     * Novo fluxo do Mapa Força:
+     * confirmar no modal apenas PREPARA o kit.
+     * A cautela real só será criada no Salvar US.
+     *
+     * O ramo antigo permanece por compatibilidade durante
+     * a troca dos dois arquivos, evitando quebrar o build
+     * se este MapaForca.jsx for substituído primeiro.
+     */
+    if (resumo?.preparado === true) {
+      atualizarEditor((unidadeAtual) => {
+        const funcao =
+          contexto?.funcao ||
+          resumo?.funcao ||
+          'EFETIVO'
+
+        const existentes =
+          unidadeAtual
+            ?.materiaisPreparados?.[
+              funcao
+            ] ||
+          null
+
+        const itensPreparados =
+          mesclarItensPreparados(
+            existentes
+              ?.itensPreparados ||
+              [],
+            resumo
+              ?.itensPreparados ||
+              []
+          )
+
+        const resumoItens =
+          itensPreparados.map(
+            (item) => {
+              const correspondente =
+                (
+                  resumo
+                    ?.resumoItens ||
+                  []
+                ).find(
+                  (resumoItem) =>
+                    chaveMaterialPreparado(
+                      resumoItem
+                    ) ===
+                    chaveMaterialPreparado(
+                      item
+                    )
+                )
+
+              return {
+                ...(correspondente ||
+                  item),
+                quantidade:
+                  Math.max(
+                    1,
+                    Number(
+                      item?.quantidade ||
+                      1
+                    ) || 1
+                  )
+              }
+            }
+          )
+
+        return {
+          ...unidadeAtual,
+          materiaisPreparados: {
+            ...(
+              unidadeAtual
+                ?.materiaisPreparados ||
+              {}
+            ),
+            [funcao]: {
+              ...(existentes || {}),
+              preparado: true,
+              policial:
+                contexto.policial,
+              policial_id:
+                contexto.policial.id,
+              funcao,
+              prefixoUs:
+                contexto?.unidade
+                  ?.prefixo ||
+                unidadeAtual?.prefixo ||
+                '',
+              itensPreparados,
+              resumoItens,
+              quantidadeItens:
+                itensPreparados.length,
+              preparado_em:
+                new Date().toISOString()
+            }
+          }
+        }
+      })
+
+      setMensagemMapa(
+        `Material preparado para ${nomePolicial(
+          contexto.policial
+        )}. A cautela só será liberada ao policial quando você clicar em Salvar US.`
+      )
+
+      return
+    }
+
+    const idMapaAtual =
+      contexto?.mapaId ||
+      mapaId
+
+    try {
+      await registrarCautelaMapaForca({
+        mapaId:
+          idMapaAtual,
+
+        usId:
+          contexto?.unidade?.id ||
+          null,
+
+        policial:
+          contexto.policial,
+
+        funcao:
+          contexto.funcao,
+
+        prefixoUs:
+          contexto?.unidade
+            ?.prefixo ||
+          '',
+
+        movimentacaoPrincipalId:
+          resumo
+            ?.movimentacaoPrincipalId ||
+          null,
+
+        transferenciasMunicaoIds:
+          resumo
+            ?.transferenciasMunicaoIds ||
+          [],
+
+        resumoItens:
+          resumo?.resumoItens ||
+          [],
+
+        quantidadeItens:
+          resumo?.quantidadeItens ||
+          0
+      })
+
+      const cautelas =
+        await listarCautelasMapaForca({
+          mapaId:
+            idMapaAtual
+        })
+
+      setCautelasMapa(
+        Array.isArray(cautelas)
+          ? cautelas
+          : []
+      )
+
+      setMensagemMapa(
+        `Cautela registrada no Mapa Força para ${nomePolicial(
+          contexto.policial
+        )}. O material permanece no SVDD até o policial confirmar o recebimento.`
+      )
+    } catch (error) {
+      console.error(
+        'A cautela foi criada, mas não foi possível registrar o vínculo no Mapa Força:',
+        error
+      )
+
+      setMensagemMapa(
+        `A cautela foi criada para ${nomePolicial(
+          contexto.policial
+        )}, mas o vínculo visual com o Mapa Força não pôde ser atualizado: ${
+          error?.message ||
+          'erro não identificado'
+        }.`
+      )
+    }
+  }
+
 
   async function salvarCabecalho() {
     if (salvando) return
@@ -807,46 +2331,281 @@ export default function MapaForca({
 
   async function salvarUS() {
     if (!editor || salvando) return
+
     setSalvando(true)
     setMensagemMapa('')
-    try {
-      const prefixo = String(editor.unidade.prefixo || '').trim()
-      if (!prefixo) throw new Error('Informe o prefixo/identificação da US.')
 
-      if (editor.unidade.vtrDiferenteEscala) {
-        if (!editor.unidade.viaturaPrevista?.id) throw new Error('Selecione a viatura prevista originalmente na escala.')
-        if (!String(editor.unidade.motivoTrocaVtr || '').trim()) throw new Error('Informe o motivo da troca da viatura.')
+    try {
+      const prefixo =
+        String(
+          editor.unidade.prefixo ||
+          ''
+        ).trim()
+
+      if (!prefixo) {
+        throw new Error(
+          'Informe o prefixo/identificação da US.'
+        )
+      }
+
+      if (
+        editor.unidade
+          .vtrDiferenteEscala
+      ) {
+        if (
+          !editor.unidade
+            .viaturaPrevista?.id
+        ) {
+          throw new Error(
+            'Selecione a viatura prevista originalmente na escala.'
+          )
+        }
+
+        if (
+          !String(
+            editor.unidade
+              .motivoTrocaVtr ||
+            ''
+          ).trim()
+        ) {
+          throw new Error(
+            'Informe o motivo da troca da viatura.'
+          )
+        }
       }
 
       const unidadeParaSalvar = {
         ...editor.unidade,
-        inicioUs: inicio,
-        fimUs: fim
+        inicioUs:
+          inicio,
+        fimUs:
+          fim
       }
 
-      const resultado = await salvarUSMapaForca({
-        mapaId,
-        inicio,
-        fim,
-        user,
-        grupo: editor.grupo,
-        unidade: unidadeParaSalvar,
-        ordem: editor.unidade.persistido
-          ? (salvas.find((item) => item.unidade.id === editor.unidade.id)?.ordem || 0)
-          : (salvas.reduce((maior, item) => Math.max(maior, Number(item.ordem || 0)), -1) + 1)
-      })
+      const resultado =
+        await salvarUSMapaForca({
+          mapaId,
+          inicio,
+          fim,
+          user,
+          grupo:
+            editor.grupo,
+          unidade:
+            unidadeParaSalvar,
+          ordem:
+            editor.unidade
+              .persistido
+              ? (
+                  salvas.find(
+                    (item) =>
+                      item.unidade.id ===
+                      editor.unidade.id
+                  )?.ordem ||
+                  0
+                )
+              : (
+                  salvas.reduce(
+                    (maior, item) =>
+                      Math.max(
+                        maior,
+                        Number(
+                          item.ordem ||
+                          0
+                        )
+                      ),
+                    -1
+                  ) + 1
+                )
+        })
 
-      setMapaId(resultado.mapaId)
-      setHorarioPadraoInicio(inicio)
-      setHorarioPadraoFim(fim)
+      setMapaId(
+        resultado.mapaId
+      )
+      setHorarioPadraoInicio(
+        inicio
+      )
+      setHorarioPadraoFim(
+        fim
+      )
+
+      const preparacoes = {
+        ...(
+          unidadeParaSalvar
+            ?.materiaisPreparados ||
+          {}
+        )
+      }
+
+      const chavesPreparacao =
+        Object.keys(
+          preparacoes
+        )
+
+      if (
+        chavesPreparacao.length >
+        0
+      ) {
+        const restantes = {
+          ...preparacoes
+        }
+
+        for (
+          const funcao of
+          chavesPreparacao
+        ) {
+          const preparacao =
+            preparacoes[funcao]
+
+          if (
+            !preparacao?.policial?.id ||
+            !Array.isArray(
+              preparacao
+                ?.itensPreparados
+            ) ||
+            preparacao
+              .itensPreparados
+              .length === 0
+          ) {
+            delete restantes[
+              funcao
+            ]
+            continue
+          }
+
+          try {
+            const efetivada =
+              await efetivarMateriaisPreparadosMapa({
+                preparacao,
+                user,
+                unidade: {
+                  ...unidadeParaSalvar,
+                  id:
+                    resultado.usId,
+                  persistido:
+                    true
+                }
+              })
+
+            if (efetivada) {
+              await registrarCautelaMapaForca({
+                mapaId:
+                  resultado.mapaId,
+                usId:
+                  resultado.usId,
+                policial:
+                  preparacao.policial,
+                funcao,
+                prefixoUs:
+                  unidadeParaSalvar
+                    ?.prefixo ||
+                  '',
+                movimentacaoPrincipalId:
+                  efetivada
+                    .movimentacaoPrincipalId ||
+                  null,
+                transferenciasMunicaoIds:
+                  efetivada
+                    .transferenciasMunicaoIds ||
+                  [],
+                resumoItens:
+                  preparacao
+                    ?.resumoItens ||
+                  efetivada
+                    ?.resumoItens ||
+                  [],
+                quantidadeItens:
+                  preparacao
+                    ?.quantidadeItens ||
+                  efetivada
+                    ?.quantidadeItens ||
+                  0
+              })
+            }
+
+            delete restantes[
+              funcao
+            ]
+          } catch (erroMaterial) {
+            /*
+             * A US já recebeu UUID real. Mantemos o editor nessa
+             * US persistida e somente com os kits ainda não concluídos.
+             * Assim o operador pode corrigir o problema e clicar
+             * novamente em Salvar alterações da US sem criar outra US.
+             */
+            setEditor(
+              (atual) =>
+                atual
+                  ? {
+                      ...atual,
+                      unidade: {
+                        ...atual.unidade,
+                        id:
+                          resultado.usId,
+                        persistido:
+                          true,
+                        inicioUs:
+                          inicio,
+                        fimUs:
+                          fim,
+                        materiaisPreparados:
+                          restantes
+                      }
+                    }
+                  : atual
+            )
+
+            await recarregarMapa()
+
+            throw new Error(
+              `A US foi salva, mas o material de ${
+                nomePolicial(
+                  preparacao.policial
+                )
+              } não pôde ser liberado: ${
+                erroMaterial?.message ||
+                'erro não identificado'
+              }. Corrija e salve a US novamente.`
+            )
+          }
+        }
+      } else {
+        /*
+         * Compatibilidade com cautelas criadas pela versão anterior
+         * do modal enquanto os dois arquivos são atualizados.
+         */
+        await vincularCautelasPendentesAUS({
+          mapaId:
+            resultado.mapaId,
+          usId:
+            resultado.usId,
+          unidade:
+            unidadeParaSalvar
+        })
+      }
+
       await recarregarMapa()
       setEditor(null)
-      setMensagemMapa('US salva. A tela está pronta para montar a próxima equipe.')
+
+      setMensagemMapa(
+        chavesPreparacao.length > 0
+          ? 'US salva. Os materiais preparados foram liberados para aceite dos policiais.'
+          : 'US salva. A tela está pronta para montar a próxima equipe.'
+      )
     } catch (error) {
-      console.error('Erro ao salvar US:', error)
-      setMensagemMapa(error?.message || 'Não foi possível salvar a US.')
-    } finally { setSalvando(false) }
+      console.error(
+        'Erro ao salvar US:',
+        error
+      )
+
+      setMensagemMapa(
+        error?.message ||
+        'Não foi possível salvar a US.'
+      )
+    } finally {
+      setSalvando(false)
+    }
   }
+
 
   function editarUS(item) {
     const inicioUs = item.unidade.inicioUs || inicio
@@ -1043,7 +2802,8 @@ export default function MapaForca({
                   onHorario={(campo, valor) => atualizarEditor((u) => ({ ...u, [campo]: valor }))}
                   onPrefixo={(valor) => atualizarEditor((u) => ({ ...u, prefixo: valor }))}
                   onLocalPop={(valor) => atualizarEditor((u) => ({ ...u, localPop: valor }))}
-                  onPagarMaterial={onPagarMaterial} />
+                  cautelasPorPolicial={cautelasEditorExibidasPorPolicial}
+                  onPagarMaterial={abrirPagarMaterialMapa} />
                 <div className="mapa-forca-editor-actions">
                   <button type="button" className="mapa-forca-secondary" onClick={() => setEditor(null)}>Cancelar</button>
                   <button type="button" className="mapa-forca-primary" onClick={salvarUS} disabled={salvando}>{salvando ? 'Salvando...' : editor.unidade.persistido ? 'Salvar alterações da US' : 'Salvar US'}</button>
@@ -1071,7 +2831,7 @@ export default function MapaForca({
                 <UnidadeCompacta
                   key={`salva-${item.unidade.id}`}
                   item={item}
-                  materiaisPorPolicial={materiaisPorPolicial}
+                  materiaisPorPolicial={materiaisExibidosPorPolicial}
                   onEditar={editarUS}
                   onExcluir={excluirUS}
                 />
@@ -1089,6 +2849,47 @@ export default function MapaForca({
         ocupados={selecao.tipo === 'POLICIAL' ? policiaisOcupados : (selecao.tipo === 'VIATURA_PREVISTA' ? new Set() : viaturasOcupadas)}
         onClose={() => setSelecao(null)}
         onSelecionar={selecao.tipo === 'POLICIAL' ? selecionarPolicial : (selecao.tipo === 'VIATURA_PREVISTA' ? selecionarViaturaPrevista : selecionarViatura)} />}
+
+      {pagarMaterialMapa && (
+        <PagarMaterialMapaForca
+          open
+          user={user}
+          policial={pagarMaterialMapa.policial}
+          funcao={pagarMaterialMapa.funcao}
+          unidade={pagarMaterialMapa.unidade}
+          itensPreparados={
+            editor?.unidade
+              ?.materiaisPreparados?.[
+                pagarMaterialMapa.funcao
+              ]?.itensPreparados ||
+            []
+          }
+          itensReservadosMapa={
+            Object.entries(
+              editor?.unidade
+                ?.materiaisPreparados ||
+              {}
+            )
+              .filter(
+                ([funcao]) =>
+                  funcao !==
+                  pagarMaterialMapa.funcao
+              )
+              .flatMap(
+                ([, preparacao]) =>
+                  preparacao
+                    ?.itensPreparados ||
+                  []
+              )
+          }
+          onClose={() => setPagarMaterialMapa(null)}
+          onConcluido={(resumo) => {
+            void registrarPagamentoNoMapa(
+              resumo
+            )
+          }}
+        />
+      )}
 
       <footer className="mapa-forca-footer"><div><strong>MAPA FORÇA • MONTAGEM POR US</strong><span>Uma equipe por vez. Cautelas e ativação operacional permanecem para a próxima etapa.</span></div><span>Mapa Força • SIGMO</span></footer>
     </main>

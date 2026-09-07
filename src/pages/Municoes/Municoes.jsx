@@ -829,6 +829,48 @@ function ComboFiltro({
   )
 }
 
+async function listarPoliciaisMunicaoPorCalibre(
+  calibre
+) {
+  const calibreNormalizado =
+    normalizar(
+      calibre
+    )
+
+  if (!calibreNormalizado) {
+    return []
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_policiais_calibre',
+    {
+      p_token:
+        token,
+
+      p_calibre:
+        calibreNormalizado
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
 async function listarTransferenciasPendentes(
   direcao
 ) {
@@ -927,6 +969,75 @@ async function receberTransferenciaSvddP4(
         token,
       p_transferencia_id:
         transferenciaId
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+async function listarDevolucoesMunicaoPendentesSvdd() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_listar_devolucoes_pendentes_svdd',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+
+async function receberDevolucaoMunicaoSvdd(
+  devolucaoId
+) {
+  if (!devolucaoId) {
+    throw new Error(
+      'Devolução de munição não informada.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_receber_devolucao',
+    {
+      p_token:
+        token,
+
+      p_devolucao_id:
+        devolucaoId
     }
   )
 
@@ -2395,9 +2506,7 @@ function RecebimentoMunicaoModal({
     useState([])
 
   const [loading, setLoading] =
-    useState(
-      tipo !== 'DEVOLUCAO'
-    )
+    useState(true)
 
   const [erro, setErro] =
     useState('')
@@ -2412,22 +2521,24 @@ function RecebimentoMunicaoModal({
     setErroAcao
   ] = useState('')
 
+  const ehDevolucao =
+    tipo === 'DEVOLUCAO'
+
   useEffect(() => {
     let ativo = true
 
-    if (
-      tipo === 'DEVOLUCAO'
-    ) {
-      setLoading(false)
+    setLoading(true)
+    setErro('')
+    setErroAcao('')
 
-      return () => {
-        ativo = false
-      }
-    }
+    const consulta =
+      ehDevolucao
+        ? listarDevolucoesMunicaoPendentesSvdd()
+        : listarTransferenciasPendentes(
+            'ENTRADA'
+          )
 
-    listarTransferenciasPendentes(
-      'ENTRADA'
-    )
+    consulta
       .then((resultado) => {
         if (ativo) {
           setLista(
@@ -2439,7 +2550,11 @@ function RecebimentoMunicaoModal({
         if (ativo) {
           setErro(
             error?.message ||
-            'Não foi possível consultar as munições pendentes de recebimento.'
+            (
+              ehDevolucao
+                ? 'Não foi possível consultar as devoluções pendentes de munição.'
+                : 'Não foi possível consultar as munições pendentes de recebimento.'
+            )
           )
         }
       })
@@ -2452,22 +2567,32 @@ function RecebimentoMunicaoModal({
     return () => {
       ativo = false
     }
-  }, [tipo])
+  }, [
+    tipo,
+    ehDevolucao
+  ])
 
   async function receber(item) {
-    if (
-      !item?.transferencia_id
-    ) {
+    const idOperacao =
+      ehDevolucao
+        ? item?.devolucao_id
+        : item?.transferencia_id
+
+    if (!idOperacao) {
       return
     }
 
     try {
       setRecebendoId(
-        item.transferencia_id
+        idOperacao
       )
       setErroAcao('')
 
-      if (
+      if (ehDevolucao) {
+        await receberDevolucaoMunicaoSvdd(
+          idOperacao
+        )
+      } else if (
         item.destino_tipo ===
         'COFRE_SVDD'
       ) {
@@ -2493,7 +2618,11 @@ function RecebimentoMunicaoModal({
     } catch (error) {
       setErroAcao(
         error?.message ||
-        'Não foi possível receber a transferência.'
+        (
+          ehDevolucao
+            ? 'Não foi possível receber a devolução de munição.'
+            : 'Não foi possível receber a transferência.'
+        )
       )
     } finally {
       setRecebendoId(
@@ -2503,18 +2632,20 @@ function RecebimentoMunicaoModal({
   }
 
   const config =
-    tipo === 'DEVOLUCAO'
+    ehDevolucao
       ? {
           titulo:
             'Receber devolução',
+
           subtitulo:
-            'Encerrar carga ou cautela e receber novamente a munição.'
+            'Confira fisicamente a munição devolvida pelo policial. O saldo só retorna ao SVDD após a confirmação.'
         }
       : {
           titulo:
             perfilP4
               ? 'Receber do SVDD'
               : 'Receber do P4',
+
           subtitulo:
             perfilP4
               ? 'Transferências devolvidas pelo SVDD e pendentes de recebimento.'
@@ -2528,13 +2659,11 @@ function RecebimentoMunicaoModal({
       onClose={onClose}
       amplo
     >
-      {tipo === 'DEVOLUCAO' ? (
-        <div className="municoes-modal-empty">
-          O recebimento de devolução será ligado ao backend em etapa própria.
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="municoes-loading">
-          Carregando recebimentos...
+          {ehDevolucao
+            ? 'Carregando devoluções...'
+            : 'Carregando recebimentos...'}
         </div>
       ) : erro ? (
         <div className="municoes-alert municoes-alert-error">
@@ -2542,8 +2671,106 @@ function RecebimentoMunicaoModal({
         </div>
       ) : lista.length === 0 ? (
         <div className="municoes-modal-empty">
-          Nenhuma munição pendente de recebimento.
+          {ehDevolucao
+            ? 'Nenhuma devolução de munição está pendente para o SVDD.'
+            : 'Nenhuma munição pendente de recebimento.'}
         </div>
+      ) : ehDevolucao ? (
+        <>
+          {erroAcao && (
+            <div className="municoes-alert municoes-alert-error">
+              {erroAcao}
+            </div>
+          )}
+
+          <div className="municoes-table-wrap">
+            <table className="municoes-table">
+              <thead>
+                <tr>
+                  <th>RE</th>
+                  <th>POLICIAL</th>
+                  <th>CALIBRE</th>
+                  <th>QUANTIDADE</th>
+                  <th>SOLICITADO EM</th>
+                  <th>OBSERVAÇÕES</th>
+                  <th>AÇÃO</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {lista.map(
+                  (item) => (
+                    <tr
+                      key={
+                        item.devolucao_id
+                      }
+                    >
+                      <td>
+                        {item.policial_re || '—'}
+                      </td>
+
+                      <td>
+                        <strong>
+                          {item.policial_nome || '—'}
+                        </strong>
+                      </td>
+
+                      <td>
+                        <strong>
+                          {item.calibre || '—'}
+                        </strong>
+                      </td>
+
+                      <td>
+                        <strong>
+                          {numero(
+                            item.quantidade
+                          )}
+                        </strong>
+                      </td>
+
+                      <td>
+                        {item.solicitado_em
+                          ? new Date(
+                              item.solicitado_em
+                            ).toLocaleString(
+                              'pt-BR'
+                            )
+                          : '—'}
+                      </td>
+
+                      <td>
+                        {item.observacoes || '—'}
+                      </td>
+
+                      <td>
+                        <button
+                          type="button"
+                          className="municoes-btn-primary municoes-btn-small"
+                          disabled={
+                            recebendoId ===
+                            item.devolucao_id
+                          }
+                          onClick={() =>
+                            receber(
+                              item
+                            )
+                          }
+                          title="Confirmar recebimento físico da munição no SVDD"
+                        >
+                          {recebendoId ===
+                          item.devolucao_id
+                            ? 'Recebendo...'
+                            : 'Receber'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : (
         <>
           {erroAcao && (
@@ -2553,105 +2780,105 @@ function RecebimentoMunicaoModal({
           )}
 
           <div className="municoes-table-wrap">
-          <table className="municoes-table">
-            <thead>
-              <tr>
-                <th>CALIBRE</th>
-                <th>QUANTIDADE</th>
-                <th>ORIGEM</th>
-                <th>DESTINO</th>
-                <th>STATUS</th>
-                <th>DATA</th>
-                <th>AÇÃO</th>
-              </tr>
-            </thead>
+            <table className="municoes-table">
+              <thead>
+                <tr>
+                  <th>CALIBRE</th>
+                  <th>QUANTIDADE</th>
+                  <th>ORIGEM</th>
+                  <th>DESTINO</th>
+                  <th>STATUS</th>
+                  <th>DATA</th>
+                  <th>AÇÃO</th>
+                </tr>
+              </thead>
 
-            <tbody>
-              {lista.map(
-                (item) => (
-                  <tr
-                    key={
-                      item.transferencia_id
-                    }
-                  >
-                    <td>
-                      <strong>
-                        {item.calibre}
-                      </strong>
-                    </td>
-
-                    <td>
-                      <strong>
-                        {numero(
-                          item.quantidade_total
-                        )}
-                      </strong>
-                    </td>
-
-                    <td>
-                      {item.origem_nome || '—'}
-                    </td>
-
-                    <td>
-                      {item.destino_nome || '—'}
-                    </td>
-
-                    <td>
-                      <span className="municoes-validade-badge municoes-validade-alerta">
-                        {item.status}
-                      </span>
-                    </td>
-
-                    <td>
-                      {item.criado_em
-                        ? new Date(
-                            item.criado_em
-                          ).toLocaleString(
-                            'pt-BR'
-                          )
-                        : '—'}
-                    </td>
-
-                    <td>
-                      <button
-                        type="button"
-                        className="municoes-btn-primary municoes-btn-small"
-                        disabled={
-                          recebendoId ===
-                            item.transferencia_id ||
-                          ![
-                            'COFRE_SVDD',
-                            'COFRE_P4'
-                          ].includes(
-                            item.destino_tipo
-                          )
-                        }
-                        onClick={() =>
-                          receber(
-                            item
-                          )
-                        }
-                        title={
-                          item.destino_tipo ===
-                          'COFRE_SVDD'
-                            ? 'Confirmar recebimento no Cofre do SVDD'
-                            : item.destino_tipo ===
-                              'COFRE_P4'
-                              ? 'Confirmar recebimento no Cofre do P4'
-                              : 'Este fluxo de recebimento será ligado em etapa própria.'
-                        }
-                      >
-                        {recebendoId ===
+              <tbody>
+                {lista.map(
+                  (item) => (
+                    <tr
+                      key={
                         item.transferencia_id
-                          ? 'Recebendo...'
-                          : 'Receber'}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
+                      }
+                    >
+                      <td>
+                        <strong>
+                          {item.calibre}
+                        </strong>
+                      </td>
+
+                      <td>
+                        <strong>
+                          {numero(
+                            item.quantidade_total
+                          )}
+                        </strong>
+                      </td>
+
+                      <td>
+                        {item.origem_nome || '—'}
+                      </td>
+
+                      <td>
+                        {item.destino_nome || '—'}
+                      </td>
+
+                      <td>
+                        <span className="municoes-validade-badge municoes-validade-alerta">
+                          {item.status}
+                        </span>
+                      </td>
+
+                      <td>
+                        {item.criado_em
+                          ? new Date(
+                              item.criado_em
+                            ).toLocaleString(
+                              'pt-BR'
+                            )
+                          : '—'}
+                      </td>
+
+                      <td>
+                        <button
+                          type="button"
+                          className="municoes-btn-primary municoes-btn-small"
+                          disabled={
+                            recebendoId ===
+                              item.transferencia_id ||
+                            ![
+                              'COFRE_SVDD',
+                              'COFRE_P4'
+                            ].includes(
+                              item.destino_tipo
+                            )
+                          }
+                          onClick={() =>
+                            receber(
+                              item
+                            )
+                          }
+                          title={
+                            item.destino_tipo ===
+                            'COFRE_SVDD'
+                              ? 'Confirmar recebimento no Cofre do SVDD'
+                              : item.destino_tipo ===
+                                'COFRE_P4'
+                                ? 'Confirmar recebimento no Cofre do P4'
+                                : 'Este fluxo de recebimento será ligado em etapa própria.'
+                          }
+                        >
+                          {recebendoId ===
+                          item.transferencia_id
+                            ? 'Recebendo...'
+                            : 'Receber'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
         </>
       )}
@@ -2730,7 +2957,8 @@ function RetornoManutencaoModal({
 }
 
 function PoliciaisLoteModal({
-  lote,
+  lote = null,
+  calibre = '',
   onClose
 }) {
   const [lista, setLista] =
@@ -2742,42 +2970,118 @@ function PoliciaisLoteModal({
   const [erro, setErro] =
     useState('')
 
+  const consultaPorLote =
+    Boolean(
+      lote?.lote_id
+    )
+
+  const calibreConsulta =
+    normalizar(
+      lote?.calibre ||
+      calibre
+    )
+
   useEffect(() => {
     let ativo = true
 
-    listarPoliciaisComLote({
-      loteId: lote.lote_id
-    })
-      .then((resultado) => {
+    async function carregar() {
+      try {
+        setLoading(true)
+        setErro('')
+
+        if (consultaPorLote) {
+          const resultado =
+            await listarPoliciaisComLote({
+              loteId:
+                lote.lote_id
+            })
+
+          if (ativo) {
+            setLista(
+              resultado || []
+            )
+          }
+
+          return
+        }
+
+        if (!calibreConsulta) {
+          if (ativo) {
+            setLista([])
+          }
+          return
+        }
+
+        /*
+         * Consulta por calibre via RPC segura.
+         * Funciona no P4 e no SVDD sem expor lote.
+         */
+        const resultado =
+          await listarPoliciaisMunicaoPorCalibre(
+            calibreConsulta
+          )
+
         if (ativo) {
           setLista(
-            resultado || []
+            (resultado || [])
+              .filter(
+                (item) =>
+                  numero(
+                    item?.quantidade_em_posse
+                  ) > 0
+              )
+              .sort(
+                (a, b) =>
+                  String(
+                    a?.policial_nome ||
+                    ''
+                  ).localeCompare(
+                    String(
+                      b?.policial_nome ||
+                      ''
+                    ),
+                    'pt-BR'
+                  )
+              )
           )
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         if (ativo) {
           setErro(
             error?.message ||
             'Não foi possível consultar os policiais.'
           )
         }
-      })
-      .finally(() => {
+      } finally {
         if (ativo) {
           setLoading(false)
         }
-      })
+      }
+    }
+
+    carregar()
 
     return () => {
       ativo = false
     }
-  }, [lote])
+  }, [
+    lote,
+    calibreConsulta,
+    consultaPorLote
+  ])
 
   return (
     <Modal
-      titulo={`Rastreio do lote ${lote.numero_lote}`}
-      subtitulo={`${lote.calibre} • Lote ${lote.numero_lote}`}
+      titulo={
+        consultaPorLote
+          ? `Rastreio do lote ${lote.numero_lote}`
+          : `Policiais com munição • ${calibreConsulta}`
+      }
+      subtitulo={
+        consultaPorLote
+          ? `${lote.calibre} • Lote ${lote.numero_lote}`
+          : `${calibreConsulta} • todos os lotes`
+      }
       onClose={onClose}
       amplo
     >
@@ -2791,7 +3095,9 @@ function PoliciaisLoteModal({
         </div>
       ) : lista.length === 0 ? (
         <div className="municoes-modal-empty">
-          Nenhum policial está com munição deste lote.
+          {consultaPorLote
+            ? 'Nenhum policial está com munição deste lote.'
+            : 'Nenhum policial está com munição deste calibre.'}
         </div>
       ) : (
         <div className="municoes-table-wrap">
@@ -2807,41 +3113,43 @@ function PoliciaisLoteModal({
             </thead>
 
             <tbody>
-              {lista.map((item) => (
-                <tr
-                  key={`${item.lote_id}-${item.policial_id || item.policial_re}`}
-                >
-                  <td>
-                    {item.policial_re || '—'}
-                  </td>
+              {lista.map(
+                (item) => (
+                  <tr
+                    key={`${item.policial_id || item.policial_re}-${item.lote_id || calibreConsulta}`}
+                  >
+                    <td>
+                      {item.policial_re || '—'}
+                    </td>
 
-                  <td>
-                    <strong>
-                      {item.policial_nome || '—'}
-                    </strong>
-                  </td>
+                    <td>
+                      <strong>
+                        {item.policial_nome || '—'}
+                      </strong>
+                    </td>
 
-                  <td>
-                    <strong>
-                      {numero(
-                        item.quantidade_em_posse
+                    <td>
+                      <strong>
+                        {numero(
+                          item.quantidade_em_posse
+                        )}
+                      </strong>
+                    </td>
+
+                    <td>
+                      {formatarData(
+                        item.primeira_retirada
                       )}
-                    </strong>
-                  </td>
+                    </td>
 
-                  <td>
-                    {formatarData(
-                      item.primeira_retirada
-                    )}
-                  </td>
-
-                  <td>
-                    {formatarData(
-                      item.devolucao_prevista
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    <td>
+                      {formatarData(
+                        item.devolucao_prevista
+                      )}
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>
@@ -3556,14 +3864,6 @@ export default function Municoes({
             cor:
               '#f59e0b'
           },
-          {
-            label:
-              'Outros',
-            valor:
-              outros,
-            cor:
-              '#64748b'
-          }
         ]
       }
 
@@ -3901,13 +4201,15 @@ export default function Municoes({
           subtitulo="Baixas registradas"
         />
 
-        <CardDistribuicao
-          titulo="OUTROS"
-          itens={
-            distribuicaoPorLocal.outros
-          }
-          subtitulo="Outra unidade ou destino"
-        />
+        {gerenciaLotes && (
+          <CardDistribuicao
+            titulo="OUTROS"
+            itens={
+              distribuicaoPorLocal.outros
+            }
+            subtitulo="Outra unidade ou destino"
+          />
+        )}
       </section>
 
       <section
@@ -4234,10 +4536,14 @@ export default function Municoes({
           <div
             style={{
               width:
-                'min(760px, 100%)',
+                gerenciaLotes
+                  ? 'min(760px, 100%)'
+                  : 'min(470px, 100%)',
               display: 'grid',
               gridTemplateColumns:
-                'minmax(145px, 170px) minmax(145px, 170px) auto auto auto',
+                gerenciaLotes
+                  ? 'minmax(145px, 170px) minmax(145px, 170px) auto auto auto'
+                  : 'minmax(145px, 170px) auto auto',
               justifyContent: 'end',
               gap: '8px',
               alignItems: 'end'
@@ -4271,69 +4577,82 @@ export default function Municoes({
               }}
             />
 
-            <ComboFiltro
-              label="LOTE"
-              value={
-                filtroLote
-              }
-              options={
-                lotesDisponiveis.map(
-                  (lote) => ({
-                    key:
-                      lote.lote_id ||
-                      `${lote.municao_id}-${lote.numero_lote}`,
+            {gerenciaLotes && (
+              <ComboFiltro
+                label="LOTE"
+                value={
+                  filtroLote
+                }
+                options={
+                  lotesDisponiveis.map(
+                    (lote) => ({
+                      key:
+                        lote.lote_id ||
+                        `${lote.municao_id}-${lote.numero_lote}`,
 
-                    value:
-                      lote.numero_lote,
+                      value:
+                        lote.numero_lote,
 
-                    label:
-                      lote.numero_lote,
+                      label:
+                        lote.numero_lote,
 
-                    secondary:
-                      lote.calibre
-                  })
-                )
-              }
-              onChange={(valor) =>
-                setFiltroLote(
-                  String(
-                    valor || ''
-                  ).toUpperCase()
-                )
-              }
-            />
+                      secondary:
+                        lote.calibre
+                    })
+                  )
+                }
+                onChange={(valor) =>
+                  setFiltroLote(
+                    String(
+                      valor || ''
+                    ).toUpperCase()
+                  )
+                }
+              />
+            )}
 
             <button
               type="button"
               className="municoes-btn-primary"
               disabled={
-                !loteSelecionado
+                !loteSelecionado &&
+                !filtroCalibre
               }
               onClick={() =>
                 setLoteRastreio(
-                  loteSelecionado
+                  loteSelecionado ||
+                  {
+                    consulta_calibre:
+                      true,
+                    calibre:
+                      filtroCalibre
+                  }
                 )
               }
               title={
                 loteSelecionado
                   ? `Ver policiais do lote ${loteSelecionado.numero_lote}`
-                  : 'Selecione um lote completo para consultar os policiais'
+                  : filtroCalibre
+                    ? `Ver policiais com munição ${filtroCalibre} em todos os lotes`
+                    : 'Selecione um calibre ou um lote para consultar os policiais'
               }
             >
               Policiais
             </button>
 
-            <button
-              type="button"
-              className="municoes-btn-secondary"
-              onClick={() =>
-                setModalOutros(
-                  true
-                )
-              }
-            >
-              Outros
-            </button>
+            {gerenciaLotes && (
+              <button
+                type="button"
+                className="municoes-btn-secondary"
+                onClick={() =>
+                  setModalOutros(
+                    true
+                  )
+                }
+              >
+                Outros
+              </button>
+            )}
 
             <button
               type="button"
@@ -4786,7 +5105,10 @@ export default function Municoes({
           }
           onSalvo={() =>
             aposAlteracao(
-              'Transferência recebida com sucesso.'
+              recebimentoOperacao ===
+                'DEVOLUCAO'
+                ? 'Devolução de munição recebida com sucesso.'
+                : 'Transferência recebida com sucesso.'
             )
           }
         />
@@ -4824,7 +5146,7 @@ export default function Municoes({
         />
       )}
 
-      {modalOutros && (
+      {gerenciaLotes && modalOutros && (
         <OutrosLocaisModal
           resumo={resumo}
           lotes={lotes}
@@ -4839,7 +5161,13 @@ export default function Municoes({
       {loteRastreio && (
         <PoliciaisLoteModal
           lote={
-            loteRastreio
+            loteRastreio?.lote_id
+              ? loteRastreio
+              : null
+          }
+          calibre={
+            loteRastreio?.calibre ||
+            filtroCalibre
           }
           onClose={() =>
             setLoteRastreio(null)

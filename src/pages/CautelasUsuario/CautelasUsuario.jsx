@@ -13,6 +13,13 @@ import {
   solicitarDevolucaoCautela
 } from '../../services/cautelasUsuarioService'
 
+import {
+  listarCargasPermanentesPendentesPolicial,
+  listarCautelasPendentesPolicial,
+  receberCargaPermanenteMunicao,
+  receberCautelaMunicaoPolicial
+} from '../../services/municoesMovimentacoesService'
+
 import './CautelasUsuario.css'
 import './CautelasUsuarioNovidades.css'
 
@@ -217,12 +224,171 @@ function chaveQuantidadeDevolucao(item) {
 }
 
 
+function obterTimestampMovimentacao(movimentacao) {
+  const valor =
+    movimentacao?.created_at ||
+    movimentacao?.solicitado_em ||
+    movimentacao?.criado_em ||
+    null
+
+  if (!valor) {
+    return null
+  }
+
+  const data = new Date(valor)
+
+  return Number.isNaN(data.getTime())
+    ? null
+    : data.getTime()
+}
+
+function obterTimestampTransferenciaMunicao(transferencia) {
+  const valor =
+    transferencia?.criado_em ||
+    transferencia?.created_at ||
+    null
+
+  if (!valor) {
+    return null
+  }
+
+  const data = new Date(valor)
+
+  return Number.isNaN(data.getTime())
+    ? null
+    : data.getTime()
+}
+
+function associarMunicoesAosCarrinhos(
+  carrinhos = [],
+  transferencias = []
+) {
+  const porCarrinho = new Map()
+  const associadas = new Set()
+
+  for (const carrinho of carrinhos || []) {
+    porCarrinho.set(
+      String(carrinho?.id || ''),
+      []
+    )
+  }
+
+  for (const transferencia of transferencias || []) {
+    const transferenciaId =
+      String(
+        transferencia?.transferencia_id ||
+        transferencia?.id ||
+        ''
+      )
+
+    if (!transferenciaId) {
+      continue
+    }
+
+    const movimentacaoPrincipalId =
+      String(
+        transferencia?.movimentacao_principal_id ||
+        ''
+      )
+
+    if (
+      movimentacaoPrincipalId &&
+      porCarrinho.has(
+        movimentacaoPrincipalId
+      )
+    ) {
+      porCarrinho
+        .get(movimentacaoPrincipalId)
+        .push(transferencia)
+
+      associadas.add(
+        transferenciaId
+      )
+
+      continue
+    }
+
+    const timestampMunicao =
+      obterTimestampTransferenciaMunicao(
+        transferencia
+      )
+
+    if (timestampMunicao === null) {
+      continue
+    }
+
+    let melhorCarrinho = null
+    let menorDiferenca = Infinity
+
+    for (const carrinho of carrinhos || []) {
+      const timestampCarrinho =
+        obterTimestampMovimentacao(
+          carrinho
+        )
+
+      if (timestampCarrinho === null) {
+        continue
+      }
+
+      const diferenca =
+        Math.abs(
+          timestampMunicao -
+          timestampCarrinho
+        )
+
+      /*
+       * Arma e munição do mesmo pagamento são criadas praticamente
+       * juntas. A janela de 3 minutos serve apenas como fallback
+       * enquanto movimentacao_principal_id ainda vier vazio.
+       */
+      if (
+        diferenca <= 3 * 60 * 1000 &&
+        diferenca < menorDiferenca
+      ) {
+        melhorCarrinho = carrinho
+        menorDiferenca = diferenca
+      }
+    }
+
+    if (melhorCarrinho?.id) {
+      const chave =
+        String(
+          melhorCarrinho.id
+        )
+
+      porCarrinho
+        .get(chave)
+        .push(transferencia)
+
+      associadas.add(
+        transferenciaId
+      )
+    }
+  }
+
+  return {
+    porCarrinho,
+    associadas
+  }
+}
+
+
 export default function CautelasUsuario({
   user,
   modo = 'receber',
   onConcluido
 }) {
   const [cautelas, setCautelas] = useState([])
+  const [
+    cargasPermanentesPendentes,
+    setCargasPermanentesPendentes
+  ] = useState([])
+
+  const [
+    cautelasMunicaoPendentes,
+    setCautelasMunicaoPendentes
+  ] = useState([])
+
   const [materiais, setMateriais] = useState([])
   const [itensSelecionados, setItensSelecionados] = useState([])
   const [quantidadesDevolver, setQuantidadesDevolver] = useState({})
@@ -239,16 +405,36 @@ export default function CautelasUsuario({
       setLoading(true)
       setErro('')
 
-      const [pendentes, ativos, devolucoesPendentes] =
+      const [
+        pendentes,
+        ativos,
+        devolucoesPendentes,
+        cargasPermanentes,
+        cautelasMunicao
+      ] =
         await Promise.all([
           listarCautelasAguardandoUsuario(user),
           listarMateriaisEmServicoUsuario(user),
-          listarDevolucoesPendentesUsuario(user)
+          listarDevolucoesPendentesUsuario(user),
+          listarCargasPermanentesPendentesPolicial(),
+          listarCautelasPendentesPolicial()
         ])
 
       const listaPendentes = pendentes || []
 
       setCautelas(listaPendentes)
+      setCargasPermanentesPendentes(
+        Array.isArray(cargasPermanentes)
+          ? cargasPermanentes
+          : []
+      )
+
+      setCautelasMunicaoPendentes(
+        Array.isArray(cautelasMunicao)
+          ? cautelasMunicao
+          : []
+      )
+
       setMateriais(ativos || [])
       setDevolucoes(devolucoesPendentes || [])
 
@@ -311,6 +497,50 @@ export default function CautelasUsuario({
 
   const existeDevolucaoPendente = devolucoes.length > 0
   const telaDevolucao = modo === 'devolver'
+
+  const associacaoMunicoesCarrinhos =
+    useMemo(
+      () =>
+        associarMunicoesAosCarrinhos(
+          cautelas,
+          cautelasMunicaoPendentes
+        ),
+      [
+        cautelas,
+        cautelasMunicaoPendentes
+      ]
+    )
+
+  const cautelasMunicaoSemCarrinho =
+    useMemo(
+      () =>
+        cautelasMunicaoPendentes.filter(
+          (transferencia) => {
+            const id =
+              String(
+                transferencia?.transferencia_id ||
+                transferencia?.id ||
+                ''
+              )
+
+            return (
+              !id ||
+              !associacaoMunicoesCarrinhos
+                .associadas
+                .has(id)
+            )
+          }
+        ),
+      [
+        cautelasMunicaoPendentes,
+        associacaoMunicoesCarrinhos
+      ]
+    )
+
+  const totalAguardandoRecebimento =
+    cautelas.length +
+    cargasPermanentesPendentes.length +
+    cautelasMunicaoSemCarrinho.length
 
   const chavesItensEmDevolucao = useMemo(() => {
     const chaves = new Set()
@@ -972,6 +1202,16 @@ function alterarQuantidadeDevolver(
     const itensRecebimento =
       prepararItensRecebimento(movimentacao)
 
+    const municoesDoCarrinho =
+      associacaoMunicoesCarrinhos
+        .porCarrinho
+        .get(
+          String(
+            movimentacao?.id ||
+            ''
+          )
+        ) || []
+
     for (const item of itensRecebimento) {
       if (!item.novidade) {
         continue
@@ -992,37 +1232,110 @@ function alterarQuantidadeDevolver(
       }
     }
 
-    const quantitativosParciais = itensRecebimento.filter(
-      (item) =>
-        item.quantitativo &&
-        item.quantidadeReceber < item.quantidadeEnviada
-    )
+    const quantitativosParciais =
+      itensRecebimento.filter(
+        (item) =>
+          item.quantitativo &&
+          item.quantidadeReceber <
+            item.quantidadeEnviada
+      )
 
-    const mensagemConfirmacao = quantitativosParciais.length > 0
-      ? 'Confirma o recebimento das quantidades selecionadas? As unidades não recebidas permanecerão no Cofre do SVDD.'
-      : 'Confirma o recebimento de todos os materiais deste carrinho?'
+    const possuiMunicaoVinculada =
+      municoesDoCarrinho.length > 0
 
-    if (!window.confirm(mensagemConfirmacao)) {
+    let mensagemConfirmacao =
+      quantitativosParciais.length > 0
+        ? 'Confirma o recebimento das quantidades selecionadas? As unidades não recebidas permanecerão no Cofre do SVDD.'
+        : 'Confirma o recebimento de todos os materiais deste carrinho?'
+
+    if (possuiMunicaoVinculada) {
+      mensagemConfirmacao =
+        quantitativosParciais.length > 0
+          ? 'Confirma o recebimento dos materiais e das munições deste carrinho? As quantidades patrimoniais não recebidas permanecerão no Cofre do SVDD.'
+          : 'Confirma o recebimento de todos os materiais e munições deste carrinho?'
+    }
+
+    if (
+      !window.confirm(
+        mensagemConfirmacao
+      )
+    ) {
       return
     }
 
     try {
-      setProcessando(movimentacao.id)
+      setProcessando(
+        movimentacao.id
+      )
       setErro('')
       setMensagem('')
 
       const resultado =
         await confirmarRecebimentoCautela({
-          movimentacaoId: movimentacao.id,
-          itens: itensRecebimento,
+          movimentacaoId:
+            movimentacao.id,
+          itens:
+            itensRecebimento,
           user
         })
 
+      const resultadosMunicoes = []
+
+      for (
+        const transferencia of
+        municoesDoCarrinho
+      ) {
+        const transferenciaId =
+          transferencia?.transferencia_id
+
+        if (!transferenciaId) {
+          throw new Error(
+            'Uma cautela de munição vinculada ao carrinho não possui identificação válida.'
+          )
+        }
+
+        const resultadoMunicao =
+          await receberCautelaMunicaoPolicial(
+            transferenciaId
+          )
+
+        resultadosMunicoes.push({
+          transferencia,
+          resultado:
+            resultadoMunicao
+        })
+      }
+
+      const totalMunicoes =
+        municoesDoCarrinho.reduce(
+          (total, transferencia) =>
+            total +
+            Math.max(
+              0,
+              Number(
+                transferencia
+                  ?.quantidade_total ||
+                0
+              ) || 0
+            ),
+          0
+        )
+
       setMensagem(
-        resultado?.mensagem ||
-          (quantitativosParciais.length > 0
-            ? 'Recebimento parcial concluído. As quantidades não recebidas permaneceram no Cofre do SVDD.'
-            : 'Cautela recebida com sucesso. Os materiais já estão sob sua responsabilidade.')
+        possuiMunicaoVinculada
+          ? (
+              totalMunicoes > 0
+                ? `Cautela recebida com sucesso. Materiais e ${totalMunicoes} unidade(s) de munição já estão sob sua responsabilidade.`
+                : 'Cautela recebida com sucesso. Materiais e munições já estão sob sua responsabilidade.'
+            )
+          : (
+              resultado?.mensagem ||
+              (
+                quantitativosParciais.length > 0
+                  ? 'Recebimento parcial concluído. As quantidades não recebidas permaneceram no Cofre do SVDD.'
+                  : 'Cautela recebida com sucesso. Os materiais já estão sob sua responsabilidade.'
+              )
+            )
       )
 
       setNovidadesRecebimento(
@@ -1059,11 +1372,169 @@ function alterarQuantidadeDevolver(
       )
 
       await carregar()
-      onConcluido?.(resultado)
+
+      onConcluido?.({
+        ...(
+          resultado &&
+          typeof resultado === 'object'
+            ? resultado
+            : {}
+        ),
+        municoes:
+          resultadosMunicoes
+      })
     } catch (error) {
       setErro(
         error?.message ||
           'Não foi possível confirmar o recebimento.'
+      )
+    } finally {
+      setProcessando('')
+    }
+  }
+
+  async function receberCautelaMunicao(
+    transferencia
+  ) {
+    const transferenciaId =
+      transferencia?.transferencia_id
+
+    if (!transferenciaId) {
+      setErro(
+        'Cautela de munição inválida.'
+      )
+      return
+    }
+
+    const calibre =
+      String(
+        transferencia?.calibre ||
+        'MUNIÇÃO'
+      ).trim()
+
+    const quantidade =
+      Math.max(
+        0,
+        Number(
+          transferencia?.quantidade_total ||
+          0
+        ) || 0
+      )
+
+    if (
+      !window.confirm(
+        `Confirma o recebimento de ${quantidade} unidade(s) de ${calibre} em cautela individual?`
+      )
+    ) {
+      return
+    }
+
+    try {
+      setProcessando(
+        `MUNICAO_CAUTELA:${transferenciaId}`
+      )
+      setErro('')
+      setMensagem('')
+
+      const resultado =
+        await receberCautelaMunicaoPolicial(
+          transferenciaId
+        )
+
+      setMensagem(
+        `Cautela de munição recebida com sucesso: ${quantidade} unidade(s) de ${calibre}.`
+      )
+
+      await carregar()
+
+      onConcluido?.({
+        tipo:
+          'MUNICAO_CAUTELA',
+        resultado
+      })
+    } catch (error) {
+      console.error(
+        'Erro ao receber cautela de munição:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível confirmar o recebimento da cautela de munição.'
+      )
+    } finally {
+      setProcessando('')
+    }
+  }
+
+  async function receberCargaPermanente(
+    transferencia
+  ) {
+    const transferenciaId =
+      transferencia?.transferencia_id
+
+    if (!transferenciaId) {
+      setErro(
+        'Transferência de munição inválida.'
+      )
+      return
+    }
+
+    const calibre =
+      String(
+        transferencia?.calibre ||
+        'MUNIÇÃO'
+      ).trim()
+
+    const quantidade =
+      Math.max(
+        0,
+        Number(
+          transferencia?.quantidade_total ||
+          0
+        ) || 0
+      )
+
+    if (
+      !window.confirm(
+        `Confirma o recebimento de ${quantidade} unidade(s) de ${calibre} como carga permanente?`
+      )
+    ) {
+      return
+    }
+
+    try {
+      setProcessando(
+        `MUNICAO:${transferenciaId}`
+      )
+      setErro('')
+      setMensagem('')
+
+      const resultado =
+        await receberCargaPermanenteMunicao(
+          transferenciaId
+        )
+
+      setMensagem(
+        `Carga permanente recebida com sucesso: ${quantidade} unidade(s) de ${calibre}.`
+      )
+
+      await carregar()
+
+      onConcluido?.({
+        tipo:
+          'MUNICAO_CARGA_PERMANENTE',
+        resultado
+      })
+    } catch (error) {
+      console.error(
+        'Erro ao receber carga permanente de munição:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível confirmar o recebimento da munição.'
       )
     } finally {
       setProcessando('')
@@ -1168,7 +1639,9 @@ function alterarQuantidadeDevolver(
       <section className="cautela-usuario-resumo">
         <article>
           <small>Aguardando recebimento</small>
-          <strong>{cautelas.length}</strong>
+          <strong>
+            {totalAguardandoRecebimento}
+          </strong>
         </article>
         <article>
           <small>Materiais sob responsabilidade</small>
@@ -1432,17 +1905,247 @@ function alterarQuantidadeDevolver(
         </section>
       ) : (
         <section className="cautela-usuario-lista">
-          {cautelas.length === 0 ? (
+          {cautelas.length === 0 &&
+          cargasPermanentesPendentes.length === 0 &&
+          cautelasMunicaoSemCarrinho.length === 0 ? (
             <div className="cautela-usuario-estado">
               <strong>
-                Nenhum carrinho aguardando seu aceite.
+                Nenhum material aguardando seu aceite.
               </strong>
               <p>
-                Quando o SVDD pagar material para você, o carrinho aparecerá aqui.
+                Quando houver material ou munição destinado a você, a pendência aparecerá aqui.
               </p>
             </div>
           ) : (
-            cautelas.map((movimentacao) => (
+            <>
+              {cautelasMunicaoSemCarrinho.map(
+                (transferencia) => {
+                  const chaveProcessamento =
+                    `MUNICAO_CAUTELA:${transferencia.transferencia_id}`
+
+                  const recebendo =
+                    processando ===
+                    chaveProcessamento
+
+                  return (
+                    <article
+                      key={
+                        transferencia.transferencia_id
+                      }
+                      className="cautela-usuario-card"
+                    >
+                      <div className="cautela-usuario-card-topo">
+                        <div>
+                          <span>
+                            CAUTELA DE MUNIÇÃO
+                          </span>
+
+                          <h2>
+                            {transferencia.calibre ||
+                              'Munição'}
+                          </h2>
+                        </div>
+
+                        <small>
+                          {formatarData(
+                            transferencia.criado_em
+                          )}
+                        </small>
+                      </div>
+
+                      <div className="cautela-usuario-carrinho">
+                        <article className="cautela-usuario-carrinho-item">
+                          <div className="cautela-usuario-carrinho-info">
+                            <strong>
+                              MUNIÇÃO{' '}
+                              {transferencia.calibre ||
+                                ''}
+                            </strong>
+
+                            <span>
+                              Cautela individual
+                            </span>
+                          </div>
+
+                          <b>
+                            Qtd.{' '}
+                            {Number(
+                              transferencia.quantidade_total ||
+                              0
+                            )}
+                          </b>
+                        </article>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="cautela-usuario-primary"
+                        onClick={() =>
+                          receberCautelaMunicao(
+                            transferencia
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            processando
+                          )
+                        }
+                      >
+                        {recebendo
+                          ? 'Confirmando...'
+                          : 'Confirmar recebimento'}
+                      </button>
+                    </article>
+                  )
+                }
+              )}
+
+
+              {cargasPermanentesPendentes.map(
+                (transferencia) => {
+                  const chaveProcessamento =
+                    `MUNICAO:${transferencia.transferencia_id}`
+
+                  const recebendo =
+                    processando ===
+                    chaveProcessamento
+
+                  return (
+                    <article
+                      key={
+                        transferencia.transferencia_id
+                      }
+                      className="cautela-usuario-card"
+                    >
+                      <div className="cautela-usuario-card-topo">
+                        <div>
+                          <span>
+                            MUNIÇÃO • CARGA PERMANENTE
+                          </span>
+
+                          <h2>
+                            {transferencia.calibre ||
+                              'Munição'}
+                          </h2>
+                        </div>
+
+                        <small>
+                          Aprovada em{' '}
+                          {formatarData(
+                            transferencia.aprovado_em
+                          )}
+                        </small>
+                      </div>
+
+                      <div className="cautela-usuario-carrinho">
+                        <h3>
+                          Munição para recebimento
+                        </h3>
+
+                        <article className="cautela-usuario-carrinho-item">
+                          <div className="cautela-usuario-carrinho-info">
+                            <strong>
+                              {transferencia.calibre ||
+                                'MUNIÇÃO'}
+                            </strong>
+
+                            <span>
+                              Quantidade:{' '}
+                              {Number(
+                                transferencia.quantidade_total ||
+                                0
+                              ).toLocaleString(
+                                'pt-BR'
+                              )}
+                            </span>
+
+                            <small
+                              style={{
+                                display:
+                                  'block',
+                                marginTop:
+                                  '6px'
+                              }}
+                            >
+                              Origem:{' '}
+                              {transferencia.origem_nome ||
+                                'COFRE DO P4'}
+                            </small>
+
+                            <small
+                              style={{
+                                display:
+                                  'block',
+                                marginTop:
+                                  '4px'
+                              }}
+                            >
+                              Documento:{' '}
+                              {transferencia.documento ||
+                                'NÃO INFORMADO'}
+                            </small>
+
+                            <small
+                              style={{
+                                display:
+                                  'block',
+                                marginTop:
+                                  '4px'
+                              }}
+                            >
+                              Observações:{' '}
+                              {transferencia.observacoes ||
+                                'SEM OBSERVAÇÕES'}
+                            </small>
+
+                            <small
+                              style={{
+                                display:
+                                  'block',
+                                marginTop:
+                                  '4px'
+                              }}
+                            >
+                              Aprovado por:{' '}
+                              {transferencia.aprovado_por_nome ||
+                                'COMANDANTE DE CIA'}
+                            </small>
+                          </div>
+
+                          <b>
+                            Qtd.{' '}
+                            {Number(
+                              transferencia.quantidade_total ||
+                              0
+                            )}
+                          </b>
+                        </article>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="cautela-usuario-primary"
+                        onClick={() =>
+                          receberCargaPermanente(
+                            transferencia
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            processando
+                          )
+                        }
+                      >
+                        {recebendo
+                          ? 'Confirmando...'
+                          : 'Confirmar recebimento'}
+                      </button>
+                    </article>
+                  )
+                }
+              )}
+
+              {cautelas.map((movimentacao) => (
               <article
                 key={movimentacao.id}
                 className="cautela-usuario-card"
@@ -1756,6 +2459,43 @@ function alterarQuantidadeDevolver(
                       }
                     )
                   )}
+
+                  {(associacaoMunicoesCarrinhos
+                    .porCarrinho
+                    .get(
+                      String(
+                        movimentacao?.id ||
+                        ''
+                      )
+                    ) || []
+                  ).map(
+                    (transferencia) => (
+                      <article
+                        key={`municao-${transferencia.transferencia_id}`}
+                        className="cautela-usuario-carrinho-item"
+                      >
+                        <div className="cautela-usuario-carrinho-info">
+                          <strong>
+                            MUNIÇÃO{' '}
+                            {transferencia.calibre ||
+                              ''}
+                          </strong>
+
+                          <span>
+                            Cautela individual
+                          </span>
+                        </div>
+
+                        <b>
+                          Qtd.{' '}
+                          {Number(
+                            transferencia.quantidade_total ||
+                            0
+                          )}
+                        </b>
+                      </article>
+                    )
+                  )}
                 </div>
 
                 <button
@@ -1771,7 +2511,8 @@ function alterarQuantidadeDevolver(
                     : 'Confirmar recebimento'}
                 </button>
               </article>
-            ))
+            ))}
+            </>
           )}
         </section>
       )}
