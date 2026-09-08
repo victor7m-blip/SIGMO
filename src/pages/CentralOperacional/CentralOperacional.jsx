@@ -20,6 +20,10 @@ import {
 
 import { carregarCentralOperacional, listarManutencoesExternasContagem } from '../../services/centralOperacionalService'
 import { listarTonfas } from '../../services/tonfasService'
+import {
+  listarColetesBalisticos,
+  listarDescargasColetesPendentes
+} from '../../services/coletesBalisticosService'
 import { listarManutencoes } from '../../services/manutencoesService'
 import { listarCautelasAtivas } from '../../services/tonfasMovimentacoesService'
 import {
@@ -632,6 +636,637 @@ function normalizarSemAcento(valor) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+
+function formatarDataCurta(valor) {
+  if (!valor) return 'NÃO INFORMADA'
+
+  const data = new Date(
+    `${String(valor).slice(0, 10)}T12:00:00`
+  )
+
+  if (Number.isNaN(data.getTime())) {
+    return 'NÃO INFORMADA'
+  }
+
+  return data.toLocaleDateString('pt-BR')
+}
+
+function situacaoValidadeColeteCentral(colete) {
+  if (!colete?.validade) {
+    return null
+  }
+
+  const validade = new Date(
+    `${String(colete.validade).slice(0, 10)}T12:00:00`
+  )
+
+  if (Number.isNaN(validade.getTime())) {
+    return null
+  }
+
+  const mesesInformados =
+    Number(
+      colete?.alerta_validade_meses ??
+      3
+    )
+
+  const mesesAlerta =
+    Number.isFinite(mesesInformados)
+      ? Math.max(
+          1,
+          Math.min(
+            24,
+            Math.trunc(mesesInformados)
+          )
+        )
+      : 3
+
+  const inicioAlerta =
+    new Date(
+      validade.getTime()
+    )
+
+  inicioAlerta.setMonth(
+    inicioAlerta.getMonth() -
+    mesesAlerta
+  )
+
+  const hoje =
+    new Date()
+
+  hoje.setHours(
+    12,
+    0,
+    0,
+    0
+  )
+
+  if (hoje >= validade) {
+    return {
+      situacao: 'VENCIDO',
+      validade,
+      inicioAlerta,
+      mesesAlerta
+    }
+  }
+
+  if (hoje >= inicioAlerta) {
+    return {
+      situacao: 'ALERTA',
+      validade,
+      inicioAlerta,
+      mesesAlerta
+    }
+  }
+
+  return null
+}
+
+function criarNovidadesValidadeColetes(
+  coletes = []
+) {
+  return (coletes || [])
+    .filter(
+      (colete) =>
+        colete?.ativo !== false
+    )
+    .map((colete) => {
+      const validade =
+        situacaoValidadeColeteCentral(
+          colete
+        )
+
+      if (!validade) {
+        return null
+      }
+
+      const vencido =
+        validade.situacao ===
+        'VENCIDO'
+
+      const descargaPendente =
+        colete?.descarga_pendente === true
+          ? (
+              colete?.descarga_solicitacao ||
+              null
+            )
+          : null
+
+      const descargaSolicitadaEm =
+        descargaPendente?.solicitada_em ||
+        null
+
+      const tamanho =
+        [
+          colete?.tamanho,
+          colete?.modelagem
+        ]
+          .map(normalizarTexto)
+          .filter(Boolean)
+          .join(' · ')
+
+      const descricao =
+        [
+          `VALIDADE: ${formatarDataCurta(colete?.validade)}`,
+          colete?.numero_lote
+            ? `LOTE: ${colete.numero_lote}`
+            : '',
+          colete?.sexo
+            ? `SEXO: ${colete.sexo}`
+            : '',
+          tamanho
+            ? `TAMANHO: ${tamanho}`
+            : '',
+          colete?.local_atual
+            ? `LOCAL: ${colete.local_atual}`
+            : 'LOCAL: COFRE DO P4',
+          colete?.carga_policial_nome
+            ? `RESPONSÁVEL: ${colete.carga_policial_nome}`
+            : ''
+        ]
+          .filter(Boolean)
+          .join(' • ')
+
+      return {
+        id:
+          `COLETE-VALIDADE-${colete?.id || colete?.patrimonio || colete?.numero_serie}-${validade.situacao}`,
+
+        origem_novidade:
+          'COLETE_BALISTICO_VALIDADE',
+
+        referencia_id:
+          colete?.id ||
+          null,
+
+        tipo_patrimonio:
+          'COLETE BALÍSTICO',
+
+        tipo_especifico:
+          'COLETE BALÍSTICO',
+
+        especie:
+          'COLETE BALÍSTICO',
+
+        patrimonio:
+          colete?.patrimonio ||
+          null,
+
+        numero_patrimonio:
+          colete?.patrimonio ||
+          null,
+
+        numero_serie:
+          colete?.numero_serie ||
+          null,
+
+        numero_lote:
+          colete?.numero_lote ||
+          null,
+
+        sexo:
+          colete?.sexo ||
+          null,
+
+        tamanho:
+          colete?.tamanho ||
+          null,
+
+        modelagem:
+          colete?.modelagem ||
+          null,
+
+        validade:
+          colete?.validade ||
+          null,
+
+        alerta_validade_meses:
+          validade.mesesAlerta,
+
+        titulo:
+          vencido
+            ? 'VENCIDO'
+            : 'VALIDADE PRÓXIMA',
+
+        descricao:
+          descargaPendente
+            ? `${descricao} • DESCARGA SOLICITADA E AGUARDANDO APROVAÇÃO DO CMT DE CIA`
+            : descricao,
+
+        providencia_sugerida:
+          descargaPendente
+            ? 'AGUARDAR A DECISÃO DO COMANDANTE DA CIA SOBRE A SOLICITAÇÃO DE DESCARGA.'
+            : vencido
+            ? 'RETIRAR O COLETE DE NOVA DISTRIBUIÇÃO E PROVIDENCIAR A DESTINAÇÃO PATRIMONIAL CABÍVEL.'
+            : 'PROGRAMAR A SUBSTITUIÇÃO OU PROVIDÊNCIA ANTES DO VENCIMENTO.',
+
+        gravidade:
+          vencido
+            ? 'ALTA'
+            : 'MÉDIA',
+
+        status:
+          descargaPendente
+            ? 'AGUARDANDO APROVAÇÃO DO CMT DE CIA'
+            : vencido
+            ? 'VENCIDO'
+            : 'ALERTA DE VALIDADE',
+
+        registrado_por_nome:
+          descargaPendente?.solicitada_por_nome ||
+          'SIGMO',
+
+        local_atual:
+          colete?.local_atual ||
+          'COFRE DO P4',
+
+        responsabilidade_atual:
+          'P4',
+
+        responsavel_setor:
+          'P4',
+
+        setor_responsavel:
+          'P4',
+
+        created_at:
+          descargaSolicitadaEm ||
+          validade.inicioAlerta
+            .toISOString(),
+
+        updated_at:
+          descargaPendente?.updated_at ||
+          descargaSolicitadaEm ||
+          validade.validade
+            .toISOString(),
+
+        descarga_pendente:
+          Boolean(
+            descargaPendente
+          ),
+
+        descarga_solicitacao_id:
+          descargaPendente?.id ||
+          null,
+
+        descarga_solicitada_em:
+          descargaSolicitadaEm,
+
+        descarga_solicitada_por_nome:
+          descargaPendente?.solicitada_por_nome ||
+          null
+      }
+    })
+    .filter(Boolean)
+}
+
+function incluirNovidadesColetes(
+  dadosOperacionais,
+  novidadesColetes
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  const indicadores =
+    Array.isArray(
+      base.indicadores
+    )
+      ? [...base.indicadores]
+      : []
+
+  const indiceNovidades =
+    indicadores.findIndex(
+      (item) =>
+        item?.key ===
+        'novidades'
+    )
+
+  const cardAtual =
+    indiceNovidades >= 0
+      ? indicadores[
+          indiceNovidades
+        ]
+      : {
+          key: 'novidades',
+          titulo:
+            'Novidades patrimoniais',
+          total: 0,
+          itens: []
+        }
+
+  const mapa =
+    new Map()
+
+  for (
+    const item of
+    cardAtual?.itens || []
+  ) {
+    const chave =
+      String(
+        item?.id ||
+        [
+          item?.tipo_patrimonio,
+          item?.patrimonio,
+          item?.numero_serie,
+          item?.titulo
+        ]
+          .filter(Boolean)
+          .join('|')
+      )
+
+    mapa.set(
+      chave,
+      item
+    )
+  }
+
+  for (
+    const item of
+    novidadesColetes || []
+  ) {
+    mapa.set(
+      String(item.id),
+      item
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    total:
+      itens.length,
+    itens
+  }
+
+  if (
+    indiceNovidades >= 0
+  ) {
+    indicadores[
+      indiceNovidades
+    ] = cardNovo
+  } else {
+    indicadores.push(
+      cardNovo
+    )
+  }
+
+  return {
+    ...base,
+    indicadores
+  }
+}
+
+function incluirDescargasColetesAprovacaoCmt(
+  dadosOperacionais,
+  descargasPendentes
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  const alertas =
+    Array.isArray(
+      base.alertas
+    )
+      ? [...base.alertas]
+      : []
+
+  const indiceCard =
+    alertas.findIndex(
+      (item) => {
+        const key =
+          String(
+            item?.key || ''
+          )
+            .trim()
+            .toLowerCase()
+
+        const titulo =
+          String(
+            item?.titulo || ''
+          )
+            .normalize('NFD')
+            .replace(
+              /[\u0300-\u036f]/g,
+              ''
+            )
+            .trim()
+            .toUpperCase()
+
+        return (
+          key ===
+            'aprovacoes-comandante' ||
+          key ===
+            'aprovacoes-cmt' ||
+          key ===
+            'aguardando-aprovacao-cmt' ||
+          titulo ===
+            'AGUARDANDO APROVACAO DO CMT'
+        )
+      }
+    )
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[
+          indiceCard
+        ]
+      : {
+          key:
+            'aprovacoes-comandante',
+          titulo:
+            'Aguardando aprovação do Cmt',
+          tom:
+            'amarelo',
+          total:
+            0,
+          itens:
+            []
+        }
+
+  const mapa =
+    new Map()
+
+  for (
+    const item of
+    cardAtual?.itens || []
+  ) {
+    mapa.set(
+      String(
+        item?.id ||
+        item?.protocolo ||
+        Math.random()
+      ),
+      item
+    )
+  }
+
+  for (
+    const solicitacao of
+    descargasPendentes || []
+  ) {
+    if (
+      !solicitacao?.id
+    ) {
+      continue
+    }
+
+    const item = {
+      id:
+        solicitacao.id,
+
+      origem_aprovacao:
+        'BAIXA_PATRIMONIAL',
+
+      tipo_solicitacao:
+        'DESCARGA_COLETE',
+
+      modulo:
+        'COLETE BALÍSTICO',
+
+      tipo_patrimonio:
+        'COLETE BALÍSTICO',
+
+      referencia_id:
+        solicitacao.referencia_id ||
+        null,
+
+      patrimonio:
+        solicitacao.patrimonio ||
+        null,
+
+      numero_serie:
+        solicitacao.numero_serie ||
+        null,
+
+      status:
+        solicitacao.status ||
+        'AGUARDANDO_APROVACAO',
+
+      motivo:
+        solicitacao.motivo ||
+        null,
+
+      observacoes:
+        solicitacao.observacoes ||
+        null,
+
+      status_anterior:
+        solicitacao.status_anterior ||
+        null,
+
+      local_anterior:
+        solicitacao.local_anterior ||
+        null,
+
+      solicitada_por_id:
+        solicitacao.solicitada_por_id ||
+        null,
+
+      solicitada_por_nome:
+        solicitacao.solicitada_por_nome ||
+        'P4',
+
+      solicitada_em:
+        solicitacao.solicitada_em ||
+        solicitacao.created_at ||
+        null,
+
+      created_at:
+        solicitacao.solicitada_em ||
+        solicitacao.created_at ||
+        null,
+
+      updated_at:
+        solicitacao.updated_at ||
+        solicitacao.solicitada_em ||
+        null,
+
+      descarga_pendente:
+        true,
+
+      descarga_solicitacao_id:
+        solicitacao.id
+    }
+
+    mapa.set(
+      String(
+        solicitacao.id
+      ),
+      item
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.solicitada_em ||
+            a?.created_at ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.solicitada_em ||
+            b?.created_at ||
+            0
+          ).getTime()
+
+        return (
+          dataB -
+          dataA
+        )
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    total:
+      itens.length,
+    itens
+  }
+
+  if (
+    indiceCard >= 0
+  ) {
+    alertas[
+      indiceCard
+    ] = cardNovo
+  } else {
+    alertas.push(
+      cardNovo
+    )
+  }
+
+  return {
+    ...base,
+    alertas
+  }
+}
+
+
 function filtrarTonfasPorTipo(lista = [], tipoMaterial = '') {
   const tipo = normalizarSemAcento(tipoMaterial)
 
@@ -769,6 +1404,15 @@ function CentralOperacional({ user }) {
   const visaoP4 =
     perfilAtual === 'P4'
 
+  const visaoColeteCentral =
+    visaoP4 ||
+    perfilAtual.includes(
+      'COMANDANTE'
+    ) ||
+    perfilAtual.includes(
+      'ADMINISTRADOR'
+    )
+
   const [dashboard, setDashboard] = useState(null)
   const [operacional, setOperacional] = useState(null)
 
@@ -893,8 +1537,49 @@ function CentralOperacional({ user }) {
             !idsExternos.has(String(item?.id || ''))
         )
 
+      let dadosOperacionaisComAlertas =
+        dadosOperacionais
+
+      if (visaoColeteCentral) {
+        const [
+          coletesResultado,
+          descargasColetesPendentes
+        ] = await Promise.all([
+          listarColetesBalisticos({
+            filtros: {
+              ativo: true
+            },
+            pagina: 1,
+            limite: 10000
+          }),
+
+          listarDescargasColetesPendentes()
+        ])
+
+        const novidadesColetes =
+          criarNovidadesValidadeColetes(
+            coletesResultado?.data ||
+            []
+          )
+
+        dadosOperacionaisComAlertas =
+          incluirNovidadesColetes(
+            dadosOperacionais,
+            novidadesColetes
+          )
+
+        dadosOperacionaisComAlertas =
+          incluirDescargasColetesAprovacaoCmt(
+            dadosOperacionaisComAlertas,
+            descargasColetesPendentes
+          )
+      }
+
       setDashboard(dadosDashboard)
-      setOperacional(dadosOperacionais)
+
+      setOperacional(
+        dadosOperacionaisComAlertas
+      )
 
       const categoriasBase =
         (dadosCategorias ?? []).map(
@@ -1033,7 +1718,12 @@ function CentralOperacional({ user }) {
     } finally {
       setCarregandoCentral(false)
     }
-  }, [user, visaoSVDD, visaoP4])
+  }, [
+    user,
+    visaoSVDD,
+    visaoP4,
+    visaoColeteCentral
+  ])
 
   useEffect(() => {
     carregarCentral()

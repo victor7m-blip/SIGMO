@@ -95,6 +95,15 @@ function identificacaoEquipamento(item) {
   return id || ''
 }
 
+function fotoEquipamento(item) {
+  return (
+    item?.foto_url ||
+    item?.dados?.foto_url ||
+    item?.dados?.foto_principal_url ||
+    ''
+  )
+}
+
 function equipamentos(itens = []) {
   const vistos = new Set()
 
@@ -106,7 +115,11 @@ function equipamentos(itens = []) {
     if (vistos.has(chave)) return lista
     vistos.add(chave)
 
-    lista.push({ tipo, identificacao })
+    lista.push({
+      tipo,
+      identificacao,
+      foto_url: fotoEquipamento(item)
+    })
     return lista
   }, [])
 }
@@ -232,12 +245,42 @@ function PolicialVisual({ funcao, policial, materiais = [], compacto = false }) 
                       margin: 0
                     }}
                   >
-                    <span
-                      className="mfv-equipamento-icone"
-                      aria-hidden="true"
-                    >
-                      {iconeEquipamento('COP')}
-                    </span>
+                    {cop.foto_url ? (
+                      <img
+                        src={cop.foto_url}
+                        alt={cop.identificacao || 'COP'}
+                        style={{
+                          width: '38px',
+                          height: '38px',
+                          flex: '0 0 38px',
+                          objectFit: 'contain',
+                          border: '1px solid #d7e0eb',
+                          borderRadius: '7px',
+                          background: '#ffffff',
+                          padding: '3px'
+                        }}
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: '38px',
+                          height: '38px',
+                          flex: '0 0 38px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid #d7e0eb',
+                          borderRadius: '7px',
+                          background: '#ffffff',
+                          color: '#12346d',
+                          fontSize: '9px',
+                          fontWeight: 900
+                        }}
+                      >
+                        COP
+                      </span>
+                    )}
 
                     <span>
                       <b>COP</b>

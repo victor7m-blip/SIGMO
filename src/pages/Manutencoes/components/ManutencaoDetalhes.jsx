@@ -18,6 +18,82 @@ function dataHora(valor) {
   }).format(data)
 }
 
+function normalizarComparacao(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+}
+
+function valorDepoisDosDoisPontos(valor) {
+  const texto = String(valor || '')
+  const indice = texto.indexOf(':')
+
+  if (indice < 0) return ''
+
+  return texto.slice(indice + 1).trim()
+}
+
+function separarObservacoesManutencao(valor) {
+  const resultado = {
+    entrada: [],
+    statusAnterior: '',
+    localAnterior: '',
+    servicoExecutado: '',
+    observacoesRetorno: '',
+    retornoRegistradoEm: ''
+  }
+
+  const partes = String(valor || '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+
+  for (const parte of partes) {
+    const comparacao = normalizarComparacao(parte)
+
+    if (comparacao.startsWith('STATUS ANTERIOR:')) {
+      resultado.statusAnterior = valorDepoisDosDoisPontos(parte)
+      continue
+    }
+
+    if (comparacao.startsWith('LOCAL ANTERIOR:')) {
+      resultado.localAnterior = valorDepoisDosDoisPontos(parte)
+      continue
+    }
+
+    if (comparacao.startsWith('NOVIDADE PATRIMONIAL:')) {
+      continue
+    }
+
+    if (comparacao.startsWith('SERVICO EXECUTADO:')) {
+      resultado.servicoExecutado = valorDepoisDosDoisPontos(parte)
+      continue
+    }
+
+    if (comparacao.startsWith('OBSERVACOES DO RETORNO:')) {
+      resultado.observacoesRetorno = valorDepoisDosDoisPontos(parte)
+      continue
+    }
+
+    if (comparacao.startsWith('RETORNO REGISTRADO EM:')) {
+      resultado.retornoRegistradoEm = valorDepoisDosDoisPontos(parte)
+      continue
+    }
+
+    resultado.entrada.push(parte)
+  }
+
+  return resultado
+}
+
+function novidadeGeradaAutomaticamentePelaManutencao(novidade) {
+  const descricao = normalizarComparacao(novidade?.descricao)
+
+  return descricao.includes('PROVIDENCIA: MANUTENCAO INTERNA')
+}
+
 export default function ManutencaoDetalhes({
   manutencao,
   onFechar,
@@ -123,6 +199,38 @@ if (!manutencao) return null
     perfilUsuario.includes('P4') &&
     Boolean(historicoExterno?.id)
 
+  const novidadeAutomatica =
+    novidadeGeradaAutomaticamentePelaManutencao(novidadeUsuario)
+
+  const novidadeRealUsuario =
+    novidadeAutomatica ? null : novidadeUsuario
+
+  const observacoesSeparadas =
+    separarObservacoesManutencao(manutencao.observacoes)
+
+  const observacoesEntradaVisiveis =
+    observacoesSeparadas.entrada.filter(
+      (item) =>
+        normalizarComparacao(item) !==
+        normalizarComparacao(manutencao.descricao)
+    )
+
+  const fotosEntrada = fotos.filter(
+    (foto) =>
+      normalizarComparacao(foto?.categoria) !== 'RETORNO'
+  )
+
+  const fotosRetorno = fotos.filter(
+    (foto) =>
+      normalizarComparacao(foto?.categoria) === 'RETORNO'
+  )
+
+  const temRetornoRegistrado =
+    Boolean(observacoesSeparadas.servicoExecutado) ||
+    Boolean(observacoesSeparadas.observacoesRetorno) ||
+    Boolean(observacoesSeparadas.retornoRegistradoEm) ||
+    fotosRetorno.length > 0
+
   return (
     <div className="manutencao-drawer-camada" role="presentation">
       <button
@@ -192,7 +300,7 @@ if (!manutencao) return null
     ))}
   </div>
 )}
-          {novidadeUsuario && (
+          {novidadeRealUsuario && (
             <section
               className="manutencao-detalhe-texto"
               style={{
@@ -308,7 +416,7 @@ if (!manutencao) return null
               )}
             </p>
 
-            {fotos.length > 0 && (
+            {fotosEntrada.length > 0 && (
               <div
                 style={{
                   display: 'flex',
@@ -317,14 +425,14 @@ if (!manutencao) return null
                   marginTop: '12px'
                 }}
               >
-                {fotos.map((foto, indice) => (
+                {fotosEntrada.map((foto, indice) => (
                   <img
                     key={foto.id || `${foto.foto_url}-${indice}`}
                     src={foto.foto_url}
-                    alt={`Foto ${indice + 1} da manutenção`}
+                    alt={`Foto ${indice + 1} da entrada em manutenção`}
                     onClick={() => setFotoAmpliada({
                       url: foto.foto_url,
-                      titulo: `Foto ${indice + 1} da manutenção`
+                      titulo: `Foto ${indice + 1} da entrada em manutenção`
                     })}
                     style={{
                       width: '92px',
@@ -339,6 +447,66 @@ if (!manutencao) return null
               </div>
             )}
           </section>
+
+          {temRetornoRegistrado && (
+            <section
+              className="manutencao-detalhe-texto"
+              style={{
+                border: '1px solid #bbf7d0',
+                borderRadius: '12px',
+                padding: '14px',
+                background: '#f0fdf4',
+                marginBottom: '16px'
+              }}
+            >
+              <h3>Retorno da manutenção</h3>
+
+              {observacoesSeparadas.servicoExecutado && (
+                <p style={{ marginTop: '8px' }}>
+                  <strong>Serviço executado:</strong>{' '}
+                  {observacoesSeparadas.servicoExecutado}
+                </p>
+              )}
+
+              {observacoesSeparadas.observacoesRetorno && (
+                <p style={{ marginTop: '8px' }}>
+                  <strong>Observações do retorno:</strong>{' '}
+                  {observacoesSeparadas.observacoesRetorno}
+                </p>
+              )}
+
+              {fotosRetorno.length > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    flexWrap: 'wrap',
+                    marginTop: '12px'
+                  }}
+                >
+                  {fotosRetorno.map((foto, indice) => (
+                    <img
+                      key={foto.id || `${foto.foto_url}-${indice}`}
+                      src={foto.foto_url}
+                      alt={`Foto ${indice + 1} do retorno da manutenção`}
+                      onClick={() => setFotoAmpliada({
+                        url: foto.foto_url,
+                        titulo: `Foto ${indice + 1} do retorno da manutenção`
+                      })}
+                      style={{
+                        width: '92px',
+                        height: '92px',
+                        objectFit: 'cover',
+                        borderRadius: '8px',
+                        border: '1px solid #86efac',
+                        cursor: 'zoom-in'
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           {historicoExterno && (
             <section
@@ -503,10 +671,37 @@ if (!manutencao) return null
             <div><span>Concluída em</span><strong>{dataHora(manutencao.concluida_em)}</strong></div>
           </section>
 
-          <section className="manutencao-detalhe-texto">
-            <h3>Observações</h3>
-            <p>{manutencao.observacoes || 'Nenhuma observação registrada.'}</p>
-          </section>
+          {(observacoesSeparadas.statusAnterior ||
+            observacoesSeparadas.localAnterior) && (
+            <section className="manutencao-detalhe-texto">
+              <h3>Situação antes da manutenção</h3>
+              <p>
+                {observacoesSeparadas.statusAnterior && (
+                  <>
+                    <strong>Status:</strong>{' '}
+                    {observacoesSeparadas.statusAnterior}
+                  </>
+                )}
+
+                {observacoesSeparadas.statusAnterior &&
+                  observacoesSeparadas.localAnterior && ' · '}
+
+                {observacoesSeparadas.localAnterior && (
+                  <>
+                    <strong>Local:</strong>{' '}
+                    {observacoesSeparadas.localAnterior}
+                  </>
+                )}
+              </p>
+            </section>
+          )}
+
+          {observacoesEntradaVisiveis.length > 0 && (
+            <section className="manutencao-detalhe-texto">
+              <h3>Observações da entrada</h3>
+              <p>{observacoesEntradaVisiveis.join(' | ')}</p>
+            </section>
+          )}
 
           {(manutencaoInternaAtiva || podeRegistrarRetornoExterno) && (
             <label className="manutencao-observacoes-finais">

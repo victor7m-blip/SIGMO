@@ -10,6 +10,7 @@ export const MODULOS_MANUTENCAO = Object.freeze({
   ARMAS: 'ARMAS',
   TONFAS: 'TONFAS',
   HT: 'HT',
+  COP: 'COP',
   TPD: 'TPD',
   TASER: 'TASER',
   MUNICAO: 'MUNICAO',
@@ -467,6 +468,59 @@ function normalizarManutencao(item = {}) {
   }
 }
 
+function separarObservacoesEstruturadasCOP(valor = null) {
+  const resultado = {
+    observacoesEntrada: null,
+    statusAnterior: null,
+    localAnterior: null,
+    novidadePatrimonialId: null
+  }
+
+  const partes = String(valor || '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+
+  const observacoesEntrada = []
+
+  for (const parte of partes) {
+    const parteNormalizada = maiusculo(parte)
+
+    if (parteNormalizada.startsWith('STATUS ANTERIOR:')) {
+      resultado.statusAnterior =
+        texto(parte.slice(parte.indexOf(':') + 1)) || null
+      continue
+    }
+
+    if (parteNormalizada.startsWith('LOCAL ANTERIOR:')) {
+      resultado.localAnterior =
+        texto(parte.slice(parte.indexOf(':') + 1)) || null
+      continue
+    }
+
+    if (parteNormalizada.startsWith('NOVIDADE PATRIMONIAL:')) {
+      resultado.novidadePatrimonialId =
+        texto(parte.slice(parte.indexOf(':') + 1)) || null
+      continue
+    }
+
+    observacoesEntrada.push(parte)
+  }
+
+  resultado.observacoesEntrada =
+    observacoesEntrada.length > 0
+      ? maiusculo(observacoesEntrada.join(' | '))
+      : null
+
+  resultado.statusAnterior =
+    maiusculo(resultado.statusAnterior) || null
+
+  resultado.localAnterior =
+    maiusculo(resultado.localAnterior) || null
+
+  return resultado
+}
+
 
 async function aplicarEntradaManutencaoArma({
   referenciaId,
@@ -638,6 +692,134 @@ async function aplicarEntradaManutencaoHT({
         companhia_atual: restaurado.unidade || ''
       })
     }
+  }
+}
+
+
+async function aplicarEntradaManutencaoCOP({
+  referenciaId,
+  user = null
+}) {
+  const { data: cop, error } = await supabase
+    .from('sigmo_cops')
+    .select('*')
+    .eq('id', referenciaId)
+    .single()
+
+  if (error) throw error
+
+  const statusAtual = maiusculo(
+    cop.status_operacional
+  )
+
+  if (
+    cop.ativo === false ||
+    statusAtual === 'BAIXADA' ||
+    statusAtual === 'BAIXADO'
+  ) {
+    throw new Error(
+      'Uma COP baixada ou inativa não pode ser colocada em manutenção.'
+    )
+  }
+
+  if (statusAtual === 'MANUTENCAO') {
+    throw new Error(
+      'A COP já está registrada como em manutenção.'
+    )
+  }
+
+  const payloadAnterior = {
+    status_operacional:
+      cop.status_operacional,
+    local_atual:
+      cop.local_atual,
+    ativo:
+      cop.ativo
+  }
+
+  const payloadNovo = {
+    status_operacional:
+      'MANUTENCAO',
+    local_atual:
+      cop.local_atual ||
+      'SVDD',
+    ativo:
+      true
+  }
+
+  const {
+    data: atualizada,
+    error: updateError
+  } = await supabase
+    .from('sigmo_cops')
+    .update(payloadNovo)
+    .eq('id', cop.id)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw updateError
+  }
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo:
+        'cop',
+      referencia_id:
+        atualizada.id,
+      dados:
+        atualizada,
+      user,
+      local_atual:
+        atualizada.local_atual ||
+        'SVDD',
+      companhia_atual:
+        ''
+    })
+  } catch (error) {
+    await supabase
+      .from('sigmo_cops')
+      .update(payloadAnterior)
+      .eq('id', cop.id)
+
+    throw error
+  }
+
+  return {
+    cop:
+      atualizada,
+
+    rollback:
+      async () => {
+        const {
+          data: restaurada,
+          error: rollbackError
+        } = await supabase
+          .from('sigmo_cops')
+          .update(payloadAnterior)
+          .eq('id', cop.id)
+          .select()
+          .single()
+
+        if (rollbackError) {
+          throw rollbackError
+        }
+
+        await criarOuAtualizarPatrimonio({
+          tipo:
+            'cop',
+          referencia_id:
+            restaurada.id,
+          dados:
+            restaurada,
+          user,
+          local_atual:
+            restaurada.local_atual ||
+            'SVDD',
+          companhia_atual:
+            ''
+        })
+      }
   }
 }
 
@@ -876,7 +1058,10 @@ export async function registrarManutencao({
     // Manutenção aberta diretamente no módulo (sem novidade prévia) deve
     // gerar também a novidade patrimonial oficial. Para HTs vindos de
     // devolução/recebimento, a novidade já existe e apenas é reutilizada.
-    if (moduloValido === MODULOS_MANUTENCAO.HT) {
+    if (
+      moduloValido === MODULOS_MANUTENCAO.HT ||
+      moduloValido === MODULOS_MANUTENCAO.COP
+    ) {
       novidadePatrimonial =
         await registrarNovidadePatrimonialManutencaoDireta({
           modulo: moduloValido,
@@ -889,6 +1074,11 @@ export async function registrarManutencao({
           user
         })
     }
+
+    const dadosEstruturadosCOP =
+      moduloValido === MODULOS_MANUTENCAO.COP
+        ? separarObservacoesEstruturadasCOP(observacoes)
+        : null
 
     const payload = {
       modulo:
@@ -927,6 +1117,30 @@ export async function registrarManutencao({
           .filter(Boolean)
           .join(' | ') ||
         null,
+
+      ...(moduloValido === MODULOS_MANUTENCAO.COP
+        ? {
+            observacoes_entrada:
+              dadosEstruturadosCOP?.observacoesEntrada || null,
+
+            status_anterior:
+              dadosEstruturadosCOP?.statusAnterior || null,
+
+            local_anterior:
+              dadosEstruturadosCOP?.localAnterior || null,
+
+            novidade_patrimonial_id:
+              novidadePatrimonial?.id ||
+              dadosEstruturadosCOP?.novidadePatrimonialId ||
+              null,
+
+            servico_executado:
+              null,
+
+            observacoes_retorno:
+              null
+          }
+        : {}),
 
       origem:
         maiusculo(origem) ||
@@ -1038,6 +1252,13 @@ export async function registrarManutencao({
 
     if (moduloValido === MODULOS_MANUTENCAO.HT) {
       movimentacaoPatrimonial = await aplicarEntradaManutencaoHT({
+        referenciaId: referenciaValida,
+        user
+      })
+    }
+
+    if (moduloValido === MODULOS_MANUTENCAO.COP) {
+      movimentacaoPatrimonial = await aplicarEntradaManutencaoCOP({
         referenciaId: referenciaValida,
         user
       })
@@ -1386,6 +1607,15 @@ export async function listarManutencoes({
       .map((item) => String(item.referencia_id))
   )]
 
+  const referenciasCOP = [...new Set(
+    manutencoesComOrigemInstitucional
+      .filter((item) =>
+        item.modulo === MODULOS_MANUTENCAO.COP &&
+        item.referencia_id
+      )
+      .map((item) => String(item.referencia_id))
+  )]
+
   const referenciasTaser = [...new Set(
     manutencoesComOrigemInstitucional
       .filter((item) =>
@@ -1397,6 +1627,7 @@ export async function listarManutencoes({
 
   let armasPorId = new Map()
   let htsPorId = new Map()
+  let copsPorId = new Map()
   let tpdsPorId = new Map()
   let tasersPorId = new Map()
 
@@ -1432,6 +1663,31 @@ export async function listarManutencoes({
     } else {
       htsPorId = new Map(
         (hts || []).map((ht) => [String(ht.id), ht])
+      )
+    }
+  }
+
+  if (referenciasCOP.length > 0) {
+    const { data: cops, error: copsError } = await supabase
+      .from('sigmo_cops')
+      .select(
+        'id, numero, identificacao_equipamento, marca, status_operacional, local_atual, foto_url'
+      )
+      .in('id', referenciasCOP)
+
+    if (copsError) {
+      console.warn(
+        'Não foi possível carregar a identificação das COPs em manutenção:',
+        copsError
+      )
+    } else {
+      copsPorId = new Map(
+        (cops || []).map(
+          (cop) => [
+            String(cop.id),
+            cop
+          ]
+        )
       )
     }
   }
@@ -1531,6 +1787,49 @@ return {
   origem_institucional: origemInstitucionalHT,
   origem_institucional_local: ht.local_atual || item.origem_institucional_local
 }
+      }
+
+      if (item.modulo === MODULOS_MANUTENCAO.COP) {
+        const cop = copsPorId.get(
+          referenciaId
+        )
+
+        if (!cop) {
+          return item
+        }
+
+        return {
+          ...item,
+          patrimonio:
+            `COP ${String(
+              cop.numero ||
+              ''
+            ).padStart(2, '0')}`.trim(),
+          numero:
+            cop.numero ||
+            null,
+          identificacao_equipamento:
+            cop.identificacao_equipamento ||
+            null,
+          marca:
+            cop.marca ||
+            null,
+          status_operacional:
+            cop.status_operacional ||
+            null,
+          local_atual:
+            cop.local_atual ||
+            null,
+          foto_url_cadastro:
+            cop.foto_url ||
+            null,
+          origem_institucional:
+            'SVDD',
+          origem_institucional_local:
+            cop.local_atual ||
+            item.origem_institucional_local ||
+            'SVDD'
+        }
       }
 
       if (item.modulo === MODULOS_MANUTENCAO.TPD) {
@@ -2049,6 +2348,131 @@ async function aplicarRetornoHT(manutencao, user) {
   }
 }
 
+async function aplicarRetornoCOP(
+  manutencao,
+  user
+) {
+  const {
+    data: cop,
+    error
+  } = await supabase
+    .from('sigmo_cops')
+    .select('*')
+    .eq(
+      'id',
+      manutencao.referencia_id
+    )
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  if (
+    maiusculo(
+      cop.status_operacional
+    ) !== 'MANUTENCAO'
+  ) {
+    throw new Error(
+      'A COP não está registrada como em manutenção.'
+    )
+  }
+
+  const payloadAnterior = {
+    status_operacional:
+      cop.status_operacional,
+    local_atual:
+      cop.local_atual,
+    ativo:
+      cop.ativo
+  }
+
+  const payloadNovo = {
+    status_operacional:
+      'RESERVA',
+    local_atual:
+      'SVDD',
+    ativo:
+      true
+  }
+
+  const {
+    data: atualizada,
+    error: updateError
+  } = await supabase
+    .from('sigmo_cops')
+    .update(payloadNovo)
+    .eq('id', cop.id)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw updateError
+  }
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo:
+        'cop',
+      referencia_id:
+        atualizada.id,
+      dados:
+        atualizada,
+      user,
+      local_atual:
+        atualizada.local_atual ||
+        'SVDD',
+      companhia_atual:
+        ''
+    })
+  } catch (error) {
+    await supabase
+      .from('sigmo_cops')
+      .update(payloadAnterior)
+      .eq('id', cop.id)
+
+    throw error
+  }
+
+  return {
+    cop:
+      atualizada,
+
+    rollback:
+      async () => {
+        const {
+          data: restaurada,
+          error: rollbackError
+        } = await supabase
+          .from('sigmo_cops')
+          .update(payloadAnterior)
+          .eq('id', cop.id)
+          .select()
+          .single()
+
+        if (rollbackError) {
+          throw rollbackError
+        }
+
+        await criarOuAtualizarPatrimonio({
+          tipo:
+            'cop',
+          referencia_id:
+            restaurada.id,
+          dados:
+            restaurada,
+          user,
+          local_atual:
+            restaurada.local_atual ||
+            'SVDD',
+          companhia_atual:
+            ''
+        })
+      }
+  }
+}
+
+
 async function aplicarRetornoPatrimonial(manutencao, user) {
   if (manutencao.modulo === MODULOS_MANUTENCAO.ARMAS) {
     return aplicarRetornoArma(manutencao, user)
@@ -2060,6 +2484,13 @@ async function aplicarRetornoPatrimonial(manutencao, user) {
 
   if (manutencao.modulo === MODULOS_MANUTENCAO.HT) {
     return aplicarRetornoHT(manutencao, user)
+  }
+
+  if (manutencao.modulo === MODULOS_MANUTENCAO.COP) {
+    return aplicarRetornoCOP(
+      manutencao,
+      user
+    )
   }
 
   return {
@@ -2167,17 +2598,58 @@ export async function concluirManutencao({
       .filter(Boolean)
       .join(' | ') || null
 
+  const dadosLegadosCOP =
+    atual.modulo === MODULOS_MANUTENCAO.COP
+      ? separarObservacoesEstruturadasCOP(atual.observacoes)
+      : null
+
   try {
+    const payloadConclusao = {
+      status: STATUS_MANUTENCAO.CONCLUIDA,
+      observacoes: observacoesFinais,
+      concluida_em: agora,
+      concluida_por_id: obterUsuarioId(user),
+      concluida_por_nome: obterUsuarioNome(user),
+      atualizado_em: agora,
+
+      ...(atual.modulo === MODULOS_MANUTENCAO.COP
+        ? {
+            observacoes_entrada:
+              atual.observacoes_entrada ||
+              dadosLegadosCOP?.observacoesEntrada ||
+              null,
+
+            status_anterior:
+              atual.status_anterior ||
+              dadosLegadosCOP?.statusAnterior ||
+              null,
+
+            local_anterior:
+              atual.local_anterior ||
+              dadosLegadosCOP?.localAnterior ||
+              null,
+
+            novidade_patrimonial_id:
+              atual.novidade_patrimonial_id ||
+              dadosLegadosCOP?.novidadePatrimonialId ||
+              null,
+
+            servico_executado:
+              maiusculo(servicoExecutado) ||
+              atual.servico_executado ||
+              null,
+
+            observacoes_retorno:
+              maiusculo(observacoes) ||
+              atual.observacoes_retorno ||
+              null
+          }
+        : {})
+    }
+
     const { data, error } = await supabase
       .from(TABLE)
-      .update({
-        status: STATUS_MANUTENCAO.CONCLUIDA,
-        observacoes: observacoesFinais,
-        concluida_em: agora,
-        concluida_por_id: obterUsuarioId(user),
-        concluida_por_nome: obterUsuarioNome(user),
-        atualizado_em: agora
-      })
+      .update(payloadConclusao)
       .eq('id', manutencaoId)
       .eq('status', STATUS_MANUTENCAO.EM_MANUTENCAO)
       .select()

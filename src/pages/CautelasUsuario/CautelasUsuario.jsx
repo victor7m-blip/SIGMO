@@ -20,6 +20,10 @@ import {
   receberCautelaMunicaoPolicial
 } from '../../services/municoesMovimentacoesService'
 
+import {
+  listarManutencoes
+} from '../../services/manutencoesService'
+
 import './CautelasUsuario.css'
 import './CautelasUsuarioNovidades.css'
 
@@ -373,6 +377,139 @@ function associarMunicoesAosCarrinhos(
 }
 
 
+
+function valorDepoisDosDoisPontos(valor) {
+  const texto = String(valor || '')
+  const indice = texto.indexOf(':')
+
+  if (indice < 0) return ''
+
+  return texto
+    .slice(indice + 1)
+    .trim()
+}
+
+function obterDadosRetornoManutencao(
+  manutencao
+) {
+  if (!manutencao) {
+    return {
+      servicoExecutado: '',
+      observacoesRetorno: ''
+    }
+  }
+
+  let servicoExecutado =
+    String(
+      manutencao.servico_executado ||
+      ''
+    ).trim()
+
+  let observacoesRetorno =
+    String(
+      manutencao.observacoes_retorno ||
+      ''
+    ).trim()
+
+  if (
+    servicoExecutado &&
+    observacoesRetorno
+  ) {
+    return {
+      servicoExecutado,
+      observacoesRetorno
+    }
+  }
+
+  const partes = String(
+    manutencao.observacoes ||
+    ''
+  )
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+
+  for (const parte of partes) {
+    const comparacao =
+      normalizar(parte)
+
+    if (
+      !servicoExecutado &&
+      comparacao.startsWith(
+        'servico executado:'
+      )
+    ) {
+      servicoExecutado =
+        valorDepoisDosDoisPontos(
+          parte
+        )
+      continue
+    }
+
+    if (
+      !observacoesRetorno &&
+      comparacao.startsWith(
+        'observacoes do retorno:'
+      )
+    ) {
+      observacoesRetorno =
+        valorDepoisDosDoisPontos(
+          parte
+        )
+    }
+  }
+
+  return {
+    servicoExecutado,
+    observacoesRetorno
+  }
+}
+
+async function carregarUltimasManutencoesCOP() {
+  try {
+    const resposta =
+      await listarManutencoes({
+        modulo: 'COP',
+        status: 'CONCLUIDA',
+        pagina: 1,
+        limite: 200
+      })
+
+    const porPatrimonio = {}
+
+    for (
+      const manutencao of
+      resposta?.data || []
+    ) {
+      const patrimonioId =
+        String(
+          manutencao?.patrimonio_id ||
+          ''
+        )
+
+      if (
+        !patrimonioId ||
+        porPatrimonio[patrimonioId]
+      ) {
+        continue
+      }
+
+      porPatrimonio[
+        patrimonioId
+      ] = manutencao
+    }
+
+    return porPatrimonio
+  } catch (error) {
+    console.warn(
+      'Não foi possível carregar a última manutenção das COPs:',
+      error
+    )
+
+    return {}
+  }
+}
+
 export default function CautelasUsuario({
   user,
   modo = 'receber',
@@ -400,6 +537,11 @@ export default function CautelasUsuario({
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
 
+  const [
+    ultimasManutencoesCOP,
+    setUltimasManutencoesCOP
+  ] = useState({})
+
   const carregar = useCallback(async () => {
     try {
       setLoading(true)
@@ -410,14 +552,16 @@ export default function CautelasUsuario({
         ativos,
         devolucoesPendentes,
         cargasPermanentes,
-        cautelasMunicao
+        cautelasMunicao,
+        manutencoesCOP
       ] =
         await Promise.all([
           listarCautelasAguardandoUsuario(user),
           listarMateriaisEmServicoUsuario(user),
           listarDevolucoesPendentesUsuario(user),
           listarCargasPermanentesPendentesPolicial(),
-          listarCautelasPendentesPolicial()
+          listarCautelasPendentesPolicial(),
+          carregarUltimasManutencoesCOP()
         ])
 
       const listaPendentes = pendentes || []
@@ -433,6 +577,13 @@ export default function CautelasUsuario({
         Array.isArray(cautelasMunicao)
           ? cautelasMunicao
           : []
+      )
+
+      setUltimasManutencoesCOP(
+        manutencoesCOP &&
+        typeof manutencoesCOP === 'object'
+          ? manutencoesCOP
+          : {}
       )
 
       setMateriais(ativos || [])
@@ -2202,6 +2353,19 @@ function alterarQuantidadeDevolver(
                             )
                           )
 
+                        const ultimaManutencaoCOP =
+                          ultimasManutencoesCOP[
+                            String(
+                              item?.patrimonio_id ||
+                              ''
+                            )
+                          ] || null
+
+                        const dadosRetornoCOP =
+                          obterDadosRetornoManutencao(
+                            ultimaManutencaoCOP
+                          )
+
                         return (
                           <article
                             key={`receber-${movimentacao.id}-${chaveItemEstavel(item)}-${index}`}
@@ -2215,6 +2379,89 @@ function alterarQuantidadeDevolver(
                               <span>
                                 {obterIdentificacao(item)}
                               </span>
+
+                              {ultimaManutencaoCOP && (
+                                <div
+                                  style={{
+                                    marginTop: '10px',
+                                    padding: '10px 12px',
+                                    border:
+                                      '1px solid #bbf7d0',
+                                    borderRadius:
+                                      '10px',
+                                    background:
+                                      '#f0fdf4'
+                                  }}
+                                >
+                                  <small
+                                    style={{
+                                      display: 'block',
+                                      marginBottom:
+                                        '5px',
+                                      color:
+                                        '#166534',
+                                      fontWeight:
+                                        800,
+                                      letterSpacing:
+                                        '.02em'
+                                    }}
+                                  >
+                                    ÚLTIMA MANUTENÇÃO CONCLUÍDA
+                                  </small>
+
+                                  <strong
+                                    style={{
+                                      display: 'block',
+                                      color:
+                                        '#14532d'
+                                    }}
+                                  >
+                                    {ultimaManutencaoCOP.descricao ||
+                                      ultimaManutencaoCOP.tipo_novidade ||
+                                      'MANUTENÇÃO'}
+                                  </strong>
+
+                                  {(dadosRetornoCOP.servicoExecutado ||
+                                    dadosRetornoCOP.observacoesRetorno) && (
+                                    <span
+                                      style={{
+                                        display:
+                                          'block',
+                                        marginTop:
+                                          '5px',
+                                        color:
+                                          '#344054',
+                                        lineHeight:
+                                          1.4
+                                      }}
+                                    >
+                                      <strong>
+                                        Solução / retorno:
+                                      </strong>{' '}
+                                      {dadosRetornoCOP.servicoExecutado ||
+                                        dadosRetornoCOP.observacoesRetorno}
+                                    </span>
+                                  )}
+
+                                  <small
+                                    style={{
+                                      display: 'block',
+                                      marginTop:
+                                        '6px',
+                                      color:
+                                        '#667085'
+                                    }}
+                                  >
+                                    Concluída em{' '}
+                                    {formatarData(
+                                      ultimaManutencaoCOP.concluida_em
+                                    )}
+                                    {ultimaManutencaoCOP.concluida_por_nome
+                                      ? ` · ${ultimaManutencaoCOP.concluida_por_nome}`
+                                      : ''}
+                                  </small>
+                                </div>
+                              )}
 
                               {quantitativo && (
                                 <label className="cautela-usuario-carrinho-quantidade">

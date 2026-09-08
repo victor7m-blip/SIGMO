@@ -27,6 +27,7 @@ export const ROTAS = {
   TASERS: 'tasers',
   TONFAS: 'tonfas',
   MUNICOES: 'municoes',
+  COLETE_BALISTICO: 'colete-balistico',
   LOCAIS: 'locais',
   VIATURAS: 'viaturas',
   MAPA_FORCA: 'mapa-forca',
@@ -402,6 +403,7 @@ const ROTAS_P4 = [
   ROTAS.TASERS,
   ROTAS.TONFAS,
   ROTAS.MUNICOES,
+  ROTAS.COLETE_BALISTICO,
   ROTAS.LOCAIS,
   ROTAS.VIATURAS,
   ROTAS.MAPA_FORCA,
@@ -458,6 +460,7 @@ const ROTAS_ENCARREGADO = [
 
 const ROTAS_COMANDANTE = [
   ...ROTAS_ENCARREGADO,
+  ROTAS.COLETE_BALISTICO,
   ROTAS.CONFIGURACOES
 ]
 

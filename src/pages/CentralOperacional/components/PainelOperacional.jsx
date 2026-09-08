@@ -17,6 +17,10 @@ import {
 } from '../../../services/centralOperacionalService'
 
 import {
+  decidirDescargaColete
+} from '../../../services/coletesBalisticosService'
+
+import {
   aceitarTransferenciaHT,
   recusarTransferenciaHT
 } from '../../../services/htsTransferenciaService'
@@ -208,12 +212,205 @@ function itemEhManutencaoExterna(item) {
   return normalizarOperacional(item?.origem_aprovacao) === 'MANUTENCAO_EXTERNA'
 }
 
+function itemEhDescargaColete(item) {
+  const origem =
+    normalizarOperacional(
+      item?.origem_aprovacao
+    )
+
+  const tipo =
+    normalizarOperacional(
+      item?.tipo_solicitacao ||
+      item?.modulo ||
+      item?.tipo_patrimonio ||
+      ''
+    )
+
+  return (
+    origem ===
+      'BAIXA_PATRIMONIAL' &&
+    (
+      tipo.includes(
+        'DESCARGA_COLETE'
+      ) ||
+      tipo.includes(
+        'COLETE BALISTICO'
+      )
+    )
+  )
+}
+
 function ehManutencaoExterna(secao) {
   return ['manutencao-externa-acompanhamento', 'manutencao-externa-aprovacoes'].includes(secao?.key)
 }
 
 function ehNovidade(secao) {
   return ['novidades', 'novidades-p4', 'novidades-svdd'].includes(secao?.key)
+}
+
+function ehAlertaValidadeColete(
+  item
+) {
+  const tipo =
+    normalizarOperacional(
+      item?.tipo_patrimonio ||
+      item?.especie ||
+      item?.especie_patrimonio ||
+      item?.tipo_especifico ||
+      ''
+    )
+
+  const titulo =
+    normalizarOperacional(
+      item?.titulo ||
+      ''
+    )
+
+  const status =
+    normalizarOperacional(
+      item?.status ||
+      ''
+    )
+
+  return (
+    tipo.includes(
+      'COLETE BALISTICO'
+    ) &&
+    !item?.descarga_pendente &&
+    (
+      titulo ===
+        'VALIDADE PROXIMA' ||
+      titulo ===
+        'VENCIDO' ||
+      status ===
+        'ALERTA DE VALIDADE' ||
+      status ===
+        'VENCIDO'
+    )
+  )
+}
+
+function textoValidadeColete(
+  item
+) {
+  if (
+    !ehAlertaValidadeColete(
+      item
+    ) ||
+    !item?.validade
+  ) {
+    return ''
+  }
+
+  const partes =
+    String(
+      item.validade
+    )
+      .slice(0, 10)
+      .split('-')
+      .map(Number)
+
+  if (
+    partes.length !== 3 ||
+    partes.some(
+      (valor) =>
+        !Number.isFinite(
+          valor
+        )
+    )
+  ) {
+    return ''
+  }
+
+  const validade =
+    new Date(
+      partes[0],
+      partes[1] - 1,
+      partes[2],
+      12,
+      0,
+      0,
+      0
+    )
+
+  const agora =
+    new Date()
+
+  const hoje =
+    new Date(
+      agora.getFullYear(),
+      agora.getMonth(),
+      agora.getDate(),
+      12,
+      0,
+      0,
+      0
+    )
+
+  const diferencaDias =
+    Math.round(
+      (
+        validade.getTime() -
+        hoje.getTime()
+      ) /
+      86400000
+    )
+
+  if (
+    diferencaDias < 0
+  ) {
+    const dias =
+      Math.abs(
+        diferencaDias
+      )
+
+    return `Vencido há ${dias} ${
+      dias === 1
+        ? 'dia'
+        : 'dias'
+    }`
+  }
+
+  if (
+    diferencaDias === 0
+  ) {
+    return 'Vence hoje'
+  }
+
+  return `Validade próxima • vence em ${diferencaDias} ${
+    diferencaDias === 1
+      ? 'dia'
+      : 'dias'
+  }`
+}
+
+function textoSituacaoNovidade(
+  item
+) {
+  if (
+    item?.descarga_pendente
+  ) {
+    return tempoPendente(
+      item?.descarga_solicitada_em ||
+      item?.created_at ||
+      item?.updated_at
+    )
+  }
+
+  if (
+    ehAlertaValidadeColete(
+      item
+    )
+  ) {
+    return textoValidadeColete(
+      item
+    )
+  }
+
+  return tempoPendente(
+    item?.created_at ||
+    item?.updated_at
+  )
 }
 
 function ehIndicadorPatrimonio(secao) {
@@ -688,11 +885,122 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     }
   }
 
+  async function decidirDescargaNaCentral(
+    item,
+    decisao
+  ) {
+    if (
+      !item?.id ||
+      decidindoDescargaId
+    ) {
+      return
+    }
+
+    const aprovando =
+      decisao ===
+      'APROVAR'
+
+    if (aprovando) {
+      const confirmou =
+        window.confirm(
+          `Aprovar a descarga definitiva do colete ${
+            item?.patrimonio ||
+            item?.numero_serie ||
+            ''
+          }?\n\nApós a aprovação, o colete será baixado e retirado do estoque ativo.`
+        )
+
+      if (!confirmou) {
+        return
+      }
+    }
+
+    let observacoes = ''
+
+    if (!aprovando) {
+      const resposta =
+        window.prompt(
+          'Informe o motivo da reprovação da descarga:'
+        )
+
+      if (resposta === null) {
+        return
+      }
+
+      observacoes =
+        String(
+          resposta || ''
+        )
+          .trim()
+          .toUpperCase()
+
+      if (!observacoes) {
+        window.alert(
+          'Informe o motivo da reprovação.'
+        )
+        return
+      }
+    }
+
+    try {
+      setDecidindoDescargaId(
+        item.id
+      )
+
+      await decidirDescargaColete({
+        solicitacao:
+          item,
+        decisao,
+        observacoes,
+        user
+      })
+
+      setSelecionado(
+        null
+      )
+
+      setRegistroAberto(
+        null
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao decidir descarga de colete:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível registrar a decisão da descarga.'
+      )
+    } finally {
+      setDecidindoDescargaId(
+        null
+      )
+    }
+  }
+
   const [selecionado, setSelecionado] = useState(null)
   const [registroAberto, setRegistroAberto] = useState(null)
   const [recebendoId, setRecebendoId] = useState(null)
   const [recusandoId, setRecusandoId] = useState(null)
   const [cancelandoId, setCancelandoId] = useState(null)
+
+  const [
+    decidindoDescargaId,
+    setDecidindoDescargaId
+  ] = useState(null)
+
+  const [
+    cancelandoDescargaId,
+    setCancelandoDescargaId
+  ] = useState(null)
 
   const [
     municoesVinculadas,
@@ -925,6 +1233,192 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
 
     return resultado
   }, [dados, user])
+
+  function ehCancelavelDescargaColete(
+    item,
+    secao
+  ) {
+    if (
+      !ehP4(user) ||
+      !ehNovidade(secao)
+    ) {
+      return false
+    }
+
+    const tipo =
+      normalizarOperacional(
+        item?.tipo_patrimonio ||
+        item?.especie ||
+        item?.especie_patrimonio ||
+        ''
+      )
+
+    const status =
+      normalizarOperacional(
+        item?.status ||
+        ''
+      )
+
+    return (
+      tipo.includes(
+        'COLETE BALISTICO'
+      ) &&
+      Boolean(
+        item?.descarga_pendente
+      ) &&
+      Boolean(
+        item?.descarga_solicitacao_id
+      ) &&
+      (
+        status.includes(
+          'AGUARDANDO APROVACAO'
+        ) ||
+        Boolean(
+          item?.descarga_pendente
+        )
+      )
+    )
+  }
+
+  async function cancelarSolicitacaoDescargaColete(
+    item
+  ) {
+    const solicitacaoId =
+      item?.descarga_solicitacao_id
+
+    if (
+      !solicitacaoId ||
+      !ehP4(user) ||
+      cancelandoDescargaId
+    ) {
+      return
+    }
+
+    const motivo =
+      window.prompt(
+        'Informe o motivo do cancelamento da solicitação de descarga:'
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo do cancelamento.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        'Cancelar esta solicitação de descarga?\n\n' +
+        'A solicitação permanecerá registrada no histórico como CANCELADA e o colete não será baixado.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    const agora =
+      new Date()
+        .toISOString()
+
+    const canceladoPor =
+      user?.nome_guerra ||
+      user?.nome ||
+      user?.nome_completo ||
+      user?.email ||
+      'P4'
+
+    try {
+      setCancelandoDescargaId(
+        solicitacaoId
+      )
+
+      const {
+        data,
+        error
+      } = await supabase
+        .from(
+          'sigmo_patrimonio_baixas'
+        )
+        .update({
+          status:
+            'CANCELADA',
+
+          decisao_observacoes:
+            `SOLICITAÇÃO DE DESCARGA CANCELADA PELO P4. MOTIVO: ${motivoNormalizado}`,
+
+          decidida_em:
+            agora,
+
+          decidida_por_nome:
+            canceladoPor,
+
+          updated_at:
+            agora
+        })
+        .eq(
+          'id',
+          solicitacaoId
+        )
+        .eq(
+          'status',
+          'AGUARDANDO_APROVACAO'
+        )
+        .select(
+          'id, status'
+        )
+        .maybeSingle()
+
+      if (error) {
+        throw error
+      }
+
+      if (!data?.id) {
+        throw new Error(
+          'A solicitação não está mais aguardando aprovação. Atualize a Central e confira a situação atual.'
+        )
+      }
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        null
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao cancelar solicitação de descarga de colete:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível cancelar a solicitação de descarga.'
+      )
+    } finally {
+      setCancelandoDescargaId(
+        null
+      )
+    }
+  }
 
   async function cancelarAguardandoRecebimento(item) {
     if (!item?.id || cancelandoId || recebendoId) return
@@ -1427,12 +1921,24 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                           style={{
                             marginTop: '6px',
                             fontWeight: 800,
-                            color: '#dc2626'
+                            color:
+                              ehAlertaValidadeColete(
+                                item
+                              )
+                                ? normalizarOperacional(
+                                    item?.titulo ||
+                                    item?.status ||
+                                    ''
+                                  ).includes(
+                                    'VENCIDO'
+                                  )
+                                  ? '#dc2626'
+                                  : '#b54708'
+                                : '#dc2626'
                           }}
                         >
-                          {tempoPendente(
-                            item?.created_at ||
-                            item?.updated_at
+                          {textoSituacaoNovidade(
+                            item
                           )}
                         </div>
                       )}
@@ -1448,6 +1954,87 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               <div><span>Local atual</span><strong>{item?.local_atual || 'Sem localização'}</strong></div>
                               <div><span>Responsável</span><strong>{item?.responsavel_atual_nome || item?.responsavel_nome || 'Não informado'}</strong></div>
                             </>
+                          ) : (
+                            ehAprovacaoComandante(
+                              selecionado
+                            ) &&
+                            itemEhDescargaColete(
+                              item
+                            )
+                          ) ? (
+                            <>
+                              <div>
+                                <span>Tipo</span>
+                                <strong>
+                                  Descarga de Colete Balístico
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Patrimônio</span>
+                                <strong>
+                                  {item?.patrimonio ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Nº de série</span>
+                                <strong>
+                                  {item?.numero_serie ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Status</span>
+                                <strong>
+                                  {item?.status ||
+                                    'AGUARDANDO_APROVACAO'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Solicitado por</span>
+                                <strong>
+                                  {item?.solicitada_por_nome ||
+                                    'P4'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Data da solicitação</span>
+                                <strong>
+                                  {formatarData(
+                                    item?.solicitada_em ||
+                                    item?.created_at
+                                  ) ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
+
+                              <div className="central-registro-itens">
+                                <span>Motivo</span>
+                                <strong>
+                                  {item?.motivo ||
+                                    item?.observacoes ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Situação anterior</span>
+                                <strong>
+                                  {[
+                                    item?.status_anterior,
+                                    item?.local_anterior
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' • ') ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
+                            </>
                           ) : ehNovidade(selecionado) ? (
                             <>
                               <div><span>Tipo de patrimônio</span><strong>{item?.especie || item?.especie_patrimonio || item?.tipo_especifico || item?.tipo_patrimonio || 'Não informado'}</strong></div>
@@ -1458,9 +2045,40 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               <div><span>Registrado por</span><strong>{item?.registrado_por_nome || 'Não informado'}</strong></div>
                               <div><span>Data / hora</span><strong>{formatarData(item?.created_at)}</strong></div>
                               <div>
-                                <span>Tempo aguardando providência</span>
-                                <strong style={{ color: '#dc2626', fontWeight: 800 }}>
-                                  {tempoPendente(item?.created_at || item?.updated_at) || 'Não informado'}
+                                <span>
+                                  {item?.descarga_pendente
+                                    ? 'Tempo aguardando aprovação'
+                                    : ehAlertaValidadeColete(
+                                        item
+                                      )
+                                    ? 'Situação da validade'
+                                    : 'Tempo aguardando providência'}
+                                </span>
+
+                                <strong
+                                  style={{
+                                    color:
+                                      ehAlertaValidadeColete(
+                                        item
+                                      )
+                                        ? normalizarOperacional(
+                                            item?.titulo ||
+                                            item?.status ||
+                                            ''
+                                          ).includes(
+                                            'VENCIDO'
+                                          )
+                                          ? '#dc2626'
+                                          : '#b54708'
+                                        : '#dc2626',
+                                    fontWeight:
+                                      800
+                                  }}
+                                >
+                                  {textoSituacaoNovidade(
+                                    item
+                                  ) ||
+                                    'Não informado'}
                                 </strong>
                               </div>
                               <div className="central-registro-itens"><span>Descrição</span><strong>{item?.descricao || 'Sem descrição.'}</strong></div>
@@ -1625,6 +2243,39 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                         </button>
                       )}
 
+                      {ehCancelavelDescargaColete(
+                        item,
+                        selecionado
+                      ) && (
+                        <button
+                          type="button"
+                          className="central-detalhe-button"
+                          disabled={
+                            Boolean(
+                              cancelandoDescargaId
+                            )
+                          }
+                          onClick={() =>
+                            cancelarSolicitacaoDescargaColete(
+                              item
+                            )
+                          }
+                          style={{
+                            borderColor:
+                              '#dc2626',
+                            color:
+                              '#dc2626',
+                            fontWeight:
+                              800
+                          }}
+                        >
+                          {cancelandoDescargaId ===
+                          item?.descarga_solicitacao_id
+                            ? 'Cancelando solicitação...'
+                            : 'Cancelar solicitação de descarga'}
+                        </button>
+                      )}
+
                       {ehCancelavelAguardandoUsuario(item, selecionado) && (
                         <button
                           type="button"
@@ -1700,6 +2351,68 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                           </button>
                         </>
                       )}
+
+                      {ehAprovacaoComandante(
+                        selecionado
+                      ) &&
+                        itemEhDescargaColete(
+                          item
+                        ) &&
+                        ehComandante(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                              disabled={
+                                Boolean(
+                                  decidindoDescargaId
+                                )
+                              }
+                              onClick={() =>
+                                decidirDescargaNaCentral(
+                                  item,
+                                  'REPROVAR'
+                                )
+                              }
+                              style={{
+                                borderColor:
+                                  '#dc2626',
+                                color:
+                                  '#dc2626',
+                                fontWeight:
+                                  800
+                              }}
+                            >
+                              {decidindoDescargaId ===
+                              item.id
+                                ? 'Processando...'
+                                : 'Reprovar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="central-button central-button-primary"
+                              disabled={
+                                Boolean(
+                                  decidindoDescargaId
+                                )
+                              }
+                              onClick={() =>
+                                decidirDescargaNaCentral(
+                                  item,
+                                  'APROVAR'
+                                )
+                              }
+                            >
+                              {decidindoDescargaId ===
+                              item.id
+                                ? 'Processando...'
+                                : 'Aprovar descarga'}
+                            </button>
+                          </>
+                        )}
 
                       {ehAprovacaoComandante(selecionado) && itemEhManutencaoExterna(item) && (
                         <>

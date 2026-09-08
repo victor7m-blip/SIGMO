@@ -67,6 +67,11 @@ const menuItems = [
     icon: '▰'
   },
   {
+    key: 'colete-balistico',
+    label: 'Colete Balístico',
+    icon: '🛡'
+  },
+  {
     key: 'viaturas',
     label: 'Viaturas',
     icon: '▱'

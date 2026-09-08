@@ -8,7 +8,8 @@ import {
 } from '../../services/cautelasUsuarioService'
 
 import {
-  ehUsuario
+  ehUsuario,
+  podeAcessarRota
 } from '../../services/permissionService'
 
 import './Materiais.css'
@@ -26,11 +27,12 @@ const categorias = [
   },
   {
     id: 'coletes',
+    rota: 'colete-balistico',
     icone: '🦺',
     titulo: 'Coletes Balísticos',
     descricao:
       'Gerencie coletes, placas balísticas, níveis de proteção, tamanhos e validades.',
-    status: 'em-breve',
+    status: 'disponivel',
     destaque: 'vermelho'
   },
   {
@@ -274,6 +276,15 @@ export default function Materiais({
   user,
   onNavegar
 }) {
+  const categoriasVisiveis =
+    categorias.filter(
+      (categoria) =>
+        categoria.id !== 'coletes' ||
+        podeAcessarRota(
+          user,
+          'colete-balistico'
+        )
+    )
 
   if (ehUsuario(user)) {
     return (
@@ -343,7 +354,7 @@ export default function Materiais({
           <span className="indicador-icone">🏷️</span>
           <div>
             <small>Categorias</small>
-            <strong>{categorias.length}</strong>
+            <strong>{categoriasVisiveis.length}</strong>
             <span>Disponíveis</span>
           </div>
         </article>
@@ -386,7 +397,7 @@ export default function Materiais({
           </div>
 
           <div className="gestao-patrimonial__grid">
-            {categorias.map((categoria) => {
+            {categoriasVisiveis.map((categoria) => {
               const disponivel =
                 categoria.status === 'disponivel'
 
@@ -477,7 +488,7 @@ export default function Materiais({
             <h2>Resumo patrimonial</h2>
 
             <div className="resumo-patrimonial">
-              {categorias.map((categoria) => (
+              {categoriasVisiveis.map((categoria) => (
                 <div key={categoria.id}>
                   <span>{categoria.titulo}</span>
                   <strong>—</strong>

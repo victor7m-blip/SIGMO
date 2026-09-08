@@ -119,7 +119,7 @@ export async function solicitarDevolucaoCargaAoP4({
     await criarMovimentacaoCompleta({
       tipo: 'TRANSFERÊNCIA PARA O P4',
       origemLocal: 'CARGA PERMANENTE',
-      destinoLocal: 'DEPÓSITO DO P4',
+      destinoLocal: 'COFRE DO P4',
       solicitante: user,
       recebedor: null,
       observacoes:
@@ -134,6 +134,122 @@ export async function solicitarDevolucaoCargaAoP4({
         }
       ],
       aprovarAutomaticamente: true
+    })
+
+  return movimentacao
+}
+
+
+export async function solicitarDevolucaoColeteAoP4({
+  colete,
+  user,
+  observacoes = ''
+}) {
+  if (!colete) {
+    throw new Error(
+      'Colete balístico não identificado.'
+    )
+  }
+
+  if (!user) {
+    throw new Error(
+      'Usuário não identificado.'
+    )
+  }
+
+  const status =
+    limpar(
+      colete.status
+    ).toUpperCase()
+
+  const local =
+    limpar(
+      colete.local_atual
+    ).toUpperCase()
+
+  if (
+    status !== 'CARGA' ||
+    local !== 'CARGA PERMANENTE'
+  ) {
+    throw new Error(
+      'Este colete não está em carga permanente.'
+    )
+  }
+
+  let patrimonioId =
+    colete.patrimonio_id ||
+    null
+
+  if (!patrimonioId) {
+    const referenciaId =
+      colete.referencia_id ||
+      colete.id ||
+      null
+
+    if (referenciaId) {
+      const {
+        data,
+        error
+      } = await supabase
+        .from('sigmo_patrimonios')
+        .select('id')
+        .eq(
+          'tipo',
+          'colete_balistico'
+        )
+        .eq(
+          'referencia_id',
+          referenciaId
+        )
+        .eq(
+          'ativo',
+          true
+        )
+        .maybeSingle()
+
+      if (error) {
+        throw error
+      }
+
+      patrimonioId =
+        data?.id ||
+        null
+    }
+  }
+
+  if (!patrimonioId) {
+    throw new Error(
+      'O patrimônio vinculado a este colete não foi encontrado.'
+    )
+  }
+
+  const movimentacao =
+    await criarMovimentacaoCompleta({
+      tipo:
+        'TRANSFERÊNCIA PARA O P4',
+      origemLocal:
+        'CARGA PERMANENTE',
+      destinoLocal:
+        'COFRE DO P4',
+      solicitante:
+        user,
+      recebedor:
+        null,
+      observacoes:
+        observacoes ||
+        'DEVOLUÇÃO DE COLETE BALÍSTICO AO P4',
+      itens: [
+        {
+          patrimonio_id:
+            patrimonioId,
+          quantidade:
+            1,
+          observacao:
+            'DEVOLUÇÃO DE COLETE BALÍSTICO AO P4'
+        }
+      ],
+      aprovarAutomaticamente:
+        true
     })
 
   return movimentacao

@@ -46,6 +46,7 @@ import CargaPessoal from './CargaPessoal/CargaPessoal'
 import Taser from './Taser/Taser'
 import Tonfas from './Tonfas/Tonfas'
 import Municoes from './Municoes/Municoes'
+import ColeteBalistico from './ColeteBalistico/ColeteBalistico'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
 import ReceberMaterialHibrido from './ReceberMaterial/ReceberMaterialHibrido'
@@ -225,6 +226,152 @@ function obterNomeUsuario(user) {
     user?.re ||
     'USUÁRIO'
   )
+}
+
+
+async function listarCargasPermanentesUsuario(user) {
+  const policialId =
+    user?.id ||
+    user?.policial_id ||
+    user?.id_policial ||
+    user?.policial?.id ||
+    null
+
+  if (!policialId) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select(
+      'id, tipo, referencia_id, descricao, numero_patrimonio, numero_serie, status, local_atual, responsavel_atual_id, responsavel_atual_nome, dados, ativo'
+    )
+    .eq('ativo', true)
+    .eq('status', 'CARGA')
+    .eq('local_atual', 'CARGA PERMANENTE')
+    .eq('responsavel_atual_id', policialId)
+    .order('tipo', {
+      ascending: true
+    })
+
+  if (error) {
+    throw error
+  }
+
+  return (data || []).map((item) => {
+    const dados =
+      item?.dados &&
+      typeof item.dados === 'object'
+        ? item.dados
+        : {}
+
+    const tipoNormalizado =
+      String(
+        item?.tipo ||
+        dados?.tipo ||
+        ''
+      )
+        .trim()
+        .toLowerCase()
+
+    const nomeTipo =
+      tipoNormalizado === 'colete_balistico'
+        ? 'COLETE BALÍSTICO'
+        : tipoNormalizado === 'arma'
+        ? 'ARMA'
+        : String(
+            item?.tipo ||
+            dados?.tipo ||
+            'MATERIAL'
+          )
+            .replaceAll('_', ' ')
+            .toUpperCase()
+
+    return {
+      id:
+        `CARGA-${item.id}`,
+
+      patrimonio_id:
+        item.id,
+
+      referencia_id:
+        item.referencia_id ||
+        null,
+
+      tipo:
+        nomeTipo,
+
+      tipo_patrimonio:
+        item.tipo ||
+        null,
+
+      descricao:
+        item.descricao ||
+        (
+          nomeTipo === 'COLETE BALÍSTICO'
+            ? [
+                'COLETE BALÍSTICO',
+                dados?.fabricante,
+                dados?.nivel_protecao
+              ]
+                .filter(Boolean)
+                .join(' ')
+            : nomeTipo
+        ),
+
+      numero_patrimonio:
+        item.numero_patrimonio ||
+        dados?.patrimonio ||
+        null,
+
+      patrimonio:
+        item.numero_patrimonio ||
+        dados?.patrimonio ||
+        null,
+
+      numero_serie:
+        item.numero_serie ||
+        dados?.numero_serie ||
+        null,
+
+      modelo:
+        dados?.modelo ||
+        null,
+
+      policial_nome:
+        item.responsavel_atual_nome ||
+        dados?.carga_policial_nome ||
+        null,
+
+      policial_re:
+        dados?.carga_policial_re ||
+        user?.re ||
+        null,
+
+      status:
+        item.status ||
+        'CARGA',
+
+      local_atual:
+        item.local_atual ||
+        'CARGA PERMANENTE',
+
+      quantidade:
+        1,
+
+      saldo:
+        1,
+
+      tipo_registro:
+        'CARGA_PERMANENTE',
+
+      situacao_label:
+        'Carga permanente'
+    }
+  })
 }
 
 function obterIniciais(texto) {
@@ -3658,17 +3805,40 @@ function PainelUsuario({ user, onNavegar }) {
       try {
         setLoading(true)
         setErro('')
-        const [aguardando, materiais, devolucoes] = await Promise.all([
+        const [
+          aguardando,
+          materiaisEmServico,
+          cargasPermanentes,
+          devolucoes
+        ] = await Promise.all([
           listarCautelasAguardandoUsuario(user),
           listarMateriaisEmServicoUsuario(user),
+          listarCargasPermanentesUsuario(user),
           listarDevolucoesPendentesUsuario(user)
         ])
 
         if (ativo) {
           setDados({
-            aguardando: aguardando || [],
-            materiais: materiais || [],
-            devolucoes: devolucoes || []
+            aguardando:
+              aguardando || [],
+
+            materiais: [
+              ...(materiaisEmServico || []).map(
+                (item) => ({
+                  ...item,
+                  tipo_registro:
+                    item?.tipo_registro ||
+                    'CAUTELA_ATIVA',
+                  situacao_label:
+                    item?.situacao_label ||
+                    'Cautela ativa'
+                })
+              ),
+              ...(cargasPermanentes || [])
+            ],
+
+            devolucoes:
+              devolucoes || []
           })
         }
       } catch (error) {
@@ -3843,9 +4013,9 @@ function PainelUsuario({ user, onNavegar }) {
         <KpiStrip
           icon="▰"
           tone="yellow"
-          label="Cautelas ativas"
+          label="Materiais sob responsabilidade"
           value={totalMateriais}
-          detail="materiais sob sua responsabilidade"
+          detail="cautelas e cargas permanentes"
         />
         <KpiStrip
           icon="↩"
@@ -3885,7 +4055,7 @@ function PainelUsuario({ user, onNavegar }) {
             <div className="sigmo-command-empty">Carregando...</div>
           ) : dados.materiais.length === 0 ? (
             <div className="sigmo-command-empty">
-              Nenhum material cautelado no momento.
+              Nenhum material sob sua responsabilidade no momento.
             </div>
           ) : (
             <div className="sigmo-command-movements">
@@ -3913,7 +4083,17 @@ function PainelUsuario({ user, onNavegar }) {
                       cursor: 'pointer'
                     }}
                   >
-                    <DashboardIcon tone="yellow">▰</DashboardIcon>
+                    <DashboardIcon
+                      tone={
+                        item?.tipo_registro ===
+                        'CARGA_PERMANENTE'
+                          ? 'green'
+                          : 'yellow'
+                      }
+                    >
+                      ▰
+                    </DashboardIcon>
+
                     <div className="sigmo-command-movement-copy">
                       <strong>
                         {item.descricao || item.tipo || 'Material'}
@@ -3929,8 +4109,22 @@ function PainelUsuario({ user, onNavegar }) {
                         <span>{identificacao}</span>
                       )}
                     </div>
-                    <em className="sigmo-command-badge sigmo-command-badge-cautela">
-                      Cautela ativa
+
+                    <em
+                      className={`sigmo-command-badge ${
+                        item?.tipo_registro ===
+                        'CARGA_PERMANENTE'
+                          ? 'sigmo-command-badge-recebimento'
+                          : 'sigmo-command-badge-cautela'
+                      }`}
+                    >
+                      {item?.situacao_label ||
+                        (
+                          item?.tipo_registro ===
+                          'CARGA_PERMANENTE'
+                            ? 'Carga permanente'
+                            : 'Cautela ativa'
+                        )}
                     </em>
                   </button>
                 )
@@ -4020,7 +4214,13 @@ function PainelUsuario({ user, onNavegar }) {
               <div>
                 <small style={{ opacity: .72 }}>Situação</small>
                 <strong style={{ display: 'block', marginTop: 4 }}>
-                  Cautela ativa
+                  {materialSelecionado?.situacao_label ||
+                    (
+                      materialSelecionado?.tipo_registro ===
+                      'CARGA_PERMANENTE'
+                        ? 'Carga permanente'
+                        : 'Cautela ativa'
+                    )}
                 </strong>
               </div>
 
@@ -4572,6 +4772,15 @@ if (route === 'tonfas') {
 
     if (route === 'municoes') {
       return <Municoes user={user} />
+    }
+
+    if (route === 'colete-balistico') {
+      return (
+        <ColeteBalistico
+          user={user}
+          onVoltar={voltarDashboard}
+        />
+      )
     }
 
     if (

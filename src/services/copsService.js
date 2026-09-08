@@ -5,6 +5,11 @@ import {
   desativarPatrimonioPorReferencia
 } from './patrimoniosService'
 
+import {
+  MODULOS_MANUTENCAO,
+  registrarManutencao
+} from './manutencoesService'
+
 const TABLE = 'sigmo_cops'
 
 const STATUS_VALIDOS = new Set([
@@ -168,6 +173,87 @@ function definirLocalPatrimonial(cop) {
   return 'SVDD'
 }
 
+function aplicarEstadoPatrimonialCOP(
+  cop,
+  patrimonio = null
+) {
+  const copNormalizada =
+    normalizarCOP(cop)
+
+  if (!copNormalizada) {
+    return null
+  }
+
+  if (!patrimonio) {
+    return copNormalizada
+  }
+
+  const statusPatrimonial =
+    normalizarStatus(
+      patrimonio.status
+    )
+
+  const localPatrimonial =
+    normalizarTexto(
+      patrimonio.local_atual
+    )
+
+  let statusEfetivo =
+    copNormalizada.status_operacional
+
+  if (
+    statusPatrimonial === 'CAUTELADO' ||
+    statusPatrimonial === 'EM_SERVICO' ||
+    normalizarMaiusculo(
+      localPatrimonial
+    ).includes(
+      'CAUTELA'
+    )
+  ) {
+    statusEfetivo = 'EM_SERVICO'
+  } else if (
+    statusPatrimonial === 'MANUTENCAO' ||
+    normalizarMaiusculo(
+      localPatrimonial
+    ).includes(
+      'MANUTEN'
+    )
+  ) {
+    statusEfetivo = 'MANUTENCAO'
+  } else if (
+    statusPatrimonial === 'BAIXADA'
+  ) {
+    statusEfetivo = 'BAIXADA'
+  } else if (
+    statusPatrimonial === 'RESERVA'
+  ) {
+    statusEfetivo = 'RESERVA'
+  }
+
+  return {
+    ...copNormalizada,
+
+    status_operacional:
+      statusEfetivo,
+
+    local_atual:
+      localPatrimonial ||
+      copNormalizada.local_atual,
+
+    ativo:
+      copNormalizada.ativo !== false &&
+      patrimonio.ativo !== false,
+
+    status_patrimonial:
+      patrimonio.status ||
+      null,
+
+    local_patrimonial:
+      patrimonio.local_atual ||
+      null
+  }
+}
+
 export async function listarCOPs({
   filtros = {},
   pagina = 1,
@@ -175,73 +261,173 @@ export async function listarCOPs({
   sortBy = 'numero',
   sortDirection = 'asc'
 } = {}) {
-  const inicio = (pagina - 1) * limite
-  const fim = inicio + limite - 1
+  const [
+    {
+      data: copsData,
+      error: copsError
+    },
+    {
+      data: patrimoniosData,
+      error: patrimoniosError
+    }
+  ] = await Promise.all([
+    supabase
+      .from(TABLE)
+      .select('*'),
 
-  let query = supabase
-    .from(TABLE)
-    .select('*', { count: 'exact' })
-    .order(sortBy, {
-      ascending:
-        sortDirection === 'asc',
-      nullsFirst: false
-    })
-    .range(inicio, fim)
+    supabase
+      .from('sigmo_patrimonios')
+      .select(
+        'referencia_id, status, local_atual, ativo'
+      )
+      .eq('tipo', 'cop')
+  ])
 
-  const pesquisa = limparPesquisa(
-    filtros.pesquisa
-  )
+  if (copsError) {
+    throw copsError
+  }
+
+  if (patrimoniosError) {
+    throw patrimoniosError
+  }
+
+  const patrimonioPorReferencia =
+    new Map(
+      (patrimoniosData || [])
+        .filter(
+          (item) =>
+            item?.referencia_id
+        )
+        .map((item) => [
+          String(
+            item.referencia_id
+          ),
+          item
+        ])
+    )
+
+  let lista =
+    (copsData || [])
+      .map((cop) =>
+        aplicarEstadoPatrimonialCOP(
+          cop,
+          patrimonioPorReferencia.get(
+            String(cop.id)
+          ) || null
+        )
+      )
+      .filter(Boolean)
+
+  const pesquisa =
+    normalizarMaiusculo(
+      limparPesquisa(
+        filtros.pesquisa
+      )
+    )
 
   if (pesquisa) {
-    query = query.or(
-      [
-        `numero.ilike.%${pesquisa}%`,
-        `identificacao_equipamento.ilike.%${pesquisa}%`,
-        `marca.ilike.%${pesquisa}%`,
-        `local_atual.ilike.%${pesquisa}%`
-      ].join(',')
-    )
-  }
-
-  if (filtros.numero?.trim()) {
-    query = query.eq(
-      'numero',
-      normalizarNumero(filtros.numero)
+    lista = lista.filter(
+      (cop) =>
+        [
+          cop.numero,
+          cop.identificacao_equipamento,
+          cop.marca,
+          cop.local_atual
+        ].some((valor) =>
+          normalizarMaiusculo(
+            valor
+          ).includes(
+            pesquisa
+          )
+        )
     )
   }
 
   if (
-    filtros.identificacao_equipamento
+    filtros.numero?.trim()
+  ) {
+    const numeroFiltro =
+      normalizarNumero(
+        filtros.numero
+      )
+
+    lista = lista.filter(
+      (cop) =>
+        cop.numero ===
+        numeroFiltro
+    )
+  }
+
+  if (
+    filtros
+      .identificacao_equipamento
       ?.trim()
   ) {
-    query = query.ilike(
-      'identificacao_equipamento',
-      `%${filtros.identificacao_equipamento.trim()}%`
-    )
-  }
+    const identificacaoFiltro =
+      normalizarMaiusculo(
+        filtros
+          .identificacao_equipamento
+      )
 
-  if (filtros.marca?.trim()) {
-    query = query.ilike(
-      'marca',
-      `%${filtros.marca.trim()}%`
+    lista = lista.filter(
+      (cop) =>
+        normalizarMaiusculo(
+          cop.identificacao_equipamento
+        ).includes(
+          identificacaoFiltro
+        )
     )
   }
 
   if (
-    filtros.status_operacional?.trim()
+    filtros.marca?.trim()
   ) {
-    query = query.eq(
-      'status_operacional',
+    const marcaFiltro =
+      normalizarMaiusculo(
+        filtros.marca
+      )
+
+    lista = lista.filter(
+      (cop) =>
+        normalizarMaiusculo(
+          cop.marca
+        ).includes(
+          marcaFiltro
+        )
+    )
+  }
+
+  if (
+    filtros.status_operacional
+      ?.trim()
+  ) {
+    const statusFiltro =
       normalizarStatus(
         filtros.status_operacional
       )
+
+    lista = lista.filter(
+      (cop) =>
+        cop.status_operacional ===
+        statusFiltro
     )
   }
 
-  if (filtros.local_atual?.trim()) {
-    query = query.ilike(
-      'local_atual',
-      `%${filtros.local_atual.trim()}%`
+  if (
+    filtros.local_atual?.trim()
+  ) {
+    const localFiltro =
+      normalizarMaiusculo(
+        filtros.local_atual
+      )
+
+    lista = lista.filter(
+      (cop) =>
+        normalizarMaiusculo(
+          cop.local_atual
+        ).includes(
+          localFiltro
+        )
     )
   }
 
@@ -254,17 +440,82 @@ export async function listarCOPs({
       filtros.ativo === true ||
       filtros.ativo === 'true'
 
-    query = query.eq('ativo', ativo)
+    lista = lista.filter(
+      (cop) =>
+        cop.ativo === ativo
+    )
   }
 
-  const { data, error, count } =
-    await query
+  const direcao =
+    sortDirection === 'desc'
+      ? -1
+      : 1
 
-  if (error) throw error
+  lista.sort((a, b) => {
+    const valorA =
+      a?.[sortBy]
+
+    const valorB =
+      b?.[sortBy]
+
+    if (
+      valorA === null ||
+      valorA === undefined
+    ) {
+      return 1
+    }
+
+    if (
+      valorB === null ||
+      valorB === undefined
+    ) {
+      return -1
+    }
+
+    return (
+      String(valorA)
+        .localeCompare(
+          String(valorB),
+          'pt-BR',
+          {
+            numeric: true,
+            sensitivity: 'base'
+          }
+        ) *
+      direcao
+    )
+  })
+
+  const total =
+    lista.length
+
+  const paginaValida =
+    Math.max(
+      1,
+      Number(pagina) || 1
+    )
+
+  const limiteValido =
+    Math.max(
+      1,
+      Number(limite) || 20
+    )
+
+  const inicio =
+    (
+      paginaValida - 1
+    ) *
+    limiteValido
 
   return {
-    data: (data || []).map(normalizarCOP),
-    total: count || 0
+    data:
+      lista.slice(
+        inicio,
+        inicio +
+          limiteValido
+      ),
+
+    total
   }
 }
 
@@ -577,18 +828,358 @@ export async function sincronizarCOPsComPatrimonios(
   return copsNormalizadas.length
 }
 
-export async function obterResumoCOPs() {
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select(
-      'id, status_operacional, local_atual, ativo'
+export async function listarCOPsDisponiveisManutencao({
+  pesquisa = ''
+} = {}) {
+  const [
+    { data: copsData, error: copsError },
+    {
+      data: patrimoniosData,
+      error: patrimoniosError
+    }
+  ] = await Promise.all([
+    supabase
+      .from(TABLE)
+      .select('*')
+      .eq('ativo', true)
+      .order('numero', {
+        ascending: true
+      }),
+
+    supabase
+      .from('sigmo_patrimonios')
+      .select(
+        'referencia_id, status, local_atual, ativo'
+      )
+      .eq('tipo', 'cop')
+  ])
+
+  if (copsError) throw copsError
+  if (patrimoniosError) {
+    throw patrimoniosError
+  }
+
+  const patrimonioPorReferencia =
+    new Map(
+      (patrimoniosData || [])
+        .filter(
+          (item) => item?.referencia_id
+        )
+        .map((item) => [
+          String(
+            item.referencia_id
+          ),
+          item
+        ])
     )
+
+  const termo =
+    normalizarMaiusculo(
+      pesquisa
+    )
+
+  return (copsData || [])
+    .map(normalizarCOP)
+    .filter((cop) => {
+      if (
+        cop.ativo === false ||
+        cop.status_operacional ===
+          'MANUTENCAO' ||
+        cop.status_operacional ===
+          'BAIXADA'
+      ) {
+        return false
+      }
+
+      const patrimonio =
+        patrimonioPorReferencia.get(
+          String(cop.id)
+        )
+
+      if (!patrimonio) {
+        return false
+      }
+
+      if (
+        patrimonio.ativo === false
+      ) {
+        return false
+      }
+
+      const statusPatrimonial =
+        normalizarStatus(
+          patrimonio.status
+        )
+
+      const localPatrimonial =
+        normalizarMaiusculo(
+          patrimonio.local_atual
+        )
+
+      if (
+        statusPatrimonial ===
+          'CAUTELADO' ||
+        statusPatrimonial ===
+          'EM_SERVICO' ||
+        statusPatrimonial ===
+          'MANUTENCAO' ||
+        statusPatrimonial ===
+          'BAIXADA' ||
+        localPatrimonial.includes(
+          'CAUTELA'
+        ) ||
+        localPatrimonial.includes(
+          'MANUTEN'
+        )
+      ) {
+        return false
+      }
+
+      if (
+        statusPatrimonial !==
+          'RESERVA'
+      ) {
+        return false
+      }
+
+      return true
+    })
+    .filter((cop) => {
+      if (!termo) {
+        return true
+      }
+
+      return [
+        cop.numero,
+        cop.identificacao_equipamento,
+        cop.marca,
+        cop.local_atual
+      ].some((valor) =>
+        normalizarMaiusculo(
+          valor
+        ).includes(
+          termo
+        )
+      )
+    })
+    .map((cop) => {
+      const patrimonio =
+        patrimonioPorReferencia.get(
+          String(cop.id)
+        )
+
+      return {
+        ...cop,
+        status_patrimonial:
+          patrimonio?.status ||
+          null,
+        local_patrimonial:
+          patrimonio?.local_atual ||
+          null
+      }
+    })
+}
+
+async function buscarPatrimonioCentralCOP(
+  copId
+) {
+  const { data, error } = await supabase
+    .from('sigmo_patrimonios')
+    .select(
+      'id, status, local_atual, ativo'
+    )
+    .eq('tipo', 'cop')
+    .eq('referencia_id', copId)
+    .maybeSingle()
 
   if (error) throw error
 
-  const itens = (data || []).map(
+  return data
+}
+
+export async function enviarCOPParaManutencao({
+  copId,
+  tipoNovidade = 'MANUTENÇÃO CORRETIVA',
+  descricao = null,
+  observacoes = null,
+  foto = null,
+  fotos = [],
+  user = null
+}) {
+  if (!copId) {
+    throw new Error(
+      'COP não informada para manutenção.'
+    )
+  }
+
+  const cop = await buscarCOPPorId(
+    copId
+  )
+
+  if (
+    cop.ativo === false ||
+    cop.status_operacional === 'BAIXADA'
+  ) {
+    throw new Error(
+      'Uma COP baixada ou inativa não pode ser colocada em manutenção.'
+    )
+  }
+
+  if (
+    cop.status_operacional ===
+    'MANUTENCAO'
+  ) {
+    throw new Error(
+      'Esta COP já está em manutenção.'
+    )
+  }
+
+  if (!normalizarTexto(descricao)) {
+    throw new Error(
+      'Informe a descrição da novidade ou do defeito.'
+    )
+  }
+
+  const patrimonio =
+    await buscarPatrimonioCentralCOP(
+      cop.id
+    )
+
+  const statusPatrimonial =
+    normalizarStatus(
+      patrimonio?.status
+    )
+
+  const localPatrimonial =
+    normalizarMaiusculo(
+      patrimonio?.local_atual
+    )
+
+  if (
+    patrimonio?.ativo === false
+  ) {
+    throw new Error(
+      'Esta COP está inativa no patrimônio central.'
+    )
+  }
+
+  if (
+    statusPatrimonial === 'CAUTELADO' ||
+    statusPatrimonial === 'EM_SERVICO' ||
+    localPatrimonial.includes(
+      'CAUTELA INDIVIDUAL'
+    )
+  ) {
+    throw new Error(
+      'Uma COP em serviço ou cautelada não pode ser enviada para manutenção antes da devolução.'
+    )
+  }
+
+  if (
+    statusPatrimonial === 'MANUTENCAO' ||
+    localPatrimonial.includes(
+      'MANUTEN'
+    )
+  ) {
+    throw new Error(
+      'Esta COP já está em manutenção no patrimônio central.'
+    )
+  }
+
+  const manutencao =
+    await registrarManutencao({
+      modulo:
+        MODULOS_MANUTENCAO.COP,
+      tipoMaterial:
+        'COP',
+      referenciaId:
+        cop.id,
+      patrimonioId:
+        patrimonio?.id ||
+        null,
+      quantidade:
+        1,
+      tipoNovidade,
+      descricao,
+      observacoes:
+        [
+          normalizarTexto(
+            observacoes
+          ),
+          `STATUS ANTERIOR: ${
+            cop.status_operacional ||
+            'NÃO INFORMADO'
+          }`,
+          `LOCAL ANTERIOR: ${
+            cop.local_atual ||
+            'NÃO INFORMADO'
+          }`
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      origem:
+        cop.local_atual ||
+        'SVDD',
+      destino:
+        'MANUTENCAO',
+      foto,
+      fotos,
+      user
+    })
+
+  const copAtualizada =
+    await buscarCOPPorId(
+      cop.id
+    )
+
+  return {
+    cop:
+      copAtualizada,
+    manutencao
+  }
+}
+
+export async function obterResumoCOPs() {
+  const [
+    { data: copsData, error: copsError },
+    {
+      data: patrimoniosData,
+      error: patrimoniosError
+    }
+  ] = await Promise.all([
+    supabase
+      .from(TABLE)
+      .select(
+        'id, status_operacional, local_atual, ativo'
+      ),
+    supabase
+      .from('sigmo_patrimonios')
+      .select(
+        'referencia_id, status, local_atual, ativo'
+      )
+      .eq('tipo', 'cop')
+  ])
+
+  if (copsError) throw copsError
+  if (patrimoniosError) {
+    throw patrimoniosError
+  }
+
+  const itens = (copsData || []).map(
     normalizarCOP
   )
+
+  const patrimonioPorReferencia =
+    new Map(
+      (patrimoniosData || [])
+        .filter(
+          (item) => item?.referencia_id
+        )
+        .map((item) => [
+          item.referencia_id,
+          item
+        ])
+    )
 
   const resumo = {
     total: itens.length,
@@ -606,27 +1197,74 @@ export async function obterResumoCOPs() {
       continue
     }
 
-    const status = normalizarStatus(
-      item.status_operacional
-    )
+    const patrimonio =
+      patrimonioPorReferencia.get(
+        item.id
+      )
 
-    if (status === 'BAIXADA') {
+    const statusPatrimonial =
+      normalizarStatus(
+        patrimonio?.status
+      )
+
+    const localPatrimonial =
+      normalizarMaiusculo(
+        patrimonio?.local_atual
+      )
+
+    const statusCadastro =
+      normalizarStatus(
+        item.status_operacional
+      )
+
+    if (
+      statusCadastro === 'BAIXADA' ||
+      statusPatrimonial === 'BAIXADA' ||
+      patrimonio?.ativo === false
+    ) {
       resumo.baixadas += 1
       continue
     }
 
-    if (status === 'MANUTENCAO') {
+    if (
+      statusCadastro === 'MANUTENCAO' ||
+      statusPatrimonial ===
+        'MANUTENCAO' ||
+      localPatrimonial.includes(
+        'MANUTEN'
+      )
+    ) {
       resumo.manutencao += 1
       continue
     }
 
-    if (status === 'EM_SERVICO') {
+    if (
+      statusPatrimonial ===
+        'CAUTELADO' ||
+      statusPatrimonial ===
+        'EM_SERVICO' ||
+      localPatrimonial.includes(
+        'CAUTELA INDIVIDUAL'
+      )
+    ) {
       resumo.emServico += 1
       continue
     }
 
-    if (status === 'RESERVA') {
+    if (
+      statusPatrimonial ===
+        'RESERVA' ||
+      statusCadastro === 'RESERVA'
+    ) {
       resumo.reserva += 1
+      continue
+    }
+
+    if (
+      statusCadastro ===
+        'EM_SERVICO'
+    ) {
+      resumo.emServico += 1
       continue
     }
 

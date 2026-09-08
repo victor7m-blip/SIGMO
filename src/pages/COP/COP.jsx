@@ -12,9 +12,12 @@ import {
 import COPForm from './components/COPForm'
 import COPTable from './components/COPTable'
 import COPDetalhesModal from './components/COPDetalhesModal'
+import COPManutencaoModal from './components/COPManutencaoModal'
 
 import {
+  enviarCOPParaManutencao,
   listarCOPs,
+  listarCOPsDisponiveisManutencao,
   obterResumoCOPs
 } from '../../services/copsService'
 
@@ -54,6 +57,24 @@ export default function COP({ user }) {
   const [copVisualizando, setCOPVisualizando] =
     useState(null)
 
+  const [copManutencao, setCOPManutencao] =
+    useState(null)
+
+  const [salvandoManutencao, setSalvandoManutencao] =
+    useState(false)
+
+  const [seletorManutencaoAberto, setSeletorManutencaoAberto] =
+    useState(false)
+
+  const [buscaSeletorManutencao, setBuscaSeletorManutencao] =
+    useState('')
+
+  const [copsSeletorManutencao, setCOPsSeletorManutencao] =
+    useState([])
+
+  const [carregandoSeletorManutencao, setCarregandoSeletorManutencao] =
+    useState(false)
+
   const [fotosVisualizacao, setFotosVisualizacao] =
     useState([])
   const [carregandoFotos, setCarregandoFotos] =
@@ -87,12 +108,67 @@ export default function COP({ user }) {
     'P4'
   ].includes(perfilNormalizado)
 
+  const podeManutencao = [
+    'ADMINISTRADOR',
+    'P4',
+    'SVDD',
+    'ENCARREGADO SVDD',
+    'ENCARREGADO DO SVDD',
+    'AUXILIAR SVDD',
+    'AUXILIAR DO SVDD'
+  ].includes(perfilNormalizado)
+
   const totalPaginas = useMemo(
     () => Math.max(
       1,
       Math.ceil(total / LIMITE)
     ),
     [total]
+  )
+
+  const copsElegiveisManutencao = useMemo(
+    () => {
+      const termo = String(
+        buscaSeletorManutencao || ''
+      )
+        .trim()
+        .toUpperCase()
+
+      return (
+        copsSeletorManutencao || []
+      )
+        .filter((cop) => {
+          const status = String(
+            cop?.status_operacional || ''
+          )
+            .trim()
+            .toUpperCase()
+
+          return (
+            cop?.ativo !== false &&
+            status !== 'MANUTENCAO' &&
+            status !== 'BAIXADA'
+          )
+        })
+        .filter((cop) => {
+          if (!termo) return true
+
+          return [
+            cop?.numero,
+            cop?.identificacao_equipamento,
+            cop?.marca,
+            cop?.local_atual
+          ].some((valor) =>
+            String(valor || '')
+              .toUpperCase()
+              .includes(termo)
+          )
+        })
+    },
+    [
+      copsSeletorManutencao,
+      buscaSeletorManutencao
+    ]
   )
 
   const carregarResumo = useCallback(
@@ -264,6 +340,86 @@ export default function COP({ user }) {
     ])
   }
 
+  async function abrirSeletorManutencao() {
+    if (!podeManutencao) return
+
+    setFormAberto(false)
+    setCOPEditando(null)
+    limparVisualizacao()
+
+    setBuscaSeletorManutencao('')
+    setSeletorManutencaoAberto(true)
+    setCarregandoSeletorManutencao(true)
+
+    try {
+      const resultado =
+        await listarCOPsDisponiveisManutencao()
+
+      setCOPsSeletorManutencao(
+        Array.isArray(resultado)
+          ? resultado
+          : []
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao carregar COPs para manutenção:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível carregar as COPs disponíveis para manutenção.'
+      )
+
+      setCOPsSeletorManutencao([])
+    } finally {
+      setCarregandoSeletorManutencao(false)
+    }
+  }
+
+  function selecionarCOPParaManutencao(cop) {
+    setSeletorManutencaoAberto(false)
+    setBuscaSeletorManutencao('')
+    setCOPManutencao(cop)
+  }
+
+  async function confirmarManutencao(dados) {
+    if (!copManutencao?.id) return
+
+    try {
+      setSalvandoManutencao(true)
+
+      await enviarCOPParaManutencao({
+        copId: copManutencao.id,
+        ...dados,
+        user
+      })
+
+      setCOPManutencao(null)
+
+      await Promise.all([
+        carregarCOPs(),
+        carregarResumo()
+      ])
+
+      window.alert(
+        'COP enviada para manutenção com sucesso.'
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao enviar COP para manutenção:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível enviar a COP para manutenção.'
+      )
+    } finally {
+      setSalvandoManutencao(false)
+    }
+  }
+
   function ordenar(campo) {
     if (sortBy === campo) {
       setSortDirection((prev) =>
@@ -289,6 +445,19 @@ export default function COP({ user }) {
     }))
 
     setPagina(1)
+  }
+
+  function mostrarCOPsEmManutencao() {
+    filtrarPorResumo('MANUTENCAO')
+
+    requestAnimationFrame(() => {
+      document
+        .querySelector('.cop-list-card')
+        ?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        })
+    })
   }
 
   const distribuicao = [
@@ -524,6 +693,234 @@ export default function COP({ user }) {
         </article>
       </section>
 
+      <section
+        aria-label="Operações patrimoniais da COP"
+        style={{
+          display: 'grid',
+          gap: '14px',
+          marginTop: '18px',
+          marginBottom: '22px'
+        }}
+      >
+        <article
+          style={{
+            overflow: 'hidden',
+            border: '1px solid #d9e2ec',
+            borderRadius: '14px',
+            background: '#ffffff'
+          }}
+        >
+          <header
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              padding: '16px 18px',
+              borderBottom: '1px solid #d9e2ec'
+            }}
+          >
+            <div
+              aria-hidden="true"
+              style={{
+                width: '42px',
+                height: '42px',
+                flex: '0 0 42px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '10px',
+                background: '#062a52',
+                fontSize: '21px'
+              }}
+            >
+              🛠️
+            </div>
+
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  color: '#0f172a',
+                  fontSize: '18px'
+                }}
+              >
+                Condição do material
+              </h2>
+
+              <p
+                style={{
+                  margin: '3px 0 0',
+                  color: '#64748b',
+                  fontSize: '13px'
+                }}
+              >
+                Manutenção e acompanhamento das Câmeras Operacionais Portáteis.
+              </p>
+            </div>
+          </header>
+
+          <div
+            style={{
+              padding: '14px'
+            }}
+          >
+            <button
+              type="button"
+              onClick={abrirSeletorManutencao}
+              disabled={
+                !podeManutencao ||
+                carregandoSeletorManutencao
+              }
+              style={{
+                width: '310px',
+                maxWidth: '100%',
+                minHeight: '86px',
+                padding: '14px 16px',
+                border: '1px solid #cdd9e6',
+                borderRadius: '12px',
+                background: '#ffffff',
+                textAlign: 'left',
+                cursor:
+                  !podeManutencao ||
+                  carregandoSeletorManutencao
+                    ? 'not-allowed'
+                    : 'pointer',
+                opacity:
+                  !podeManutencao
+                    ? 0.55
+                    : 1
+              }}
+            >
+              <strong
+                style={{
+                  display: 'block',
+                  marginBottom: '5px',
+                  color: '#12346d',
+                  fontSize: '14px'
+                }}
+              >
+                {carregandoSeletorManutencao
+                  ? 'Carregando...'
+                  : 'Enviar para manutenção'}
+              </strong>
+
+              <span
+                style={{
+                  display: 'block',
+                  color: '#64748b',
+                  fontSize: '12px',
+                  lineHeight: 1.45
+                }}
+              >
+                Selecionar uma COP disponível e registrar defeito, dano ou avaria.
+              </span>
+            </button>
+          </div>
+        </article>
+
+        <article
+          style={{
+            overflow: 'hidden',
+            border: '1px solid #d9e2ec',
+            borderRadius: '14px',
+            background: '#ffffff'
+          }}
+        >
+          <header
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              padding: '16px 18px',
+              borderBottom: '1px solid #d9e2ec'
+            }}
+          >
+            <div
+              aria-hidden="true"
+              style={{
+                width: '42px',
+                height: '42px',
+                flex: '0 0 42px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '10px',
+                background: '#062a52',
+                fontSize: '21px'
+              }}
+            >
+              📥
+            </div>
+
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  color: '#0f172a',
+                  fontSize: '18px'
+                }}
+              >
+                Entradas e recebimentos
+              </h2>
+
+              <p
+                style={{
+                  margin: '3px 0 0',
+                  color: '#64748b',
+                  fontSize: '13px'
+                }}
+              >
+                Retorno e acompanhamento das COPs encaminhadas para reparo.
+              </p>
+            </div>
+          </header>
+
+          <div
+            style={{
+              padding: '14px'
+            }}
+          >
+            <button
+              type="button"
+              onClick={mostrarCOPsEmManutencao}
+              style={{
+                width: '310px',
+                maxWidth: '100%',
+                minHeight: '86px',
+                padding: '14px 16px',
+                border: '1px solid #cdd9e6',
+                borderRadius: '12px',
+                background: '#ffffff',
+                textAlign: 'left',
+                cursor: 'pointer'
+              }}
+            >
+              <strong
+                style={{
+                  display: 'block',
+                  marginBottom: '5px',
+                  color: '#12346d',
+                  fontSize: '14px'
+                }}
+              >
+                Receber manutenção
+              </strong>
+
+              <span
+                style={{
+                  display: 'block',
+                  color: '#64748b',
+                  fontSize: '12px',
+                  lineHeight: 1.45
+                }}
+              >
+                Visualizar COPs em reparo e acompanhar o retorno para o SVDD.
+              </span>
+            </button>
+          </div>
+        </article>
+      </section>
+
       {erro && (
         <div className="cop-alert-error">
           {erro}
@@ -701,6 +1098,320 @@ export default function COP({ user }) {
           </button>
         </footer>
       </section>
+
+      {seletorManutencaoAberto && (
+        <div
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !carregandoSeletorManutencao
+            ) {
+              setSeletorManutencaoAberto(false)
+            }
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            background: 'rgba(15, 23, 42, 0.58)'
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Selecionar COP para manutenção"
+            style={{
+              width: 'min(760px, 100%)',
+              maxHeight: '82vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderRadius: '14px',
+              background: '#ffffff',
+              boxShadow:
+                '0 24px 70px rgba(15, 23, 42, 0.28)'
+            }}
+          >
+            <header
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '20px',
+                padding: '22px 24px',
+                borderBottom: '1px solid #e5e7eb'
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    display: 'block',
+                    marginBottom: '4px',
+                    color: '#64748b',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    letterSpacing: '0.08em'
+                  }}
+                >
+                  MANUTENÇÃO INDIVIDUAL
+                </span>
+
+                <h2
+                  style={{
+                    margin: 0,
+                    color: '#0f172a',
+                    fontSize: '22px'
+                  }}
+                >
+                  Selecionar COP
+                </h2>
+
+                <p
+                  style={{
+                    margin: '5px 0 0',
+                    color: '#64748b',
+                    fontSize: '13px'
+                  }}
+                >
+                  Escolha a câmera que será enviada para reparo.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Fechar"
+                onClick={() =>
+                  setSeletorManutencaoAberto(false)
+                }
+                disabled={carregandoSeletorManutencao}
+                style={{
+                  border: 0,
+                  background: 'transparent',
+                  fontSize: '28px',
+                  lineHeight: 1,
+                  cursor: 'pointer'
+                }}
+              >
+                ×
+              </button>
+            </header>
+
+            <div
+              style={{
+                padding: '20px 24px',
+                overflow: 'auto'
+              }}
+            >
+              <label
+                htmlFor="cop-seletor-manutencao"
+                style={{
+                  display: 'block',
+                  marginBottom: '7px',
+                  color: '#334155',
+                  fontSize: '12px',
+                  fontWeight: 800
+                }}
+              >
+                Pesquisar equipamento
+              </label>
+
+              <input
+                id="cop-seletor-manutencao"
+                type="search"
+                value={buscaSeletorManutencao}
+                onChange={(event) =>
+                  setBuscaSeletorManutencao(
+                    event.target.value
+                  )
+                }
+                placeholder="Número, ID da câmera, marca ou local"
+                autoFocus
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  marginBottom: '16px',
+                  padding: '11px 12px',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  font: 'inherit'
+                }}
+              />
+
+              {carregandoSeletorManutencao ? (
+                <div
+                  style={{
+                    padding: '28px 8px',
+                    textAlign: 'center',
+                    color: '#64748b'
+                  }}
+                >
+                  Carregando COPs...
+                </div>
+              ) : copsElegiveisManutencao.length === 0 ? (
+                <div
+                  style={{
+                    padding: '28px 8px',
+                    textAlign: 'center',
+                    color: '#64748b'
+                  }}
+                >
+                  Nenhuma COP disponível para envio à manutenção.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '8px'
+                  }}
+                >
+                  {copsElegiveisManutencao.map((cop) => (
+                    <button
+                      key={cop.id}
+                      type="button"
+                      onClick={() =>
+                        selecionarCOPParaManutencao(cop)
+                      }
+                      style={{
+                        width: '100%',
+                        display: 'grid',
+                        gridTemplateColumns:
+                          '52px minmax(0, 1fr) auto',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '10px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '9px',
+                        background: '#ffffff',
+                        textAlign: 'left',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {cop.foto_url ? (
+                        <img
+                          src={cop.foto_url}
+                          alt={`COP ${cop.numero || ''}`}
+                          style={{
+                            width: '46px',
+                            height: '46px',
+                            objectFit: 'contain',
+                            borderRadius: '7px',
+                            background: '#f8fafc'
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            width: '46px',
+                            height: '46px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '7px',
+                            background: '#f1f5f9',
+                            color: '#475569',
+                            fontSize: '10px',
+                            fontWeight: 900
+                          }}
+                        >
+                          COP
+                        </span>
+                      )}
+
+                      <span
+                        style={{
+                          minWidth: 0
+                        }}
+                      >
+                        <strong
+                          style={{
+                            display: 'block',
+                            color: '#0f172a'
+                          }}
+                        >
+                          COP {cop.numero || '—'}
+                        </strong>
+
+                        <small
+                          style={{
+                            display: 'block',
+                            marginTop: '3px',
+                            color: '#64748b'
+                          }}
+                        >
+                          {[
+                            cop.identificacao_equipamento,
+                            cop.marca
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') ||
+                            'Sem identificação adicional'}
+                        </small>
+                      </span>
+
+                      <small
+                        style={{
+                          color: '#475569',
+                          fontWeight: 700,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {cop.local_atual || 'SVDD'}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <footer
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                padding: '16px 24px',
+                borderTop: '1px solid #e5e7eb'
+              }}
+            >
+              <span
+                style={{
+                  color: '#64748b',
+                  fontSize: '12px'
+                }}
+              >
+                {copsElegiveisManutencao.length}{' '}
+                equipamento(s) listado(s)
+              </span>
+
+              <button
+                type="button"
+                className="cop-btn-secondary"
+                onClick={() =>
+                  setSeletorManutencaoAberto(false)
+                }
+              >
+                Cancelar
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      <COPManutencaoModal
+        cop={copManutencao}
+        salvando={salvandoManutencao}
+        onClose={() => {
+          if (!salvandoManutencao) {
+            setCOPManutencao(null)
+          }
+        }}
+        onConfirm={confirmarManutencao}
+      />
 
       {copVisualizando && (
         <COPDetalhesModal
