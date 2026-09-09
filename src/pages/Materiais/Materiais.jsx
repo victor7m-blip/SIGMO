@@ -96,6 +96,17 @@ const categorias = [
 },
 
   {
+    id: 'colete-refletivo',
+    rota: 'colete-refletivo',
+    icone: '🦺',
+    titulo: 'Colete Refletivo',
+    descricao:
+      'Controle o estoque de coletes refletivos por quantidade e tamanho P, M, G, GG e XG.',
+    status: 'disponivel',
+    destaque: 'verde'
+  },
+
+  {
     id: 'outros',
     icone: '📦',
     titulo: 'Outros Materiais',
