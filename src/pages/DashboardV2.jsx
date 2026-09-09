@@ -47,6 +47,7 @@ import Taser from './Taser/Taser'
 import Tonfas from './Tonfas/Tonfas'
 import Municoes from './Municoes/Municoes'
 import ColeteBalistico from './ColeteBalistico/ColeteBalistico'
+import ColeteRefletivo from './ColeteRefletivo/ColeteRefletivo'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
 import ReceberMaterialHibrido from './ReceberMaterial/ReceberMaterialHibrido'
@@ -4777,6 +4778,15 @@ if (route === 'tonfas') {
     if (route === 'colete-balistico') {
       return (
         <ColeteBalistico
+          user={user}
+          onVoltar={voltarDashboard}
+        />
+      )
+    }
+
+    if (route === 'colete-refletivo') {
+      return (
+        <ColeteRefletivo
           user={user}
           onVoltar={voltarDashboard}
         />
