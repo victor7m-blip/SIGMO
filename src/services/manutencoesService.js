@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { loadSessionToken } from './authService'
 import { criarOuAtualizarPatrimonio } from './patrimoniosService'
 import { criarNotificacaoParaPerfil } from './notificacoesService'
 
@@ -824,6 +825,258 @@ async function aplicarEntradaManutencaoCOP({
 }
 
 
+async function garantirPatrimonioMunicaoManutencao({
+  referenciaId,
+  origem = null,
+  user = null
+}) {
+  const { data: municao, error } = await supabase
+    .from('sigmo_municoes')
+    .select('id, calibre, descricao, ativo')
+    .eq('id', referenciaId)
+    .single()
+
+  if (error) throw error
+
+  const origemNormalizada = maiusculo(origem)
+
+  const localAtual =
+    origemNormalizada.includes('SVDD') ||
+    origemNormalizada.includes('SERVIÇO DE DIA') ||
+    origemNormalizada.includes('SERVICO DE DIA')
+      ? 'COFRE DO SVDD'
+      : 'COFRE DO P4'
+
+  const patrimonio = await criarOuAtualizarPatrimonio({
+    tipo: 'municao',
+    referencia_id: municao.id,
+    dados: {
+      ...municao,
+      municao_id: municao.id,
+      tipo_registro: 'MUNICAO_QUANTIDADE',
+      status_operacional: 'MANUTENCAO',
+      local_atual: localAtual
+    },
+    user,
+    local_atual: localAtual,
+    companhia_atual: ''
+  })
+
+  return {
+    municao,
+    patrimonio
+  }
+}
+
+
+async function registrarHistoricoManutencaoMunicao({
+  municaoId,
+  loteId,
+  manutencaoId,
+  tipoMovimentacao,
+  origem,
+  destino,
+  quantidade,
+  observacoes = null,
+  user = null
+}) {
+  const payload = {
+    municao_id: municaoId,
+    lote_id: loteId,
+    cautela_id: null,
+    movimentacao_principal_id: null,
+    tipo_movimentacao: maiusculo(tipoMovimentacao),
+    origem: maiusculo(origem) || null,
+    destino: maiusculo(destino) || null,
+    quantidade: inteiroPositivo(quantidade),
+    policial_id: null,
+    policial_re: null,
+    policial_nome: null,
+    documento: null,
+    observacoes: [
+      `MANUTENCAO SIGMO: ${manutencaoId}`,
+      maiusculo(observacoes) || null
+    ].filter(Boolean).join(' | '),
+    registrado_por_id: obterUsuarioId(user),
+    registrado_por_nome: obterUsuarioNome(user)
+  }
+
+  const { data, error } = await supabase
+    .from('sigmo_municoes_movimentacoes')
+    .insert(payload)
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  return data
+}
+
+
+async function aplicarEntradaManutencaoMunicao({
+  referenciaId,
+  quantidade,
+  origem = null,
+  manutencao,
+  user = null
+}) {
+  const quantidadeValida = inteiroPositivo(quantidade)
+
+  if (quantidadeValida <= 0) {
+    throw new Error('A quantidade de munição enviada para manutenção deve ser maior que zero.')
+  }
+
+  const origemNormalizada = maiusculo(origem)
+
+  const origemSVDD =
+    origemNormalizada.includes('SVDD') ||
+    origemNormalizada.includes('SERVIÇO DE DIA') ||
+    origemNormalizada.includes('SERVICO DE DIA')
+
+  const campoOrigem = origemSVDD
+    ? 'quantidade_svdd'
+    : 'quantidade_p4'
+
+  const origemLocal = origemSVDD
+    ? 'COFRE DO SVDD'
+    : 'COFRE DO P4'
+
+  const { data: lotes, error } = await supabase
+    .from('sigmo_municoes_lotes')
+    .select('*')
+    .eq('municao_id', referenciaId)
+    .eq('ativo', true)
+    .gt(campoOrigem, 0)
+    .order('validade', { ascending: true, nullsFirst: false })
+    .order('criado_em', { ascending: true })
+
+  if (error) throw error
+
+  const saldoTotal = (lotes || []).reduce(
+    (soma, lote) => soma + inteiroPositivo(lote?.[campoOrigem]),
+    0
+  )
+
+  if (quantidadeValida > saldoTotal) {
+    throw new Error(
+      `Existem apenas ${saldoTotal} unidade(s) disponíveis em ${origemLocal} para manutenção.`
+    )
+  }
+
+  const alteracoes = []
+  const historicos = []
+  let restante = quantidadeValida
+
+  try {
+    for (const lote of lotes || []) {
+      if (restante <= 0) break
+
+      const saldoOrigem = inteiroPositivo(lote?.[campoOrigem])
+      if (saldoOrigem <= 0) continue
+
+      const saldoManutencao = inteiroPositivo(lote?.quantidade_manutencao)
+      const usar = Math.min(saldoOrigem, restante)
+
+      const { data: atualizado, error: updateError } = await supabase
+        .from('sigmo_municoes_lotes')
+        .update({
+          [campoOrigem]: saldoOrigem - usar,
+          quantidade_manutencao: saldoManutencao + usar,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('id', lote.id)
+        .eq(campoOrigem, saldoOrigem)
+        .eq('quantidade_manutencao', saldoManutencao)
+        .select('*')
+        .maybeSingle()
+
+      if (updateError) throw updateError
+
+      if (!atualizado?.id) {
+        throw new Error(
+          'O estoque da munição foi alterado por outra operação. Atualize a tela e tente novamente.'
+        )
+      }
+
+      alteracoes.push({
+        loteId: lote.id,
+        campoOrigem,
+        saldoOrigem,
+        saldoManutencao
+      })
+
+      const historico = await registrarHistoricoManutencaoMunicao({
+        municaoId: referenciaId,
+        loteId: lote.id,
+        manutencaoId: manutencao.id,
+        tipoMovimentacao: 'MANUTENCAO_ENTRADA',
+        origem: origemLocal,
+        destino: 'MANUTENCAO',
+        quantidade: usar,
+        observacoes: manutencao?.descricao || manutencao?.tipo_novidade || null,
+        user
+      })
+
+      historicos.push(historico?.id)
+      restante -= usar
+    }
+
+    if (restante > 0) {
+      throw new Error(
+        'Não foi possível separar toda a quantidade de munição para manutenção.'
+      )
+    }
+
+    return {
+      municao: {
+        id: referenciaId,
+        quantidade: quantidadeValida,
+        origem: origemLocal
+      },
+      rollback: async () => {
+        for (const historicoId of historicos.filter(Boolean)) {
+          await supabase
+            .from('sigmo_municoes_movimentacoes')
+            .delete()
+            .eq('id', historicoId)
+        }
+
+        for (const item of [...alteracoes].reverse()) {
+          await supabase
+            .from('sigmo_municoes_lotes')
+            .update({
+              [item.campoOrigem]: item.saldoOrigem,
+              quantidade_manutencao: item.saldoManutencao,
+              atualizado_em: new Date().toISOString()
+            })
+            .eq('id', item.loteId)
+        }
+      }
+    }
+  } catch (errorEntrada) {
+    for (const historicoId of historicos.filter(Boolean)) {
+      await supabase
+        .from('sigmo_municoes_movimentacoes')
+        .delete()
+        .eq('id', historicoId)
+    }
+
+    for (const item of [...alteracoes].reverse()) {
+      await supabase
+        .from('sigmo_municoes_lotes')
+        .update({
+          [item.campoOrigem]: item.saldoOrigem,
+          quantidade_manutencao: item.saldoManutencao,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('id', item.loteId)
+    }
+
+    throw errorEntrada
+  }
+}
+
+
 async function registrarNovidadePatrimonialManutencaoDireta({
   modulo,
   tipoMaterial,
@@ -838,25 +1091,30 @@ async function registrarNovidadePatrimonialManutencaoDireta({
     return null
   }
 
-  // Se já existe uma novidade patrimonial aberta para este patrimônio,
-  // ela deve continuar sendo a origem da manutenção (casos vindos de
-  // devolução/recebimento). Assim evitamos criar novidade duplicada.
-  const { data: novidadesExistentes, error: buscaError } = await supabase
-    .from('sigmo_patrimonio_novidades')
-    .select('id, patrimonio_id, titulo, status, created_at')
-    .eq('patrimonio_id', patrimonioId)
-    .eq('status', 'registrada')
-    .order('created_at', { ascending: false })
-    .limit(1)
+  // Para patrimônios individualizados (HT/COP), uma novidade aberta pode
+  // ser reutilizada quando a manutenção nasce do recebimento/devolução.
+  // Para MUNIÇÃO, que é quantitativa e agregada por calibre, cada entrada
+  // direta em manutenção deve gerar sua própria novidade. Quando o fluxo
+  // já possui uma novidade específica, ela é informada explicitamente ao
+  // registrarManutencao.
+  if (maiusculo(modulo) !== MODULOS_MANUTENCAO.MUNICAO) {
+    const { data: novidadesExistentes, error: buscaError } = await supabase
+      .from('sigmo_patrimonio_novidades')
+      .select('id, patrimonio_id, titulo, status, created_at')
+      .eq('patrimonio_id', patrimonioId)
+      .eq('status', 'registrada')
+      .order('created_at', { ascending: false })
+      .limit(1)
 
-  if (buscaError) throw buscaError
+    if (buscaError) throw buscaError
 
-  const existente = novidadesExistentes?.[0] || null
+    const existente = novidadesExistentes?.[0] || null
 
-  if (existente?.id) {
-    return {
-      ...existente,
-      criada_agora: false
+    if (existente?.id) {
+      return {
+        ...existente,
+        criada_agora: false
+      }
     }
   }
 
@@ -957,6 +1215,7 @@ export async function registrarManutencao({
   tipoMaterial,
   referenciaId,
   patrimonioId = null,
+  novidadePatrimonialId = null,
   movimentacaoId = null,
   quantidade = 1,
   tipoNovidade = null,
@@ -967,6 +1226,7 @@ export async function registrarManutencao({
   policial = null,
   foto = null,
   fotos = [],
+  estoqueJaMovido = false,
   user = null
 }) {
   const moduloValido =
@@ -999,6 +1259,25 @@ export async function registrarManutencao({
     )
   }
 
+  let patrimonioVinculado =
+    patrimonioId || null
+
+  if (
+    moduloValido === MODULOS_MANUTENCAO.MUNICAO &&
+    !patrimonioVinculado
+  ) {
+    const contextoMunicao =
+      await garantirPatrimonioMunicaoManutencao({
+        referenciaId: referenciaValida,
+        origem,
+        user
+      })
+
+    patrimonioVinculado =
+      contextoMunicao?.patrimonio?.id ||
+      null
+  }
+
   const {
     arquivos,
     existentes: fotosExistentes
@@ -1010,7 +1289,13 @@ export async function registrarManutencao({
   const fotosEnviadas = []
   let manutencaoCriada = null
   let movimentacaoPatrimonial = null
-  let novidadePatrimonial = null
+  let novidadePatrimonial =
+    novidadePatrimonialId
+      ? {
+          id: novidadePatrimonialId,
+          criada_agora: false
+        }
+      : null
 
   try {
     for (
@@ -1059,14 +1344,18 @@ export async function registrarManutencao({
     // gerar também a novidade patrimonial oficial. Para HTs vindos de
     // devolução/recebimento, a novidade já existe e apenas é reutilizada.
     if (
-      moduloValido === MODULOS_MANUTENCAO.HT ||
-      moduloValido === MODULOS_MANUTENCAO.COP
+      !novidadePatrimonial?.id &&
+      (
+        moduloValido === MODULOS_MANUTENCAO.HT ||
+        moduloValido === MODULOS_MANUTENCAO.COP ||
+        moduloValido === MODULOS_MANUTENCAO.MUNICAO
+      )
     ) {
       novidadePatrimonial =
         await registrarNovidadePatrimonialManutencaoDireta({
           modulo: moduloValido,
           tipoMaterial: tipoValido,
-          patrimonioId: patrimonioId || null,
+          patrimonioId: patrimonioVinculado || null,
           referenciaId: referenciaValida,
           tipoNovidade,
           descricao,
@@ -1091,7 +1380,7 @@ export async function registrarManutencao({
         referenciaValida,
 
       patrimonio_id:
-        patrimonioId || null,
+        patrimonioVinculado || null,
 
       movimentacao_id:
         movimentacaoId || null,
@@ -1262,6 +1551,20 @@ export async function registrarManutencao({
         referenciaId: referenciaValida,
         user
       })
+    }
+
+    if (
+      moduloValido === MODULOS_MANUTENCAO.MUNICAO &&
+      !estoqueJaMovido
+    ) {
+      movimentacaoPatrimonial =
+        await aplicarEntradaManutencaoMunicao({
+          referenciaId: referenciaValida,
+          quantidade: quantidadeValida,
+          origem,
+          manutencao: data,
+          user
+        })
     }
 
     return normalizarManutencao(
@@ -1625,11 +1928,21 @@ export async function listarManutencoes({
       .map((item) => String(item.referencia_id))
   )]
 
+  const referenciasMunicao = [...new Set(
+    manutencoesComOrigemInstitucional
+      .filter((item) =>
+        item.modulo === MODULOS_MANUTENCAO.MUNICAO &&
+        item.referencia_id
+      )
+      .map((item) => String(item.referencia_id))
+  )]
+
   let armasPorId = new Map()
   let htsPorId = new Map()
   let copsPorId = new Map()
   let tpdsPorId = new Map()
   let tasersPorId = new Map()
+  let municoesPorId = new Map()
 
   if (referenciasArmas.length > 0) {
     const { data: armas, error: armasError } = await supabase
@@ -1724,6 +2037,24 @@ export async function listarManutencoes({
     } else {
       tasersPorId = new Map(
         (tasers || []).map((taser) => [String(taser.id), taser])
+      )
+    }
+  }
+
+  if (referenciasMunicao.length > 0) {
+    const { data: municoes, error: municoesError } = await supabase
+      .from('sigmo_municoes')
+      .select('id, calibre, descricao')
+      .in('id', referenciasMunicao)
+
+    if (municoesError) {
+      console.warn(
+        'Não foi possível carregar a identificação das munições em manutenção:',
+        municoesError
+      )
+    } else {
+      municoesPorId = new Map(
+        (municoes || []).map((municao) => [String(municao.id), municao])
       )
     }
   }
@@ -1857,6 +2188,17 @@ return {
           marca: taser.marca || null,
           modelo: taser.modelo || null,
           tipo_taser: taser.tipo_taser || null
+        }
+      }
+
+      if (item.modulo === MODULOS_MANUTENCAO.MUNICAO) {
+        const municao = municoesPorId.get(referenciaId)
+        if (!municao) return item
+
+        return {
+          ...item,
+          calibre: municao.calibre || null,
+          descricao_municao: municao.descricao || null
         }
       }
 
@@ -2473,6 +2815,93 @@ async function aplicarRetornoCOP(
 }
 
 
+async function aplicarRetornoMunicao(manutencao, user) {
+  const quantidade = inteiroPositivo(
+    manutencao?.quantidade
+  )
+
+  if (quantidade <= 0) {
+    throw new Error(
+      'A manutenção de munição não possui quantidade válida para retorno.'
+    )
+  }
+
+  if (!manutencao?.id) {
+    throw new Error(
+      'A manutenção de munição não possui identificação válida.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  /*
+   * O lote de munição é informação interna do estoque e não deve
+   * depender de leitura direta pelo perfil SVDD. O retorno passa por
+   * uma RPC SECURITY DEFINER que valida a sessão SIGMO e movimenta
+   * internamente os lotes vinculados à manutenção.
+   */
+  const { data, error } = await supabase.rpc(
+    'sigmo_municoes_retornar_manutencao',
+    {
+      p_token:
+        token,
+
+      p_manutencao_id:
+        manutencao.id,
+
+      p_acao:
+        'RETORNAR'
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível devolver a munição da manutenção ao estoque.'
+    )
+  }
+
+  return {
+    municao:
+      data || {
+        id:
+          manutencao?.referencia_id ||
+          null,
+        quantidade
+      },
+
+    rollback: async () => {
+      const {
+        error: rollbackError
+      } = await supabase.rpc(
+        'sigmo_municoes_retornar_manutencao',
+        {
+          p_token:
+            token,
+
+          p_manutencao_id:
+            manutencao.id,
+
+          p_acao:
+            'DESFAZER'
+        }
+      )
+
+      if (rollbackError) {
+        throw rollbackError
+      }
+    }
+  }
+}
+
+
 async function aplicarRetornoPatrimonial(manutencao, user) {
   if (manutencao.modulo === MODULOS_MANUTENCAO.ARMAS) {
     return aplicarRetornoArma(manutencao, user)
@@ -2493,6 +2922,13 @@ async function aplicarRetornoPatrimonial(manutencao, user) {
     )
   }
 
+  if (manutencao.modulo === MODULOS_MANUTENCAO.MUNICAO) {
+    return aplicarRetornoMunicao(
+      manutencao,
+      user
+    )
+  }
+
   return {
     rollback: async () => {}
   }
@@ -2500,6 +2936,17 @@ async function aplicarRetornoPatrimonial(manutencao, user) {
 
 
 async function concluirNovidadePatrimonialDaManutencao(manutencao, user) {
+  const dadosEstruturados =
+    separarObservacoesEstruturadasCOP(
+      manutencao?.observacoes
+    )
+
+  const novidadeVinculadaId =
+    texto(
+      manutencao?.novidade_patrimonial_id ||
+      dadosEstruturados?.novidadePatrimonialId
+    )
+
   let patrimonioId = texto(manutencao?.patrimonio_id)
 
   // Manutenções criadas a partir de alguns fluxos antigos podem não ter
@@ -2521,14 +2968,24 @@ async function concluirNovidadePatrimonialDaManutencao(manutencao, user) {
     return null
   }
 
-  const { data: novidades, error: buscaError } = await supabase
+  let queryNovidade = supabase
     .from('sigmo_patrimonio_novidades')
     .select('id, patrimonio_id, titulo, status, created_at')
-    .eq('patrimonio_id', patrimonioId)
     .eq('status', 'registrada')
-    .lte('created_at', manutencao.registrada_em)
-    .order('created_at', { ascending: false })
-    .limit(1)
+
+  if (novidadeVinculadaId) {
+    queryNovidade = queryNovidade
+      .eq('id', novidadeVinculadaId)
+      .limit(1)
+  } else {
+    queryNovidade = queryNovidade
+      .eq('patrimonio_id', patrimonioId)
+      .lte('created_at', manutencao.registrada_em)
+      .order('created_at', { ascending: false })
+      .limit(1)
+  }
+
+  const { data: novidades, error: buscaError } = await queryNovidade
 
   if (buscaError) throw buscaError
 

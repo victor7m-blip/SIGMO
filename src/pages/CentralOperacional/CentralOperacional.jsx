@@ -31,6 +31,946 @@ import {
   ehAuxiliar
 } from '../../services/permissionService'
 
+import { supabase } from '../../services/supabaseClient'
+import { loadSessionToken } from '../../services/authService'
+import { listarMovimentacoesPendentes } from '../../services/patrimonioMovimentacaoService'
+
+async function listarAprovacoesMunicoesPendentesCentral() {
+  const token = loadSessionToken()
+
+  if (!token) {
+    throw new Error('Sessão SIGMO inválida ou expirada.')
+  }
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_municoes_listar_aprovacoes_pendentes',
+    { p_token: token }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+function dadosMovimentacaoPatrimonialCentral(item) {
+  return item?.dados || item?.metadata?.dados_engine || {}
+}
+
+function ehManutencaoMunicaoPendenteCentral(item) {
+  const dados = dadosMovimentacaoPatrimonialCentral(item)
+  const status = normalizarSemAcento(item?.status_movimentacao || item?.status || dados?.status_movimentacao || '')
+  const modulo = normalizarSemAcento(item?.modulo || item?.categoria || dados?.modulo || dados?.categoria || '')
+  const destino = normalizarSemAcento(
+    item?.destino_guardiao_codigo ||
+    item?.destino_codigo ||
+    item?.destino_local_nome ||
+    item?.destino_local ||
+    item?.destino_nome ||
+    dados?.guardiao_destino?.codigo ||
+    dados?.guardiao_destino?.nome ||
+    ''
+  )
+  const manutencaoEmTransferencia =
+    dados?.manutencao_em_transferencia === true ||
+    dados?.transferencia_manutencao_municao === true
+
+  return (
+    ['PENDENTE', 'EM_ANDAMENTO'].includes(status) &&
+    modulo === 'MUNICAO' &&
+    manutencaoEmTransferencia &&
+    (destino === 'P4' || destino.includes('COFRE DO P4') || destino.includes('GUARDA DO P4'))
+  )
+}
+
+async function listarAprovacoesManutencaoMunicoesPendentesCentral() {
+  const pendentes = await listarMovimentacoesPendentes({
+    guardiaoCodigo: 'P4',
+    limite: 500
+  })
+
+  return (pendentes || []).filter(ehManutencaoMunicaoPendenteCentral)
+}
+
+function ehDescargaManutencaoMunicaoPendenteCentral(item) {
+  const dados =
+    dadosMovimentacaoPatrimonialCentral(item)
+
+  const status =
+    normalizarSemAcento(
+      item?.status_movimentacao ||
+      item?.status ||
+      dados?.status_movimentacao ||
+      ''
+    )
+
+  const modulo =
+    normalizarSemAcento(
+      item?.modulo ||
+      item?.categoria ||
+      dados?.modulo ||
+      dados?.categoria ||
+      ''
+    )
+
+  return (
+    ['PENDENTE', 'EM_ANDAMENTO'].includes(status) &&
+    modulo === 'MUNICAO' &&
+    dados?.solicitacao_descarga_manutencao === true &&
+    dados?.descarga_manutencao_p4 === true &&
+    dados?.requer_aprovacao_cmt === true
+  )
+}
+
+async function listarDescargasManutencaoMunicoesPendentesCentral() {
+  const pendentes =
+    await listarMovimentacoesPendentes({
+      limite: 500
+    })
+
+  return (pendentes || [])
+    .filter(
+      ehDescargaManutencaoMunicaoPendenteCentral
+    )
+}
+
+function incluirDescargasManutencaoMunicoesCentral(
+  dadosOperacionais,
+  movimentacoes,
+  { visaoP4 = false, visaoCmt = false } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const tituloNormalizado = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const itensNormalizados =
+    (movimentacoes || [])
+      .map((movimentacao) => {
+        const dados =
+          dadosMovimentacaoPatrimonialCentral(
+            movimentacao
+          )
+
+        const id =
+          movimentacao?.id
+
+        if (!id) {
+          return null
+        }
+
+        return {
+          ...movimentacao,
+          id,
+          movimentacao_id:
+            id,
+          protocolo:
+            movimentacao?.protocolo ||
+            null,
+          origem_aprovacao:
+            'MUNICAO_DESCARGA',
+          tipo_solicitacao:
+            'DESCARGA_MANUTENCAO_MUNICAO',
+          modulo:
+            'MUNICAO',
+          categoria:
+            'MUNICAO',
+          tipo:
+            'DESCARGA',
+          tipo_movimentacao:
+            'DESCARGA',
+          origem_transferencia:
+            'ENGINE_PATRIMONIAL',
+          municao_id:
+            dados?.municao_id ||
+            dados?.referencia_id ||
+            null,
+          calibre:
+            dados?.calibre ||
+            null,
+          quantidade_total:
+            Number(
+              dados?.quantidade ??
+              movimentacao?.quantidade ??
+              0
+            ),
+          quantidade:
+            Number(
+              dados?.quantidade ??
+              movimentacao?.quantidade ??
+              0
+            ),
+          origem_codigo:
+            'P4',
+          origem_nome:
+            dados?.guardiao_origem?.nome ||
+            'COFRE DO P4',
+          local_origem:
+            dados?.local_origem ||
+            'COFRE DO P4',
+          destino_codigo:
+            'DESCARGA',
+          destino_nome:
+            dados?.destino_final ||
+            dados?.guardiao_destino?.nome ||
+            'DESCARGA',
+          local_destino:
+            dados?.local_destino ||
+            'DESCARGA PENDENTE',
+          motivo:
+            dados?.motivo_descarga ||
+            movimentacao?.motivo ||
+            'SOLICITACAO_DESCARGA_MUNICAO',
+          documento:
+            dados?.documento ||
+            null,
+          observacoes:
+            dados?.observacoes ||
+            movimentacao?.observacoes ||
+            movimentacao?.observacao ||
+            null,
+          status:
+            'AGUARDANDO_APROVACAO',
+          status_movimentacao:
+            movimentacao?.status_movimentacao ||
+            'PENDENTE',
+          created_at:
+            movimentacao?.criado_em ||
+            movimentacao?.created_at ||
+            null,
+          solicitada_em:
+            movimentacao?.criado_em ||
+            movimentacao?.created_at ||
+            null,
+          solicitada_por_nome:
+            movimentacao?.solicitado_por_nome ||
+            movimentacao?.realizado_por_nome ||
+            'P4',
+          requer_aprovacao_cmt:
+            true,
+          descarga_pendente:
+            true,
+          dados
+        }
+      })
+      .filter(Boolean)
+
+  if (
+    !visaoP4 &&
+    !visaoCmt
+  ) {
+    return base
+  }
+
+  const indiceCard =
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        tituloNormalizado(
+          item?.titulo
+        )
+
+      if (visaoCmt) {
+        return (
+          key === 'aprovacoes-comandante' ||
+          key === 'aprovacoes-cmt' ||
+          titulo === 'APROVACOES PENDENTES'
+        )
+      }
+
+      return (
+        key === 'manutencao-externa-acompanhamento' ||
+        key === 'aguardando-aprovacao-cmt' ||
+        titulo === 'AGUARDANDO APROVACAO DO CMT'
+      )
+    })
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key:
+            visaoCmt
+              ? 'aprovacoes-comandante'
+              : 'manutencao-externa-acompanhamento',
+          titulo:
+            visaoCmt
+              ? 'Aprovações pendentes'
+              : 'Aguardando aprovação do Cmt',
+          tom:
+            'atencao',
+          total:
+            0,
+          itens:
+            []
+        }
+
+  const mapa =
+    new Map()
+
+  for (const item of cardAtual?.itens || []) {
+    const ehDescargaMunicao =
+      normalizarSemAcento(
+        item?.origem_aprovacao ||
+        ''
+      ) === 'MUNICAO_DESCARGA' ||
+      normalizarSemAcento(
+        item?.tipo_solicitacao ||
+        ''
+      ) === 'DESCARGA_MANUTENCAO_MUNICAO'
+
+    if (ehDescargaMunicao) {
+      continue
+    }
+
+    const id =
+      item?.movimentacao_id ||
+      item?.transferencia_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      String(id),
+      item
+    )
+  }
+
+  for (const item of itensNormalizados) {
+    mapa.set(
+      String(
+        item.movimentacao_id ||
+        item.id
+      ),
+      item
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            a?.solicitada_em ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            b?.solicitada_em ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    key:
+      visaoCmt
+        ? 'aprovacoes-comandante'
+        : 'manutencao-externa-acompanhamento',
+    titulo:
+      visaoCmt
+        ? 'Aprovações pendentes'
+        : 'Aguardando aprovação do Cmt',
+    total:
+      itens.length,
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] =
+      cardNovo
+  } else {
+    alertas.push(
+      cardNovo
+    )
+  }
+
+  return {
+    ...base,
+    alertas
+  }
+}
+
+function incluirAprovacoesManutencaoMunicoesCentral(
+  dadosOperacionais,
+  movimentacoes,
+  { visaoP4 = false, visaoCmt = false } = {}
+) {
+  const base =
+    dadosOperacionais && typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const tituloNormalizado = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const normalizarItemManutencao = (movimentacao) => {
+    const dados =
+      dadosMovimentacaoPatrimonialCentral(
+        movimentacao
+      )
+
+    const id =
+      movimentacao?.id
+
+    if (!id) {
+      return null
+    }
+
+    const aprovadoCmt =
+      dados?.cmt_aprovado === true ||
+      Boolean(
+        movimentacao?.aprovado_em
+      )
+
+    return {
+      ...movimentacao,
+      id,
+      movimentacao_id:
+        id,
+      protocolo:
+        movimentacao?.protocolo ||
+        null,
+      origem_aprovacao:
+        'MUNICAO_MANUTENCAO',
+      tipo_solicitacao:
+        'TRANSFERENCIA_MANUTENCAO_MUNICAO',
+      modulo:
+        'MUNICAO',
+      categoria:
+        'MUNICAO',
+      tipo:
+        'TRANSFERENCIA',
+      tipo_movimentacao:
+        movimentacao?.tipo_movimentacao ||
+        'TRANSFERENCIA',
+      origem_transferencia:
+        'ENGINE_PATRIMONIAL',
+      municao_id:
+        dados?.municao_id ||
+        dados?.referencia_id ||
+        null,
+      manutencao_id:
+        dados?.manutencao_id ||
+        null,
+      calibre:
+        dados?.calibre ||
+        null,
+      quantidade_total:
+        Number(
+          dados?.quantidade ??
+          movimentacao?.quantidade ??
+          0
+        ),
+      quantidade:
+        Number(
+          dados?.quantidade ??
+          movimentacao?.quantidade ??
+          0
+        ),
+      origem_codigo:
+        dados?.guardiao_origem?.codigo ||
+        'SVDD',
+      origem_nome:
+        dados?.guardiao_origem?.nome ||
+        movimentacao?.origem_guardiao_nome ||
+        movimentacao?.origem_local_nome ||
+        'COFRE DO SVDD',
+      local_origem:
+        dados?.local_origem ||
+        movimentacao?.origem_local_nome ||
+        'COFRE DO SVDD',
+      destino_codigo:
+        movimentacao?.destino_guardiao_codigo ||
+        dados?.guardiao_destino?.codigo ||
+        'P4',
+      destino_guardiao_codigo:
+        movimentacao?.destino_guardiao_codigo ||
+        dados?.guardiao_destino?.codigo ||
+        'P4',
+      destino_nome:
+        dados?.guardiao_destino?.nome ||
+        movimentacao?.destino_guardiao_nome ||
+        movimentacao?.destino_local_nome ||
+        'COFRE DO P4',
+      local_destino:
+        dados?.local_destino ||
+        movimentacao?.destino_local_nome ||
+        'COFRE DO P4',
+      motivo:
+        movimentacao?.motivo ||
+        'ENCAMINHAMENTO_MANUTENCAO_SVDD_P4',
+      observacoes:
+        movimentacao?.observacoes ||
+        movimentacao?.observacao ||
+        null,
+      status:
+        aprovadoCmt
+          ? 'AGUARDANDO_RECEBIMENTO_P4'
+          : 'AGUARDANDO_APROVACAO',
+      status_movimentacao:
+        movimentacao?.status_movimentacao ||
+        'PENDENTE',
+      created_at:
+        movimentacao?.criado_em ||
+        movimentacao?.created_at ||
+        null,
+      solicitada_em:
+        movimentacao?.criado_em ||
+        movimentacao?.created_at ||
+        null,
+      solicitada_por_nome:
+        movimentacao?.solicitado_por_nome ||
+        movimentacao?.realizado_por_nome ||
+        'SVDD',
+      aprovado_em:
+        movimentacao?.aprovado_em ||
+        dados?.cmt_aprovado_em ||
+        null,
+      aprovado_por_nome:
+        movimentacao?.aprovado_por_nome ||
+        dados?.cmt_aprovado_por_nome ||
+        null,
+      cmt_aprovado:
+        aprovadoCmt,
+      dados
+    }
+  }
+
+  const itensNormalizados =
+    (movimentacoes || [])
+      .map(
+        normalizarItemManutencao
+      )
+      .filter(Boolean)
+
+  const localizarCard = (
+    { keys = [], titulos = [] } = {}
+  ) =>
+    alertas.findIndex((item) => {
+      const key =
+        String(
+          item?.key || ''
+        )
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        tituloNormalizado(
+          item?.titulo
+        )
+
+      return (
+        keys.includes(key) ||
+        titulos.includes(titulo)
+      )
+    })
+
+  const mesclarCard = ({
+    indiceCard,
+    key,
+    titulo,
+    tom = 'atencao',
+    novosItens = []
+  }) => {
+    const cardAtual =
+      indiceCard >= 0
+        ? alertas[indiceCard]
+        : {
+            key,
+            titulo,
+            tom,
+            total: 0,
+            itens: []
+          }
+
+    const mapa =
+      new Map()
+
+    for (
+      const item of
+      cardAtual?.itens || []
+    ) {
+      const origemAprovacao =
+        normalizarSemAcento(
+          item?.origem_aprovacao ||
+          ''
+        )
+
+      const tipoSolicitacao =
+        normalizarSemAcento(
+          item?.tipo_solicitacao ||
+          ''
+        )
+
+      const ehManutencaoMunicao =
+        origemAprovacao ===
+          'MUNICAO_MANUTENCAO' ||
+        tipoSolicitacao ===
+          'TRANSFERENCIA_MANUTENCAO_MUNICAO'
+
+      /*
+       * Itens de manutenção de munição são reconstruídos pelo estado
+       * atual do banco. Não reaproveitar cópias antigas do card, pois
+       * uma movimentação já aprovada continuaria sendo contada.
+       */
+      if (ehManutencaoMunicao) {
+        continue
+      }
+
+      const id =
+        item?.movimentacao_id ||
+        item?.id ||
+        item?.transferencia_id ||
+        item?.protocolo ||
+        `${item?.created_at || ''}-${item?.titulo || ''}`
+
+      mapa.set(
+        String(id),
+        item
+      )
+    }
+
+    for (
+      const item of
+      novosItens || []
+    ) {
+      const id =
+        item?.movimentacao_id ||
+        item?.id
+
+      if (!id) {
+        continue
+      }
+
+      mapa.set(
+        String(id),
+        item
+      )
+    }
+
+    const itens =
+      [...mapa.values()]
+        .sort((a, b) => {
+          const dataA =
+            new Date(
+              a?.created_at ||
+              a?.solicitada_em ||
+              0
+            ).getTime()
+
+          const dataB =
+            new Date(
+              b?.created_at ||
+              b?.solicitada_em ||
+              0
+            ).getTime()
+
+          return dataB - dataA
+        })
+
+    const cardNovo = {
+      ...cardAtual,
+      key,
+      titulo,
+      tom:
+        cardAtual?.tom ||
+        tom,
+      total:
+        itens.length,
+      itens
+    }
+
+    if (indiceCard >= 0) {
+      alertas[indiceCard] =
+        cardNovo
+    } else {
+      alertas.push(
+        cardNovo
+      )
+    }
+  }
+
+  if (visaoCmt) {
+    const aguardandoCmt =
+      itensNormalizados.filter(
+        (item) =>
+          !item.cmt_aprovado
+      )
+
+    const indiceAprovacoes =
+      localizarCard({
+        keys: [
+          'aprovacoes-comandante',
+          'aprovacoes-cmt'
+        ],
+        titulos: [
+          'APROVACOES PENDENTES'
+        ]
+      })
+
+    mesclarCard({
+      indiceCard:
+        indiceAprovacoes,
+      key:
+        'aprovacoes-comandante',
+      titulo:
+        'Aprovações pendentes',
+      tom:
+        'atencao',
+      novosItens:
+        aguardandoCmt
+    })
+  }
+
+  if (visaoP4) {
+    const aguardandoCmt =
+      itensNormalizados.filter(
+        (item) =>
+          !item.cmt_aprovado
+      )
+
+    const aprovadasParaP4 =
+      itensNormalizados.filter(
+        (item) =>
+          item.cmt_aprovado
+      )
+
+    const indiceAguardando =
+      localizarCard({
+        keys: [
+          'manutencao-externa-acompanhamento',
+          'aguardando-aprovacao-cmt'
+        ],
+        titulos: [
+          'AGUARDANDO APROVACAO DO CMT'
+        ]
+      })
+
+    mesclarCard({
+      indiceCard:
+        indiceAguardando,
+      key:
+        'manutencao-externa-acompanhamento',
+      titulo:
+        'Aguardando aprovação do Cmt',
+      tom:
+        'atencao',
+      novosItens:
+        aguardandoCmt
+    })
+
+    if (
+      aprovadasParaP4.length > 0
+    ) {
+      const indiceTransferencias =
+        localizarCard({
+          keys: [
+            'transferencias'
+          ],
+          titulos: [
+            'TRANSFERENCIAS PENDENTES'
+          ]
+        })
+
+      mesclarCard({
+        indiceCard:
+          indiceTransferencias,
+        key:
+          'transferencias',
+        titulo:
+          'Transferências pendentes',
+        tom:
+          'atencao',
+        novosItens:
+          aprovadasParaP4
+      })
+    }
+  }
+
+  return {
+    ...base,
+    alertas
+  }
+}
+
+function incluirAprovacoesMunicoesCentral(
+  dadosOperacionais,
+  solicitacoes,
+  { visaoP4 = false, visaoCmt = false } = {}
+) {
+  const base =
+    dadosOperacionais && typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  const alertas = Array.isArray(base.alertas)
+    ? [...base.alertas]
+    : []
+
+  const tituloNormalizado = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const indiceCard = alertas.findIndex((item) => {
+    const key = String(item?.key || '').trim().toLowerCase()
+    const titulo = tituloNormalizado(item?.titulo)
+
+    if (visaoP4) {
+      return (
+        key === 'manutencao-externa-acompanhamento' ||
+        key === 'aguardando-aprovacao-cmt' ||
+        titulo === 'AGUARDANDO APROVACAO DO CMT'
+      )
+    }
+
+    if (visaoCmt) {
+      return (
+        key === 'aprovacoes-comandante' ||
+        key === 'aprovacoes-cmt' ||
+        titulo === 'APROVACOES PENDENTES'
+      )
+    }
+
+    return false
+  })
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key: visaoP4
+            ? 'manutencao-externa-acompanhamento'
+            : 'aprovacoes-comandante',
+          titulo: visaoP4
+            ? 'Aguardando aprovação do Cmt'
+            : 'Aprovações pendentes',
+          tom: 'atencao',
+          total: 0,
+          itens: []
+        }
+
+  const mapa = new Map()
+
+  for (const item of cardAtual?.itens || []) {
+    const ehMunicao =
+      String(item?.origem_aprovacao || '')
+        .trim()
+        .toUpperCase() === 'MUNICAO_TRANSFERENCIA' ||
+      String(item?.tipo_solicitacao || '')
+        .trim()
+        .toUpperCase() === 'TRANSFERENCIA_MUNICAO'
+
+    const id =
+      item?.transferencia_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      ehMunicao ? `MUNICAO-${id}` : `OUTRO-${id}`,
+      item
+    )
+  }
+
+  for (const solicitacao of solicitacoes || []) {
+    const id = solicitacao?.transferencia_id || solicitacao?.id
+    if (!id) continue
+
+    mapa.set(`MUNICAO-${id}`, {
+      id,
+      transferencia_id: id,
+      origem_aprovacao: 'MUNICAO_TRANSFERENCIA',
+      tipo_solicitacao: 'TRANSFERENCIA_MUNICAO',
+      modulo: 'MUNIÇÕES',
+      tipo: 'TRANSFERÊNCIA DE MUNIÇÕES',
+      tipo_patrimonio: 'MUNIÇÕES',
+      municao_id: solicitacao?.municao_id || null,
+      calibre: solicitacao?.calibre || null,
+      quantidade_total: Number(solicitacao?.quantidade_total || 0),
+      quantidade: Number(solicitacao?.quantidade_total || 0),
+      origem_tipo: solicitacao?.origem_tipo || 'COFRE_P4',
+      origem_nome: solicitacao?.origem_nome || 'COFRE DO P4',
+      destino_tipo: solicitacao?.destino_tipo || null,
+      destino_nome: solicitacao?.destino_nome || 'DESTINO NÃO INFORMADO',
+      documento: solicitacao?.documento || null,
+      observacoes: solicitacao?.observacoes || null,
+      solicitada_por_nome:
+        solicitacao?.criado_por_nome || 'P4',
+      criado_por_nome:
+        solicitacao?.criado_por_nome || 'P4',
+      status: 'AGUARDANDO_APROVACAO',
+      created_at: solicitacao?.criado_em || null,
+      solicitada_em: solicitacao?.criado_em || null
+    })
+  }
+
+  const itens = [...mapa.values()].sort((a, b) => {
+    const dataA = new Date(
+      a?.created_at || a?.solicitada_em || 0
+    ).getTime()
+    const dataB = new Date(
+      b?.created_at || b?.solicitada_em || 0
+    ).getTime()
+    return dataB - dataA
+  })
+
+  const cardNovo = {
+    ...cardAtual,
+    key: visaoP4
+      ? 'manutencao-externa-acompanhamento'
+      : 'aprovacoes-comandante',
+    titulo: visaoP4
+      ? 'Aguardando aprovação do Cmt'
+      : 'Aprovações pendentes',
+    total: itens.length,
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] = cardNovo
+  } else {
+    alertas.push(cardNovo)
+  }
+
+  return { ...base, alertas }
+}
+
 function normalizarTexto(valor) {
   return String(valor ?? '').trim()
 }
@@ -1404,11 +2344,24 @@ function CentralOperacional({ user }) {
   const visaoP4 =
     perfilAtual === 'P4'
 
-  const visaoColeteCentral =
-    visaoP4 ||
+  const ehCmtCia =
     perfilAtual.includes(
       'COMANDANTE'
     ) ||
+    perfilAtual.includes(
+      'CMT'
+    )
+
+  const visaoColeteCentral =
+    visaoP4 ||
+    ehCmtCia ||
+    perfilAtual.includes(
+      'ADMINISTRADOR'
+    )
+
+  const visaoAprovacaoMunicoes =
+    visaoP4 ||
+    ehCmtCia ||
     perfilAtual.includes(
       'ADMINISTRADOR'
     )
@@ -1467,7 +2420,10 @@ function CentralOperacional({ user }) {
         dadosCategorias,
         dadosOperacionais,
         manutencoesResultado,
-        manutencoesExternas
+        manutencoesExternas,
+        aprovacoesMunicoes,
+        aprovacoesManutencaoMunicoes,
+        descargasManutencaoMunicoes
       ] = await Promise.all([
         carregarDashboardPatrimonial(),
         listarCategoriasOperacionais(),
@@ -1477,7 +2433,18 @@ function CentralOperacional({ user }) {
           pagina: 1,
           limite: 5000
         }),
-        listarManutencoesExternasContagem()
+        listarManutencoesExternasContagem(),
+        visaoAprovacaoMunicoes
+          ? listarAprovacoesMunicoesPendentesCentral()
+          : Promise.resolve([]),
+
+        visaoAprovacaoMunicoes
+          ? listarAprovacoesManutencaoMunicoesPendentesCentral()
+          : Promise.resolve([]),
+
+        visaoAprovacaoMunicoes
+          ? listarDescargasManutencaoMunicoesPendentesCentral()
+          : Promise.resolve([])
       ])
 
       const manutencoesTodas =
@@ -1572,6 +2539,44 @@ function CentralOperacional({ user }) {
           incluirDescargasColetesAprovacaoCmt(
             dadosOperacionaisComAlertas,
             descargasColetesPendentes
+          )
+      }
+
+      if (visaoAprovacaoMunicoes) {
+        dadosOperacionaisComAlertas =
+          incluirAprovacoesMunicoesCentral(
+            dadosOperacionaisComAlertas,
+            aprovacoesMunicoes,
+            {
+              visaoP4,
+              visaoCmt:
+                ehCmtCia ||
+                perfilAtual.includes('ADMINISTRADOR')
+            }
+          )
+
+        dadosOperacionaisComAlertas =
+          incluirAprovacoesManutencaoMunicoesCentral(
+            dadosOperacionaisComAlertas,
+            aprovacoesManutencaoMunicoes,
+            {
+              visaoP4,
+              visaoCmt:
+                ehCmtCia ||
+                perfilAtual.includes('ADMINISTRADOR')
+            }
+          )
+
+        dadosOperacionaisComAlertas =
+          incluirDescargasManutencaoMunicoesCentral(
+            dadosOperacionaisComAlertas,
+            descargasManutencaoMunicoes,
+            {
+              visaoP4,
+              visaoCmt:
+                ehCmtCia ||
+                perfilAtual.includes('ADMINISTRADOR')
+            }
           )
       }
 
@@ -1722,7 +2727,10 @@ function CentralOperacional({ user }) {
     user,
     visaoSVDD,
     visaoP4,
-    visaoColeteCentral
+    visaoColeteCentral,
+    visaoAprovacaoMunicoes,
+    ehCmtCia,
+    perfilAtual
   ])
 
   useEffect(() => {

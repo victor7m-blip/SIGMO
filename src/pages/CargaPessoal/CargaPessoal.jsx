@@ -14,6 +14,10 @@ import {
   supabase
 } from '../../services/supabaseClient'
 
+import {
+  loadSessionToken
+} from '../../services/authService'
+
 import './CargaPessoal.css'
 
 function texto(valor, fallback = 'Não informado') {
@@ -58,6 +62,71 @@ function formatarModelagem(valor) {
   }
 
   return v || 'Não informado'
+}
+
+
+async function listarMunicoesCargaPessoal(user) {
+  const reBase =
+    String(
+      user?.re ||
+      user?.policial_re ||
+      ''
+    )
+      .replace(/\D/g, '')
+      .slice(0, 6)
+
+  if (reBase.length !== 6) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('sigmo_municoes_carga_permanente_policial')
+    .select(
+      'calibre, lote_id, numero_lote, fabricante, policial_id, policial_re, policial_nome, quantidade_em_posse, primeira_retirada, ultima_retirada, devolucao_prevista, municao_id'
+    )
+    .ilike(
+      'policial_re',
+      `${reBase}%`
+    )
+    .gt(
+      'quantidade_em_posse',
+      0
+    )
+    .order(
+      'calibre',
+      {
+        ascending: true
+      }
+    )
+
+  if (error) {
+    throw error
+  }
+
+  return (data || [])
+    .filter(
+      (item) =>
+        String(
+          item?.policial_re ||
+          ''
+        )
+          .replace(/\D/g, '')
+          .slice(0, 6) ===
+        reBase
+    )
+    .map(
+      (item) => ({
+        ...item,
+        quantidade_em_posse:
+          Number(
+            item?.quantidade_em_posse ||
+            0
+          )
+      })
+    )
 }
 
 async function listarColetesCargaPessoal(user) {
@@ -134,6 +203,7 @@ export default function CargaPessoal({
 }) {
   const [armas, setArmas] = useState([])
   const [coletes, setColetes] = useState([])
+  const [municoes, setMunicoes] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
@@ -146,14 +216,17 @@ export default function CargaPessoal({
 
       const [
         listaArmas,
-        listaColetes
+        listaColetes,
+        listaMunicoes
       ] = await Promise.all([
         listarArmasCargaPessoal(user),
-        listarColetesCargaPessoal(user)
+        listarColetesCargaPessoal(user),
+        listarMunicoesCargaPessoal(user)
       ])
 
       setArmas(listaArmas || [])
       setColetes(listaColetes || [])
+      setMunicoes(listaMunicoes || [])
     } catch (error) {
       console.error(
         'Erro ao carregar carga pessoal:',
@@ -162,6 +235,7 @@ export default function CargaPessoal({
 
       setArmas([])
       setColetes([])
+      setMunicoes([])
       setErro(
         error?.message ||
         'Não foi possível carregar sua carga pessoal.'
@@ -218,6 +292,109 @@ export default function CargaPessoal({
       setErro(
         error?.message ||
         'Não foi possível solicitar a devolução ao P4.'
+      )
+    } finally {
+      setDevolvendoId(null)
+    }
+  }
+
+
+
+  async function devolverMunicaoAoP4(municao) {
+    const quantidade =
+      Math.max(
+        0,
+        Math.trunc(
+          Number(
+            municao?.quantidade_em_posse ||
+            0
+          )
+        )
+      )
+
+    if (quantidade <= 0) {
+      setErro(
+        'Não há munição disponível para devolução.'
+      )
+      return
+    }
+
+    const confirmou = window.confirm(
+      `Confirma a devolução de ${quantidade} unidade(s) de ${texto(
+        municao?.calibre,
+        'munição'
+      )} ao P4?\n\nA carga continuará vinculada a você até o recebimento ser confirmado.`
+    )
+
+    if (!confirmou) return
+
+    const idDevolucao =
+      `MUNICAO-${municao?.lote_id || municao?.calibre || 'CARGA'}`
+
+    try {
+      setDevolvendoId(idDevolucao)
+      setErro('')
+      setMensagem('')
+
+      const token =
+        loadSessionToken()
+
+      if (!token) {
+        throw new Error(
+          'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+        )
+      }
+
+      const municaoId =
+        municao?.municao_id ||
+        null
+
+      if (!municaoId) {
+        throw new Error(
+          'Não foi possível identificar a munição para devolução.'
+        )
+      }
+
+      const {
+        error
+      } = await supabase.rpc(
+        'sigmo_municoes_solicitar_devolucao',
+        {
+          p_token:
+            token,
+
+          p_municao_id:
+            municaoId,
+
+          p_quantidade:
+            quantidade,
+
+          p_observacoes:
+            'DEVOLUÇÃO DE CARGA PERMANENTE AO P4'
+        }
+      )
+
+      if (error) {
+        throw error
+      }
+
+      setMensagem(
+        `Devolução de ${quantidade} unidade(s) de ${texto(
+          municao?.calibre,
+          'munição'
+        )} solicitada com sucesso. A carga permanecerá vinculada até o recebimento ser confirmado.`
+      )
+
+      await carregar()
+    } catch (error) {
+      console.error(
+        'Erro ao solicitar devolução da munição:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível solicitar a devolução da munição.'
       )
     } finally {
       setDevolvendoId(null)
@@ -304,6 +481,22 @@ export default function CargaPessoal({
           <small>
             Coletes balísticos em carga
           </small>
+        </article>
+
+        <article>
+          <span>Munições em carga</span>
+          <strong>
+            {municoes.reduce(
+              (total, item) =>
+                total +
+                Number(
+                  item?.quantidade_em_posse ||
+                  0
+                ),
+              0
+            )}
+          </strong>
+          <small>Carga permanente ativa</small>
         </article>
 
         <article>
@@ -428,6 +621,144 @@ export default function CargaPessoal({
             ))}
           </div>
         )}
+
+      <section className="carga-pessoal-painel">
+        <div className="carga-pessoal-painel-titulo">
+          <div>
+            <span>MUNIÇÕES</span>
+            <h2>Carga permanente</h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={carregar}
+            disabled={loading}
+          >
+            {loading ? 'Atualizando...' : 'Atualizar'}
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="carga-pessoal-vazio">
+            Carregando munições...
+          </div>
+        ) : municoes.length === 0 ? (
+          <div className="carga-pessoal-vazio">
+            Nenhuma munição em carga permanente vinculada
+            ao seu RE.
+          </div>
+        ) : (
+          <div className="carga-pessoal-grid">
+            {municoes.map((municao) => (
+              <article
+                className="carga-pessoal-card"
+                key={
+                  `${municao.lote_id || 'SEM-LOTE'}-${municao.calibre}`
+                }
+              >
+                <div className="carga-pessoal-card-topo">
+                  <div className="carga-pessoal-icone">
+                    ▥
+                  </div>
+
+                  <div>
+                    <span>MUNIÇÃO</span>
+                    <h3>
+                      {texto(
+                        municao.calibre,
+                        'Calibre não informado'
+                      )}
+                    </h3>
+                  </div>
+
+                  <b>CARGA</b>
+                </div>
+
+                <dl>
+                  <div>
+                    <dt>Quantidade</dt>
+                    <dd>
+                      {Number(
+                        municao.quantidade_em_posse ||
+                        0
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>Lote</dt>
+                    <dd>
+                      {texto(
+                        municao.numero_lote
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>Fabricante</dt>
+                    <dd>
+                      {texto(
+                        municao.fabricante
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>RE vinculado</dt>
+                    <dd>
+                      {texto(
+                        municao.policial_re
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>Primeira retirada</dt>
+                    <dd>
+                      {formatarData(
+                        municao.primeira_retirada
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>Situação</dt>
+                    <dd>
+                      CARGA PERMANENTE
+                    </dd>
+                  </div>
+                </dl>
+
+                <footer className="carga-pessoal-card-footer">
+                  <span>
+                    Munição vinculada à sua carga permanente
+                    pelo P4.
+                  </span>
+
+                  <button
+                    type="button"
+                    className="carga-pessoal-devolver"
+                    onClick={() =>
+                      devolverMunicaoAoP4(
+                        municao
+                      )
+                    }
+                    disabled={
+                      devolvendoId ===
+                      `MUNICAO-${municao?.lote_id || municao?.calibre || 'CARGA'}`
+                    }
+                  >
+                    {devolvendoId ===
+                    `MUNICAO-${municao?.lote_id || municao?.calibre || 'CARGA'}`
+                      ? 'Enviando...'
+                      : 'Devolver ao P4'}
+                  </button>
+                </footer>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="carga-pessoal-painel">
         <div className="carga-pessoal-painel-titulo">

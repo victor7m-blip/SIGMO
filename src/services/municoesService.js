@@ -204,7 +204,7 @@ export async function listarResumoMunicoes({
 
   const { data, error } =
     await supabase.rpc(
-      'sigmo_municoes_listar_resumo',
+      'sigmo_municoes_listar_resumo_com_manutencao',
       {
         p_token: token
       }
@@ -240,6 +240,11 @@ export async function listarResumoMunicoes({
         quantidade_em_servico:
           numeroInteiro(
             item.quantidade_em_servico
+          ),
+
+        quantidade_manutencao:
+          numeroInteiro(
+            item.quantidade_manutencao
           ),
 
         quantidade_consumida:

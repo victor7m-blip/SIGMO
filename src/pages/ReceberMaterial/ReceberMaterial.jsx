@@ -332,6 +332,129 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
   return porPatrimonio
 }
 
+async function buscarNovidadesPendentesMunicoes(itens = []) {
+  const municaoIds = [
+    ...new Set(
+      (itens || [])
+        .filter(
+          (item) =>
+            item?.tipo_registro ===
+            'MUNICAO_DEVOLUCAO'
+        )
+        .map(
+          (item) =>
+            item?.municao_id ||
+            item?.referencia_id
+        )
+        .filter(ehUuidValido)
+        .map(String)
+    )
+  ]
+
+  if (municaoIds.length === 0) {
+    return new Map()
+  }
+
+  const {
+    data: patrimoniosMunicao,
+    error: patrimoniosError
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id, tipo, referencia_id')
+    .in('referencia_id', municaoIds)
+
+  if (patrimoniosError) {
+    console.warn(
+      'Não foi possível localizar os patrimônios centrais das munições:',
+      patrimoniosError
+    )
+    return new Map()
+  }
+
+  const patrimoniosValidos =
+    (patrimoniosMunicao || [])
+      .filter(
+        (patrimonio) =>
+          [
+            'MUNICAO',
+            'MUNIÇÃO'
+          ].includes(
+            normalizarTexto(
+              patrimonio?.tipo
+            )
+          )
+      )
+
+  if (patrimoniosValidos.length === 0) {
+    return new Map()
+  }
+
+  const novidadesPorPatrimonio =
+    await buscarNovidadesPendentesPatrimonios(
+      patrimoniosValidos.map(
+        (patrimonio) => ({
+          patrimonio_id:
+            patrimonio.id
+        })
+      )
+    )
+
+  const porMunicao =
+    new Map()
+
+  for (
+    const patrimonio of
+    patrimoniosValidos
+  ) {
+    const novidade =
+      novidadesPorPatrimonio.get(
+        String(
+          patrimonio.id
+        )
+      )
+
+    if (
+      novidade &&
+      patrimonio?.referencia_id
+    ) {
+      const quantidadeNaDescricao =
+        String(
+          novidade?.descricao ||
+          ''
+        ).match(
+          /QUANTIDADE AFETADA:\s*(\d+)/i
+        )
+
+      const quantidadeAfetada =
+        Math.max(
+          1,
+          Number(
+            novidade?.quantidade_afetada ||
+            novidade?.metadata?.quantidade_afetada ||
+            quantidadeNaDescricao?.[1] ||
+            1
+          ) || 1
+        )
+
+      porMunicao.set(
+        String(
+          patrimonio.referencia_id
+        ),
+        {
+          ...novidade,
+          patrimonio_id:
+            novidade?.patrimonio_id ||
+            patrimonio.id,
+          quantidade_afetada:
+            quantidadeAfetada
+        }
+      )
+    }
+  }
+
+  return porMunicao
+}
+
 async function listarDevolucoesMunicaoPendentesSvdd() {
   const token =
     loadSessionToken()
@@ -390,6 +513,94 @@ async function receberDevolucaoMunicaoSvdd(
 
       p_devolucao_id:
         devolucaoId
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+async function receberDevolucaoMunicaoComManutencao({
+  item,
+  novidade
+}) {
+  if (!item?.devolucao_municao_id) {
+    throw new Error(
+      'Devolução de munição não informada.'
+    )
+  }
+
+  if (!item?.municao_id) {
+    throw new Error(
+      'Munição não identificada para manutenção.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const novidadeOriginal =
+    item?.novidade_pendente ||
+    item?.aviso_novidade ||
+    null
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_municoes_receber_devolucao_com_manutencao',
+    {
+      p_token:
+        token,
+
+      p_devolucao_id:
+        item.devolucao_municao_id,
+
+      p_municao_id:
+        item.municao_id,
+
+      p_quantidade_manutencao:
+        Math.max(
+          1,
+          Number(
+            novidade?.quantidade_afetada ||
+            1
+          ) || 1
+        ),
+
+      p_novidade_patrimonial_id:
+        novidade?.novidade_id ||
+        novidade?.id ||
+        novidadeOriginal?.id ||
+        null,
+
+      p_patrimonio_id:
+        novidadeOriginal?.patrimonio_id ||
+        null,
+
+      p_tipo_novidade:
+        normalizarTexto(
+          novidade?.tipo ||
+          novidadeOriginal?.titulo ||
+          'NOVIDADE'
+        ),
+
+      p_descricao:
+        normalizarTexto(
+          novidade?.descricao ||
+          novidadeOriginal?.descricao ||
+          'MUNIÇÃO ENCAMINHADA PARA MANUTENÇÃO.'
+        )
     }
   )
 
@@ -892,10 +1103,17 @@ export default function ReceberMaterial({
             )
           }
 
-          const novidadesPorPatrimonio =
-            await buscarNovidadesPendentesPatrimonios(
+          const [
+            novidadesPorPatrimonio,
+            novidadesPorMunicao
+          ] = await Promise.all([
+            buscarNovidadesPendentesPatrimonios(
+              lista
+            ),
+            buscarNovidadesPendentesMunicoes(
               lista
             )
+          ])
 
           const listaComNovidades =
             lista.map(
@@ -913,7 +1131,20 @@ export default function ReceberMaterial({
                           ''
                         )
                       ) ||
+                      null,
+
+                aviso_novidade:
+                  item?.tipo_registro ===
+                  'MUNICAO_DEVOLUCAO'
+                    ? novidadesPorMunicao.get(
+                        String(
+                          item?.municao_id ||
+                          item?.referencia_id ||
+                          ''
+                        )
+                      ) ||
                       null
+                    : null
               })
             )
 
@@ -1061,7 +1292,7 @@ export default function ReceberMaterial({
       itemId,
       (item) => {
         const novidadePendente =
-          item?.novidade_pendente || null
+          item?.novidade_pendente || item?.aviso_novidade || null
 
         const novidadeExistente =
           item?.novidade ||
@@ -1085,7 +1316,13 @@ export default function ReceberMaterial({
                   providencia:
                     '',
                   quantidade_afetada:
-                    1,
+                    Math.max(
+                      1,
+                      Number(
+                        novidadePendente?.quantidade_afetada ||
+                        1
+                      ) || 1
+                    ),
                   fotos:
                     Array.isArray(
                       novidadePendente.fotos
@@ -1402,13 +1639,6 @@ export default function ReceberMaterial({
   function prepararNovidadeItem(
     item
   ) {
-    if (
-      item?.tipo_registro ===
-      'MUNICAO_DEVOLUCAO'
-    ) {
-      return null
-    }
-
     const novidade =
       item?.novidade
 
@@ -1459,8 +1689,12 @@ export default function ReceberMaterial({
         ),
 
       quantidade_afetada:
-        item?.tipo_registro ===
-          'TONFA_QUANTIDADE'
+        [
+          'TONFA_QUANTIDADE',
+          'MUNICAO_DEVOLUCAO'
+        ].includes(
+          item?.tipo_registro
+        )
           ? Math.max(
               1,
               Math.min(
@@ -1547,7 +1781,7 @@ export default function ReceberMaterial({
   }
 
   const novidadePendente =
-    item?.novidade_pendente || null
+    item?.novidade_pendente || item?.aviso_novidade || null
 
   setItensSelecionados((listaAtual) => [
     ...listaAtual,
@@ -1569,7 +1803,13 @@ export default function ReceberMaterial({
                 novidadePendente.descricao || ''
               ),
               providencia: '',
-              quantidade_afetada: 1,
+              quantidade_afetada: Math.max(
+                      1,
+                      Number(
+                        novidadePendente?.quantidade_afetada ||
+                        1
+                      ) || 1
+                    ),
               fotos: Array.isArray(novidadePendente.fotos)
                 ? novidadePendente.fotos.map((foto, indice) => ({
                     ...foto,
@@ -1655,7 +1895,7 @@ function alterarQuantidade(id, valor) {
     setItensSelecionados(
       patrimonios.map((item) => {
         const novidadePendente =
-          item?.novidade_pendente || null
+          item?.novidade_pendente || item?.aviso_novidade || null
 
         return {
           ...item,
@@ -1683,7 +1923,13 @@ function alterarQuantidade(id, valor) {
                   providencia:
                     '',
                   quantidade_afetada:
-                    1,
+                    Math.max(
+                      1,
+                      Number(
+                        novidadePendente?.quantidade_afetada ||
+                        1
+                      ) || 1
+                    ),
                   fotos:
                     Array.isArray(
                       novidadePendente.fotos
@@ -1805,7 +2051,10 @@ async function confirmarRecebimento() {
 
   for (const item of itensSelecionados) {
     if (
-      item?.novidade_pendente &&
+      (
+        item?.novidade_pendente ||
+        item?.aviso_novidade
+      ) &&
       !normalizarTexto(item?.novidade?.providencia)
     ) {
       setErro(
@@ -2153,10 +2402,28 @@ async function confirmarRecebimento() {
         )
       }
 
-      const resultado =
-        await receberDevolucaoMunicaoSvdd(
-          item.devolucao_municao_id
+      const novidadeItem =
+        prepararNovidadeItem(
+          item
         )
+
+      const providencia =
+        normalizarTexto(
+          novidadeItem?.providencia ||
+          'COFRE'
+        )
+
+      const resultado =
+        providencia ===
+        'MANUTENCAO'
+          ? await receberDevolucaoMunicaoComManutencao({
+              item,
+              novidade:
+                novidadeItem
+            })
+          : await receberDevolucaoMunicaoSvdd(
+              item.devolucao_municao_id
+            )
 
       resultadosMunicoes.push({
         item,
@@ -2585,6 +2852,11 @@ async function confirmarRecebimento() {
                             item
                           )
 
+                        const novidadeVisual =
+                          item?.novidade_pendente ||
+                          item?.aviso_novidade ||
+                          null
+
                         return (
                           <tr
                             key={
@@ -2604,7 +2876,7 @@ async function confirmarRecebimento() {
                             <td>
   {item.descricao}
 
-  {item?.novidade_pendente && (
+  {novidadeVisual && (
     <div
       style={{
         marginTop: '8px',
@@ -2619,13 +2891,13 @@ async function confirmarRecebimento() {
       </strong>
 
       <small style={{ display: 'block', marginTop: '3px' }}>
-        {normalizarTexto(item.novidade_pendente.titulo || 'NOVIDADE')}
-        {item.novidade_pendente.descricao
-          ? ` • ${normalizarTexto(item.novidade_pendente.descricao)}`
+        {normalizarTexto(novidadeVisual.titulo || 'NOVIDADE')}
+        {novidadeVisual.descricao
+          ? ` • ${normalizarTexto(novidadeVisual.descricao)}`
           : ''}
       </small>
 
-      {(item.novidade_pendente.fotos || []).length > 0 && (
+      {(novidadeVisual.fotos || []).length > 0 && (
         <div
           style={{
             display: 'flex',
@@ -2634,7 +2906,7 @@ async function confirmarRecebimento() {
             marginTop: '7px'
           }}
         >
-          {item.novidade_pendente.fotos.map((foto) => (
+          {novidadeVisual.fotos.map((foto) => (
             <button
               key={foto.id}
               type="button"

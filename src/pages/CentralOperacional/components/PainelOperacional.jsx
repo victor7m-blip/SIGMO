@@ -26,6 +26,13 @@ import {
 } from '../../../services/htsTransferenciaService'
 
 import {
+  aceitarTransferenciaManutencaoMunicao,
+  aprovarDescargaManutencaoMunicaoCmt,
+  recusarDescargaManutencaoMunicaoCmt,
+  recusarTransferenciaManutencaoMunicao
+} from '../../../services/municoesMovimentacoesService'
+
+import {
   listarNovidadesVtrFluxo,
   registrarCienciaProvidenciaVtr,
   listarDocumentosNovidadeVtr,
@@ -200,6 +207,59 @@ function ehTransferenciaHTEngine(item, secao) {
   )
 }
 
+
+function ehTransferenciaManutencaoMunicaoEngine(item, secao) {
+  if (!ehTransferencia(secao)) return false
+
+  const dados =
+    item?.dados ||
+    item?.metadata?.dados_engine ||
+    {}
+
+  const modulo = normalizarOperacional(
+    item?.modulo ||
+    item?.categoria ||
+    dados?.modulo ||
+    dados?.categoria
+  )
+
+  const origem = normalizarOperacional(
+    item?.origem_codigo ||
+    item?.origem_guardiao_codigo ||
+    item?.local_origem ||
+    dados?.guardiao_origem?.codigo ||
+    dados?.guardiao_origem?.nome
+  )
+
+  const destino = normalizarOperacional(
+    item?.destino_codigo ||
+    item?.destino_guardiao_codigo ||
+    item?.destino_local ||
+    item?.destino_nome ||
+    dados?.guardiao_destino?.codigo ||
+    dados?.guardiao_destino?.nome
+  )
+
+  const manutencaoEmTransferencia =
+    dados?.manutencao_em_transferencia === true ||
+    dados?.transferencia_manutencao_municao === true
+
+  return (
+    modulo === 'MUNICAO' &&
+    manutencaoEmTransferencia &&
+    (
+      origem === 'SVDD' ||
+      origem.includes('COFRE DO SVDD') ||
+      origem.includes('SERVICO DE DIA')
+    ) &&
+    (
+      destino === 'P4' ||
+      destino.includes('COFRE DO P4') ||
+      destino.includes('GUARDA DO P4')
+    )
+  )
+}
+
 function ehAprovacao(secao) {
   return ['aprovacoes', 'aprovacoes-comandante'].includes(secao?.key)
 }
@@ -210,6 +270,40 @@ function ehAprovacaoComandante(secao) {
 
 function itemEhManutencaoExterna(item) {
   return normalizarOperacional(item?.origem_aprovacao) === 'MANUTENCAO_EXTERNA'
+}
+
+
+function itemEhTransferenciaMunicao(item) {
+  return (
+    normalizarOperacional(
+      item?.origem_aprovacao
+    ) === 'MUNICAO_TRANSFERENCIA' ||
+    normalizarOperacional(
+      item?.tipo_solicitacao
+    ) === 'TRANSFERENCIA_MUNICAO'
+  )
+}
+
+function itemEhManutencaoMunicao(item) {
+  return (
+    normalizarOperacional(
+      item?.origem_aprovacao
+    ) === 'MUNICAO_MANUTENCAO' ||
+    normalizarOperacional(
+      item?.tipo_solicitacao
+    ) === 'TRANSFERENCIA_MANUTENCAO_MUNICAO'
+  )
+}
+
+function itemEhDescargaMunicao(item) {
+  return (
+    normalizarOperacional(
+      item?.origem_aprovacao
+    ) === 'MUNICAO_DESCARGA' ||
+    normalizarOperacional(
+      item?.tipo_solicitacao
+    ) === 'DESCARGA_MANUTENCAO_MUNICAO'
+  )
 }
 
 function itemEhDescargaColete(item) {
@@ -430,6 +524,27 @@ function tituloItem(item, secao) {
     return item?.protocolo || `${item?.origem_codigo || 'Origem'} → ${item?.destino_codigo || 'Destino'}`
   }
 
+  if (
+    ehAprovacao(secao) &&
+    itemEhTransferenciaMunicao(item)
+  ) {
+    return `Munições — ${item?.calibre || 'calibre não informado'}`
+  }
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhManutencaoMunicao(item)
+  ) {
+    return `Manutenção de munições — ${item?.calibre || 'calibre não informado'}`
+  }
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhDescargaMunicao(item)
+  ) {
+    return `Descarga de munições — ${item?.calibre || 'calibre não informado'}`
+  }
+
   if (ehAprovacao(secao) && item?.origem_aprovacao === 'BAIXA_PATRIMONIAL') {
     return `Baixa de ${item?.modulo || 'patrimônio'} — ${item?.patrimonio || item?.numero_serie || 'item'}`
   }
@@ -537,6 +652,85 @@ function obterFotosNovidade(item) {
   return []
 }
 
+
+function obterFotosDescargaMunicao(item) {
+  const dados =
+    item?.dados &&
+    typeof item.dados === 'object'
+      ? item.dados
+      : (
+          item?.metadata?.dados_engine &&
+          typeof item.metadata.dados_engine === 'object'
+            ? item.metadata.dados_engine
+            : {}
+        )
+
+  const fontes = [
+    ...(Array.isArray(item?.fotos)
+      ? item.fotos
+      : []),
+    ...(Array.isArray(dados?.fotos)
+      ? dados.fotos
+      : [])
+  ]
+
+  const porUrl =
+    new Map()
+
+  for (const foto of fontes) {
+    const url =
+      foto?.foto_url ||
+      foto?.url ||
+      null
+
+    if (!url) {
+      continue
+    }
+
+    porUrl.set(
+      String(url),
+      {
+        ...foto,
+        foto_url:
+          url
+      }
+    )
+  }
+
+  const urls = [
+    ...(Array.isArray(item?.foto_urls)
+      ? item.foto_urls
+      : []),
+    ...(Array.isArray(dados?.foto_urls)
+      ? dados.foto_urls
+      : [])
+  ]
+
+  for (const url of urls) {
+    const endereco =
+      String(url || '').trim()
+
+    if (!endereco) {
+      continue
+    }
+
+    if (!porUrl.has(endereco)) {
+      porUrl.set(
+        endereco,
+        {
+          foto_url:
+            endereco
+        }
+      )
+    }
+  }
+
+  return Array.from(
+    porUrl.values()
+  )
+}
+
+
 function detalheItem(item, secao) {
   if (ehIndicadorPatrimonio(secao)) {
     return [
@@ -556,6 +750,72 @@ function detalheItem(item, secao) {
       item?.gravidade,
       item?.status,
       item?.registrado_por_nome
+    ].map(texto).filter(Boolean).join(' • ')
+  }
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhTransferenciaMunicao(item)
+  ) {
+    return [
+      item?.quantidade_total
+        ? `${item.quantidade_total} un.`
+        : '',
+      item?.origem_nome && item?.destino_nome
+        ? `${item.origem_nome} → ${item.destino_nome}`
+        : '',
+      item?.solicitada_por_nome
+        ? `SOLICITADO POR: ${item.solicitada_por_nome}`
+        : '',
+      item?.documento
+        ? `DOCUMENTO: ${item.documento}`
+        : '',
+      item?.observacoes
+    ].map(texto).filter(Boolean).join(' • ')
+  }
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhManutencaoMunicao(item)
+  ) {
+    return [
+      Number(item?.quantidade_total || item?.quantidade || 0) > 0
+        ? `${Number(item?.quantidade_total || item?.quantidade || 0)} un.`
+        : '',
+      item?.origem_nome && item?.destino_nome
+        ? `${item.origem_nome} → ${item.destino_nome}`
+        : '',
+      item?.solicitada_por_nome
+        ? `SOLICITADO POR: ${item.solicitada_por_nome}`
+        : '',
+      item?.observacoes
+    ].map(texto).filter(Boolean).join(' • ')
+  }
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhDescargaMunicao(item)
+  ) {
+    return [
+      Number(item?.quantidade_total || item?.quantidade || 0) > 0
+        ? `${Number(item?.quantidade_total || item?.quantidade || 0)} un.`
+        : '',
+      item?.origem_nome
+        ? `ORIGEM: ${item.origem_nome}`
+        : 'ORIGEM: COFRE DO P4',
+      item?.destino_nome
+        ? `DESTINO FINAL: ${item.destino_nome}`
+        : '',
+      item?.motivo
+        ? `MOTIVO: ${item.motivo}`
+        : '',
+      item?.solicitada_por_nome
+        ? `SOLICITADO POR: ${item.solicitada_por_nome}`
+        : '',
+      item?.documento
+        ? `DOCUMENTO: ${item.documento}`
+        : '',
+      item?.observacoes
     ].map(texto).filter(Boolean).join(' • ')
   }
 
@@ -717,6 +977,7 @@ async function listarMunicoesVinculadasAosCarrinhos(
 
 export default function PainelOperacional({ dados, carregando, user, onAtualizar }) {
   const [decidindoManutencaoExternaId, setDecidindoManutencaoExternaId] = useState(null)
+  const [decidindoMunicaoId, setDecidindoMunicaoId] = useState(null)
   const [novidadesVtr, setNovidadesVtr] = useState([])
   const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
   const [novidadeVtrAberta, setNovidadeVtrAberta] = useState(null)
@@ -842,6 +1103,615 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
       window.alert(error?.message || 'Não foi possível excluir o documento.')
     }
   }
+
+
+  async function aprovarTransferenciaMunicaoNaCentral(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      decidindoMunicaoId
+    ) {
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Aprovar a transferência de ${Number(
+          item?.quantidade_total ||
+          0
+        )} unidade(s) de ${
+          item?.calibre ||
+          'munição'
+        }?\n\n${
+          item?.origem_nome ||
+          'COFRE DO P4'
+        } → ${
+          item?.destino_nome ||
+          'COFRE DO SVDD'
+        }`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    const token =
+      loadSessionToken()
+
+    if (!token) {
+      window.alert(
+        'Sessão SIGMO inválida ou expirada.'
+      )
+      return
+    }
+
+    try {
+      setDecidindoMunicaoId(
+        transferenciaId
+      )
+
+      const { error } =
+        await supabase.rpc(
+          'sigmo_municoes_aprovar_transferencia',
+          {
+            p_token:
+              token,
+
+            p_transferencia_id:
+              transferenciaId
+          }
+        )
+
+      if (error) {
+        throw error
+      }
+
+      setRegistroAberto(null)
+
+      // Mantém a janela "Aprovações pendentes" aberta.
+      // Remove somente a solicitação que acabou de ser aprovada;
+      // o card/contadores da Central são recarregados logo em seguida.
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    transferenciaId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      window.alert(
+        error?.message ||
+        'Não foi possível aprovar a transferência de munições.'
+      )
+    } finally {
+      setDecidindoMunicaoId(
+        null
+      )
+    }
+  }
+
+
+  async function aprovarManutencaoMunicaoNaCentral(
+    item
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      decidindoMunicaoId
+    ) {
+      return
+    }
+
+    const quantidade =
+      Number(
+        item?.quantidade_total ||
+        item?.quantidade ||
+        item?.dados?.quantidade ||
+        0
+      ) || 0
+
+    const calibre =
+      texto(
+        item?.calibre ||
+        item?.dados?.calibre ||
+        ''
+      )
+
+    const confirmou =
+      window.confirm(
+        `Aprovar o encaminhamento de ${quantidade} munição(ões)${calibre ? ` ${calibre}` : ''} em manutenção do SVDD para o P4?\n\nApós esta aprovação, o P4 poderá confirmar o recebimento.`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setDecidindoMunicaoId(
+        movimentacaoId
+      )
+
+      const agora =
+        new Date().toISOString()
+
+      const dadosAtuais =
+        item?.dados &&
+        typeof item.dados === 'object'
+          ? item.dados
+          : {}
+
+      const aprovadoPorNome =
+        user?.nome_guerra ||
+        user?.nome ||
+        user?.nome_completo ||
+        user?.email ||
+        'COMANDANTE DE CIA'
+
+      const {
+        data,
+        error
+      } = await supabase
+        .from(
+          'sigmo_patrimonio_movimentacoes'
+        )
+        .update({
+          aprovado_por:
+            user?.id ||
+            null,
+
+          aprovado_por_nome:
+            aprovadoPorNome,
+
+          aprovado_em:
+            agora,
+
+          dados: {
+            ...dadosAtuais,
+            cmt_aprovado:
+              true,
+            cmt_aprovado_em:
+              agora,
+            cmt_aprovado_por_id:
+              user?.id ||
+              null,
+            cmt_aprovado_por_nome:
+              aprovadoPorNome,
+            etapa_fluxo:
+              'AGUARDANDO_RECEBIMENTO_P4'
+          },
+
+          atualizado_em:
+            agora,
+
+          updated_at:
+            agora
+        })
+        .eq(
+          'id',
+          movimentacaoId
+        )
+        .eq(
+          'status_movimentacao',
+          'PENDENTE'
+        )
+        .select(
+          'id, status_movimentacao, aprovado_em'
+        )
+        .maybeSingle()
+
+      if (error) {
+        throw error
+      }
+
+      if (!data?.id) {
+        throw new Error(
+          'Esta solicitação não está mais aguardando aprovação. Atualize a Central e confira a situação atual.'
+        )
+      }
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.movimentacao_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    movimentacaoId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao aprovar encaminhamento de manutenção de munição:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível aprovar o encaminhamento de manutenção de munição.'
+      )
+    } finally {
+      setDecidindoMunicaoId(
+        null
+      )
+    }
+  }
+
+
+  async function reprovarManutencaoMunicaoNaCentral(
+    item
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      decidindoMunicaoId
+    ) {
+      return
+    }
+
+    const motivo =
+      window.prompt(
+        'Informe o motivo da reprovação do encaminhamento ao P4:'
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(motivo || '')
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo da reprovação.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        'Reprovar este encaminhamento de manutenção de munição?\n\nA munição permanecerá em manutenção sob responsabilidade do SVDD.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setDecidindoMunicaoId(
+        movimentacaoId
+      )
+
+      await recusarTransferenciaManutencaoMunicao({
+        movimentacaoId,
+        motivo:
+          `REPROVADA PELO CMT DE CIA: ${motivoNormalizado}`,
+        user
+      })
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.movimentacao_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    movimentacaoId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao reprovar encaminhamento de manutenção de munição:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível reprovar o encaminhamento de manutenção de munição.'
+      )
+    } finally {
+      setDecidindoMunicaoId(
+        null
+      )
+    }
+  }
+
+
+  async function aprovarDescargaMunicaoNaCentral(
+    item
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      decidindoMunicaoId
+    ) {
+      return
+    }
+
+    const quantidade =
+      Number(
+        item?.quantidade_total ||
+        item?.quantidade ||
+        item?.dados?.quantidade ||
+        0
+      ) || 0
+
+    const calibre =
+      texto(
+        item?.calibre ||
+        item?.dados?.calibre ||
+        ''
+      )
+
+    const confirmou =
+      window.confirm(
+        `Aprovar a descarga definitiva de ${quantidade} munição(ões)${calibre ? ` ${calibre}` : ''}?\n\nApós a aprovação, a quantidade será retirada da manutenção do P4 e registrada como descarga.`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setDecidindoMunicaoId(
+        movimentacaoId
+      )
+
+      await aprovarDescargaManutencaoMunicaoCmt({
+        movimentacaoId,
+        user
+      })
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.movimentacao_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    movimentacaoId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao aprovar descarga de munição:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível aprovar a descarga de munição.'
+      )
+    } finally {
+      setDecidindoMunicaoId(
+        null
+      )
+    }
+  }
+
+
+  async function reprovarDescargaMunicaoNaCentral(
+    item
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      decidindoMunicaoId
+    ) {
+      return
+    }
+
+    const motivo =
+      window.prompt(
+        'Informe o motivo da reprovação da descarga de munição:'
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo da reprovação.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        'Reprovar esta solicitação de descarga?\n\nA munição continuará em manutenção sob responsabilidade do P4.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setDecidindoMunicaoId(
+        movimentacaoId
+      )
+
+      await recusarDescargaManutencaoMunicaoCmt({
+        movimentacaoId,
+        motivo:
+          `REPROVADA PELO CMT DE CIA: ${motivoNormalizado}`,
+        user
+      })
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.movimentacao_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    movimentacaoId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao reprovar descarga de munição:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível reprovar a descarga de munição.'
+      )
+    } finally {
+      setDecidindoMunicaoId(
+        null
+      )
+    }
+  }
+
 
   async function decidirExterna(item, decisao) {
     if (!item?.id || decidindoManutencaoExternaId) return
@@ -1558,6 +2428,119 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     }
   }
 
+
+  async function receberTransferenciaManutencaoMunicaoNoP4(item) {
+    if (!item?.id || recebendoId || recusandoId) return
+
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const quantidade =
+      Number(
+        item?.quantidade ||
+        dados?.quantidade ||
+        0
+      ) || 0
+
+    const calibre =
+      texto(
+        item?.calibre ||
+        dados?.calibre ||
+        ''
+      )
+
+    const confirmou = window.confirm(
+      `Confirmar o recebimento de ${quantidade || ''} munição(ões)${calibre ? ` ${calibre}` : ''} em manutenção no P4?`
+    )
+
+    if (!confirmou) return
+
+    try {
+      setRecebendoId(item.id)
+
+      await aceitarTransferenciaManutencaoMunicao({
+        movimentacaoId:
+          item.id,
+        user
+      })
+
+      setSelecionado(null)
+      setRegistroAberto(null)
+
+      if (typeof onAtualizar === 'function') {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao receber transferência de manutenção de munição no P4:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível receber a manutenção de munição no P4.'
+      )
+    } finally {
+      setRecebendoId(null)
+    }
+  }
+
+  async function recusarTransferenciaManutencaoMunicaoNoP4(item) {
+    if (!item?.id || recebendoId || recusandoId) return
+
+    const motivo = window.prompt(
+      'Informe o motivo da recusa da manutenção de munição:'
+    )
+
+    if (motivo === null) return
+
+    if (!motivo.trim()) {
+      window.alert(
+        'Informe o motivo da recusa.'
+      )
+      return
+    }
+
+    const confirmou = window.confirm(
+      'Confirmar a recusa desta transferência? A munição permanecerá em manutenção sob responsabilidade do SVDD.'
+    )
+
+    if (!confirmou) return
+
+    try {
+      setRecusandoId(item.id)
+
+      await recusarTransferenciaManutencaoMunicao({
+        movimentacaoId:
+          item.id,
+        motivo:
+          motivo.trim().toUpperCase(),
+        user
+      })
+
+      setSelecionado(null)
+      setRegistroAberto(null)
+
+      if (typeof onAtualizar === 'function') {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao recusar transferência de manutenção de munição:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível recusar a transferência de manutenção de munição.'
+      )
+    } finally {
+      setRecusandoId(null)
+    }
+  }
+
   async function receberNoP4(item) {
     if (!item?.id || recebendoId) return
 
@@ -1958,6 +2941,191 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                             ehAprovacaoComandante(
                               selecionado
                             ) &&
+                            itemEhDescargaMunicao(
+                              item
+                            )
+                          ) ? (
+                            <>
+                              <div>
+                                <span>Tipo</span>
+                                <strong>
+                                  Descarga de Munição
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Calibre</span>
+                                <strong>
+                                  {item?.calibre ||
+                                    item?.dados?.calibre ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Quantidade</span>
+                                <strong>
+                                  {Number(
+                                    item?.quantidade_total ||
+                                    item?.quantidade ||
+                                    item?.dados?.quantidade ||
+                                    0
+                                  )} un.
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Origem</span>
+                                <strong>
+                                  {item?.origem_nome ||
+                                    'COFRE DO P4'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Destino final</span>
+                                <strong>
+                                  {item?.destino_nome ||
+                                    item?.dados?.destino_final ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Solicitado por</span>
+                                <strong>
+                                  {item?.solicitada_por_nome ||
+                                    'P4'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Data da solicitação</span>
+                                <strong>
+                                  {formatarData(
+                                    item?.solicitada_em ||
+                                    item?.created_at
+                                  ) ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Documento</span>
+                                <strong>
+                                  {item?.documento ||
+                                    item?.dados?.documento ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div className="central-registro-itens">
+                                <span>Motivo</span>
+                                <strong>
+                                  {item?.motivo ||
+                                    item?.dados?.motivo_descarga ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              {(item?.observacoes ||
+                                item?.dados?.observacoes) && (
+                                <div className="central-registro-itens">
+                                  <span>Observações</span>
+                                  <strong>
+                                    {item?.observacoes ||
+                                      item?.dados?.observacoes}
+                                  </strong>
+                                </div>
+                              )}
+
+                              {obterFotosDescargaMunicao(item).length > 0 && (
+                                <div
+                                  className="central-registro-itens"
+                                  style={{
+                                    gridColumn:
+                                      '1 / -1'
+                                  }}
+                                >
+                                  <span>Fotos anexadas</span>
+
+                                  <div
+                                    style={{
+                                      display:
+                                        'grid',
+                                      gridTemplateColumns:
+                                        'repeat(auto-fit, minmax(120px, 160px))',
+                                      gap:
+                                        12,
+                                      marginTop:
+                                        8
+                                    }}
+                                  >
+                                    {obterFotosDescargaMunicao(item).map(
+                                      (foto, fotoIndex) => (
+                                        <button
+                                          key={
+                                            foto?.id ||
+                                            foto?.foto_url ||
+                                            fotoIndex
+                                          }
+                                          type="button"
+                                          onClick={() =>
+                                            setFotoAmpliada({
+                                              ...foto,
+                                              indice:
+                                                fotoIndex + 1,
+                                              contexto:
+                                                'DESCARGA DE MUNIÇÃO'
+                                            })
+                                          }
+                                          title="Clique para ampliar a foto"
+                                          style={{
+                                            display:
+                                              'block',
+                                            width:
+                                              '100%',
+                                            padding:
+                                              0,
+                                            borderRadius:
+                                              12,
+                                            overflow:
+                                              'hidden',
+                                            border:
+                                              '1px solid rgba(255,255,255,.18)',
+                                            background:
+                                              'rgba(255,255,255,.04)',
+                                            cursor:
+                                              'zoom-in'
+                                          }}
+                                        >
+                                          <img
+                                            src={
+                                              foto.foto_url
+                                            }
+                                            alt={`Foto ${fotoIndex + 1} da descarga de munição`}
+                                            style={{
+                                              display:
+                                                'block',
+                                              width:
+                                                '100%',
+                                              height:
+                                                120,
+                                              objectFit:
+                                                'cover'
+                                            }}
+                                          />
+                                        </button>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            ehAprovacaoComandante(
+                              selecionado
+                            ) &&
                             itemEhDescargaColete(
                               item
                             )
@@ -2119,7 +3287,9 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                                             setFotoAmpliada({
                                               ...foto,
                                               indice:
-                                                fotoIndex + 1
+                                                fotoIndex + 1,
+                                              contexto:
+                                                'NOVIDADE'
                                             })
                                           }
                                           title="Clique para ampliar a foto"
@@ -2352,6 +3522,231 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                         </>
                       )}
 
+
+                      {ehTransferenciaManutencaoMunicaoEngine(
+                        item,
+                        selecionado
+                      ) &&
+                        normalizarOperacional(
+                          user?.perfil_efetivo ||
+                          user?.perfil ||
+                          user?.role ||
+                          user?.tipo_perfil
+                        ) === 'P4' && (
+                        <>
+                          <button
+                            type="button"
+                            className="central-detalhe-button"
+                            disabled={
+                              Boolean(recebendoId) ||
+                              Boolean(recusandoId) ||
+                              Boolean(cancelandoId)
+                            }
+                            onClick={() =>
+                              recusarTransferenciaManutencaoMunicaoNoP4(
+                                item
+                              )
+                            }
+                            style={{
+                              borderColor:
+                                '#dc2626',
+                              color:
+                                '#dc2626',
+                              fontWeight:
+                                800
+                            }}
+                          >
+                            {recusandoId === item.id
+                              ? 'Recusando...'
+                              : 'Recusar'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="central-button central-button-primary"
+                            disabled={
+                              Boolean(recebendoId) ||
+                              Boolean(recusandoId) ||
+                              Boolean(cancelandoId)
+                            }
+                            onClick={() =>
+                              receberTransferenciaManutencaoMunicaoNoP4(
+                                item
+                              )
+                            }
+                          >
+                            {recebendoId === item.id
+                              ? 'Recebendo...'
+                              : 'Receber'}
+                          </button>
+                        </>
+                      )}
+
+                      {ehAprovacaoComandante(
+                        selecionado
+                      ) &&
+                        itemEhManutencaoMunicao(
+                          item
+                        ) &&
+                        ehComandante(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                              disabled={
+                                Boolean(
+                                  decidindoMunicaoId
+                                )
+                              }
+                              onClick={() =>
+                                reprovarManutencaoMunicaoNaCentral(
+                                  item
+                                )
+                              }
+                              style={{
+                                borderColor:
+                                  '#dc2626',
+                                color:
+                                  '#dc2626',
+                                fontWeight:
+                                  800
+                              }}
+                            >
+                              {decidindoMunicaoId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.id
+                              )
+                                ? 'Processando...'
+                                : 'Reprovar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="central-button central-button-primary"
+                              disabled={
+                                Boolean(
+                                  decidindoMunicaoId
+                                )
+                              }
+                              onClick={() =>
+                                aprovarManutencaoMunicaoNaCentral(
+                                  item
+                                )
+                              }
+                            >
+                              {decidindoMunicaoId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.id
+                              )
+                                ? 'Aprovando...'
+                                : 'Aprovar'}
+                            </button>
+                          </>
+                        )}
+
+                      {ehAprovacaoComandante(
+                        selecionado
+                      ) &&
+                        itemEhDescargaMunicao(
+                          item
+                        ) &&
+                        ehComandante(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                              disabled={
+                                Boolean(
+                                  decidindoMunicaoId
+                                )
+                              }
+                              onClick={() =>
+                                reprovarDescargaMunicaoNaCentral(
+                                  item
+                                )
+                              }
+                              style={{
+                                borderColor:
+                                  '#dc2626',
+                                color:
+                                  '#dc2626',
+                                fontWeight:
+                                  800
+                              }}
+                            >
+                              {decidindoMunicaoId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.id
+                              )
+                                ? 'Processando...'
+                                : 'Reprovar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="central-button central-button-primary"
+                              disabled={
+                                Boolean(
+                                  decidindoMunicaoId
+                                )
+                              }
+                              onClick={() =>
+                                aprovarDescargaMunicaoNaCentral(
+                                  item
+                                )
+                              }
+                            >
+                              {decidindoMunicaoId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.id
+                              )
+                                ? 'Aprovando...'
+                                : 'Aprovar descarga'}
+                            </button>
+                          </>
+                        )}
+
+                      {ehAprovacaoComandante(
+                        selecionado
+                      ) &&
+                        itemEhTransferenciaMunicao(
+                          item
+                        ) &&
+                        ehComandante(
+                          user
+                        ) && (
+                          <button
+                            type="button"
+                            className="central-button central-button-primary"
+                            disabled={
+                              Boolean(
+                                decidindoMunicaoId
+                              )
+                            }
+                            onClick={() =>
+                              aprovarTransferenciaMunicaoNaCentral(
+                                item
+                              )
+                            }
+                          >
+                            {decidindoMunicaoId ===
+                            (
+                              item?.transferencia_id ||
+                              item?.id
+                            )
+                              ? 'Aprovando...'
+                              : 'Aprovar'}
+                          </button>
+                        )}
+
                       {ehAprovacaoComandante(
                         selecionado
                       ) &&
@@ -2478,9 +3873,12 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
             <header className="central-modal-header">
               <div>
                 <span className="central-section-eyebrow">
-                  FOTO DA NOVIDADE
+                  FOTO ANEXADA
                 </span>
                 <h3>
+                  {fotoAmpliada.contexto
+                    ? `${fotoAmpliada.contexto} — `
+                    : ''}
                   Foto {fotoAmpliada.indice || 1}
                 </h3>
               </div>
@@ -2511,7 +3909,7 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
             >
               <img
                 src={fotoAmpliada.foto_url}
-                alt={`Foto ${fotoAmpliada.indice || 1} da novidade`}
+                alt={`Foto ${fotoAmpliada.indice || 1} anexada`}
                 style={{
                   display:
                     'block',

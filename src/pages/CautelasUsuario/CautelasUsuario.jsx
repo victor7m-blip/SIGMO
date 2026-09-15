@@ -1383,6 +1383,67 @@ function alterarQuantidadeDevolver(
       }
     }
 
+    for (const transferencia of municoesDoCarrinho) {
+      const chaveMunicao =
+        `municao-${transferencia.transferencia_id}`
+
+      const novidadeMunicao =
+        obterNovidadeRecebimento(
+          chaveMunicao
+        )
+
+      if (!novidadeMunicao) {
+        continue
+      }
+
+      if (!novidadeMunicao.tipo) {
+        setErro(
+          'Selecione o tipo da novidade registrada na munição.'
+        )
+        return
+      }
+
+      if (!String(
+        novidadeMunicao.descricao ||
+        ''
+      ).trim()) {
+        setErro(
+          'Descreva a novidade registrada na munição.'
+        )
+        return
+      }
+
+      const quantidadeTotalMunicao =
+        Math.max(
+          0,
+          Number(
+            transferencia
+              ?.quantidade_total ||
+            0
+          ) || 0
+        )
+
+      const quantidadeAfetada =
+        Math.max(
+          1,
+          Number(
+            novidadeMunicao
+              ?.quantidade_afetada ||
+            1
+          ) || 1
+        )
+
+      if (
+        quantidadeAfetada >
+        quantidadeTotalMunicao
+      ) {
+        setErro(
+          'A quantidade de munição com novidade não pode ser maior que a quantidade recebida.'
+        )
+        return
+      }
+    }
+
     const quantitativosParciais =
       itensRecebimento.filter(
         (item) =>
@@ -1445,9 +1506,27 @@ function alterarQuantidadeDevolver(
           )
         }
 
+        const chaveMunicao =
+          `municao-${transferenciaId}`
+
+        const novidadeMunicao =
+          obterNovidadeRecebimento(
+            chaveMunicao
+          )
+
         const resultadoMunicao =
           await receberCautelaMunicaoPolicial(
-            transferenciaId
+            transferenciaId,
+            novidadeMunicao
+              ? {
+                  tipo:
+                    novidadeMunicao.tipo,
+                  descricao:
+                    novidadeMunicao.descricao,
+                  quantidade_afetada:
+                    novidadeMunicao.quantidade_afetada
+                }
+              : null
           )
 
         resultadosMunicoes.push({
@@ -1572,9 +1651,65 @@ function alterarQuantidadeDevolver(
         ) || 0
       )
 
+    const chaveMunicao =
+      `municao-${transferenciaId}`
+
+    const novidadeMunicao =
+      obterNovidadeRecebimento(
+        chaveMunicao
+      )
+
+    if (novidadeMunicao) {
+      if (!novidadeMunicao.tipo) {
+        setErro(
+          'Selecione o tipo da novidade registrada na munição.'
+        )
+        return
+      }
+
+      if (!String(
+        novidadeMunicao.descricao ||
+        ''
+      ).trim()) {
+        setErro(
+          'Descreva a novidade registrada na munição.'
+        )
+        return
+      }
+
+      const quantidadeAfetada =
+        Math.max(
+          1,
+          Number(
+            novidadeMunicao
+              ?.quantidade_afetada ||
+            1
+          ) || 1
+        )
+
+      if (
+        quantidadeAfetada >
+        quantidade
+      ) {
+        setErro(
+          'A quantidade de munição com novidade não pode ser maior que a quantidade recebida.'
+        )
+        return
+      }
+    }
+
     if (
       !window.confirm(
-        `Confirma o recebimento de ${quantidade} unidade(s) de ${calibre} em cautela individual?`
+        novidadeMunicao
+          ? `Confirma o recebimento de ${quantidade} unidade(s) de ${calibre}, encaminhando ${Math.max(
+              1,
+              Number(
+                novidadeMunicao
+                  ?.quantidade_afetada ||
+                1
+              ) || 1
+            )} unidade(s) para manutenção?`
+          : `Confirma o recebimento de ${quantidade} unidade(s) de ${calibre} em cautela individual?`
       )
     ) {
       return
@@ -1589,11 +1724,44 @@ function alterarQuantidadeDevolver(
 
       const resultado =
         await receberCautelaMunicaoPolicial(
-          transferenciaId
+          transferenciaId,
+          novidadeMunicao
+            ? {
+                tipo:
+                  novidadeMunicao.tipo,
+                descricao:
+                  novidadeMunicao.descricao,
+                quantidade_afetada:
+                  novidadeMunicao.quantidade_afetada
+              }
+            : null
         )
 
       setMensagem(
-        `Cautela de munição recebida com sucesso: ${quantidade} unidade(s) de ${calibre}.`
+        novidadeMunicao
+          ? `Cautela de munição recebida. ${Math.max(
+              1,
+              Number(
+                novidadeMunicao
+                  ?.quantidade_afetada ||
+                1
+              ) || 1
+            )} unidade(s) de ${calibre} encaminhada(s) para manutenção.`
+          : `Cautela de munição recebida com sucesso: ${quantidade} unidade(s) de ${calibre}.`
+      )
+
+      setNovidadesRecebimento(
+        (estadoAtual) => {
+          const proximo = {
+            ...estadoAtual
+          }
+
+          delete proximo[
+            chaveMunicao
+          ]
+
+          return proximo
+        }
       )
 
       await carregar()
@@ -2078,6 +2246,24 @@ function alterarQuantidadeDevolver(
                     processando ===
                     chaveProcessamento
 
+                  const chaveMunicao =
+                    `municao-${transferencia.transferencia_id}`
+
+                  const quantidadeMunicao =
+                    Math.max(
+                      1,
+                      Number(
+                        transferencia
+                          ?.quantidade_total ||
+                        1
+                      ) || 1
+                    )
+
+                  const novidadeMunicao =
+                    obterNovidadeRecebimento(
+                      chaveMunicao
+                    )
+
                   return (
                     <article
                       key={
@@ -2116,14 +2302,161 @@ function alterarQuantidadeDevolver(
                             <span>
                               Cautela individual
                             </span>
+
+                            <div
+                              className="cautela-usuario-novidade-acoes"
+                              style={{
+                                marginTop: 10
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className="cautela-usuario-novidade-botao"
+                                onClick={() =>
+                                  alternarNovidadeRecebimento(
+                                    chaveMunicao
+                                  )
+                                }
+                              >
+                                {novidadeMunicao
+                                  ? (
+                                      novidadeMunicao.aberta
+                                        ? 'Fechar novidade'
+                                        : 'Alterar novidade'
+                                    )
+                                  : 'Registrar novidade'}
+                              </button>
+
+                              {novidadeMunicao && (
+                                <>
+                                  <span className="cautela-usuario-novidade-ok">
+                                    ✓ Novidade registrada
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    className="cautela-usuario-novidade-remover"
+                                    onClick={() =>
+                                      removerNovidadeRecebimento(
+                                        chaveMunicao
+                                      )
+                                    }
+                                  >
+                                    Remover
+                                  </button>
+                                </>
+                              )}
+                            </div>
+
+                            {novidadeMunicao?.aberta && (
+                              <div className="cautela-usuario-novidade-card">
+                                <div className="cautela-usuario-novidade-titulo">
+                                  <span>
+                                    REGISTRO DE NOVIDADE
+                                  </span>
+
+                                  <strong>
+                                    MUNIÇÃO{' '}
+                                    {transferencia.calibre ||
+                                      ''}
+                                  </strong>
+                                </div>
+
+                                <div className="cautela-usuario-novidade-grid">
+                                  <label>
+                                    Tipo
+
+                                    <select
+                                      value={
+                                        novidadeMunicao.tipo ||
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        alterarNovidadeRecebimento(
+                                          chaveMunicao,
+                                          'tipo',
+                                          event.target.value,
+                                          quantidadeMunicao
+                                        )
+                                      }
+                                    >
+                                      <option value="">
+                                        SELECIONE
+                                      </option>
+
+                                      <option value="AVARIA">
+                                        AVARIA
+                                      </option>
+
+                                      <option value="DEFEITO">
+                                        DEFEITO
+                                      </option>
+
+                                      <option value="DANIFICADA">
+                                        MUNIÇÃO DANIFICADA
+                                      </option>
+
+                                      <option value="OXIDACAO">
+                                        OXIDAÇÃO
+                                      </option>
+
+                                      <option value="OUTRO">
+                                        OUTRO
+                                      </option>
+                                    </select>
+                                  </label>
+
+                                  <label>
+                                    Quantidade com novidade
+
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max={quantidadeMunicao}
+                                      value={
+                                        novidadeMunicao
+                                          .quantidade_afetada ||
+                                        1
+                                      }
+                                      onChange={(event) =>
+                                        alterarNovidadeRecebimento(
+                                          chaveMunicao,
+                                          'quantidade_afetada',
+                                          event.target.value,
+                                          quantidadeMunicao
+                                        )
+                                      }
+                                    />
+                                  </label>
+
+                                  <label className="cautela-usuario-novidade-full">
+                                    Descrição
+
+                                    <textarea
+                                      value={
+                                        novidadeMunicao
+                                          .descricao ||
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        alterarNovidadeRecebimento(
+                                          chaveMunicao,
+                                          'descricao',
+                                          event.target.value,
+                                          quantidadeMunicao
+                                        )
+                                      }
+                                      placeholder="DESCREVA O QUE FOI CONSTATADO NA CONFERÊNCIA"
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           <b>
                             Qtd.{' '}
-                            {Number(
-                              transferencia.quantidade_total ||
-                              0
-                            )}
+                            {quantidadeMunicao}
                           </b>
                         </article>
                       </div>
@@ -2716,32 +3049,211 @@ function alterarQuantidadeDevolver(
                       )
                     ) || []
                   ).map(
-                    (transferencia) => (
-                      <article
-                        key={`municao-${transferencia.transferencia_id}`}
-                        className="cautela-usuario-carrinho-item"
-                      >
-                        <div className="cautela-usuario-carrinho-info">
-                          <strong>
-                            MUNIÇÃO{' '}
-                            {transferencia.calibre ||
-                              ''}
-                          </strong>
+                    (transferencia) => {
+                      const chaveMunicao =
+                        `municao-${transferencia.transferencia_id}`
 
-                          <span>
-                            Cautela individual
-                          </span>
-                        </div>
+                      const quantidadeMunicao =
+                        Math.max(
+                          1,
+                          Number(
+                            transferencia
+                              ?.quantidade_total ||
+                            1
+                          ) || 1
+                        )
 
-                        <b>
-                          Qtd.{' '}
-                          {Number(
-                            transferencia.quantidade_total ||
-                            0
-                          )}
-                        </b>
-                      </article>
-                    )
+                      const novidadeMunicao =
+                        obterNovidadeRecebimento(
+                          chaveMunicao
+                        )
+
+                      return (
+                        <article
+                          key={chaveMunicao}
+                          className="cautela-usuario-carrinho-item"
+                        >
+                          <div className="cautela-usuario-carrinho-info">
+                            <strong>
+                              MUNIÇÃO{' '}
+                              {transferencia.calibre ||
+                                ''}
+                            </strong>
+
+                            <span>
+                              Cautela individual
+                            </span>
+
+                            <div
+                              className="cautela-usuario-novidade-acoes"
+                              style={{
+                                marginTop: 10
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className="cautela-usuario-novidade-botao"
+                                onClick={() =>
+                                  alternarNovidadeRecebimento(
+                                    chaveMunicao
+                                  )
+                                }
+                              >
+                                {novidadeMunicao
+                                  ? (
+                                      novidadeMunicao.aberta
+                                        ? 'Fechar novidade'
+                                        : 'Alterar novidade'
+                                    )
+                                  : 'Registrar novidade'}
+                              </button>
+
+                              {novidadeMunicao && (
+                                <>
+                                  <span className="cautela-usuario-novidade-ok">
+                                    ✓ Novidade registrada
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    className="cautela-usuario-novidade-remover"
+                                    onClick={() =>
+                                      removerNovidadeRecebimento(
+                                        chaveMunicao
+                                      )
+                                    }
+                                  >
+                                    Remover
+                                  </button>
+                                </>
+                              )}
+                            </div>
+
+                            {novidadeMunicao?.aberta && (
+                              <div className="cautela-usuario-novidade-card">
+                                <div className="cautela-usuario-novidade-titulo">
+                                  <span>
+                                    REGISTRO DE NOVIDADE
+                                  </span>
+
+                                  <strong>
+                                    MUNIÇÃO{' '}
+                                    {transferencia.calibre ||
+                                      ''}
+                                  </strong>
+                                </div>
+
+                                <div className="cautela-usuario-novidade-grid">
+                                  <label>
+                                    Tipo
+
+                                    <select
+                                      value={
+                                        novidadeMunicao.tipo ||
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        alterarNovidadeRecebimento(
+                                          chaveMunicao,
+                                          'tipo',
+                                          event.target.value,
+                                          quantidadeMunicao
+                                        )
+                                      }
+                                    >
+                                      <option value="">
+                                        SELECIONE
+                                      </option>
+
+                                      <option value="AVARIA">
+                                        AVARIA
+                                      </option>
+
+                                      <option value="DEFEITO">
+                                        DEFEITO
+                                      </option>
+
+                                      <option value="DANIFICADA">
+                                        MUNIÇÃO DANIFICADA
+                                      </option>
+
+                                      <option value="OXIDACAO">
+                                        OXIDAÇÃO
+                                      </option>
+
+                                      <option value="OUTRO">
+                                        OUTRO
+                                      </option>
+                                    </select>
+
+                                    {novidadeMunicao.tipo && (
+                                      <small
+                                        style={{
+                                          display: 'block',
+                                          marginTop: 6,
+                                          lineHeight: 1.35
+                                        }}
+                                      >
+                                        A quantidade indicada será encaminhada para manutenção.
+                                      </small>
+                                    )}
+                                  </label>
+
+                                  <label>
+                                    Quantidade com novidade
+
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max={quantidadeMunicao}
+                                      value={
+                                        novidadeMunicao
+                                          .quantidade_afetada ||
+                                        1
+                                      }
+                                      onChange={(event) =>
+                                        alterarNovidadeRecebimento(
+                                          chaveMunicao,
+                                          'quantidade_afetada',
+                                          event.target.value,
+                                          quantidadeMunicao
+                                        )
+                                      }
+                                    />
+                                  </label>
+
+                                  <label className="cautela-usuario-novidade-full">
+                                    Descrição
+
+                                    <textarea
+                                      value={
+                                        novidadeMunicao
+                                          .descricao ||
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        alterarNovidadeRecebimento(
+                                          chaveMunicao,
+                                          'descricao',
+                                          event.target.value,
+                                          quantidadeMunicao
+                                        )
+                                      }
+                                      placeholder="DESCREVA O QUE FOI CONSTATADO NA CONFERÊNCIA"
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <b>
+                            Qtd.{' '}
+                            {quantidadeMunicao}
+                          </b>
+                        </article>
+                      )
+                    }
                   )}
                 </div>
 

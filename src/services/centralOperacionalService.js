@@ -540,7 +540,37 @@ export async function carregarCentralOperacional({ user } = {}) {
           ? 'P4'
           : null
 
+    // Munição cautelada ao policial sempre sai do SVDD.
+    // Quando a novidade é registrada no recebimento, o patrimônio
+    // quantitativo já pode estar com local atual "MANUTENÇÃO", então
+    // não existe uma cautela patrimonial individual para a Central
+    // recuperar a origem. Nesse caso preservamos a origem institucional
+    // da cautela de munição para que a ocorrência também apareça ao SVDD.
+    const tipoNovidade =
+      normalizarSemAcentos(
+        item?.tipo_patrimonio ||
+        patrimonio?.tipo ||
+        ''
+      )
+
+    const descricaoNovidade =
+      normalizarSemAcentos(
+        [
+          item?.titulo,
+          item?.descricao
+        ]
+          .filter(Boolean)
+          .join(' ')
+      )
+
+    const cargaPelaMunicaoCautelada =
+      tipoNovidade.includes('MUNICAO') &&
+      descricaoNovidade.includes('CAUTELA DE MUNICAO')
+        ? 'SVDD'
+        : null
+
     const cargaAtual =
+      cargaPelaMunicaoCautelada ||
       cargaPeloLocalAtual ||
       cargaPelaCautela ||
       null

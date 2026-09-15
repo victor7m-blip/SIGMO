@@ -17,12 +17,21 @@ import {
 } from '../../services/municoesService'
 
 import {
+  criarTransferenciaManutencaoMunicaoPendente,
+  registrarDescargaManutencaoMunicaoP4,
   transferirMunicaoP4ParaSvdd,
-  transferirMunicaoSvddParaP4
+  transferirMunicaoSvddParaP4,
+  transferirMunicaoExterna
 } from '../../services/municoesMovimentacoesService'
 
 import { supabase } from '../../services/supabaseClient'
 import { loadSessionToken } from '../../services/authService'
+import {
+  concluirManutencao,
+  listarManutencoes,
+  MODULOS_MANUTENCAO,
+  registrarManutencao
+} from '../../services/manutencoesService'
 
 import './Municoes.css'
 
@@ -50,6 +59,17 @@ function podeGerenciarLotes(user) {
   return (
     perfil === 'P4' ||
     perfil.includes('ADMINISTRADOR')
+  )
+}
+
+
+function podeVerVisaoP4(user) {
+  const perfil = obterPerfil(user)
+
+  return (
+    perfil === 'P4' ||
+    perfil.includes('ADMINISTRADOR') ||
+    perfil.includes('COMANDANTE')
   )
 }
 
@@ -423,15 +443,141 @@ function SelecionarTransferenciaModal({
   const p4ParaSvdd =
     sentido === 'P4_SVDD'
 
-  const disponiveis =
-    resumo.filter(
-      (item) =>
-        numero(
-          p4ParaSvdd
-            ? item.quantidade_p4
-            : item.quantidade_svdd
-        ) > 0
+  const [
+    pendentesSaida,
+    setPendentesSaida
+  ] = useState([])
+
+  const [
+    carregandoPendentes,
+    setCarregandoPendentes
+  ] = useState(true)
+
+  const [
+    erroPendentes,
+    setErroPendentes
+  ] = useState('')
+
+  useEffect(() => {
+    let ativo = true
+
+    setCarregandoPendentes(true)
+    setErroPendentes('')
+
+    listarTransferenciasPendentes(
+      'SAIDA'
     )
+      .then((resultado) => {
+        if (ativo) {
+          setPendentesSaida(
+            Array.isArray(resultado)
+              ? resultado
+              : []
+          )
+        }
+      })
+      .catch((error) => {
+        if (ativo) {
+          setErroPendentes(
+            error?.message ||
+            'Não foi possível calcular as quantidades já reservadas em transferências pendentes.'
+          )
+        }
+      })
+      .finally(() => {
+        if (ativo) {
+          setCarregandoPendentes(false)
+        }
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [])
+
+  const origemEsperada =
+    p4ParaSvdd
+      ? 'COFRE_P4'
+      : 'COFRE_SVDD'
+
+  function quantidadeReservada(
+    municaoId
+  ) {
+    return pendentesSaida.reduce(
+      (total, item) => {
+        if (
+          String(
+            item?.municao_id ||
+            ''
+          ) !==
+          String(
+            municaoId ||
+            ''
+          )
+        ) {
+          return total
+        }
+
+        if (
+          normalizar(
+            item?.origem_tipo
+          ) !==
+          normalizar(
+            origemEsperada
+          )
+        ) {
+          return total
+        }
+
+        return (
+          total +
+          numero(
+            item?.quantidade_total
+          )
+        )
+      },
+      0
+    )
+  }
+
+  function quantidadeDisponivel(
+    item
+  ) {
+    const fisica =
+      numero(
+        p4ParaSvdd
+          ? item.quantidade_p4
+          : item.quantidade_svdd
+      )
+
+    const reservada =
+      quantidadeReservada(
+        item?.id
+      )
+
+    return Math.max(
+      0,
+      fisica -
+      reservada
+    )
+  }
+
+  const disponiveis =
+    resumo
+      .map((item) => ({
+        ...item,
+        quantidade_disponivel_origem:
+          quantidadeDisponivel(
+            item
+          )
+      }))
+      .filter(
+        (item) =>
+          numero(
+            item
+              .quantidade_disponivel_origem
+          ) > 0
+      )
 
   return (
     <Modal
@@ -444,7 +590,17 @@ function SelecionarTransferenciaModal({
       onClose={onClose}
       amplo
     >
-      {disponiveis.length === 0 ? (
+      {erroPendentes && (
+        <div className="municoes-alert municoes-alert-error">
+          {erroPendentes}
+        </div>
+      )}
+
+      {carregandoPendentes ? (
+        <div className="municoes-loading">
+          Atualizando disponibilidade...
+        </div>
+      ) : disponiveis.length === 0 ? (
         <div className="municoes-modal-empty">
           Nenhum calibre possui saldo disponível na origem.
         </div>
@@ -485,9 +641,8 @@ function SelecionarTransferenciaModal({
 
                     <td>
                       {numero(
-                        p4ParaSvdd
-                          ? item.quantidade_p4
-                          : item.quantidade_svdd
+                        item
+                          .quantidade_disponivel_origem
                       ).toLocaleString(
                         'pt-BR'
                       )}
@@ -1613,9 +1768,22 @@ function TransferenciaModal({
     sentido === 'P4_SVDD'
 
   const disponivel =
-    p4ParaSvdd
-      ? numero(municao.quantidade_p4)
-      : numero(municao.quantidade_svdd)
+    municao
+      ?.quantidade_disponivel_origem !==
+    undefined
+      ? numero(
+          municao
+            .quantidade_disponivel_origem
+        )
+      : (
+          p4ParaSvdd
+            ? numero(
+                municao.quantidade_p4
+              )
+            : numero(
+                municao.quantidade_svdd
+              )
+        )
 
   async function salvar(event) {
     event.preventDefault()
@@ -1752,9 +1920,12 @@ function TransferenciaModal({
 function OperacaoEspecialModal({
   tipo,
   resumo,
+  manutencoesAtivas = [],
   origem = 'P4',
   destinoPadrao = '',
-  onClose
+  user,
+  onClose,
+  onSalvo
 }) {
   const [municaoId, setMunicaoId] =
     useState('')
@@ -1770,6 +1941,19 @@ function OperacaoEspecialModal({
   const [destino, setDestino] =
     useState('')
 
+  const [reDestinatario, setReDestinatario] =
+    useState('')
+
+  const [
+    policialDestinatario,
+    setPolicialDestinatario
+  ] = useState(null)
+
+  const [
+    buscandoPolicial,
+    setBuscandoPolicial
+  ] = useState(false)
+
   const [documento, setDocumento] =
     useState('')
 
@@ -1778,6 +1962,30 @@ function OperacaoEspecialModal({
 
   const [fotos, setFotos] =
     useState([])
+
+  const [salvando, setSalvando] =
+    useState(false)
+
+  const [erroAcao, setErroAcao] =
+    useState('')
+
+  const [
+    transferenciasPendentesSaida,
+    setTransferenciasPendentesSaida
+  ] = useState([])
+
+  const [
+    carregandoReservas,
+    setCarregandoReservas
+  ] = useState(
+    tipo === 'TRANSFERENCIA_EXTERNA' &&
+    normalizar(origem).includes('P4')
+  )
+
+  const [
+    erroReservas,
+    setErroReservas
+  ] = useState('')
 
   const origemNormalizada =
     normalizar(origem)
@@ -1789,13 +1997,277 @@ function OperacaoEspecialModal({
       ? 'quantidade_svdd'
       : 'quantidade_p4'
 
-  const disponiveis =
-    resumo.filter(
-      (item) =>
-        numero(
-          item?.[campoSaldo]
-        ) > 0
+  const deveDescontarReservasP4 =
+    tipo === 'TRANSFERENCIA_EXTERNA' &&
+    !origemNormalizada.includes('SVDD')
+
+  useEffect(() => {
+    let ativo = true
+
+    if (!deveDescontarReservasP4) {
+      setTransferenciasPendentesSaida([])
+      setCarregandoReservas(false)
+      setErroReservas('')
+
+      return () => {
+        ativo = false
+      }
+    }
+
+    setCarregandoReservas(true)
+    setErroReservas('')
+
+    listarTransferenciasPendentes(
+      'SAIDA'
     )
+      .then((resultado) => {
+        if (!ativo) {
+          return
+        }
+
+        setTransferenciasPendentesSaida(
+          Array.isArray(resultado)
+            ? resultado
+            : []
+        )
+      })
+      .catch((error) => {
+        if (!ativo) {
+          return
+        }
+
+        setTransferenciasPendentesSaida([])
+        setErroReservas(
+          error?.message ||
+          'Não foi possível calcular as munições já reservadas em transferências pendentes.'
+        )
+      })
+      .finally(() => {
+        if (ativo) {
+          setCarregandoReservas(false)
+        }
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [
+    deveDescontarReservasP4
+  ])
+
+  function quantidadeReservadaP4(
+    item
+  ) {
+    if (!deveDescontarReservasP4) {
+      return 0
+    }
+
+    const municaoIdItem =
+      String(
+        item?.id ||
+        ''
+      )
+
+    if (!municaoIdItem) {
+      return 0
+    }
+
+    return transferenciasPendentesSaida.reduce(
+      (total, transferencia) => {
+        const mesmaMunicao =
+          String(
+            transferencia?.municao_id ||
+            ''
+          ) === municaoIdItem
+
+        const origemP4 =
+          normalizar(
+            transferencia?.origem_tipo
+          ) === 'COFRE_P4'
+
+        if (
+          !mesmaMunicao ||
+          !origemP4
+        ) {
+          return total
+        }
+
+        return (
+          total +
+          numero(
+            transferencia?.quantidade_total
+          )
+        )
+      },
+      0
+    )
+  }
+
+  const ehManutencao =
+    tipo === 'MANUTENCAO'
+
+  const encaminhaManutencaoSvdd =
+    ehManutencao &&
+    origemNormalizada.includes(
+      'SVDD'
+    )
+
+  const manutencaoSvddDisponivelPorMunicao =
+    useMemo(() => {
+      const mapa = new Map()
+
+      if (!encaminhaManutencaoSvdd) {
+        return mapa
+      }
+
+      for (const item of manutencoesAtivas) {
+        const status =
+          normalizar(
+            item?.status
+          )
+
+        const origemItem =
+          normalizar(
+            item?.origem
+          )
+
+        const referenciaId =
+          String(
+            item?.referencia_id ||
+            ''
+          )
+
+        if (
+          status !== 'EM_MANUTENCAO' ||
+          !referenciaId ||
+          !(
+            origemItem.includes(
+              'SVDD'
+            ) ||
+            origemItem.includes(
+              'SERVICO DE DIA'
+            )
+          )
+        ) {
+          continue
+        }
+
+        mapa.set(
+          referenciaId,
+          numero(
+            mapa.get(
+              referenciaId
+            )
+          ) +
+          numero(
+            item?.quantidade
+          )
+        )
+      }
+
+      return mapa
+    }, [
+      encaminhaManutencaoSvdd,
+      manutencoesAtivas
+    ])
+
+  const manutencaoP4DisponivelPorMunicao =
+    useMemo(() => {
+      const mapa = new Map()
+
+      if (tipo !== 'DESCARGA') {
+        return mapa
+      }
+
+      for (const item of manutencoesAtivas) {
+        const status =
+          normalizar(
+            item?.status
+          )
+
+        const origemItem =
+          normalizar(
+            item?.origem
+          )
+
+        const referenciaId =
+          String(
+            item?.referencia_id ||
+            ''
+          )
+
+        if (
+          status !== 'EM_MANUTENCAO' ||
+          !referenciaId ||
+          !origemItem.includes('P4')
+        ) {
+          continue
+        }
+
+        mapa.set(
+          referenciaId,
+          numero(
+            mapa.get(
+              referenciaId
+            )
+          ) +
+          numero(
+            item?.quantidade
+          )
+        )
+      }
+
+      return mapa
+    }, [
+      tipo,
+      manutencoesAtivas
+    ])
+
+  const disponiveis =
+    resumo
+      .map((item) => {
+        const saldoFisico =
+          encaminhaManutencaoSvdd
+            ? numero(
+                manutencaoSvddDisponivelPorMunicao.get(
+                  String(item.id)
+                )
+              )
+            : tipo === 'DESCARGA'
+              ? numero(
+                  manutencaoP4DisponivelPorMunicao.get(
+                    String(item.id)
+                  )
+                )
+              : numero(
+                  item?.[campoSaldo]
+                )
+
+        const reservado =
+          encaminhaManutencaoSvdd
+            ? 0
+            : quantidadeReservadaP4(
+                item
+              )
+
+        return {
+          ...item,
+
+          quantidade_disponivel_origem:
+            Math.max(
+              0,
+              saldoFisico -
+              reservado
+            )
+        }
+      })
+      .filter(
+        (item) =>
+          numero(
+            item
+              .quantidade_disponivel_origem
+          ) > 0
+      )
 
   const municao =
     disponiveis.find(
@@ -1805,12 +2277,13 @@ function OperacaoEspecialModal({
     ) || null
 
   const saldoDisponivel =
-    numero(
-      municao?.[campoSaldo]
-    )
-
-  const ehManutencao =
-    tipo === 'MANUTENCAO'
+    carregandoReservas &&
+    deveDescontarReservasP4
+      ? 0
+      : numero(
+          municao
+            ?.quantidade_disponivel_origem
+        )
 
   const ehTransferencia =
     tipo === 'TRANSFERENCIA_EXTERNA'
@@ -1818,36 +2291,168 @@ function OperacaoEspecialModal({
   const ehDescarga =
     tipo === 'DESCARGA'
 
+  const ehCargaPermanente =
+    ehTransferencia &&
+    classificacao ===
+      'CARGA_PERMANENTE'
+
+  useEffect(() => {
+    if (!ehCargaPermanente) {
+      setReDestinatario('')
+      setPolicialDestinatario(null)
+      setBuscandoPolicial(false)
+      return
+    }
+
+    const reBase =
+      String(
+        reDestinatario ||
+        ''
+      )
+        .replace(/\D/g, '')
+        .slice(0, 6)
+
+    if (reBase.length !== 6) {
+      setPolicialDestinatario(null)
+      setBuscandoPolicial(false)
+      return
+    }
+
+    let ativo = true
+
+    async function localizarPolicial() {
+      try {
+        setBuscandoPolicial(true)
+        setPolicialDestinatario(null)
+        setErroAcao('')
+
+        const {
+          data,
+          error
+        } = await supabase
+          .from('policiais')
+          .select(
+            'id, re, nome, nome_guerra, posto_graduacao, situacao'
+          )
+          .ilike(
+            're',
+            `${reBase}%`
+          )
+          .limit(10)
+
+        if (error) {
+          throw error
+        }
+
+        if (!ativo) {
+          return
+        }
+
+        const policial =
+          (data || []).find(
+            (item) => {
+              const reItem =
+                String(
+                  item?.re ||
+                  ''
+                )
+                  .replace(/\D/g, '')
+                  .slice(0, 6)
+
+              return (
+                reItem === reBase &&
+                normalizar(
+                  item?.situacao
+                ) !== 'INATIVO'
+              )
+            }
+          ) ||
+          null
+
+        if (!policial) {
+          setErroAcao(
+            `RE ${reBase} não localizado entre os policiais ativos.`
+          )
+          return
+        }
+
+        setPolicialDestinatario(
+          policial
+        )
+      } catch (error) {
+        if (!ativo) {
+          return
+        }
+
+        setErroAcao(
+          error?.message ||
+          'Não foi possível localizar o policial pelo RE.'
+        )
+      } finally {
+        if (ativo) {
+          setBuscandoPolicial(false)
+        }
+      }
+    }
+
+    localizarPolicial()
+
+    return () => {
+      ativo = false
+    }
+  }, [
+    ehCargaPermanente,
+    reDestinatario
+  ])
+
   const config =
     ehManutencao
-      ? {
-          titulo:
-            origemNormalizada.includes(
-              'SVDD'
-            )
-              ? 'Enviar munição ao P4 para manutenção'
-              : 'Enviar munição para manutenção',
+      ? encaminhaManutencaoSvdd
+        ? {
+            titulo:
+              'Encaminhar manutenção ao P4',
 
-          subtitulo:
-            origemNormalizada.includes(
-              'SVDD'
-            )
-              ? 'A munição sai do saldo disponível do SVDD e segue para análise do P4.'
-              : 'Registre munições avariadas, deterioradas ou impróprias para uso.',
+            subtitulo:
+              'Selecione somente munições que já estão em manutenção sob responsabilidade do SVDD. Você pode encaminhar uma, várias ou todas ao P4 sem alterar o saldo apto do cofre.',
 
-          confirmar:
-            'Confirmar envio para manutenção'
-        }
+            confirmar:
+              'Encaminhar ao P4'
+          }
+        : {
+            titulo:
+              'Enviar munição para manutenção',
+
+            subtitulo:
+              'Registre munições avariadas, deterioradas ou impróprias para uso.',
+
+            confirmar:
+              'Confirmar envio para manutenção'
+          }
       : ehTransferencia
         ? {
             titulo:
-              'Transferir para outra unidade',
+              classificacao ===
+              'CARGA_PERMANENTE'
+                ? 'Carga permanente'
+                : classificacao ===
+                  'OUTRAS_CIAS'
+                  ? 'Transferir para outra Cia'
+                  : classificacao ===
+                    'BATALHAO'
+                    ? 'Transferir para o Batalhão'
+                    : 'Transferir para outra unidade',
 
             subtitulo:
-              'Selecione calibre, quantidade e destino da transferência.',
+              classificacao ===
+              'CARGA_PERMANENTE'
+                ? 'Informe o policial destinatário pelo RE, o calibre e a quantidade.'
+                : 'Selecione calibre, quantidade e informe o destino da transferência.',
 
             confirmar:
-              'Confirmar transferência'
+              classificacao ===
+              'CARGA_PERMANENTE'
+                ? 'Confirmar carga permanente'
+                : 'Confirmar transferência'
           }
         : {
             titulo:
@@ -1860,6 +2465,481 @@ function OperacaoEspecialModal({
               'Confirmar descarga'
           }
 
+  async function salvarTransferencia(event) {
+    event.preventDefault()
+
+    if (!ehTransferencia) {
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErroAcao('')
+
+      if (!municao?.id) {
+        throw new Error(
+          'Selecione o calibre da munição.'
+        )
+      }
+
+      const quantidadeFinal =
+        numero(
+          quantidade
+        )
+
+      if (quantidadeFinal <= 0) {
+        throw new Error(
+          'Informe uma quantidade maior que zero.'
+        )
+      }
+
+      if (
+        quantidadeFinal >
+        saldoDisponivel
+      ) {
+        throw new Error(
+          `Existem apenas ${saldoDisponivel} unidade(s) disponíveis no P4.`
+        )
+      }
+
+      if (!classificacao) {
+        throw new Error(
+          'Destino da transferência não informado.'
+        )
+      }
+
+      let destinoNome =
+        classificacao ===
+        'BATALHAO'
+          ? '27º BPM/M'
+          : String(
+              destino ||
+              ''
+            )
+              .trim()
+              .toUpperCase()
+
+      if (ehCargaPermanente) {
+        const reBase =
+          String(
+            reDestinatario ||
+            ''
+          )
+            .replace(/\D/g, '')
+            .slice(0, 6)
+
+        if (reBase.length !== 6) {
+          throw new Error(
+            'Informe os 6 dígitos do RE do destinatário.'
+          )
+        }
+
+        if (!policialDestinatario?.id) {
+          throw new Error(
+            'Aguarde a localização de um policial válido para este RE.'
+          )
+        }
+
+        const nome =
+          policialDestinatario?.nome_guerra ||
+          policialDestinatario?.nome ||
+          'POLICIAL'
+
+        destinoNome =
+          `RE ${
+            policialDestinatario?.re ||
+            reBase
+          } - ${nome}`
+            .trim()
+            .toUpperCase()
+      } else if (!destinoNome) {
+        throw new Error(
+          'Informe a unidade ou destino da transferência.'
+        )
+      }
+
+      await transferirMunicaoExterna({
+        municaoId:
+          municao.id,
+
+        calibre:
+          municao.calibre,
+
+        quantidade:
+          quantidadeFinal,
+
+        destinoTipo:
+          classificacao,
+
+        destinoNome,
+
+        documento,
+        observacoes,
+        user
+      })
+
+      await onSalvo?.()
+      onClose?.()
+    } catch (error) {
+      setErroAcao(
+        error?.message ||
+        'Não foi possível registrar a transferência.'
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function encaminharManutencaoSvddAoP4(quantidadeSolicitada) {
+    let restante =
+      numero(
+        quantidadeSolicitada
+      )
+
+    if (restante <= 0) {
+      throw new Error(
+        'Informe uma quantidade maior que zero.'
+      )
+    }
+
+    const candidatos =
+      [...manutencoesAtivas]
+        .filter((item) => {
+          const mesmaMunicao =
+            String(
+              item?.referencia_id ||
+              ''
+            ) ===
+            String(
+              municao?.id ||
+              ''
+            )
+
+          const origemItem =
+            normalizar(
+              item?.origem
+            )
+
+          return (
+            mesmaMunicao &&
+            normalizar(
+              item?.status
+            ) === 'EM_MANUTENCAO' &&
+            numero(
+              item?.quantidade
+            ) > 0 &&
+            (
+              origemItem.includes(
+                'SVDD'
+              ) ||
+              origemItem.includes(
+                'SERVICO DE DIA'
+              )
+            )
+          )
+        })
+        .sort((a, b) => {
+          const dataA =
+            new Date(
+              a?.criado_em ||
+              a?.registrada_em ||
+              a?.created_at ||
+              0
+            ).getTime()
+
+          const dataB =
+            new Date(
+              b?.criado_em ||
+              b?.registrada_em ||
+              b?.created_at ||
+              0
+            ).getTime()
+
+          return dataA - dataB
+        })
+
+    const totalDisponivel =
+      candidatos.reduce(
+        (soma, item) =>
+          soma +
+          numero(
+            item?.quantidade
+          ),
+        0
+      )
+
+    if (restante > totalDisponivel) {
+      throw new Error(
+        `Existem apenas ${totalDisponivel} unidade(s) deste calibre em manutenção no SVDD.`
+      )
+    }
+
+    for (const manutencao of candidatos) {
+      if (restante <= 0) {
+        break
+      }
+
+      const quantidadeRegistro =
+        numero(
+          manutencao?.quantidade
+        )
+
+      if (quantidadeRegistro <= 0) {
+        continue
+      }
+
+      const quantidadeEncaminhar =
+        Math.min(
+          quantidadeRegistro,
+          restante
+        )
+
+      await criarTransferenciaManutencaoMunicaoPendente({
+        manutencaoId:
+          manutencao.id,
+
+        quantidade:
+          quantidadeEncaminhar,
+
+        observacoes:
+          [
+            documento
+              ? `DOCUMENTO: ${String(documento).trim().toUpperCase()}`
+              : null,
+
+            String(observacoes || '').trim()
+              ? `OBSERVAÇÃO DO ENCAMINHAMENTO: ${String(observacoes).trim().toUpperCase()}`
+              : null
+          ]
+            .filter(Boolean)
+            .join(' | ') ||
+          null,
+
+        user
+      })
+
+      restante -=
+        quantidadeEncaminhar
+    }
+
+    if (restante > 0) {
+      throw new Error(
+        'Não foi possível criar toda a solicitação de encaminhamento ao P4.'
+      )
+    }
+  }
+
+  async function salvarDescarga(event) {
+    event.preventDefault()
+
+    if (!ehDescarga) {
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErroAcao('')
+
+      if (!municao?.id) {
+        throw new Error(
+          'Selecione o calibre da munição.'
+        )
+      }
+
+      const quantidadeFinal =
+        numero(
+          quantidade
+        )
+
+      if (quantidadeFinal <= 0) {
+        throw new Error(
+          'Informe uma quantidade maior que zero.'
+        )
+      }
+
+      if (
+        quantidadeFinal >
+        saldoDisponivel
+      ) {
+        throw new Error(
+          `Existem apenas ${saldoDisponivel} unidade(s) deste calibre em manutenção no P4.`
+        )
+      }
+
+      if (!classificacao) {
+        throw new Error(
+          'Selecione o motivo da descarga.'
+        )
+      }
+
+      const destinoFinal =
+        String(
+          destino ||
+          ''
+        )
+          .trim()
+          .toUpperCase()
+
+      if (!destinoFinal) {
+        throw new Error(
+          'Informe o destino final da descarga.'
+        )
+      }
+
+      await registrarDescargaManutencaoMunicaoP4({
+        municaoId:
+          municao.id,
+
+        quantidade:
+          quantidadeFinal,
+
+        motivo:
+          classificacao,
+
+        destinoFinal,
+
+        documento,
+        observacoes,
+        fotos:
+          fotos.slice(0, 6),
+        user
+      })
+
+      await onSalvo?.()
+      onClose?.()
+    } catch (error) {
+      setErroAcao(
+        error?.message ||
+        'Não foi possível registrar a descarga.'
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function salvarManutencao(event) {
+    event.preventDefault()
+
+    if (!ehManutencao) {
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErroAcao('')
+
+      if (!municao?.id) {
+        throw new Error(
+          'Selecione o calibre da munição.'
+        )
+      }
+
+      const quantidadeFinal =
+        numero(
+          quantidade
+        )
+
+      if (quantidadeFinal <= 0) {
+        throw new Error(
+          'Informe uma quantidade maior que zero.'
+        )
+      }
+
+      if (
+        quantidadeFinal >
+        saldoDisponivel
+      ) {
+        throw new Error(
+          encaminhaManutencaoSvdd
+            ? `Existem apenas ${saldoDisponivel} unidade(s) deste calibre em manutenção no SVDD.`
+            : `Existem apenas ${saldoDisponivel} unidade(s) disponíveis na origem.`
+        )
+      }
+
+      if (encaminhaManutencaoSvdd) {
+        await encaminharManutencaoSvddAoP4(
+          quantidadeFinal
+        )
+
+        await onSalvo?.()
+        onClose?.()
+        return
+      }
+
+      if (!classificacao) {
+        throw new Error(
+          'Selecione o tipo da ocorrência.'
+        )
+      }
+
+      if (!String(observacoes || '').trim()) {
+        throw new Error(
+          'Descreva a avaria, deterioração ou condição da munição.'
+        )
+      }
+
+      const origemManutencao =
+        'COFRE DO P4'
+
+      await registrarManutencao({
+        modulo:
+          MODULOS_MANUTENCAO.MUNICAO,
+
+        tipoMaterial:
+          'MUNICAO',
+
+        referenciaId:
+          municao.id,
+
+        quantidade:
+          quantidadeFinal,
+
+        tipoNovidade:
+          classificacao,
+
+        descricao:
+          String(
+            observacoes
+          )
+            .trim()
+            .toUpperCase(),
+
+        observacoes:
+          [
+            documento
+              ? `DOCUMENTO: ${String(documento).trim().toUpperCase()}`
+              : null,
+            `CALIBRE: ${municao.calibre || 'NÃO INFORMADO'}`
+          ]
+            .filter(Boolean)
+            .join(' | '),
+
+        origem:
+          origemManutencao,
+
+        destino:
+          'MANUTENCAO',
+
+        fotos,
+        user
+      })
+
+      await onSalvo?.()
+      onClose?.()
+    } catch (error) {
+      setErroAcao(
+        error?.message ||
+        (
+          encaminhaManutencaoSvdd
+            ? 'Não foi possível encaminhar a manutenção ao P4.'
+            : 'Não foi possível enviar a munição para manutenção.'
+        )
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
   return (
     <Modal
       titulo={config.titulo}
@@ -1868,10 +2948,28 @@ function OperacaoEspecialModal({
       amplo
     >
       <form
-        onSubmit={(event) =>
-          event.preventDefault()
+        onSubmit={
+          ehTransferencia
+            ? salvarTransferencia
+            : ehManutencao
+              ? salvarManutencao
+              : ehDescarga
+                ? salvarDescarga
+                : (event) =>
+                    event.preventDefault()
         }
       >
+        {erroReservas && (
+          <div
+            className="municoes-alert municoes-alert-error"
+            style={{
+              marginBottom: '14px'
+            }}
+          >
+            {erroReservas}
+          </div>
+        )}
+
         <div className="municoes-form-grid">
           <Campo label="ORIGEM">
             <input
@@ -1892,12 +2990,19 @@ function OperacaoEspecialModal({
               autoFocus
               className="municoes-select"
               value={municaoId}
+              disabled={
+                carregandoReservas &&
+                deveDescontarReservasP4
+              }
               onChange={(event) => {
                 setMunicaoId(
                   event.target.value
                 )
                 setQuantidade(
-                  ''
+                  encaminhaManutencaoSvdd &&
+                  event.target.value
+                    ? ''
+                    : ''
                 )
               }}
             >
@@ -1912,31 +3017,52 @@ function OperacaoEspecialModal({
                     value={item.id}
                   >
                     {item.calibre} — {numero(
-                      item?.[campoSaldo]
-                    )} disponível(is)
+                      item
+                        ?.quantidade_disponivel_origem
+                    )}{encaminhaManutencaoSvdd
+                      ? ' em manutenção no SVDD'
+                      : ehDescarga
+                        ? ' em manutenção no P4'
+                        : ' disponível(is)'}
                   </option>
                 )
               )}
             </select>
           </Campo>
 
-          <Campo label="QUANTIDADE">
+          <Campo
+            label={
+              encaminhaManutencaoSvdd
+                ? 'QUANTIDADE A ENCAMINHAR'
+                : 'QUANTIDADE'
+            }
+          >
             <input
               className="municoes-input"
               type="number"
               min="1"
-              max={saldoDisponivel || undefined}
+              max={
+                saldoDisponivel || undefined
+              }
               value={quantidade}
-              onChange={(event) =>
+              onChange={(event) => {
                 setQuantidade(
                   event.target.value
                 )
-              }
+              }}
               disabled={!municao}
             />
           </Campo>
 
-          <Campo label="DISPONÍVEL NA ORIGEM">
+          <Campo
+            label={
+              encaminhaManutencaoSvdd
+                ? 'EM MANUTENÇÃO NO SVDD'
+                : ehDescarga
+                  ? 'EM MANUTENÇÃO NO P4'
+                  : 'DISPONÍVEL NA ORIGEM'
+            }
+          >
             <input
               className="municoes-input municoes-input-readonly"
               value={
@@ -1950,55 +3076,100 @@ function OperacaoEspecialModal({
 
           {ehManutencao && (
             <>
-              <Campo label="TIPO DE OCORRÊNCIA">
-                <select
-                  className="municoes-select"
-                  value={classificacao}
-                  onChange={(event) =>
-                    setClassificacao(
-                      event.target.value
-                    )
-                  }
-                >
-                  <option value="">
-                    Selecione
-                  </option>
+              {!encaminhaManutencaoSvdd && (
+                <Campo label="TIPO DE OCORRÊNCIA">
+                  <select
+                    className="municoes-select"
+                    value={classificacao}
+                    onChange={(event) =>
+                      setClassificacao(
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="">
+                      Selecione
+                    </option>
 
-                  <option value="AVARIA">
-                    AVARIA
-                  </option>
+                    <option value="AVARIA">
+                      AVARIA
+                    </option>
 
-                  <option value="DETERIORACAO">
-                    DETERIORAÇÃO
-                  </option>
+                    <option value="DETERIORACAO">
+                      DETERIORAÇÃO
+                    </option>
 
-                  <option value="UMIDADE_OXIDACAO">
-                    UMIDADE / OXIDAÇÃO
-                  </option>
+                    <option value="UMIDADE_OXIDACAO">
+                      UMIDADE / OXIDAÇÃO
+                    </option>
 
-                  <option value="EMBALAGEM_DANIFICADA">
-                    EMBALAGEM DANIFICADA
-                  </option>
+                    <option value="EMBALAGEM_DANIFICADA">
+                      EMBALAGEM DANIFICADA
+                    </option>
 
-                  <option value="VALIDADE">
-                    VALIDADE / CONDIÇÃO
-                  </option>
+                    <option value="VALIDADE">
+                      VALIDADE / CONDIÇÃO
+                    </option>
 
-                  <option value="OUTRO">
-                    OUTRO
-                  </option>
-                </select>
-              </Campo>
+                    <option value="OUTRO">
+                      OUTRO
+                    </option>
+                  </select>
+                </Campo>
+              )}
 
               <Campo label="DESTINO">
                 <input
                   className="municoes-input municoes-input-readonly"
-                  value={
-                    origemNormalizada.includes(
-                      'SVDD'
+                  value="MANUTENÇÃO P4"
+                  readOnly
+                />
+              </Campo>
+            </>
+          )}
+
+          {ehTransferencia && ehCargaPermanente && (
+            <>
+              <Campo label="RE DO DESTINATÁRIO">
+                <input
+                  className="municoes-input"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={reDestinatario}
+                  onChange={(event) => {
+                    setReDestinatario(
+                      String(
+                        event.target.value ||
+                        ''
+                      )
+                        .replace(/\D/g, '')
+                        .slice(0, 6)
                     )
-                      ? 'P4 / MANUTENÇÃO'
-                      : 'MANUTENÇÃO P4'
+
+                    setPolicialDestinatario(
+                      null
+                    )
+                    setErroAcao('')
+                  }}
+                  placeholder="6 dígitos do RE"
+                />
+              </Campo>
+
+              <Campo label="POLICIAL DESTINATÁRIO">
+                <input
+                  className="municoes-input municoes-input-readonly"
+                  value={
+                    buscandoPolicial
+                      ? 'LOCALIZANDO...'
+                      : policialDestinatario
+                        ? [
+                            policialDestinatario.posto_graduacao,
+                            policialDestinatario.nome_guerra ||
+                            policialDestinatario.nome
+                          ]
+                            .filter(Boolean)
+                            .join(' ')
+                        : 'AGUARDANDO RE VÁLIDO'
                   }
                   readOnly
                 />
@@ -2006,53 +3177,56 @@ function OperacaoEspecialModal({
             </>
           )}
 
-          {ehTransferencia && (
-            <>
-              <Campo label="TIPO DE DESTINO">
-                <select
-                  className="municoes-select"
-                  value={classificacao}
-                  onChange={(event) =>
-                    setClassificacao(
-                      event.target.value
-                    )
+          {ehTransferencia && !ehCargaPermanente && (
+            <Campo
+              label={
+                classificacao ===
+                'OUTRAS_CIAS'
+                  ? 'CIA / DESTINO'
+                  : classificacao ===
+                    'BATALHAO'
+                    ? 'BATALHÃO / DESTINO'
+                    : 'UNIDADE / DESTINO'
+              }
+              full
+            >
+              <input
+                className={
+                  classificacao ===
+                  'BATALHAO'
+                    ? 'municoes-input municoes-input-readonly'
+                    : 'municoes-input'
+                }
+                value={
+                  classificacao ===
+                  'BATALHAO'
+                    ? '27º BPM/M'
+                    : destino
+                }
+                onChange={(event) => {
+                  if (
+                    classificacao ===
+                    'BATALHAO'
+                  ) {
+                    return
                   }
-                >
-                  <option value="">
-                    Selecione
-                  </option>
 
-                  <option value="CARGA_PERMANENTE">
-                    CARGA PERMANENTE
-                  </option>
-
-                  <option value="OUTRAS_CIAS">
-                    OUTRAS CIAS
-                  </option>
-
-                  <option value="BATALHAO">
-                    BATALHÃO
-                  </option>
-
-                  <option value="OUTRA_UNIDADE">
-                    OUTRA UNIDADE
-                  </option>
-                </select>
-              </Campo>
-
-              <Campo label="UNIDADE / DESTINO">
-                <input
-                  className="municoes-input"
-                  value={destino}
-                  onChange={(event) =>
-                    setDestino(
-                      event.target.value.toUpperCase()
-                    )
-                  }
-                  placeholder="Ex.: 1ª CIA, 27º BPM/M, unidade externa..."
-                />
-              </Campo>
-            </>
+                  setDestino(
+                    event.target.value.toUpperCase()
+                  )
+                }}
+                readOnly={
+                  classificacao ===
+                  'BATALHAO'
+                }
+                placeholder={
+                  classificacao ===
+                  'OUTRAS_CIAS'
+                    ? 'Ex.: 1ª CIA'
+                    : 'Informe a unidade ou destino'
+                }
+              />
+            </Campo>
           )}
 
           {ehDescarga && (
@@ -2123,9 +3297,11 @@ function OperacaoEspecialModal({
 
           <Campo
             label={
-              ehManutencao
-                ? 'DESCRIÇÃO / OBSERVAÇÕES'
-                : 'OBSERVAÇÕES'
+              encaminhaManutencaoSvdd
+                ? 'OBSERVAÇÃO DO ENCAMINHAMENTO'
+                : ehManutencao
+                  ? 'DESCRIÇÃO / OBSERVAÇÕES'
+                  : 'OBSERVAÇÕES'
             }
             full
           >
@@ -2139,14 +3315,19 @@ function OperacaoEspecialModal({
                 )
               }
               placeholder={
-                ehManutencao
-                  ? 'Descreva o dano, condição, lote envolvido ou motivo do envio.'
-                  : 'Registre informações complementares desta operação.'
+                encaminhaManutencaoSvdd
+                  ? 'Opcional: registre documento, orientação ou observação do encaminhamento ao P4.'
+                  : ehManutencao
+                    ? 'Descreva o dano, condição, lote envolvido ou motivo do envio.'
+                    : 'Registre informações complementares desta operação.'
               }
             />
           </Campo>
 
-          {(ehManutencao ||
+          {((
+            ehManutencao &&
+            !encaminhaManutencaoSvdd
+          ) ||
             ehDescarga) && (
             <Campo
               label="FOTOS"
@@ -2162,7 +3343,7 @@ function OperacaoEspecialModal({
                     Array.from(
                       event.target.files ||
                       []
-                    )
+                    ).slice(0, 6)
                   )
                 }
               />
@@ -2182,41 +3363,105 @@ function OperacaoEspecialModal({
           )}
         </div>
 
-        <div
-          className="municoes-alert"
-          style={{
-            marginTop: '16px',
-            marginBottom: 0,
-            border: '1px solid #bfdbfe',
-            background: '#eff6ff',
-            color: '#1e4f8f'
-          }}
-        >
-          Estrutura visual pronta. A gravação desta operação será ligada ao backend no próximo passo.
-        </div>
+        {erroAcao && (
+          <div className="municoes-alert municoes-alert-error">
+            {erroAcao}
+          </div>
+        )}
 
         <footer className="municoes-modal-actions">
           <button
             type="button"
             className="municoes-btn-secondary"
             onClick={onClose}
+            disabled={salvando}
           >
             Cancelar
           </button>
 
           <button
-            type="button"
+            type={
+              ehTransferencia ||
+              ehManutencao ||
+              ehDescarga
+                ? 'submit'
+                : 'button'
+            }
             className="municoes-btn-primary"
-            disabled
-            title="Será habilitado quando conectarmos o backend desta operação."
+            disabled={
+              ehTransferencia
+                ? (
+                    salvando ||
+                    !municao ||
+                    numero(
+                      quantidade
+                    ) <= 0 ||
+                    (
+                      ehCargaPermanente &&
+                      (
+                        buscandoPolicial ||
+                        !policialDestinatario?.id
+                      )
+                    ) ||
+                    (
+                      !ehCargaPermanente &&
+                      classificacao !==
+                        'BATALHAO' &&
+                      !String(
+                        destino ||
+                        ''
+                      ).trim()
+                    )
+                  )
+                : ehManutencao
+                  ? encaminhaManutencaoSvdd
+                    ? (
+                        salvando ||
+                        !municao ||
+                        saldoDisponivel <= 0
+                      )
+                    : (
+                        salvando ||
+                        !municao ||
+                        numero(
+                          quantidade
+                        ) <= 0 ||
+                        !classificacao ||
+                        !String(
+                          observacoes ||
+                          ''
+                        ).trim()
+                      )
+                  : ehDescarga
+                    ? (
+                        salvando ||
+                        !municao ||
+                        numero(
+                          quantidade
+                        ) <= 0 ||
+                        numero(
+                          quantidade
+                        ) > saldoDisponivel ||
+                        !classificacao ||
+                        !String(
+                          destino ||
+                          ''
+                        ).trim()
+                      )
+                    : true
+            }
+            title=""
           >
-            {config.confirmar}
+            {salvando
+              ? 'Salvando...'
+              : config.confirmar}
           </button>
         </footer>
       </form>
     </Modal>
   )
 }
+
 
 function DestinoTransferenciaModal({
   onClose,
@@ -2887,27 +4132,364 @@ function RecebimentoMunicaoModal({
 }
 
 function RetornoManutencaoModal({
-  resumo,
-  onClose
+  user,
+  onClose,
+  onSalvo
 }) {
-  const emManutencao =
-    resumo.filter(
-      (item) =>
-        numero(
-          item.quantidade_manutencao
-        ) > 0
+  const [lista, setLista] =
+    useState([])
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [erro, setErro] =
+    useState('')
+
+  const [
+    selecionada,
+    setSelecionada
+  ] = useState(null)
+
+  const [
+    servicoExecutado,
+    setServicoExecutado
+  ] = useState('')
+
+  const [
+    observacoesRetorno,
+    setObservacoesRetorno
+  ] = useState('')
+
+  const [fotosRetorno, setFotosRetorno] =
+    useState([])
+
+  const [salvando, setSalvando] =
+    useState(false)
+
+  async function carregarManutencoes() {
+    try {
+      setLoading(true)
+      setErro('')
+
+      const resultado =
+        await listarManutencoes({
+          modulo:
+            MODULOS_MANUTENCAO.MUNICAO,
+          status:
+            'EM_MANUTENCAO',
+          pagina:
+            1,
+          limite:
+            200
+        })
+
+      const perfilAtual =
+        obterPerfil(user)
+
+      const manutencoesDoGuardiao =
+        (resultado?.data || []).filter(
+          (item) => {
+            const origemItem =
+              normalizar(item?.origem)
+
+            if (
+              perfilAtual === 'P4' ||
+              perfilAtual.includes('ADMINISTRADOR')
+            ) {
+              return origemItem.includes('P4')
+            }
+
+            if (
+              perfilAtual.includes('SVDD') ||
+              perfilAtual.includes('SERVICO DE DIA')
+            ) {
+              return (
+                origemItem.includes('SVDD') ||
+                origemItem.includes('SERVICO DE DIA')
+              )
+            }
+
+            return false
+          }
+        )
+
+      setLista(
+        manutencoesDoGuardiao
+      )
+    } catch (error) {
+      setErro(
+        error?.message ||
+        'Não foi possível carregar as munições em manutenção.'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    carregarManutencoes()
+  }, [])
+
+  function abrirRetorno(item) {
+    setSelecionada(
+      item
     )
+    setServicoExecutado('')
+    setObservacoesRetorno('')
+    setFotosRetorno([])
+    setErro('')
+  }
+
+  async function confirmarRetorno(event) {
+    event.preventDefault()
+
+    if (!selecionada?.id) {
+      return
+    }
+
+    if (!String(
+      servicoExecutado ||
+      ''
+    ).trim()) {
+      setErro(
+        'Informe o serviço executado ou a solução adotada.'
+      )
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErro('')
+
+      await concluirManutencao({
+        manutencaoId:
+          selecionada.id,
+
+        servicoExecutado:
+          servicoExecutado
+            .trim()
+            .toUpperCase(),
+
+        observacoes:
+          observacoesRetorno
+            .trim()
+            .toUpperCase(),
+
+        fotos:
+          fotosRetorno,
+
+        user
+      })
+
+      setSelecionada(null)
+      setServicoExecutado('')
+      setObservacoesRetorno('')
+      setFotosRetorno([])
+
+      await carregarManutencoes()
+      await onSalvo?.()
+    } catch (error) {
+      setErro(
+        error?.message ||
+        'Não foi possível registrar o retorno da manutenção.'
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
 
   return (
     <Modal
       titulo="Receber manutenção"
-      subtitulo="Visualizar munições em manutenção e acompanhar o retorno ao estoque."
+      subtitulo="Mesmo fluxo de retorno usado pelo módulo de HT: registrar o serviço executado e devolver a munição ao guardião de origem."
       onClose={onClose}
       amplo
     >
-      {emManutencao.length === 0 ? (
+      {erro && (
+        <div className="municoes-alert municoes-alert-error">
+          {erro}
+        </div>
+      )}
+
+      {selecionada ? (
+        <form
+          onSubmit={
+            confirmarRetorno
+          }
+        >
+          <div className="municoes-form-grid">
+            <Campo label="CALIBRE">
+              <input
+                className="municoes-input municoes-input-readonly"
+                value={
+                  selecionada.calibre ||
+                  selecionada.descricao_municao ||
+                  'MUNIÇÃO'
+                }
+                readOnly
+              />
+            </Campo>
+
+            <Campo label="QUANTIDADE">
+              <input
+                className="municoes-input municoes-input-readonly"
+                value={
+                  numero(
+                    selecionada.quantidade
+                  )
+                }
+                readOnly
+              />
+            </Campo>
+
+            <Campo label="OCORRÊNCIA">
+              <input
+                className="municoes-input municoes-input-readonly"
+                value={
+                  selecionada.tipo_novidade ||
+                  'MANUTENÇÃO'
+                }
+                readOnly
+              />
+            </Campo>
+
+            <Campo label="RETORNO PREVISTO">
+              <input
+                className="municoes-input municoes-input-readonly"
+                value={
+                  normalizar(
+                    selecionada.origem
+                  ).includes('SVDD')
+                    ? 'COFRE DO SVDD'
+                    : 'COFRE DO P4'
+                }
+                readOnly
+              />
+            </Campo>
+
+            <Campo
+              label="DESCRIÇÃO DA ENTRADA"
+              full
+            >
+              <textarea
+                className="municoes-textarea"
+                rows={3}
+                value={
+                  selecionada.descricao ||
+                  ''
+                }
+                readOnly
+              />
+            </Campo>
+
+            <Campo
+              label="SERVIÇO EXECUTADO *"
+              full
+            >
+              <textarea
+                className="municoes-textarea"
+                rows={3}
+                value={
+                  servicoExecutado
+                }
+                onChange={(event) =>
+                  setServicoExecutado(
+                    event.target.value.toUpperCase()
+                  )
+                }
+                placeholder="Descreva a providência adotada, conferência, separação ou solução."
+                disabled={
+                  salvando
+                }
+              />
+            </Campo>
+
+            <Campo
+              label="OBSERVAÇÕES DO RETORNO"
+              full
+            >
+              <textarea
+                className="municoes-textarea"
+                rows={3}
+                value={
+                  observacoesRetorno
+                }
+                onChange={(event) =>
+                  setObservacoesRetorno(
+                    event.target.value.toUpperCase()
+                  )
+                }
+                placeholder="Condição final e demais informações."
+                disabled={
+                  salvando
+                }
+              />
+            </Campo>
+
+            <Campo
+              label="FOTOS DO RETORNO"
+              full
+            >
+              <input
+                className="municoes-input"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) =>
+                  setFotosRetorno(
+                    Array.from(
+                      event.target.files ||
+                      []
+                    ).slice(0, 6)
+                  )
+                }
+                disabled={
+                  salvando
+                }
+              />
+            </Campo>
+          </div>
+
+          <footer className="municoes-modal-actions">
+            <button
+              type="button"
+              className="municoes-btn-secondary"
+              onClick={() =>
+                setSelecionada(
+                  null
+                )
+              }
+              disabled={
+                salvando
+              }
+            >
+              Voltar
+            </button>
+
+            <button
+              type="submit"
+              className="municoes-btn-primary"
+              disabled={
+                salvando ||
+                !String(
+                  servicoExecutado ||
+                  ''
+                ).trim()
+              }
+            >
+              {salvando
+                ? 'Registrando retorno...'
+                : 'Tornar disponível'}
+            </button>
+          </footer>
+        </form>
+      ) : loading ? (
         <div className="municoes-modal-empty">
-          Nenhuma munição está registrada em manutenção.
+          Carregando manutenções...
+        </div>
+      ) : lista.length === 0 ? (
+        <div className="municoes-modal-empty">
+          Nenhuma manutenção ativa de munição.
         </div>
       ) : (
         <div className="municoes-table-wrap">
@@ -2915,32 +4497,50 @@ function RetornoManutencaoModal({
             <thead>
               <tr>
                 <th>CALIBRE</th>
-                <th>EM MANUTENÇÃO</th>
+                <th>QUANTIDADE</th>
+                <th>OCORRÊNCIA</th>
+                <th>ORIGEM</th>
                 <th>AÇÃO</th>
               </tr>
             </thead>
 
             <tbody>
-              {emManutencao.map(
+              {lista.map(
                 (item) => (
                   <tr key={item.id}>
                     <td>
                       <strong>
-                        {item.calibre}
+                        {item.calibre ||
+                        item.descricao_municao ||
+                        'MUNIÇÃO'}
                       </strong>
                     </td>
 
                     <td>
                       {numero(
-                        item.quantidade_manutencao
+                        item.quantidade
                       )}
+                    </td>
+
+                    <td>
+                      {item.tipo_novidade ||
+                      'MANUTENÇÃO'}
+                    </td>
+
+                    <td>
+                      {item.origem ||
+                      '—'}
                     </td>
 
                     <td>
                       <button
                         type="button"
                         className="municoes-btn-primary municoes-btn-small"
-                        disabled
+                        onClick={() =>
+                          abrirRetorno(
+                            item
+                          )
+                        }
                       >
                         Receber
                       </button>
@@ -2955,6 +4555,7 @@ function RetornoManutencaoModal({
     </Modal>
   )
 }
+
 
 function PoliciaisLoteModal({
   lote = null,
@@ -3391,6 +4992,11 @@ export default function Municoes({
   const [lotes, setLotes] =
     useState([])
 
+  const [
+    manutencoesAtivas,
+    setManutencoesAtivas
+  ] = useState([])
+
   const [loading, setLoading] =
     useState(true)
 
@@ -3464,6 +5070,12 @@ export default function Municoes({
       [user]
     )
 
+  const visaoP4 =
+    useMemo(
+      () => podeVerVisaoP4(user),
+      [user]
+    )
+
   const carregar =
     useCallback(async () => {
       try {
@@ -3472,13 +5084,25 @@ export default function Municoes({
 
         const [
           resumoData,
-          lotesData
+          lotesData,
+          manutencoesData
         ] = await Promise.all([
           listarResumoMunicoes(),
 
-          gerenciaLotes
+          visaoP4
             ? listarLotesResumo()
-            : Promise.resolve([])
+            : Promise.resolve([]),
+
+          listarManutencoes({
+            modulo:
+              MODULOS_MANUTENCAO.MUNICAO,
+            status:
+              'EM_MANUTENCAO',
+            pagina:
+              1,
+            limite:
+              500
+          })
         ])
 
         setResumo(
@@ -3487,6 +5111,10 @@ export default function Municoes({
 
         setLotes(
           lotesData || []
+        )
+
+        setManutencoesAtivas(
+          manutencoesData?.data || []
         )
       } catch (error) {
         console.error(error)
@@ -3498,7 +5126,7 @@ export default function Municoes({
       } finally {
         setLoading(false)
       }
-    }, [gerenciaLotes])
+    }, [visaoP4])
 
   useEffect(() => {
     carregar()
@@ -3658,6 +5286,184 @@ export default function Municoes({
       filtroLote
     ])
 
+  const manutencaoSvddPorMunicao =
+    useMemo(() => {
+      const mapa = new Map()
+
+      for (const item of manutencoesAtivas) {
+        const origemManutencao =
+          normalizar(
+            item?.origem
+          )
+
+        const sobResponsabilidadeSvdd =
+          origemManutencao.includes(
+            'SVDD'
+          ) ||
+          origemManutencao.includes(
+            'SERVICO DE DIA'
+          )
+
+        if (!sobResponsabilidadeSvdd) {
+          continue
+        }
+
+        const referenciaId =
+          String(
+            item?.referencia_id ||
+            ''
+          )
+
+        if (!referenciaId) {
+          continue
+        }
+
+        mapa.set(
+          referenciaId,
+          numero(
+            mapa.get(
+              referenciaId
+            )
+          ) +
+          numero(
+            item?.quantidade
+          )
+        )
+      }
+
+      return mapa
+    }, [manutencoesAtivas])
+
+  const manutencaoSvddPorCalibre =
+    useMemo(
+      () =>
+        resumo
+          .map((item) => ({
+            calibre:
+              item.calibre ||
+              'SEM CALIBRE',
+
+            quantidade:
+              numero(
+                manutencaoSvddPorMunicao.get(
+                  String(item.id)
+                )
+              )
+          }))
+          .filter(
+            (item) =>
+              item.quantidade > 0
+          )
+          .sort(
+            (a, b) =>
+              b.quantidade -
+              a.quantidade
+          ),
+      [
+        resumo,
+        manutencaoSvddPorMunicao
+      ]
+    )
+
+  const manutencaoP4PorMunicao =
+    useMemo(() => {
+      const mapa = new Map()
+
+      for (const item of manutencoesAtivas) {
+        const origemManutencao =
+          normalizar(
+            item?.origem
+          )
+
+        if (!origemManutencao.includes('P4')) {
+          continue
+        }
+
+        const referenciaId =
+          String(
+            item?.referencia_id ||
+            ''
+          )
+
+        if (!referenciaId) {
+          continue
+        }
+
+        mapa.set(
+          referenciaId,
+          numero(
+            mapa.get(
+              referenciaId
+            )
+          ) +
+          numero(
+            item?.quantidade
+          )
+        )
+      }
+
+      return mapa
+    }, [manutencoesAtivas])
+
+  const manutencaoP4PorCalibre =
+    useMemo(
+      () =>
+        resumo
+          .map((item) => ({
+            calibre:
+              item.calibre ||
+              'SEM CALIBRE',
+
+            quantidade:
+              numero(
+                manutencaoP4PorMunicao.get(
+                  String(item.id)
+                )
+              )
+          }))
+          .filter(
+            (item) =>
+              item.quantidade > 0
+          )
+          .sort(
+            (a, b) =>
+              b.quantidade -
+              a.quantidade
+          ),
+      [
+        resumo,
+        manutencaoP4PorMunicao
+      ]
+    )
+
+  const totalManutencaoSvdd =
+    useMemo(
+      () =>
+        manutencaoSvddPorCalibre.reduce(
+          (soma, item) =>
+            soma +
+            numero(
+              item.quantidade
+            ),
+          0
+        ),
+      [manutencaoSvddPorCalibre]
+    )
+
+  const totalManutencaoP4 =
+    useMemo(
+      () =>
+        manutencaoP4PorCalibre.reduce(
+          (soma, item) =>
+            soma +
+            numero(
+              item.quantidade
+            ),
+          0
+        ),
+      [manutencaoP4PorCalibre]
+    )
+
   const totais =
     useMemo(
       () => ({
@@ -3814,9 +5620,9 @@ export default function Municoes({
         },
         {
           label:
-            'Manutenção',
+            'Manutenção P4',
           valor:
-            manutencao,
+            totalManutencaoP4,
           cor:
             '#ef4444'
         },
@@ -3830,7 +5636,7 @@ export default function Municoes({
         }
       ]
 
-      if (!gerenciaLotes) {
+      if (!visaoP4) {
         return [
           {
             label:
@@ -3852,7 +5658,7 @@ export default function Municoes({
             label:
               'Manutenção',
             valor:
-              manutencao,
+              totalManutencaoSvdd,
             cor:
               '#ef4444'
           },
@@ -3879,11 +5685,13 @@ export default function Municoes({
         ...comunsP4
       ]
     }, [
-      gerenciaLotes,
+      visaoP4,
       resumo,
       totais.p4,
       totais.servico,
-      totais.svdd
+      totais.svdd,
+      totalManutencaoP4,
+      totalManutencaoSvdd
     ])
 
   const dadosGraficoCalibre =
@@ -3896,11 +5704,13 @@ export default function Municoes({
               'SEM CALIBRE',
 
             valor:
-              numero(
-                gerenciaLotes
-                  ? item.quantidade_total_atual
-                  : item.quantidade_svdd
-              ),
+              visaoP4
+                ? numero(
+                    item.quantidade_total_atual
+                  )
+                : numero(
+                    item.quantidade_svdd
+                  ),
 
             cor:
               '#1d5a9e'
@@ -3914,7 +5724,7 @@ export default function Municoes({
               b.valor - a.valor
           ),
       [
-        gerenciaLotes,
+        visaoP4,
         resumo
       ]
     )
@@ -4121,7 +5931,7 @@ export default function Municoes({
       )}
 
       <section className="municoes-resumo-grid">
-        {gerenciaLotes && (
+        {visaoP4 && (
           <CardResumo
             titulo="TOTAL CONTROLADO"
             valor={totais.total}
@@ -4129,7 +5939,7 @@ export default function Municoes({
           />
         )}
 
-        {gerenciaLotes && (
+        {visaoP4 && (
           <CardDistribuicao
             titulo="COFRE DO P4"
             itens={
@@ -4144,10 +5954,10 @@ export default function Municoes({
           itens={
             distribuicaoPorLocal.svdd
           }
-          subtitulo="Saldo por calibre"
+          subtitulo="Saldo disponível por calibre"
         />
 
-        {gerenciaLotes && (
+        {visaoP4 && (
           <CardDistribuicao
             titulo="CARGA PERMANENTE"
             itens={
@@ -4168,12 +5978,18 @@ export default function Municoes({
         <CardDistribuicao
           titulo="MANUTENÇÃO"
           itens={
-            distribuicaoPorLocal.manutencao
+            visaoP4
+              ? manutencaoP4PorCalibre
+              : manutencaoSvddPorCalibre
           }
-          subtitulo="Material indisponível"
+          subtitulo={
+            visaoP4
+              ? 'Sob responsabilidade do P4'
+              : 'Sob responsabilidade do SVDD'
+          }
         />
 
-        {gerenciaLotes && (
+        {visaoP4 && (
           <CardDistribuicao
             titulo="OUTRAS CIAS"
             itens={
@@ -4183,7 +5999,7 @@ export default function Municoes({
           />
         )}
 
-        {gerenciaLotes && (
+        {visaoP4 && (
           <CardDistribuicao
             titulo="BATALHÃO"
             itens={
@@ -4201,7 +6017,7 @@ export default function Municoes({
           subtitulo="Baixas registradas"
         />
 
-        {gerenciaLotes && (
+        {visaoP4 && (
           <CardDistribuicao
             titulo="OUTROS"
             itens={
@@ -4229,13 +6045,34 @@ export default function Municoes({
             dadosGraficoCalibre
           }
           rotulo={
-            gerenciaLotes
+            visaoP4
               ? 'Estoque controlado'
               : 'Estoque do SVDD'
           }
         />
       </section>
 
+      {visaoP4 && !gerenciaLotes ? (
+        <section className="municoes-operations-section">
+          <div className="municoes-operations-title">
+            <div>
+              <span>
+                Acompanhamento
+              </span>
+
+              <h2>
+                Movimentações de munições
+              </h2>
+            </div>
+          </div>
+
+          <div className="municoes-alert">
+            O Comandante de Cia possui visão completa do estoque,
+            lotes, distribuição e rastreabilidade. As ações de
+            movimentação permanecem restritas ao perfil responsável.
+          </div>
+        </section>
+      ) : (
       <section className="municoes-operations-section">
         <div className="municoes-operations-title">
           <div>
@@ -4315,7 +6152,7 @@ export default function Municoes({
               disabled={
                 gerenciaLotes
                   ? totais.p4 <= 0
-                  : totais.svdd <= 0
+                  : totalManutencaoSvdd <= 0
               }
               onClick={() =>
                 setOperacaoEspecial({
@@ -4329,13 +6166,15 @@ export default function Municoes({
               }
             >
               <strong>
-                Enviar para manutenção
+                {gerenciaLotes
+                  ? 'Enviar para manutenção'
+                  : 'Encaminhar manutenção ao P4'}
               </strong>
 
               <span>
                 {gerenciaLotes
                   ? 'Registrar munição avariada ou deteriorada sob responsabilidade do P4'
-                  : 'Encaminhar ao P4 munição avariada ou imprópria identificada no SVDD'}
+                  : `${totalManutencaoSvdd} munição(ões) em manutenção no SVDD • envie uma, várias ou todas`}
               </span>
             </button>
 
@@ -4343,7 +6182,7 @@ export default function Municoes({
               <button
                 type="button"
                 disabled={
-                  totais.p4 <= 0
+                  totalManutencaoP4 <= 0
                 }
                 onClick={() =>
                   setOperacaoEspecial({
@@ -4521,6 +6360,8 @@ export default function Municoes({
         </div>
       </section>
 
+      )}
+
       <section className="municoes-estoque-section">
         <div className="municoes-section-header">
           <div>
@@ -4536,12 +6377,12 @@ export default function Municoes({
           <div
             style={{
               width:
-                gerenciaLotes
+                visaoP4
                   ? 'min(760px, 100%)'
                   : 'min(470px, 100%)',
               display: 'grid',
               gridTemplateColumns:
-                gerenciaLotes
+                visaoP4
                   ? 'minmax(145px, 170px) minmax(145px, 170px) auto auto auto'
                   : 'minmax(145px, 170px) auto auto',
               justifyContent: 'end',
@@ -4577,7 +6418,7 @@ export default function Municoes({
               }}
             />
 
-            {gerenciaLotes && (
+            {visaoP4 && (
               <ComboFiltro
                 label="LOTE"
                 value={
@@ -4640,7 +6481,7 @@ export default function Municoes({
               Policiais
             </button>
 
-            {gerenciaLotes && (
+            {visaoP4 && (
               <button
                 type="button"
                 className="municoes-btn-secondary"
@@ -4688,7 +6529,7 @@ export default function Municoes({
             {resumoFiltrado.map(
               (item) => {
                 const lotesCalibre =
-                  gerenciaLotes
+                  visaoP4
                     ? lotesDoCalibre(
                         item.id
                       )
@@ -4701,7 +6542,7 @@ export default function Municoes({
                   >
                     <div
                       className={`municoes-calibre-main ${
-                        gerenciaLotes
+                        visaoP4
                           ? ''
                           : 'municoes-calibre-main-svdd'
                       }`}
@@ -4722,7 +6563,7 @@ export default function Municoes({
                         )}
                       </div>
 
-                      {gerenciaLotes && (
+                      {visaoP4 && (
                         <div className="municoes-saldo-item">
                           <small>
                             P4
@@ -4774,7 +6615,7 @@ export default function Municoes({
 
                     </div>
 
-                    {gerenciaLotes && (
+                    {visaoP4 && (
                       <div className="municoes-lotes-area">
                         <div className="municoes-lotes-box">
                           <div className="municoes-lotes-header">
@@ -5116,10 +6957,15 @@ export default function Municoes({
 
       {retornoManutencao && (
         <RetornoManutencaoModal
-          resumo={resumo}
+          user={user}
           onClose={() =>
             setRetornoManutencao(
               false
+            )
+          }
+          onSalvo={() =>
+            aposAlteracao(
+              'Retorno da manutenção de munição registrado com sucesso.'
             )
           }
         />
@@ -5138,15 +6984,37 @@ export default function Municoes({
             ''
           }
           resumo={resumo}
+          manutencoesAtivas={
+            manutencoesAtivas
+          }
+          user={user}
           onClose={() =>
             setOperacaoEspecial(
               null
             )
           }
+          onSalvo={() =>
+            aposAlteracao(
+              operacaoEspecial.tipo ===
+                'MANUTENCAO'
+                ? normalizar(
+                    operacaoEspecial.origem
+                  ).includes('SVDD')
+                  ? 'Uma munição em manutenção foi encaminhada ao P4 com sucesso.'
+                  : 'Munição enviada para manutenção com sucesso.'
+                : operacaoEspecial.tipo ===
+                    'DESCARGA'
+                  ? 'Descarga de munição registrada com sucesso.'
+                  : operacaoEspecial.destinoPadrao ===
+                      'CARGA_PERMANENTE'
+                    ? 'Carga permanente de munição registrada com sucesso.'
+                    : 'Transferência de munição registrada com sucesso.'
+            )
+          }
         />
       )}
 
-      {gerenciaLotes && modalOutros && (
+      {visaoP4 && modalOutros && (
         <OutrosLocaisModal
           resumo={resumo}
           lotes={lotes}
