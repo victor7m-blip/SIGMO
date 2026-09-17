@@ -2947,7 +2947,7 @@ function resumoTonfasSVDD(lista = []) {
   ]
 }
 
-function CentralOperacional({ user }) {
+function CentralOperacional({ user, onAbrirRivViatura }) {
   const visaoSVDD =
     ehEncarregado(user) ||
     ehAuxiliar(user)
@@ -3838,6 +3838,7 @@ function CentralOperacional({ user }) {
               carregando={carregandoCentral}
               user={user}
               onAtualizar={carregarCentral}
+              onAbrirRivViatura={onAbrirRivViatura}
             />
           )}
 

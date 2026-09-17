@@ -1865,119 +1865,43 @@ async function solicitarDevolucaoViaturaMapaForca({
     )
   }
 
-  const {
-    data: vinculo,
-    error: vinculoError
-  } = await supabase
-    .from('sigmo_mapa_forca_cautelas')
-    .select(
-      'id, policial_id, resumo_itens'
-    )
-    .eq('id', cautelaId)
-    .maybeSingle()
+  const token =
+    loadSessionToken()
 
-  if (vinculoError) {
-    throw vinculoError
-  }
-
-  if (!vinculo) {
+  if (!token) {
     throw new Error(
-      'O vínculo da viatura com o Mapa Força não foi localizado.'
-    )
-  }
-
-  if (
-    String(
-      vinculo?.policial_id ||
-      ''
-    ) !==
-    String(
-      policialId ||
-      ''
-    )
-  ) {
-    throw new Error(
-      'A viatura não está vinculada ao usuário atual.'
-    )
-  }
-
-  const resumo =
-    lerResumoItensMapaForca(
-      vinculo?.resumo_itens
-    )
-
-  let encontrou =
-    false
-
-  const agora =
-    new Date().toISOString()
-
-  const resumoAtualizado =
-    resumo.map((registro) => {
-      if (
-        !itemEhViaturaMapaForca(
-          registro
-        )
-      ) {
-        return registro
-      }
-
-      const registroViaturaId =
-        String(
-          registro?.viatura_id ||
-          registro?.referencia_id ||
-          registro?.id ||
-          ''
-        )
-
-      if (
-        registroViaturaId !==
-        String(viaturaId)
-      ) {
-        return registro
-      }
-
-      encontrou = true
-
-      return {
-        ...registro,
-        devolucao_solicitada_em:
-          agora,
-        devolucao_solicitada_por_id:
-          user?.id ||
-          policialId ||
-          null,
-        devolucao_solicitada_por_nome:
-          nomeUsuario(user),
-        devolucao_status:
-          'AGUARDANDO_SVDD',
-        devolucao_novidade_riv:
-          item?.novidade ||
-          null
-      }
-    })
-
-  if (!encontrou) {
-    throw new Error(
-      'A viatura selecionada não foi localizada no vínculo do Mapa Força.'
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
     )
   }
 
   const {
-    error: atualizarError
-  } = await supabase
-    .from('sigmo_mapa_forca_cautelas')
-    .update({
-      resumo_itens:
-        resumoAtualizado
-    })
-    .eq('id', cautelaId)
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_solicitar_devolucao_viatura_policial',
+    {
+      p_token:
+        token,
 
-  if (atualizarError) {
+      p_cautela_mapa_forca_id:
+        cautelaId,
+
+      p_viatura_id:
+        viaturaId
+    }
+  )
+
+  if (error) {
     throw new Error(
-      `Não foi possível solicitar a devolução da viatura: ${atualizarError.message}`
+      error?.message ||
+      'Não foi possível solicitar a devolução da viatura.'
     )
   }
+
+  const resultado =
+    Array.isArray(data)
+      ? data[0] || null
+      : data || null
 
   try {
     await criarNotificacaoParaPerfil({
@@ -2025,13 +1949,18 @@ async function solicitarDevolucaoViaturaMapaForca({
     tipo:
       'VIATURA',
     cautela_mapa_forca_id:
+      resultado
+        ?.cautela_mapa_forca_id ||
       cautelaId,
     viatura_id:
+      resultado?.viatura_id ||
       viaturaId,
     status:
+      resultado?.status ||
       'AGUARDANDO_SVDD',
     solicitado_em:
-      agora
+      resultado?.solicitado_em ||
+      new Date().toISOString()
   }
 }
 

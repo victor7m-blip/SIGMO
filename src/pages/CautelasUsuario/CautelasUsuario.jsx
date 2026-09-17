@@ -34,7 +34,8 @@ import {
   SEVERIDADES_NOVIDADE_VTR,
   enviarFotosOcorrenciaRiv,
   obterRivResumo,
-  registrarOcorrenciaRiv
+  registrarOcorrenciaRiv,
+  registrarQuilometragem
 } from '../../services/viaturasRivService'
 
 import './CautelasUsuario.css'
@@ -710,6 +711,7 @@ export default function CautelasUsuario({
   const [materiais, setMateriais] = useState([])
   const [itensSelecionados, setItensSelecionados] = useState([])
   const [quantidadesDevolver, setQuantidadesDevolver] = useState({})
+  const [quilometragensDevolucao, setQuilometragensDevolucao] = useState({})
   const [devolucoes, setDevolucoes] = useState([])
   const [quantidadesReceber, setQuantidadesReceber] = useState({})
   const [novidadesRecebimento, setNovidadesRecebimento] = useState({})
@@ -1091,6 +1093,22 @@ function alternarItemSelecionado(item) {
         )
       }
 
+      if (itemEhViatura(item)) {
+        setQuilometragensDevolucao(
+          (estadoQuilometragens) => {
+            const proximo = {
+              ...estadoQuilometragens
+            }
+
+            delete proximo[
+              chaveQuantidade
+            ]
+
+            return proximo
+          }
+        )
+      }
+
       return estadoAtual.filter(
         (selecionado) =>
           chaveItemEstavel(
@@ -1126,6 +1144,7 @@ function selecionarTodosMateriais() {
   ) {
     setItensSelecionados([])
     setQuantidadesDevolver({})
+    setQuilometragensDevolucao({})
     return
   }
 
@@ -1179,6 +1198,24 @@ function alterarQuantidadeDevolver(
     [chave]: quantidade
   }))
 }
+
+
+function alterarQuilometragemDevolucao(chave, valor) {
+  const somenteNumeros =
+    String(valor ?? '')
+      .replace(/\D/g, '')
+
+  setQuilometragensDevolucao(
+    (estadoAtual) => ({
+      ...estadoAtual,
+      [chave]: somenteNumeros
+    })
+  )
+
+  setErro('')
+}
+
+
 
   function novidadeViaturaVazia() {
     return {
@@ -2401,6 +2438,46 @@ function alterarQuantidadeDevolver(
     return
   }
 
+  for (const item of itensSelecionados) {
+    if (!itemEhViatura(item)) {
+      continue
+    }
+
+    const chave =
+      chaveQuantidadeDevolucao(item)
+
+    const kmInformado =
+      String(
+        quilometragensDevolucao[chave] ??
+        ''
+      ).trim()
+
+    if (!kmInformado) {
+      setErro(
+        `Informe o KM atual da viatura ${
+          item?.prefixo ||
+          item?.placa ||
+          item?.patrimonio ||
+          ''
+        }.`.trim()
+      )
+      return
+    }
+
+    const kmNumero =
+      Number(kmInformado)
+
+    if (
+      !Number.isInteger(kmNumero) ||
+      kmNumero < 0
+    ) {
+      setErro(
+        'Informe uma quilometragem válida para a viatura.'
+      )
+      return
+    }
+  }
+
   if (
     !window.confirm(
       `Confirma a devolução de ${itensSelecionados.length} item(ns)? Cada material será encaminhado ao setor de origem da cautela. A responsabilidade só será encerrada após o aceite do setor responsável.`
@@ -2461,6 +2538,49 @@ function alterarQuantidadeDevolver(
         }
       })
 
+    for (const item of itensParaDevolucao) {
+      if (!itemEhViatura(item)) {
+        continue
+      }
+
+      const chave =
+        chaveQuantidadeDevolucao(item)
+
+      const viaturaId =
+        item?.viatura_id ||
+        item?.referencia_id ||
+        null
+
+      if (!viaturaId) {
+        throw new Error(
+          'A viatura selecionada não possui identificação válida para atualizar a quilometragem.'
+        )
+      }
+
+      const resumoRiv =
+        await obterRivResumo(
+          viaturaId
+        )
+
+      await registrarQuilometragem({
+        viatura: {
+          id: viaturaId,
+          quilometragem_atual:
+            Number(
+              resumoRiv?.quilometragemAtual ||
+              0
+            )
+        },
+        quilometragem:
+          Number(
+            quilometragensDevolucao[chave]
+          ),
+        observacao:
+          'DEVOLUÇÃO DA VTR AO SVDD PELO POLICIAL',
+        user
+      })
+    }
+
     await solicitarDevolucaoCautela({
       user,
       itens: itensParaDevolucao
@@ -2505,6 +2625,7 @@ function alterarQuantidadeDevolver(
 
     setItensSelecionados([])
     setQuantidadesDevolver({})
+    setQuilometragensDevolucao({})
 
     await carregar()
     onConcluido?.()
@@ -2735,6 +2856,41 @@ function alterarQuantidadeDevolver(
 
             <span>
               {obterDescricao(item)}
+
+              {itemEhViatura(item) && (
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginLeft: '10px',
+                    fontWeight: 700
+                  }}
+                >
+                  KM:
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="numeric"
+                    placeholder="KM atual"
+                    value={
+                      quilometragensDevolucao[chave] ??
+                      ''
+                    }
+                    onChange={(event) =>
+                      alterarQuilometragemDevolucao(
+                        chave,
+                        event.target.value
+                      )
+                    }
+                    style={{
+                      width: '110px',
+                      height: '32px',
+                      padding: '4px 8px'
+                    }}
+                  />
+                </label>
+              )}
             </span>
 
             {obterPrazoTurno(item) && (

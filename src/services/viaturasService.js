@@ -122,9 +122,16 @@ export async function salvarViatura(dados) {
   }
 
   if (dados?.id) {
+    // A situação operacional da viatura não é alterada pelo cadastro.
+    // Ela deve mudar exclusivamente pelos fluxos operacionais/aprovações.
+    const {
+      situacao: _situacaoIgnorada,
+      ...payloadCadastro
+    } = payload
+
     const { data, error } = await supabase
       .from(TABLE)
-      .update(payload)
+      .update(payloadCadastro)
       .eq('id', dados.id)
       .select()
       .single()

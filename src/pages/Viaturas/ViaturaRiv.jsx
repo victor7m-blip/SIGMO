@@ -15,6 +15,8 @@ import {
   enviarFotosOcorrenciaRiv,
   obterFotosRivPorViatura,
   concluirManutencaoRiv,
+  atualizarAndamentoManutencaoRiv,
+  podeGerenciarManutencaoRiv,
   obterHistoricoOcorrenciaRiv,
   podeReabrirManutencaoRiv,
   reabrirManutencaoRiv,
@@ -80,6 +82,7 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
   const [historicoRegistro, setHistoricoRegistro] = useState([])
   const [carregandoHistorico, setCarregandoHistorico] = useState(false)
   const [reabrindoManutencao, setReabrindoManutencao] = useState(null)
+  const [andamentoManutencao, setAndamentoManutencao] = useState(null)
   const [fechandoAvaria, setFechandoAvaria] = useState(null)
   const [reabrindoAvaria, setReabrindoAvaria] = useState(null)
   const [erroFechamentoAvaria, setErroFechamentoAvaria] = useState('')
@@ -129,6 +132,16 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
 
     return [...padroes, ...personalizados]
   }, [dados.manutencoes, dados.quilometragemAtual])
+
+  const preventivasPendentes = useMemo(
+    () =>
+      alertas.filter(
+        (item) =>
+          item?.status?.nivel === 'VENCIDO' ||
+          item?.status?.nivel === 'ATENCAO'
+      ),
+    [alertas]
+  )
 
   const avariasAbertas = useMemo(
     () => dados.ocorrencias.filter(
@@ -197,6 +210,7 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
   }), [avariasAbertas.length, manutencoesEmAndamento.length, alertas, dados.ocorrencias.length])
 
   const podeCorrigirKm = podeCorrigirQuilometragem(user)
+  const podeGerenciarManutencao = podeGerenciarManutencaoRiv(user)
   const podeReabrirManutencao = podeReabrirManutencaoRiv(user)
   const podeGerenciarConhecidas = podeGerenciarAvariasConhecidas(user)
 
@@ -399,6 +413,66 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
     }
   }
 
+  function abrirAndamentoManutencao(item) {
+    setAndamentoManutencao({
+      item,
+      providencia:
+        item?.providencia_atual || '',
+      tipo:
+        item?.manutencao_tipo || '',
+      oficina:
+        item?.manutencao_oficina ||
+        item?.manutencao_local ||
+        '',
+      documento:
+        item?.manutencao_os || '',
+      observacoes:
+        item?.manutencao_observacoes || ''
+    })
+    setErro('')
+  }
+
+  async function salvarAndamentoManutencao(event) {
+    event.preventDefault()
+
+    if (!andamentoManutencao?.item) {
+      return
+    }
+
+    try {
+      setOcupado(true)
+      setErro('')
+
+      await atualizarAndamentoManutencaoRiv({
+        item:
+          andamentoManutencao.item,
+        providencia:
+          andamentoManutencao.providencia,
+        tipo:
+          andamentoManutencao.tipo,
+        oficina:
+          andamentoManutencao.oficina,
+        documento:
+          andamentoManutencao.documento,
+        observacoes:
+          andamentoManutencao.observacoes,
+        user
+      })
+
+      setAndamentoManutencao(null)
+      await carregar()
+      await onUpdated?.()
+    } catch (error) {
+      setErro(
+        error?.message ||
+        'Não foi possível atualizar o andamento da manutenção.'
+      )
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+
   async function concluirManutencao(item) {
     if (!window.confirm('Concluir esta manutenção? Depois de concluída, ela ficará bloqueada para alterações.')) return
     try {
@@ -482,6 +556,31 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
 
   return (
     <div className="riv">
+      <style>{`
+        .riv__modal--visualizar,
+        .riv__modal--visualizar h3,
+        .riv__modal--visualizar strong,
+        .riv__modal--visualizar p,
+        .riv__modal--visualizar span {
+          color: #f8fafc !important;
+        }
+
+        .riv__modal--visualizar small {
+          color: #93c5fd !important;
+        }
+
+        .riv__modal--visualizar .viaturas-vazio {
+          color: #94a3b8 !important;
+        }
+
+        .riv__modal--visualizar .riv__visualizar-grid > div,
+        .riv__modal--visualizar .riv__visualizar-descricao,
+        .riv__modal--visualizar .riv__visualizar-fotos,
+        .riv__modal--visualizar .riv__historico-manut {
+          color: #f8fafc !important;
+        }
+      `}</style>
+
       {erro && <div className="viaturas-erro">{erro}</div>}
 
       <nav className="riv__nav" aria-label="Seções do RIV">
@@ -1288,6 +1387,55 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
 
                     {item.descricao && <p>{item.descricao}</p>}
 
+                    {item.tipo === 'MANUTENCAO' &&
+                      String(item.titulo || '')
+                        .toUpperCase()
+                        .includes('APÓS DEVOLUÇÃO AO SVDD') &&
+                      preventivasPendentes.length > 0 && (
+                        <div
+                          style={{
+                            margin: '14px 0',
+                            padding: '12px 14px',
+                            border: '1px solid rgba(245, 158, 11, .55)',
+                            borderRadius: '10px',
+                            background: 'rgba(245, 158, 11, .10)'
+                          }}
+                        >
+                          <small
+                            style={{
+                              display: 'block',
+                              color: '#fbbf24',
+                              fontWeight: 800,
+                              marginBottom: '6px'
+                            }}
+                          >
+                            PREVENTIVA(S) EM ALERTA NESTA VTR
+                          </small>
+
+                          {preventivasPendentes.map(
+                            (preventiva) => (
+                              <div
+                                key={preventiva.value}
+                                style={{
+                                  color: '#f8fafc',
+                                  fontWeight: 700,
+                                  marginTop: '4px'
+                                }}
+                              >
+                                {preventiva.label}
+                                {' • '}
+                                {preventiva.status.label}
+                                {preventiva.registro?.proxima_km != null
+                                  ? ` • próxima em ${formatarKm(
+                                      preventiva.registro.proxima_km
+                                    )}`
+                                  : ''}
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+
                     <div className="riv__manutencao-atual-grid">
                       <div>
                         <small>Providência atual</small>
@@ -1313,6 +1461,12 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
                         <small>Registrado em</small>
                         <strong>{new Date(item.created_at).toLocaleString('pt-BR')}</strong>
                       </div>
+                      {item.manutencao_observacoes && (
+                        <div>
+                          <small>Serviço / observações</small>
+                          <strong>{item.manutencao_observacoes}</strong>
+                        </div>
+                      )}
                     </div>
 
                     <div className="riv__registro-fotos">
@@ -1363,6 +1517,35 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
                           }
                         />
                       </label>
+
+                      {preventivasPendentes.length > 0 && (
+                        <button
+                          type="button"
+                          disabled={ocupado}
+                          onClick={() => setAbaRiv('PREVENTIVAS')}
+                        >
+                          Ver preventivas
+                        </button>
+                      )}
+
+                      {podeGerenciarManutencao && item.tipo === 'MANUTENCAO' && (
+                        <button
+                          type="button"
+                          disabled={ocupado}
+                          onClick={() => abrirAndamentoManutencao(item)}
+                        >
+                          Atualizar andamento
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className="riv__btn-concluir"
+                        disabled={ocupado}
+                        onClick={() => concluirManutencao(item)}
+                      >
+                        ✓ Concluir manutenção
+                      </button>
                     </div>
                   </article>
                 )
@@ -1667,6 +1850,38 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
             </div>
 
             <div className="riv__modal-actions">
+              {visualizandoRegistro.tipo === 'MANUTENCAO' &&
+                !visualizandoRegistro.resolvida &&
+                podeGerenciarManutencao && (
+                  <button
+                    type="button"
+                    disabled={ocupado}
+                    onClick={() => {
+                      const item =
+                        visualizandoRegistro
+
+                      setVisualizandoRegistro(null)
+                      abrirAndamentoManutencao(item)
+                    }}
+                  >
+                    Atualizar andamento
+                  </button>
+                )}
+
+              {visualizandoRegistro.tipo === 'MANUTENCAO' && !visualizandoRegistro.resolvida && (
+                <button
+                  type="button"
+                  className="riv__btn-concluir"
+                  disabled={ocupado}
+                  onClick={async () => {
+                    await concluirManutencao(visualizandoRegistro)
+                    setVisualizandoRegistro(null)
+                  }}
+                >
+                  ✓ Concluir manutenção
+                </button>
+              )}
+
               {visualizandoRegistro.tipo === 'MANUTENCAO' && visualizandoRegistro.resolvida && podeReabrirManutencao && (
                 <button type="button" className="riv__btn-reabrir" onClick={() => setReabrindoManutencao({ item: visualizandoRegistro, justificativa: '' })}>
                   Reabrir manutenção
@@ -1680,6 +1895,178 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
               <button type="button" onClick={() => setVisualizandoRegistro(null)}>Fechar</button>
             </div>
           </section>
+        </div>
+      )}
+
+      {andamentoManutencao && (
+        <div
+          className="riv__modal-backdrop"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !ocupado
+            ) {
+              setAndamentoManutencao(null)
+            }
+          }}
+        >
+          <form
+            className="riv__modal"
+            onSubmit={salvarAndamentoManutencao}
+          >
+            <div className="riv__modal-header">
+              <div>
+                <small>MANUTENÇÃO DA VTR</small>
+                <h3>Atualizar andamento</h3>
+              </div>
+
+              <button
+                type="button"
+                disabled={ocupado}
+                onClick={() =>
+                  setAndamentoManutencao(null)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="riv__correcao-aviso">
+              Registre o andamento da manutenção. P4 e SVDD podem atualizar estas informações enquanto o serviço estiver aberto.
+            </p>
+
+            <div className="riv__modal-grid">
+              <label>
+                <span>Providência atual</span>
+                <input
+                  value={
+                    andamentoManutencao.providencia
+                  }
+                  onChange={(event) =>
+                    setAndamentoManutencao(
+                      (atual) => ({
+                        ...atual,
+                        providencia:
+                          event.target.value.toUpperCase()
+                      })
+                    )
+                  }
+                  placeholder="Ex.: TROCA DO ÓLEO DO MOTOR"
+                />
+              </label>
+
+              <label>
+                <span>Tipo da manutenção</span>
+                <select
+                  value={
+                    andamentoManutencao.tipo
+                  }
+                  onChange={(event) =>
+                    setAndamentoManutencao(
+                      (atual) => ({
+                        ...atual,
+                        tipo:
+                          event.target.value
+                      })
+                    )
+                  }
+                >
+                  <option value="">
+                    Selecione...
+                  </option>
+                  <option value="PREVENTIVA">
+                    Preventiva
+                  </option>
+                  <option value="CORRETIVA">
+                    Corretiva
+                  </option>
+                  <option value="INSPECAO">
+                    Inspeção
+                  </option>
+                  <option value="OUTRA">
+                    Outra
+                  </option>
+                </select>
+              </label>
+
+              <label>
+                <span>Local / oficina</span>
+                <input
+                  value={
+                    andamentoManutencao.oficina
+                  }
+                  onChange={(event) =>
+                    setAndamentoManutencao(
+                      (atual) => ({
+                        ...atual,
+                        oficina:
+                          event.target.value.toUpperCase()
+                      })
+                    )
+                  }
+                  placeholder="Ex.: OFICINA DA CIA"
+                />
+              </label>
+
+              <label>
+                <span>OS / documento</span>
+                <input
+                  value={
+                    andamentoManutencao.documento
+                  }
+                  onChange={(event) =>
+                    setAndamentoManutencao(
+                      (atual) => ({
+                        ...atual,
+                        documento:
+                          event.target.value.toUpperCase()
+                      })
+                    )
+                  }
+                  placeholder="Ex.: OS 123/2026"
+                />
+              </label>
+            </div>
+
+            <label className="riv__modal-full">
+              <span>Observações / serviço realizado</span>
+              <textarea
+                rows="4"
+                value={
+                  andamentoManutencao.observacoes
+                }
+                onChange={(event) =>
+                  setAndamentoManutencao(
+                    (atual) => ({
+                      ...atual,
+                      observacoes:
+                        event.target.value.toUpperCase()
+                    })
+                  )
+                }
+                placeholder="Ex.: ÓLEO DO MOTOR E FILTRO SUBSTITUÍDOS."
+              />
+            </label>
+
+            <div className="riv__modal-actions">
+              <button
+                type="button"
+                disabled={ocupado}
+                onClick={() =>
+                  setAndamentoManutencao(null)
+                }
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                disabled={ocupado}
+              >
+                Salvar andamento
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

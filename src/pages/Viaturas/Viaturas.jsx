@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import {
   formatarSituacaoViatura,
@@ -65,33 +65,6 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
   const [erro, setErro] = useState('')
   const [abrirRivInicial, setAbrirRivInicial] = useState(false)
   const [areaViaturas, setAreaViaturas] = useState('FROTA')
-  const [consultaAberta, setConsultaAberta] = useState(false)
-  const [consultaAvancada, setConsultaAvancada] = useState({
-    prefixo: '',
-    placa: '',
-    modelo: '',
-    ano: '',
-    tipo: 'TODOS',
-    situacao: 'TODAS'
-  })
-  const frotaRef = useRef(null)
-
-  function mostrarFrota({ limparPesquisa = false, situacao = 'TODAS' } = {}) {
-    setAreaViaturas('FROTA')
-    setFiltroSituacao(situacao)
-
-    if (limparPesquisa) {
-      setPesquisa('')
-    }
-
-    window.setTimeout(() => {
-      frotaRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      })
-    }, 0)
-  }
-
 
   async function carregar() {
     try {
@@ -137,17 +110,6 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
     }
   }, [viaturas])
 
-  const consultaAvancadaAtiva = useMemo(() => {
-    return Boolean(
-      consultaAvancada.prefixo ||
-      consultaAvancada.placa ||
-      consultaAvancada.modelo ||
-      consultaAvancada.ano ||
-      consultaAvancada.tipo !== 'TODOS' ||
-      consultaAvancada.situacao !== 'TODAS'
-    )
-  }, [consultaAvancada])
-
   const lista = useMemo(() => {
     const termo = normalizar(pesquisa)
 
@@ -166,65 +128,13 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
         return false
       }
 
-      const atendePesquisaGeral =
-        !termo ||
-        normalizar(
-          `${item.prefixo} ${item.placa} ${item.modelo} ${item.ano}`
-        ).includes(termo)
+      if (!termo) return true
 
-      if (!atendePesquisaGeral) return false
-
-      if (
-        consultaAvancada.prefixo &&
-        !normalizar(item.prefixo).includes(normalizar(consultaAvancada.prefixo))
-      ) {
-        return false
-      }
-
-      if (
-        consultaAvancada.placa &&
-        !normalizar(item.placa).includes(normalizar(consultaAvancada.placa))
-      ) {
-        return false
-      }
-
-      if (
-        consultaAvancada.modelo &&
-        !normalizar(item.modelo).includes(normalizar(consultaAvancada.modelo))
-      ) {
-        return false
-      }
-
-      if (
-        consultaAvancada.ano &&
-        String(item.ano || '') !== String(consultaAvancada.ano)
-      ) {
-        return false
-      }
-
-      if (
-        consultaAvancada.tipo !== 'TODOS' &&
-        item.tipo_veiculo !== consultaAvancada.tipo
-      ) {
-        return false
-      }
-
-      if (
-        consultaAvancada.situacao !== 'TODAS' &&
-        item.situacao !== consultaAvancada.situacao
-      ) {
-        return false
-      }
-
-      return true
+      return normalizar(
+        `${item.prefixo} ${item.placa} ${item.modelo} ${item.ano}`
+      ).includes(termo)
     })
-  }, [
-    viaturas,
-    pesquisa,
-    filtroSituacao,
-    filtroTipo,
-    consultaAvancada
-  ])
+  }, [viaturas, pesquisa, filtroSituacao, filtroTipo])
 
   function novaViatura() {
     setForm(FORM_VAZIO)
@@ -254,10 +164,7 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
       setSalvando(true)
       setErro('')
 
-      const registro = await salvarViatura({
-        ...form,
-        situacao: form.id ? form.situacao : 'DISPONIVEL'
-      })
+      const registro = await salvarViatura(form)
 
       setModalAberto(false)
       setForm(FORM_VAZIO)
@@ -497,11 +404,11 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
                 type="button"
                 onClick={() => {
                   setAreaViaturas('FROTA')
-                  setConsultaAberta(true)
+                  setFiltroSituacao('TODAS')
                 }}
               >
                 <strong>Consultar frota</strong>
-                <span>Combinar vários parâmetros para localizar viaturas</span>
+                <span>Visualizar e pesquisar as viaturas cadastradas</span>
               </button>
             </div>
           </section>
@@ -530,7 +437,7 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
                   Condição da viatura
                 </strong>
                 <span style={{ color: '#64748b', fontSize: 13 }}>
-                  Novidades, manutenção interna e encaminhamento externo.
+                  Manutenção, disponibilidade e situação operacional.
                 </span>
               </div>
             </div>
@@ -548,12 +455,15 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
                 onClick={() => setAreaViaturas('MANUTENCAO')}
               >
                 <strong>Central de manutenção</strong>
-                <span>SVDD envia à manutenção interna; P4 encaminha ao fluxo externo</span>
+                <span>Acompanhar manutenções internas e externas</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => mostrarFrota({ situacao: 'A_DISPOSICAO_OUTRAS_UNIDADES' })}
+                onClick={() => {
+                  setAreaViaturas('FROTA')
+                  setFiltroSituacao('A_DISPOSICAO_OUTRAS_UNIDADES')
+                }}
               >
                 <strong>Outras unidades</strong>
                 <span>Viaturas à disposição de outras unidades</span>
@@ -600,7 +510,11 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
             >
               <button
                 type="button"
-                onClick={() => mostrarFrota({ limparPesquisa: true, situacao: 'TODAS' })}
+                onClick={() => {
+                  setAreaViaturas('FROTA')
+                  setFiltroSituacao('TODAS')
+                  setPesquisa('')
+                }}
               >
                 <strong>Abrir ficha / RIV</strong>
                 <span>Selecione uma viatura abaixo para acessar a ficha</span>
@@ -608,7 +522,10 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
 
               <button
                 type="button"
-                onClick={() => mostrarFrota({ situacao: 'PROCESSO_DESCARGA' })}
+                onClick={() => {
+                  setAreaViaturas('FROTA')
+                  setFiltroSituacao('PROCESSO_DESCARGA')
+                }}
               >
                 <strong>Processo de descarga</strong>
                 <span>Acompanhar viaturas em processo de retirada da frota</span>
@@ -666,51 +583,7 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
       </section>
 
       {areaViaturas === 'FROTA' && (
-      <section ref={frotaRef} className="viaturas-painel">
-        {consultaAvancadaAtiva && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              marginBottom: 12,
-              padding: '10px 12px',
-              border: '1px solid #bfdbfe',
-              borderRadius: 9,
-              background: '#eff6ff',
-              color: '#1e3a8a'
-            }}
-          >
-            <strong>Consulta avançada ativa</strong>
-            <button
-              type="button"
-              onClick={() =>
-                setConsultaAvancada({
-                  prefixo: '',
-                  placa: '',
-                  modelo: '',
-                  ano: '',
-                  tipo: 'TODOS',
-                  situacao: 'TODAS'
-                })
-              }
-              style={{
-                minHeight: 34,
-                padding: '0 12px',
-                border: '1px solid #bfdbfe',
-                borderRadius: 8,
-                background: '#fff',
-                color: '#1d4ed8',
-                fontWeight: 800,
-                cursor: 'pointer'
-              }}
-            >
-              Limpar filtros
-            </button>
-          </div>
-        )}
-
+      <section className="viaturas-painel">
         <div className="viaturas-toolbar viaturas-toolbar--3">
           <input
             value={pesquisa}
@@ -859,178 +732,6 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
         </div>
       )}
 
-      {consultaAberta && (
-        <div
-          className="viaturas-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setConsultaAberta(false)
-            }
-          }}
-        >
-          <div className="viaturas-modal">
-            <div className="viaturas-modal__header">
-              <div>
-                <small>CONSULTA AVANÇADA</small>
-                <h2>Consultar frota</h2>
-                <p
-                  style={{
-                    margin: '6px 0 0',
-                    color: '#aebed0',
-                    fontSize: 14
-                  }}
-                >
-                  Combine um ou mais parâmetros. Todos os campos preenchidos serão considerados juntos.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setConsultaAberta(false)}
-                aria-label="Fechar"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="viaturas-form-grid">
-              <label>
-                <span>Prefixo</span>
-                <input
-                  value={consultaAvancada.prefixo}
-                  onChange={(event) =>
-                    setConsultaAvancada((atual) => ({
-                      ...atual,
-                      prefixo: event.target.value.toUpperCase()
-                    }))
-                  }
-                  placeholder="Ex.: M-27500"
-                />
-              </label>
-
-              <label>
-                <span>Placa</span>
-                <input
-                  value={consultaAvancada.placa}
-                  onChange={(event) =>
-                    setConsultaAvancada((atual) => ({
-                      ...atual,
-                      placa: event.target.value.toUpperCase()
-                    }))
-                  }
-                  placeholder="Ex.: ABC-1D23"
-                />
-              </label>
-
-              <label>
-                <span>Modelo</span>
-                <input
-                  value={consultaAvancada.modelo}
-                  onChange={(event) =>
-                    setConsultaAvancada((atual) => ({
-                      ...atual,
-                      modelo: event.target.value.toUpperCase()
-                    }))
-                  }
-                  placeholder="Ex.: TRAILBLAZER"
-                />
-              </label>
-
-              <label>
-                <span>Ano</span>
-                <input
-                  type="number"
-                  min="1900"
-                  max="2100"
-                  value={consultaAvancada.ano}
-                  onChange={(event) =>
-                    setConsultaAvancada((atual) => ({
-                      ...atual,
-                      ano: event.target.value
-                    }))
-                  }
-                  placeholder="Ex.: 2025"
-                />
-              </label>
-
-              <label>
-                <span>Tipo</span>
-                <select
-                  value={consultaAvancada.tipo}
-                  onChange={(event) =>
-                    setConsultaAvancada((atual) => ({
-                      ...atual,
-                      tipo: event.target.value
-                    }))
-                  }
-                >
-                  <option value="TODOS">Todos os tipos</option>
-                  {TIPOS_VEICULO.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                <span>Situação</span>
-                <select
-                  value={consultaAvancada.situacao}
-                  onChange={(event) =>
-                    setConsultaAvancada((atual) => ({
-                      ...atual,
-                      situacao: event.target.value
-                    }))
-                  }
-                >
-                  <option value="TODAS">Todas as situações</option>
-                  {SITUACOES_VIATURA_UI.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="viaturas-modal__acoes">
-              <button
-                type="button"
-                onClick={() =>
-                  setConsultaAvancada({
-                    prefixo: '',
-                    placa: '',
-                    modelo: '',
-                    ano: '',
-                    tipo: 'TODOS',
-                    situacao: 'TODAS'
-                  })
-                }
-              >
-                Limpar
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setConsultaAberta(false)
-                  setAreaViaturas('FROTA')
-                  window.setTimeout(() => {
-                    frotaRef.current?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start'
-                    })
-                  }, 0)
-                }}
-              >
-                Aplicar consulta
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {modalAberto && (
         <div
           className="viaturas-modal-backdrop"
@@ -1144,22 +845,6 @@ export default function Viaturas({ user, abrirViaturaId = null, abrirDiretoRiv =
                 />
               </label>
 
-              <label>
-                <span>Situação</span>
-                <input
-                  value={
-                    form.id
-                      ? (
-                          form.situacao === 'A_DISPOSICAO_OUTRAS_UNIDADES'
-                            ? 'À disposição de outras unidades'
-                            : formatarSituacaoViatura(form.situacao)
-                        )
-                      : 'Disponível'
-                  }
-                  readOnly
-                  title="A situação da viatura é alterada pelos fluxos operacionais do SIGMO."
-                />
-              </label>
             </div>
 
             <div className="viaturas-modal__acoes">

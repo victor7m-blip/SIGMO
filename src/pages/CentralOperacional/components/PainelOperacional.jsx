@@ -57,6 +57,51 @@ function formatarData(valor) {
   return data.toLocaleString('pt-BR')
 }
 
+function formatarObservacoesManutencaoVtr(valor) {
+  const bruto = texto(valor)
+  if (!bruto) return ''
+
+  return bruto
+    .split('•')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .filter((parte) => {
+      const normalizado = normalizarOperacional(parte)
+      return (
+        !normalizado.startsWith('CAUTELA:') &&
+        !normalizado.startsWith('PREVENTIVA_ID:')
+      )
+    })
+    .map((parte) => {
+      const normalizado = normalizarOperacional(parte)
+
+      if (normalizado === 'ORIGEM: DEVOLUCAO MAPA FORCA') {
+        return 'Origem: devolução pelo Mapa Força'
+      }
+
+      if (normalizado.startsWith('PROXIMA KM:')) {
+        const numero = Number(
+          parte
+            .split(':')
+            .slice(1)
+            .join(':')
+            .trim()
+        )
+
+        return Number.isFinite(numero)
+          ? `Próxima manutenção: ${numero.toLocaleString('pt-BR')} km`
+          : parte
+      }
+
+      if (normalizado.startsWith('PROXIMA DATA:')) {
+        return `Próxima data: ${parte.split(':').slice(1).join(':').trim()}`
+      }
+
+      return parte
+    })
+    .join(' • ')
+}
+
 function tempoPendente(valor) {
   if (!valor) return ''
 
@@ -1073,12 +1118,14 @@ async function listarMunicoesVinculadasAosCarrinhos(
 
 
 
-export default function PainelOperacional({ dados, carregando, user, onAtualizar }) {
+export default function PainelOperacional({ dados, carregando, user, onAtualizar, onAbrirRivViatura }) {
   const [decidindoManutencaoExternaId, setDecidindoManutencaoExternaId] = useState(null)
   const [decidindoMunicaoId, setDecidindoMunicaoId] = useState(null)
   const [decidindoTorniqueteId, setDecidindoTorniqueteId] = useState(null)
   const [novidadesVtr, setNovidadesVtr] = useState([])
   const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
+  const [manutencoesVtr, setManutencoesVtr] = useState([])
+  const [carregandoManutencoesVtr, setCarregandoManutencoesVtr] = useState(false)
   const [novidadeVtrAberta, setNovidadeVtrAberta] = useState(null)
   const [documentosVtr, setDocumentosVtr] = useState([])
   const [arquivoVtr, setArquivoVtr] = useState(null)
@@ -1113,26 +1160,122 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     }
   }
 
+  async function carregarManutencoesVtr() {
+    if (!perfilVtr) {
+      setManutencoesVtr([])
+      return
+    }
+
+    try {
+      setCarregandoManutencoesVtr(true)
+
+      const { data: ocorrencias, error: ocorrenciasError } = await supabase
+        .from('sigmo_viaturas_riv_ocorrencias')
+        .select(
+          'id, viatura_id, tipo, titulo, descricao, resolvida, manutencao_status, manutencao_tipo, manutencao_execucao, providencia_atual, manutencao_oficina, manutencao_local, manutencao_os, manutencao_observacoes, quilometragem, created_at, updated_at'
+        )
+        .eq('tipo', 'MANUTENCAO')
+        .eq('resolvida', false)
+        .order('created_at', { ascending: false })
+
+      if (ocorrenciasError) throw ocorrenciasError
+
+      const idsViaturas = [
+        ...new Set(
+          (ocorrencias || [])
+            .map((item) => item?.viatura_id)
+            .filter(Boolean)
+        )
+      ]
+
+      let viaturasPorId = new Map()
+
+      if (idsViaturas.length > 0) {
+        const { data: viaturas, error: viaturasError } = await supabase
+          .from('sigmo_viaturas')
+          .select('id, prefixo, placa, modelo, situacao')
+          .in('id', idsViaturas)
+
+        if (viaturasError) throw viaturasError
+
+        viaturasPorId = new Map(
+          (viaturas || []).map((viatura) => [String(viatura.id), viatura])
+        )
+      }
+
+      setManutencoesVtr(
+        (ocorrencias || []).map((item) => {
+          const viatura = viaturasPorId.get(String(item.viatura_id)) || {}
+
+          return {
+            ...item,
+            prefixo: viatura.prefixo || 'VTR',
+            placa: viatura.placa || null,
+            modelo: viatura.modelo || null,
+            situacao_viatura: viatura.situacao || null,
+            status: item.manutencao_status || 'AGUARDANDO_PROVIDENCIA',
+            tipo_movimentacao: 'MANUTENÇÃO DE VTR',
+            titulo_original: item.titulo,
+            titulo: `${viatura.prefixo || 'VTR'} — ${item.titulo || 'MANUTENÇÃO'}`,
+            descricao: [
+              item.descricao,
+              item.manutencao_execucao
+                ? `EXECUÇÃO: ${String(item.manutencao_execucao).replaceAll('_', ' ')}`
+                : '',
+              item.manutencao_tipo
+                ? `TIPO: ${String(item.manutencao_tipo).replaceAll('_', ' ')}`
+                : '',
+              item.providencia_atual
+                ? `PROVIDÊNCIA: ${item.providencia_atual}`
+                : ''
+            ]
+              .filter(Boolean)
+              .join(' • ')
+          }
+        })
+      )
+    } catch (error) {
+      console.error('Erro ao carregar manutenções de VTR:', error)
+      setManutencoesVtr([])
+    } finally {
+      setCarregandoManutencoesVtr(false)
+    }
+  }
+
   useEffect(() => {
     carregarNovidadesVtr()
+    carregarManutencoesVtr()
   }, [perfilVtr])
 
   const novidadesVtrExibidas = useMemo(() => {
     if (!perfilVtr) return []
 
+    // Manutenções possuem card próprio na Central Operacional.
+    // Evita duplicar a mesma ocorrência também em "Novidades de VTR".
+    const somenteNovidades = novidadesVtr.filter((item) => {
+      const tipo = normalizarOperacional(item?.tipo)
+      const titulo = normalizarOperacional(item?.titulo)
+
+      return (
+        tipo !== 'MANUTENCAO' &&
+        !titulo.startsWith('MANUTENCAO INTERNA') &&
+        !titulo.startsWith('MANUTENCAO EXTERNA')
+      )
+    })
+
     if (perfilVtr === 'SVDD') {
-      return novidadesVtr.filter((item) =>
+      return somenteNovidades.filter((item) =>
         String(item.fluxo_novidade_status || '') === 'PENDENTE_SVDD'
       )
     }
 
     if (perfilVtr === 'P4') {
-      return novidadesVtr.filter((item) =>
+      return somenteNovidades.filter((item) =>
         String(item.fluxo_novidade_status || '') === 'PENDENTE_P4'
       )
     }
 
-    return novidadesVtr
+    return somenteNovidades
   }, [novidadesVtr, perfilVtr])
 
   async function abrirNovidadeVtr(item) {
@@ -3134,6 +3277,35 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
             </button>
           )}
 
+          {perfilVtr && (
+            <button
+              type="button"
+              className="central-operacional-card central-operacional-card-secundario"
+              onClick={() => {
+                setSelecionado({
+                  key: 'manutencoes-vtr',
+                  titulo: 'Manutenções de VTR',
+                  total: manutencoesVtr.length,
+                  itens: manutencoesVtr
+                })
+                setRegistroAberto(null)
+              }}
+            >
+              <div className="central-card-topo">
+                <span>Manutenções de VTR</span>
+                {manutencoesVtr.length > 0 && (
+                  <b className="central-card-alerta">Em andamento</b>
+                )}
+              </div>
+              <strong>{carregandoManutencoesVtr ? '…' : manutencoesVtr.length}</strong>
+              <small>
+                {manutencoesVtr.length > 0
+                  ? 'Acompanhar manutenções'
+                  : 'Sem manutenção aberta'}
+              </small>
+            </button>
+          )}
+
           {indicadoresExibidos.map((card) => (
             <button
               type="button"
@@ -3890,6 +4062,87 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                                       )
                                     )}
                                   </div>
+                                </div>
+                              )}
+                            </>
+                          ) : selecionado?.key === 'manutencoes-vtr' ? (
+                            <>
+                              <div>
+                                <span>Viatura</span>
+                                <strong>{item?.prefixo || 'Não informada'}</strong>
+                              </div>
+                              <div>
+                                <span>Situação da VTR</span>
+                                <strong>{String(item?.situacao_viatura || '—').replaceAll('_', ' ')}</strong>
+                              </div>
+                              <div>
+                                <span>Status da manutenção</span>
+                                <strong>{String(item?.manutencao_status || 'AGUARDANDO_PROVIDENCIA').replaceAll('_', ' ')}</strong>
+                              </div>
+                              <div>
+                                <span>Execução</span>
+                                <strong>{String(item?.manutencao_execucao || '—').replaceAll('_', ' ')}</strong>
+                              </div>
+                              <div>
+                                <span>Tipo</span>
+                                <strong>{String(item?.manutencao_tipo || 'AINDA NÃO CLASSIFICADA').replaceAll('_', ' ')}</strong>
+                              </div>
+                              <div>
+                                <span>Quilometragem</span>
+                                <strong>
+                                  {item?.quilometragem != null
+                                    ? `${Number(item.quilometragem).toLocaleString('pt-BR')} km`
+                                    : 'Não informada'}
+                                </strong>
+                              </div>
+                              <div className="central-registro-itens">
+                                <span>Providência atual</span>
+                                <strong>{item?.providencia_atual || 'Aguardando definição'}</strong>
+                              </div>
+                              {(item?.manutencao_oficina || item?.manutencao_local) && (
+                                <div className="central-registro-itens">
+                                  <span>Local / oficina</span>
+                                  <strong>{item?.manutencao_oficina || item?.manutencao_local}</strong>
+                                </div>
+                              )}
+                              {item?.manutencao_os && (
+                                <div className="central-registro-itens">
+                                  <span>OS / documento</span>
+                                  <strong>{item.manutencao_os}</strong>
+                                </div>
+                              )}
+                              {item?.manutencao_observacoes && (
+                                <div className="central-registro-itens">
+                                  <span>Observações da manutenção</span>
+                                  <strong>
+                                    {formatarObservacoesManutencaoVtr(
+                                      item.manutencao_observacoes
+                                    )}
+                                  </strong>
+                                </div>
+                              )}
+
+                              {item?.viatura_id && typeof onAbrirRivViatura === 'function' && (
+                                <div
+                                  className="central-registro-itens"
+                                  style={{
+                                    gridColumn: '1 / -1',
+                                    display: 'flex',
+                                    justifyContent: 'flex-end',
+                                    marginTop: 6
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    className="central-button central-button-primary"
+                                    onClick={() => {
+                                      setSelecionado(null)
+                                      setRegistroAberto(null)
+                                      onAbrirRivViatura(item.viatura_id)
+                                    }}
+                                  >
+                                    Abrir VTR / Ir para RIV
+                                  </button>
                                 </div>
                               )}
                             </>

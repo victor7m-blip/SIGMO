@@ -1223,6 +1223,7 @@ function PainelDashboard({
         const { data, error } = await supabase
           .from('sigmo_viaturas')
           .select('id, situacao')
+          .eq('ativo', true)
 
         if (error) throw error
         if (!ativo) return
@@ -4586,6 +4587,7 @@ useEffect(() => {
         <CentralOperacional
           user={user}
           onVoltar={voltarDashboard}
+          onAbrirRivViatura={abrirRivViatura}
         />
       )
     }

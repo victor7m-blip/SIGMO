@@ -72,6 +72,27 @@ function itemEhTorniquete(item) {
   )
 }
 
+function itemEhViatura(item) {
+  return (
+    normalizarTexto(
+      item?.tipo_registro
+    ) === 'VIATURA_DEVOLUCAO' ||
+    normalizarTexto(
+      item?.tipo
+    ) === 'VIATURA' ||
+    normalizarTexto(
+      item?.categoria
+    ) === 'VIATURA' ||
+    normalizarTexto(
+      item?.modulo
+    ) === 'VIATURA' ||
+    Boolean(
+      item?.viatura_id
+    )
+  )
+}
+
+
 function ehUuidValido(valor) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     .test(String(valor ?? '').trim())
@@ -519,6 +540,97 @@ async function listarDevolucoesMunicaoPendentesSvdd() {
 }
 
 
+async function listarDevolucoesViaturaPendentesSvdd() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_viaturas_listar_devolucoes_pendentes_svdd',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível consultar as devoluções pendentes de viaturas.'
+    )
+  }
+
+  return data || []
+}
+
+
+async function receberDevolucaoViaturaSvdd({
+  item,
+  providencia
+}) {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const cautelaId =
+    item?.cautela_mapa_forca_id ||
+    null
+
+  const viaturaId =
+    item?.viatura_id ||
+    item?.referencia_id ||
+    null
+
+  if (!cautelaId || !viaturaId) {
+    throw new Error(
+      'A devolução da viatura não possui identificação válida.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_viaturas_receber_devolucao_svdd',
+    {
+      p_token:
+        token,
+
+      p_cautela_mapa_forca_id:
+        cautelaId,
+
+      p_viatura_id:
+        viaturaId,
+
+      p_providencia:
+        providencia
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível confirmar o recebimento da viatura.'
+    )
+  }
+
+  return data
+}
+
+
 async function receberDevolucaoTorniqueteSvdd({
   item,
   observacao = ''
@@ -821,6 +933,194 @@ function montarItemDevolucaoMunicao(
 }
 
 
+function montarItemDevolucaoViatura(
+  devolucao
+) {
+  const viaturaId =
+    devolucao?.viatura_id ||
+    null
+
+  const prefixo =
+    devolucao?.prefixo ||
+    'VIATURA'
+
+  return {
+    id:
+      `VIATURA-DEVOLUCAO-${devolucao?.cautela_mapa_forca_id}-${viaturaId}`,
+
+    patrimonio_id:
+      null,
+
+    referencia_id:
+      viaturaId,
+
+    viatura_id:
+      viaturaId,
+
+    cautela_mapa_forca_id:
+      devolucao?.cautela_mapa_forca_id ||
+      null,
+
+    tipo_registro:
+      'VIATURA_DEVOLUCAO',
+
+    tipo:
+      'VIATURA',
+
+    categoria:
+      'VIATURA',
+
+    modulo:
+      'VIATURA',
+
+    patrimonio:
+      prefixo,
+
+    identificador:
+      prefixo,
+
+    descricao:
+      [
+        'VIATURA',
+        prefixo,
+        devolucao?.modelo,
+        devolucao?.placa
+      ]
+        .filter(Boolean)
+        .join(' • '),
+
+    prefixo:
+      devolucao?.prefixo ||
+      null,
+
+    placa:
+      devolucao?.placa ||
+      null,
+
+    modelo:
+      devolucao?.modelo ||
+      null,
+
+    quilometragem_atual:
+      Number(
+        devolucao?.quilometragem_atual ||
+        0
+      ),
+
+    local_origem:
+      'CAUTELA INDIVIDUAL',
+
+    local_atual:
+      'CAUTELA INDIVIDUAL',
+
+    destino_devolucao:
+      'COFRE DO SVDD',
+
+    status:
+      'AGUARDANDO RECEBIMENTO',
+
+    quantidade:
+      1,
+
+    policial_id:
+      devolucao?.policial_id ||
+      null,
+
+    policial_re:
+      devolucao?.policial_re ||
+      null,
+
+    policial_nome:
+      devolucao?.policial_nome ||
+      null,
+
+    solicitado_em:
+      devolucao?.solicitado_em ||
+      null,
+
+    riv_ocorrencia_id:
+      devolucao?.riv_ocorrencia_id ||
+      null,
+
+    riv_titulo:
+      devolucao?.riv_titulo ||
+      null,
+
+    riv_descricao:
+      devolucao?.riv_descricao ||
+      null,
+
+    riv_severidade:
+      devolucao?.riv_severidade ||
+      null,
+
+    riv_disponibilidade:
+      devolucao?.riv_disponibilidade ||
+      null,
+
+    preventivas_alerta:
+      Array.isArray(
+        devolucao?.preventivas_alerta
+      )
+        ? devolucao.preventivas_alerta
+        : []
+  }
+}
+
+
+function deduplicarViaturasRecebimento(
+  lista = []
+) {
+  const resultado = []
+  const posicaoPorViatura = new Map()
+
+  for (const item of lista || []) {
+    if (!itemEhViatura(item)) {
+      resultado.push(item)
+      continue
+    }
+
+    const viaturaId =
+      String(
+        item?.viatura_id ||
+        item?.referencia_id ||
+        item?.id ||
+        ''
+      )
+
+    if (!viaturaId) {
+      resultado.push(item)
+      continue
+    }
+
+    if (!posicaoPorViatura.has(viaturaId)) {
+      posicaoPorViatura.set(
+        viaturaId,
+        resultado.length
+      )
+      resultado.push(item)
+      continue
+    }
+
+    const indice =
+      posicaoPorViatura.get(viaturaId)
+
+    const atual = resultado[indice]
+
+    if (
+      atual?.tipo_registro !==
+        'VIATURA_DEVOLUCAO' &&
+      item?.tipo_registro ===
+        'VIATURA_DEVOLUCAO'
+    ) {
+      resultado[indice] = item
+    }
+  }
+
+  return resultado
+}
+
+
 export default function ReceberMaterial({
   user,
   onVoltar = null,
@@ -899,6 +1199,11 @@ export default function ReceberMaterial({
     setFotoAmpliada
   ] = useState(null)
 
+  const [
+    providenciasViatura,
+    setProvidenciasViatura
+  ] = useState({})
+
   const erroRef = useRef(null)
   const etapaIdentificacaoRef = useRef(null)
 
@@ -946,7 +1251,8 @@ export default function ReceberMaterial({
 
           const [
             devolucao,
-            devolucoesMunicaoTodas
+            devolucoesMunicaoTodas,
+            devolucoesViaturaTodas
           ] = await Promise.all([
             buscarDevolucaoPendentePolicial({
               policialId,
@@ -956,11 +1262,43 @@ export default function ReceberMaterial({
             destinoLocal ===
               'COFRE DO SVDD'
               ? listarDevolucoesMunicaoPendentesSvdd()
+              : Promise.resolve([]),
+
+            destinoLocal ===
+              'COFRE DO SVDD'
+              ? listarDevolucoesViaturaPendentesSvdd()
               : Promise.resolve([])
           ])
 
           const devolucoesMunicao =
             (devolucoesMunicaoTodas || [])
+              .filter(
+                (item) => {
+                  const mesmoId =
+                    policialId &&
+                    String(
+                      item?.policial_id ||
+                      ''
+                    ) ===
+                      String(
+                        policialId
+                      )
+
+                  const mesmoRe =
+                    somenteNumeros(
+                      item?.policial_re
+                    ) ===
+                    reEntregador
+
+                  return (
+                    mesmoId ||
+                    mesmoRe
+                  )
+                }
+              )
+
+          const devolucoesViatura =
+            (devolucoesViaturaTodas || [])
               .filter(
                 (item) => {
                   const mesmoId =
@@ -1212,20 +1550,36 @@ export default function ReceberMaterial({
             )
           }
 
+          for (
+            const devolucaoViatura of
+            devolucoesViatura
+          ) {
+            lista.push(
+              montarItemDevolucaoViatura(
+                devolucaoViatura
+              )
+            )
+          }
+
+          const listaSemViaturaDuplicada =
+            deduplicarViaturasRecebimento(
+              lista
+            )
+
           const [
             novidadesPorPatrimonio,
             novidadesPorMunicao
           ] = await Promise.all([
             buscarNovidadesPendentesPatrimonios(
-              lista
+              listaSemViaturaDuplicada
             ),
             buscarNovidadesPendentesMunicoes(
-              lista
+              listaSemViaturaDuplicada
             )
           ])
 
           const listaComNovidades =
-            lista.map(
+            listaSemViaturaDuplicada.map(
               (item) => ({
                 ...item,
 
@@ -1233,7 +1587,8 @@ export default function ReceberMaterial({
                   (
                     item?.tipo_registro ===
                       'MUNICAO_DEVOLUCAO' ||
-                    itemEhTorniquete(item)
+                    itemEhTorniquete(item) ||
+                    itemEhViatura(item)
                   )
                     ? null
                     : novidadesPorPatrimonio.get(
@@ -1335,6 +1690,9 @@ export default function ReceberMaterial({
             item.local_atual,
             item.numero_serie,
             item.serie,
+            item.prefixo,
+            item.placa,
+            item.modelo,
             item.status
           ].some((valor) =>
             normalizarTexto(
@@ -1857,6 +2215,7 @@ export default function ReceberMaterial({
     setPolicialEntregador(null)
     setPatrimonios([])
     setItensSelecionados([])
+    setProvidenciasViatura({})
     setDevolucaoPendente(null)
     setBusca('')
     setErro('')
@@ -1872,6 +2231,7 @@ export default function ReceberMaterial({
 
     setPatrimonios([])
     setItensSelecionados([])
+    setProvidenciasViatura({})
     setDevolucaoPendente(null)
     setBusca('')
     setErro('')
@@ -1963,6 +2323,20 @@ export default function ReceberMaterial({
 }
 
   function removerItem(itemId) {
+    setProvidenciasViatura(
+      (estadoAtual) => {
+        const proximo = {
+          ...estadoAtual
+        }
+
+        delete proximo[
+          String(itemId)
+        ]
+
+        return proximo
+      }
+    )
+
     setItensSelecionados(
       (listaAtual) =>
         listaAtual.filter(
@@ -2108,6 +2482,7 @@ function alterarQuantidade(id, valor) {
     setPolicialEntregador(null)
     setPatrimonios([])
     setItensSelecionados([])
+    setProvidenciasViatura({})
     setDevolucaoPendente(null)
     setBusca('')
     setDocumento('')
@@ -2200,6 +2575,47 @@ async function confirmarRecebimento() {
     }
   }
 
+  for (const item of itensSelecionados) {
+    if (!itemEhViatura(item)) {
+      continue
+    }
+
+    const chave =
+      String(
+        item?.id ||
+        item?.viatura_id ||
+        ''
+      )
+
+    const providencia =
+      normalizarTexto(
+        providenciasViatura[chave] ||
+        (
+          item?.riv_ocorrencia_id ||
+          (
+            Array.isArray(
+              item?.preventivas_alerta
+            ) &&
+            item.preventivas_alerta.length > 0
+          )
+            ? ''
+            : 'DISPONIVEL'
+        )
+      )
+
+    if (
+      ![
+        'DISPONIVEL',
+        'MANUTENCAO_INTERNA'
+      ].includes(providencia)
+    ) {
+      setErro(
+        `Defina a condição da viatura ${obterIdentificador(item)} antes de confirmar o recebimento.`
+      )
+      return
+    }
+  }
+
   recebimentoEmAndamento.current = true
 
   try {
@@ -2212,6 +2628,12 @@ async function confirmarRecebimento() {
         (item) =>
           item?.tipo_registro ===
           'MUNICAO_DEVOLUCAO'
+      )
+
+    const itensViatura =
+      itensSelecionados.filter(
+        (item) =>
+          itemEhViatura(item)
       )
 
     const itensTonfa =
@@ -2292,6 +2714,7 @@ async function confirmarRecebimento() {
           item?.tipo_registro !==
             'MUNICAO_DEVOLUCAO' &&
           !itemEhTorniquete(item) &&
+          !itemEhViatura(item) &&
           Boolean(
             localizarMovimentacaoHT(item)
           )
@@ -2312,6 +2735,7 @@ async function confirmarRecebimento() {
           item?.tipo_registro !==
             'MUNICAO_DEVOLUCAO' &&
           !itemEhTorniquete(item) &&
+          !itemEhViatura(item) &&
           !chavesHT.has(
             criarChaveItem(item)
           )
@@ -2696,6 +3120,47 @@ async function confirmarRecebimento() {
       })
     }
 
+    const resultadosViaturas = []
+
+    for (
+      const item of
+      itensViatura
+    ) {
+      const chave =
+        String(
+          item?.id ||
+          item?.viatura_id ||
+          ''
+        )
+
+      const providencia =
+        normalizarTexto(
+          providenciasViatura[chave] ||
+          (
+            item?.riv_ocorrencia_id ||
+            (
+              Array.isArray(
+                item?.preventivas_alerta
+              ) &&
+              item.preventivas_alerta.length > 0
+            )
+              ? ''
+              : 'DISPONIVEL'
+          )
+        )
+
+      const resultado =
+        await receberDevolucaoViaturaSvdd({
+          item,
+          providencia
+        })
+
+      resultadosViaturas.push({
+        item,
+        resultado
+      })
+    }
+
     let resultadoDevolucao = null
 
     if (devolucaoPendente?.id) {
@@ -2704,7 +3169,8 @@ async function confirmarRecebimento() {
           itensSelecionados
             .filter(
               (item) =>
-                !itemEhTorniquete(item)
+                !itemEhTorniquete(item) &&
+                !itemEhViatura(item)
             )
             .map((item) => item?.devolucao_item_id)
             .filter(Boolean)
@@ -2733,7 +3199,8 @@ async function confirmarRecebimento() {
       itensHT.length +
       itensTonfa.length +
       itensTorniquete.length +
-      itensMunicao.length
+      itensMunicao.length +
+      itensViatura.length
 
     const resultadoFinal = {
       total:
@@ -2755,12 +3222,16 @@ async function confirmarRecebimento() {
       total_municoes:
         itensMunicao.length,
 
+      total_viaturas:
+        itensViatura.length,
+
       resultados: [
         ...resultadosIndividuais,
         ...resultadosHT,
         ...resultadosTonfas,
         ...resultadosTorniquete,
-        ...resultadosMunicoes
+        ...resultadosMunicoes,
+        ...resultadosViaturas
       ],
 
       devolucao:
@@ -2800,6 +3271,7 @@ async function confirmarRecebimento() {
     setPolicialEntregador(null)
     setPatrimonios([])
     setItensSelecionados([])
+    setProvidenciasViatura({})
     setDevolucaoPendente(null)
     setBusca('')
     setDocumento('')
@@ -2978,7 +3450,9 @@ async function confirmarRecebimento() {
             patrimonios.some(
               (item) =>
                 item?.tipo_registro ===
-                'MUNICAO_DEVOLUCAO'
+                  'MUNICAO_DEVOLUCAO' ||
+                item?.tipo_registro ===
+                  'VIATURA_DEVOLUCAO'
             )) && (
             <div className="pagar-material-feedback pagar-material-feedback-success">
               DEVOLUÇÃO PENDENTE LOCALIZADA • somente os itens selecionados pelo usuário estão sendo exibidos.
@@ -3217,6 +3691,105 @@ async function confirmarRecebimento() {
     </div>
   )}
 
+  {item?.tipo_registro ===
+    'VIATURA_DEVOLUCAO' &&
+    item?.riv_ocorrencia_id && (
+      <div
+        style={{
+          marginTop: '8px',
+          padding: '8px 10px',
+          border: '1px solid #f0b429',
+          borderRadius: '8px',
+          background: '#fff8e6'
+        }}
+      >
+        <strong style={{ display: 'block' }}>
+          NOVIDADE ABERTA NO RIV
+        </strong>
+
+        <small style={{ display: 'block', marginTop: '3px' }}>
+          {normalizarTexto(
+            item?.riv_titulo ||
+            'AVARIA'
+          )}
+          {item?.riv_descricao
+            ? ` • ${normalizarTexto(
+                item.riv_descricao
+              )}`
+            : ''}
+          {item?.riv_severidade
+            ? ` • ${normalizarTexto(
+                item.riv_severidade
+              )}`
+            : ''}
+        </small>
+      </div>
+    )}
+
+  {item?.tipo_registro ===
+    'VIATURA_DEVOLUCAO' &&
+    Array.isArray(
+      item?.preventivas_alerta
+    ) &&
+    item.preventivas_alerta.length > 0 && (
+      <div
+        style={{
+          marginTop: '8px',
+          padding: '8px 10px',
+          border: '1px solid #f59e0b',
+          borderRadius: '8px',
+          background: '#fff7ed'
+        }}
+      >
+        <strong style={{ display: 'block' }}>
+          ALERTA DE MANUTENÇÃO PREVENTIVA
+        </strong>
+
+        {item.preventivas_alerta.map(
+          (preventiva, indice) => (
+            <small
+              key={`prev-${item.viatura_id}-${indice}`}
+              style={{
+                display: 'block',
+                marginTop: '3px'
+              }}
+            >
+              {normalizarTexto(
+                preventiva?.nome_item ||
+                preventiva?.item ||
+                'MANUTENÇÃO'
+              )}
+              {' • '}
+              {normalizarTexto(
+                preventiva?.nivel ||
+                'ATENÇÃO'
+              )}
+              {preventiva?.proxima_km != null
+                ? ` • ${Number(
+                    preventiva.proxima_km
+                  ).toLocaleString('pt-BR')} km`
+                : ''}
+              {preventiva?.km_restantes != null
+                ? ` • ${
+                    Number(
+                      preventiva.km_restantes
+                    ) >= 0
+                      ? `${Number(
+                          preventiva.km_restantes
+                        ).toLocaleString('pt-BR')} km restantes`
+                      : `${Math.abs(
+                          Number(
+                            preventiva.km_restantes
+                          )
+                        ).toLocaleString('pt-BR')} km vencida`
+                  }`
+                : ''}
+            </small>
+          )
+        )}
+      </div>
+    )}
+
   {(
     [
       'TONFA_QUANTIDADE',
@@ -3382,6 +3955,112 @@ async function confirmarRecebimento() {
                 removerNovidadeItem
               }
             />
+
+            {itensSelecionados
+              .filter(itemEhViatura)
+              .map((item) => {
+                const chave =
+                  String(
+                    item?.id ||
+                    item?.viatura_id ||
+                    ''
+                  )
+
+                const valor =
+                  providenciasViatura[chave] ??
+                  (
+                    item?.riv_ocorrencia_id ||
+                    (
+                      Array.isArray(
+                        item?.preventivas_alerta
+                      ) &&
+                      item.preventivas_alerta.length > 0
+                    )
+                      ? ''
+                      : 'DISPONIVEL'
+                  )
+
+                return (
+                  <div
+                    key={`providencia-vtr-${chave}`}
+                    className="pagar-material-feedback pagar-material-feedback-success"
+                    style={{
+                      marginBottom: '12px',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <strong>
+                      {item?.prefixo ||
+                        item?.patrimonio ||
+                        'VIATURA'}
+                    </strong>
+
+                    <div
+                      style={{
+                        marginTop: '8px'
+                      }}
+                    >
+                      <label>
+                        Condição após conferência do SVDD
+
+                        <select
+                          value={valor}
+                          onChange={(event) =>
+                            setProvidenciasViatura(
+                              (estadoAtual) => ({
+                                ...estadoAtual,
+                                [chave]:
+                                  event.target.value
+                              })
+                            )
+                          }
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            marginTop: '6px',
+                            minHeight: '40px'
+                          }}
+                        >
+                          {(item?.riv_ocorrencia_id ||
+                            (
+                              Array.isArray(
+                                item?.preventivas_alerta
+                              ) &&
+                              item.preventivas_alerta.length > 0
+                            )) && (
+                            <option value="">
+                              SELECIONE A PROVIDÊNCIA
+                            </option>
+                          )}
+
+                          <option value="DISPONIVEL">
+                            PERMANECE DISPONÍVEL
+                          </option>
+
+                          <option value="MANUTENCAO_INTERNA">
+                            ENCAMINHAR PARA MANUTENÇÃO INTERNA
+                          </option>
+                        </select>
+                      </label>
+                    </div>
+
+                    {item?.quilometragem_atual > 0 && (
+                      <small
+                        style={{
+                          display: 'block',
+                          marginTop: '8px'
+                        }}
+                      >
+                        KM registrado no RIV: {
+                          Number(
+                            item.quilometragem_atual
+                          ).toLocaleString('pt-BR')
+                        } km
+                      </small>
+                    )}
+                  </div>
+                )
+              })}
 
             <div className="pagar-material-actions">
               <button

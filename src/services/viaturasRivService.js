@@ -63,6 +63,27 @@ export function podeCorrigirQuilometragem(user) {
   ].includes(perfil)
 }
 
+export function podeGerenciarManutencaoRiv(user) {
+  const perfil = normalizar(
+    user?.perfil ||
+    user?.role ||
+    user?.tipo_usuario ||
+    user?.user_metadata?.perfil
+  )
+
+  return [
+    'ADMINISTRADOR',
+    'P4',
+    'SECAO P4',
+    'GESTOR PATRIMONIAL',
+    'SVDD',
+    'ENCARREGADO SVDD',
+    'ENCARREGADO DO SVDD',
+    'AUXILIAR SVDD',
+    'AUXILIAR DO SVDD'
+  ].includes(perfil)
+}
+
 function atorDoUsuario(user) {
   return {
     criado_por_id: user?.id || user?.user_id || user?.auth_id || null,
@@ -295,12 +316,143 @@ async function registrarHistoricoOcorrencia({ ocorrenciaId, acao, descricao, use
   return data
 }
 
+export async function atualizarAndamentoManutencaoRiv({
+  item,
+  providencia,
+  tipo,
+  oficina,
+  documento,
+  observacoes,
+  user
+}) {
+  if (!podeGerenciarManutencaoRiv(user)) {
+    throw new Error(
+      'Somente P4 ou SVDD pode atualizar o andamento da manutenção.'
+    )
+  }
+
+  if (!item?.id || item.tipo !== 'MANUTENCAO') {
+    throw new Error('Manutenção inválida.')
+  }
+
+  if (item.resolvida) {
+    throw new Error(
+      'A manutenção já está concluída. Reabra-a antes de alterar o andamento.'
+    )
+  }
+
+  const ator = atorDoUsuario(user)
+
+  const payload = {
+    providencia_atual:
+      String(providencia || '')
+        .trim()
+        .toUpperCase() ||
+      null,
+
+    manutencao_tipo:
+      String(tipo || '')
+        .trim()
+        .toUpperCase() ||
+      null,
+
+    manutencao_oficina:
+      String(oficina || '')
+        .trim()
+        .toUpperCase() ||
+      null,
+
+    manutencao_local:
+      String(oficina || '')
+        .trim()
+        .toUpperCase() ||
+      null,
+
+    manutencao_os:
+      String(documento || '')
+        .trim()
+        .toUpperCase() ||
+      null,
+
+    manutencao_observacoes:
+      String(observacoes || '')
+        .trim()
+        .toUpperCase() ||
+      null,
+
+    updated_at:
+      new Date().toISOString()
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(TABLE_OCORRENCIAS)
+    .update(payload)
+    .eq('id', item.id)
+    .eq('tipo', 'MANUTENCAO')
+    .eq('resolvida', false)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  await registrarHistoricoOcorrencia({
+    ocorrenciaId: item.id,
+    acao: 'ANDAMENTO_ATUALIZADO',
+    descricao: [
+      payload.providencia_atual
+        ? `PROVIDÊNCIA: ${payload.providencia_atual}`
+        : null,
+      payload.manutencao_tipo
+        ? `TIPO: ${payload.manutencao_tipo}`
+        : null,
+      payload.manutencao_oficina
+        ? `LOCAL/OFICINA: ${payload.manutencao_oficina}`
+        : null,
+      payload.manutencao_os
+        ? `OS/DOCUMENTO: ${payload.manutencao_os}`
+        : null,
+      payload.manutencao_observacoes
+        ? `OBSERVAÇÕES: ${payload.manutencao_observacoes}`
+        : null
+    ]
+      .filter(Boolean)
+      .join(' | '),
+    user: {
+      ...user,
+      nome:
+        ator.criado_por_nome
+    }
+  })
+
+  return data
+}
+
+
 export async function concluirManutencaoRiv(item, user) {
-  if (!item?.id || item.tipo !== 'MANUTENCAO') throw new Error('Manutenção inválida.')
-  if (item.resolvida) throw new Error('Esta manutenção já está concluída.')
+  if (!podeGerenciarManutencaoRiv(user)) {
+    throw new Error(
+      'Somente P4 ou SVDD pode concluir a manutenção.'
+    )
+  }
+
+  if (!item?.id || item.tipo !== 'MANUTENCAO') {
+    throw new Error('Manutenção inválida.')
+  }
+
+  if (item.resolvida) {
+    throw new Error('Esta manutenção já está concluída.')
+  }
+
+  if (!item?.viatura_id) {
+    throw new Error('Não foi possível identificar a viatura desta manutenção.')
+  }
 
   const agora = new Date().toISOString()
   const ator = atorDoUsuario(user)
+
   const { data, error } = await supabase
     .from(TABLE_OCORRENCIAS)
     .update({
@@ -308,12 +460,17 @@ export async function concluirManutencaoRiv(item, user) {
       resolvida_em: agora,
       encerrada_por_id: ator.criado_por_id,
       encerrada_por_nome: ator.criado_por_nome,
-      reaberta_em: null
+      reaberta_em: null,
+      manutencao_status: 'CONCLUIDA',
+      manutencao_concluida_em: agora,
+      updated_at: agora
     })
     .eq('id', item.id)
+    .eq('tipo', 'MANUTENCAO')
     .eq('resolvida', false)
     .select()
     .single()
+
   if (error) throw error
 
   await registrarHistoricoOcorrencia({
@@ -322,6 +479,73 @@ export async function concluirManutencaoRiv(item, user) {
     descricao: 'MANUTENÇÃO CONCLUÍDA E BLOQUEADA PARA ALTERAÇÕES.',
     user
   })
+
+  // A situação da VTR é controlada pelo fluxo.
+  // Só volta para DISPONIVEL quando não existir outro bloqueio aberto.
+  const [
+    { data: outrasManutencoes, error: manutencoesError },
+    { data: avariasAbertas, error: avariasError }
+  ] = await Promise.all([
+    supabase
+      .from(TABLE_OCORRENCIAS)
+      .select('id')
+      .eq('viatura_id', item.viatura_id)
+      .eq('tipo', 'MANUTENCAO')
+      .eq('resolvida', false)
+      .neq('id', item.id)
+      .limit(1),
+
+    supabase
+      .from(TABLE_OCORRENCIAS)
+      .select('id')
+      .eq('viatura_id', item.viatura_id)
+      .eq('tipo', 'AVARIA')
+      .eq('resolvida', false)
+      .limit(1)
+  ])
+
+  if (manutencoesError) throw manutencoesError
+  if (avariasError) throw avariasError
+
+  const possuiOutraManutencao =
+    Array.isArray(outrasManutencoes) &&
+    outrasManutencoes.length > 0
+
+  const possuiAvariaAberta =
+    Array.isArray(avariasAbertas) &&
+    avariasAbertas.length > 0
+
+  if (!possuiOutraManutencao && !possuiAvariaAberta) {
+    const { error: viaturaError } = await supabase
+      .from(TABLE_VIATURAS)
+      .update({
+        situacao: 'DISPONIVEL',
+        updated_at: agora
+      })
+      .eq('id', item.viatura_id)
+
+    if (viaturaError) throw viaturaError
+
+    await registrarHistoricoOcorrencia({
+      ocorrenciaId: item.id,
+      acao: 'VIATURA_LIBERADA',
+      descricao: 'MANUTENÇÃO CONCLUÍDA SEM OUTRAS PENDÊNCIAS. VTR RETORNOU AUTOMATICAMENTE PARA DISPONÍVEL.',
+      user
+    })
+  } else {
+    await registrarHistoricoOcorrencia({
+      ocorrenciaId: item.id,
+      acao: 'VIATURA_MANTIDA_INDISPONIVEL',
+      descricao: [
+        possuiOutraManutencao ? 'EXISTE OUTRA MANUTENÇÃO EM ABERTO.' : null,
+        possuiAvariaAberta ? 'EXISTE AVARIA EM ABERTO.' : null
+      ]
+        .filter(Boolean)
+        .join(' '),
+      user
+    })
+  }
+
   return data
 }
 
