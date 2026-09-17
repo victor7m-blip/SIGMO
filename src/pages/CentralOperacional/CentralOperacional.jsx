@@ -54,6 +54,46 @@ async function listarAprovacoesMunicoesPendentesCentral() {
   return data || []
 }
 
+
+async function listarAprovacoesTorniquetesPendentesCentral() {
+  const token = loadSessionToken()
+
+  if (!token) {
+    throw new Error('Sessão SIGMO inválida ou expirada.')
+  }
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_torniquetes_listar_aprovacoes_pendentes',
+    { p_token: token }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return Array.isArray(data) ? data : []
+}
+
+
+async function listarRecebimentosTorniquetesPendentesCentral() {
+  const token = loadSessionToken()
+
+  if (!token) {
+    throw new Error('Sessão SIGMO inválida ou expirada.')
+  }
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_torniquetes_listar_recebimentos_pendentes',
+    { p_token: token }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return Array.isArray(data) ? data : []
+}
+
 function dadosMovimentacaoPatrimonialCentral(item) {
   return item?.dados || item?.metadata?.dados_engine || {}
 }
@@ -969,6 +1009,586 @@ function incluirAprovacoesMunicoesCentral(
   }
 
   return { ...base, alertas }
+}
+
+
+function incluirAprovacoesTorniquetesCentral(
+  dadosOperacionais,
+  solicitacoes,
+  {
+    visaoP4 = false,
+    visaoSVDD = false,
+    visaoCmt = false
+  } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const normalizar = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  let lista =
+    Array.isArray(solicitacoes)
+      ? solicitacoes
+      : []
+
+  /*
+   * O Comandante acompanha todas as solicitações pendentes.
+   * P4 e SVDD acompanham apenas as transferências que saíram
+   * do próprio setor enquanto aguardam decisão do Cmt.
+   */
+  if (!visaoCmt) {
+    const origemEsperada =
+      visaoP4
+        ? 'P4'
+        : visaoSVDD
+          ? 'SVDD'
+          : ''
+
+    lista = lista.filter(
+      (item) =>
+        normalizar(
+          item?.origem_tipo ||
+          item?.origem
+        ) === origemEsperada
+    )
+  }
+
+  if (
+    !visaoP4 &&
+    !visaoSVDD &&
+    !visaoCmt
+  ) {
+    return base
+  }
+
+  const localizarCard = () =>
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizar(item?.titulo)
+
+      if (visaoCmt) {
+        return (
+          key === 'aprovacoes-comandante' ||
+          key === 'aprovacoes-cmt' ||
+          titulo === 'APROVACOES PENDENTES'
+        )
+      }
+
+      if (visaoSVDD) {
+        return (
+          key === 'aprovacoes' ||
+          key === 'aguardando-aprovacoes' ||
+          titulo === 'AGUARDANDO APROVACOES'
+        )
+      }
+
+      return (
+        key === 'manutencao-externa-acompanhamento' ||
+        key === 'aguardando-aprovacao-cmt' ||
+        titulo === 'AGUARDANDO APROVACAO DO CMT'
+      )
+    })
+
+  const indiceCard =
+    localizarCard()
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key:
+            visaoCmt
+              ? 'aprovacoes-comandante'
+              : visaoSVDD
+                ? 'aprovacoes'
+                : 'manutencao-externa-acompanhamento',
+
+          titulo:
+            visaoCmt
+              ? 'Aprovações pendentes'
+              : visaoSVDD
+                ? 'Aguardando aprovações'
+                : 'Aguardando aprovação do Cmt',
+
+          tom: 'atencao',
+          total: 0,
+          itens: []
+        }
+
+  const mapa =
+    new Map()
+
+  /*
+   * Preserva os itens de outros módulos já existentes no card,
+   * mas reconstrói Torniquete pelo estado atual retornado pela RPC
+   * para não deixar cópia antiga após aprovação.
+   */
+  for (const item of cardAtual?.itens || []) {
+    const ehTorniquete =
+      normalizar(
+        item?.origem_aprovacao
+      ) === 'TORNIQUETE_TRANSFERENCIA' ||
+      normalizar(
+        item?.tipo_solicitacao
+      ) === 'TRANSFERENCIA_TORNIQUETE'
+
+    if (ehTorniquete) {
+      continue
+    }
+
+    const id =
+      item?.transferencia_id ||
+      item?.movimentacao_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      `OUTRO-${String(id)}`,
+      item
+    )
+  }
+
+  for (const solicitacao of lista) {
+    const id =
+      solicitacao?.transferencia_id ||
+      solicitacao?.id
+
+    if (!id) {
+      continue
+    }
+
+    mapa.set(
+      `TORNIQUETE-${String(id)}`,
+      {
+        ...solicitacao,
+
+        id,
+        transferencia_id:
+          id,
+
+        origem_aprovacao:
+          'TORNIQUETE_TRANSFERENCIA',
+
+        tipo_solicitacao:
+          'TRANSFERENCIA_TORNIQUETE',
+
+        modulo:
+          'TORNIQUETE',
+
+        categoria:
+          'TORNIQUETE',
+
+        tipo:
+          'TRANSFERÊNCIA DE TORNIQUETE',
+
+        tipo_movimentacao:
+          'TRANSFERENCIA',
+
+        tipo_patrimonio:
+          'TORNIQUETE',
+
+        quantidade_total:
+          Number(
+            solicitacao?.quantidade_total ||
+            solicitacao?.quantidade ||
+            0
+          ),
+
+        quantidade:
+          Number(
+            solicitacao?.quantidade_total ||
+            solicitacao?.quantidade ||
+            0
+          ),
+
+        origem_tipo:
+          solicitacao?.origem_tipo ||
+          null,
+
+        origem_codigo:
+          solicitacao?.origem_tipo ||
+          null,
+
+        origem_nome:
+          solicitacao?.origem_nome ||
+          (
+            normalizar(
+              solicitacao?.origem_tipo
+            ) === 'SVDD'
+              ? 'COFRE DO SVDD'
+              : 'COFRE DO P4'
+          ),
+
+        destino_tipo:
+          solicitacao?.destino_tipo ||
+          null,
+
+        destino_codigo:
+          solicitacao?.destino_tipo ||
+          null,
+
+        destino_nome:
+          solicitacao?.destino_nome ||
+          (
+            normalizar(
+              solicitacao?.destino_tipo
+            ) === 'SVDD'
+              ? 'COFRE DO SVDD'
+              : 'COFRE DO P4'
+          ),
+
+        documento:
+          solicitacao?.documento ||
+          null,
+
+        observacoes:
+          solicitacao?.observacoes ||
+          null,
+
+        solicitada_por_nome:
+          solicitacao?.criado_por_nome ||
+          solicitacao?.solicitado_por_nome ||
+          null,
+
+        criado_por_nome:
+          solicitacao?.criado_por_nome ||
+          solicitacao?.solicitado_por_nome ||
+          null,
+
+        status:
+          'AGUARDANDO_APROVACAO',
+
+        status_movimentacao:
+          solicitacao?.status ||
+          'AGUARDANDO_APROVACAO_CMT',
+
+        created_at:
+          solicitacao?.criado_em ||
+          solicitacao?.solicitado_em ||
+          null,
+
+        solicitada_em:
+          solicitacao?.criado_em ||
+          solicitacao?.solicitado_em ||
+          null
+      }
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            a?.solicitada_em ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            b?.solicitada_em ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    total: itens.length,
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] =
+      cardNovo
+  } else {
+    alertas.push(
+      cardNovo
+    )
+  }
+
+  return {
+    ...base,
+    alertas
+  }
+}
+
+
+function incluirRecebimentosTorniquetesCentral(
+  dadosOperacionais,
+  recebimentos,
+  {
+    visaoP4 = false,
+    visaoSVDD = false
+  } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  if (!visaoP4 && !visaoSVDD) {
+    return base
+  }
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const normalizar = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const destinoEsperado =
+    visaoP4
+      ? 'P4'
+      : 'SVDD'
+
+  const lista =
+    (Array.isArray(recebimentos)
+      ? recebimentos
+      : []
+    ).filter(
+      (item) =>
+        normalizar(
+          item?.destino_tipo ||
+          item?.destino
+        ) === destinoEsperado
+    )
+
+  const indiceCard =
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizar(
+          item?.titulo
+        )
+
+      return (
+        key === 'transferencias' ||
+        titulo === 'TRANSFERENCIAS PENDENTES'
+      )
+    })
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key:
+            'transferencias',
+
+          titulo:
+            'Transferências pendentes',
+
+          tom:
+            'atencao',
+
+          total:
+            0,
+
+          itens:
+            []
+        }
+
+  const mapa =
+    new Map()
+
+  for (const item of cardAtual?.itens || []) {
+    const ehTorniquete =
+      normalizar(
+        item?.origem_aprovacao
+      ) === 'TORNIQUETE_RECEBIMENTO' ||
+      normalizar(
+        item?.tipo_solicitacao
+      ) === 'RECEBIMENTO_TORNIQUETE'
+
+    if (ehTorniquete) {
+      continue
+    }
+
+    const id =
+      item?.transferencia_id ||
+      item?.movimentacao_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      `OUTRO-${String(id)}`,
+      item
+    )
+  }
+
+  for (const recebimento of lista) {
+    const id =
+      recebimento?.transferencia_id ||
+      recebimento?.id
+
+    if (!id) {
+      continue
+    }
+
+    mapa.set(
+      `TORNIQUETE-${String(id)}`,
+      {
+        ...recebimento,
+
+        id,
+        transferencia_id:
+          id,
+
+        origem_aprovacao:
+          'TORNIQUETE_RECEBIMENTO',
+
+        tipo_solicitacao:
+          'RECEBIMENTO_TORNIQUETE',
+
+        modulo:
+          'TORNIQUETE',
+
+        categoria:
+          'TORNIQUETE',
+
+        tipo:
+          'TRANSFERÊNCIA DE TORNIQUETE',
+
+        tipo_movimentacao:
+          'TRANSFERENCIA',
+
+        tipo_patrimonio:
+          'TORNIQUETE',
+
+        quantidade_total:
+          Number(
+            recebimento?.quantidade_total ||
+            recebimento?.quantidade ||
+            0
+          ),
+
+        quantidade:
+          Number(
+            recebimento?.quantidade_total ||
+            recebimento?.quantidade ||
+            0
+          ),
+
+        origem_codigo:
+          recebimento?.origem_tipo ||
+          null,
+
+        origem_nome:
+          recebimento?.origem_nome ||
+          null,
+
+        destino_codigo:
+          recebimento?.destino_tipo ||
+          null,
+
+        destino_nome:
+          recebimento?.destino_nome ||
+          null,
+
+        status:
+          'AGUARDANDO_RECEBIMENTO',
+
+        status_movimentacao:
+          'AGUARDANDO_RECEBIMENTO',
+
+        created_at:
+          recebimento?.aprovado_em ||
+          recebimento?.solicitado_em ||
+          null,
+
+        solicitada_em:
+          recebimento?.solicitado_em ||
+          null,
+
+        aprovado_em:
+          recebimento?.aprovado_em ||
+          null,
+
+        aprovado_por_nome:
+          recebimento?.aprovado_por_nome ||
+          null
+      }
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            a?.aprovado_em ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            b?.aprovado_em ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    key:
+      'transferencias',
+    titulo:
+      'Transferências pendentes',
+    total:
+      itens.length,
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] =
+      cardNovo
+  } else {
+    alertas.push(
+      cardNovo
+    )
+  }
+
+  return {
+    ...base,
+    alertas
+  }
 }
 
 function normalizarTexto(valor) {
@@ -2366,6 +2986,15 @@ function CentralOperacional({ user }) {
       'ADMINISTRADOR'
     )
 
+
+  const visaoAprovacaoTorniquetes =
+    visaoP4 ||
+    visaoSVDD ||
+    ehCmtCia ||
+    perfilAtual.includes(
+      'ADMINISTRADOR'
+    )
+
   const [dashboard, setDashboard] = useState(null)
   const [operacional, setOperacional] = useState(null)
 
@@ -2423,7 +3052,9 @@ function CentralOperacional({ user }) {
         manutencoesExternas,
         aprovacoesMunicoes,
         aprovacoesManutencaoMunicoes,
-        descargasManutencaoMunicoes
+        descargasManutencaoMunicoes,
+        aprovacoesTorniquetes,
+        recebimentosTorniquetes
       ] = await Promise.all([
         carregarDashboardPatrimonial(),
         listarCategoriasOperacionais(),
@@ -2444,6 +3075,14 @@ function CentralOperacional({ user }) {
 
         visaoAprovacaoMunicoes
           ? listarDescargasManutencaoMunicoesPendentesCentral()
+          : Promise.resolve([]),
+
+        visaoAprovacaoTorniquetes
+          ? listarAprovacoesTorniquetesPendentesCentral()
+          : Promise.resolve([]),
+
+        (visaoP4 || visaoSVDD)
+          ? listarRecebimentosTorniquetesPendentesCentral()
           : Promise.resolve([])
       ])
 
@@ -2576,6 +3215,37 @@ function CentralOperacional({ user }) {
               visaoCmt:
                 ehCmtCia ||
                 perfilAtual.includes('ADMINISTRADOR')
+            }
+          )
+      }
+
+
+      if (visaoAprovacaoTorniquetes) {
+        dadosOperacionaisComAlertas =
+          incluirAprovacoesTorniquetesCentral(
+            dadosOperacionaisComAlertas,
+            aprovacoesTorniquetes,
+            {
+              visaoP4,
+              visaoSVDD,
+              visaoCmt:
+                ehCmtCia ||
+                perfilAtual.includes(
+                  'ADMINISTRADOR'
+                )
+            }
+          )
+      }
+
+
+      if (visaoP4 || visaoSVDD) {
+        dadosOperacionaisComAlertas =
+          incluirRecebimentosTorniquetesCentral(
+            dadosOperacionaisComAlertas,
+            recebimentosTorniquetes,
+            {
+              visaoP4,
+              visaoSVDD
             }
           )
       }
@@ -2729,6 +3399,7 @@ function CentralOperacional({ user }) {
     visaoP4,
     visaoColeteCentral,
     visaoAprovacaoMunicoes,
+    visaoAprovacaoTorniquetes,
     ehCmtCia,
     perfilAtual
   ])

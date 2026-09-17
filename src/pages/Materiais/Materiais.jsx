@@ -107,6 +107,17 @@ const categorias = [
   },
 
   {
+    id: 'torniquete',
+    rota: 'torniquete',
+    icone: '✚',
+    titulo: 'Torniquete',
+    descricao:
+      'Controle o estoque de torniquetes por quantidade, localização e situação operacional.',
+    status: 'disponivel',
+    destaque: 'vermelho'
+  },
+
+  {
     id: 'outros',
     icone: '📦',
     titulo: 'Outros Materiais',

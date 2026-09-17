@@ -302,17 +302,24 @@ function ArmaResumoCard({ titulo, valor, descricao, detalhes = [], destaque = 'p
   )
 }
 
-function GraficoRoscaArmas({ resumo }) {
- const fatias = [
-  { label: 'Depósito do P4', valor: resumo.p4.total, cor: '#2563eb' },
-  { label: 'Cofre do SVDD', valor: resumo.svdd.total, cor: '#7c3aed' },
-  { label: 'Carga permanente', valor: resumo.carga.total, cor: '#16a34a' },
-  { label: 'Cautelas ativas', valor: resumo.cautelas.total, cor: '#eab308' },
-  { label: 'Manutenção', valor: resumo.manutencao.total, cor: '#f97316' },
-  { label: 'Não localizadas', valor: resumo.naoLocalizadas.total, cor: '#dc2626' },
-  { label: 'Apreendidas', valor: resumo.apreendidas.total, cor: '#8b5cf6' },
-  { label: 'Recolhidas', valor: resumo.recolhidas.total, cor: '#64748b' }
-]
+function GraficoRoscaArmas({ resumo, ehPerfilSVDD = false }) {
+ const fatias = ehPerfilSVDD
+   ? [
+       { label: 'Cofre do SVDD', valor: resumo.svdd.total, cor: '#7c3aed' },
+       { label: 'Cautelas ativas', valor: resumo.cautelas.total, cor: '#eab308' },
+       { label: 'Manutenção', valor: resumo.manutencao.total, cor: '#f97316' },
+       { label: 'Não localizadas', valor: resumo.naoLocalizadas.total, cor: '#dc2626' }
+     ]
+   : [
+       { label: 'Depósito do P4', valor: resumo.p4.total, cor: '#2563eb' },
+       { label: 'Cofre do SVDD', valor: resumo.svdd.total, cor: '#7c3aed' },
+       { label: 'Carga permanente', valor: resumo.carga.total, cor: '#16a34a' },
+       { label: 'Cautelas ativas', valor: resumo.cautelas.total, cor: '#eab308' },
+       { label: 'Manutenção', valor: resumo.manutencao.total, cor: '#f97316' },
+       { label: 'Não localizadas', valor: resumo.naoLocalizadas.total, cor: '#dc2626' },
+       { label: 'Apreendidas', valor: resumo.apreendidas.total, cor: '#8b5cf6' },
+       { label: 'Recolhidas', valor: resumo.recolhidas.total, cor: '#64748b' }
+     ]
 
   let acumulado = 0
   const partes = fatias.map((item) => {
@@ -359,17 +366,24 @@ function GraficoRoscaArmas({ resumo }) {
   )
 }
 
-function GraficoBarrasArmas({ resumo }) {
-  const categorias = [
-  { label: 'Depósito do P4', valor: resumo.p4.total },
-  { label: 'Cofre do SVDD', valor: resumo.svdd.total },
-  { label: 'Carga permanente', valor: resumo.carga.total },
-  { label: 'Cautelas', valor: resumo.cautelas.total },
-  { label: 'Manutenção', valor: resumo.manutencao.total },
-  { label: 'Não localizadas', valor: resumo.naoLocalizadas.total },
-  { label: 'Apreendidas', valor: resumo.apreendidas.total },
-  { label: 'Recolhidas', valor: resumo.recolhidas.total }
-]
+function GraficoBarrasArmas({ resumo, ehPerfilSVDD = false }) {
+  const categorias = ehPerfilSVDD
+    ? [
+        { label: 'Cofre do SVDD', valor: resumo.svdd.total },
+        { label: 'Cautelas', valor: resumo.cautelas.total },
+        { label: 'Manutenção', valor: resumo.manutencao.total },
+        { label: 'Não localizadas', valor: resumo.naoLocalizadas.total }
+      ]
+    : [
+        { label: 'Depósito do P4', valor: resumo.p4.total },
+        { label: 'Cofre do SVDD', valor: resumo.svdd.total },
+        { label: 'Carga permanente', valor: resumo.carga.total },
+        { label: 'Cautelas', valor: resumo.cautelas.total },
+        { label: 'Manutenção', valor: resumo.manutencao.total },
+        { label: 'Não localizadas', valor: resumo.naoLocalizadas.total },
+        { label: 'Apreendidas', valor: resumo.apreendidas.total },
+        { label: 'Recolhidas', valor: resumo.recolhidas.total }
+      ]
 
   const maior = Math.max(1, ...categorias.map((item) => item.valor))
 
@@ -1707,31 +1721,34 @@ setFotoSelecionadaVisualizacao(
             destaque="laranja"
             onClick={resumo.manutencao.total ? () => abrirPainelResumo('MANUTENCAO', 'Armas em manutenção', 'Armamento temporariamente indisponível para reparo.') : undefined}
             onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('MANUTENCAO', 'Manutenção', 'Armamento temporariamente indisponível para reparo.', detalhe)}
-          />
-          <ArmaResumoCard
-            titulo="Recolhidas"
-            detalhes={detalhesEspecies(resumo.recolhidas)}
-            descricao="Recolhidas e indisponíveis"
-            destaque="azul"
-            onClick={resumo.recolhidas.total ? () => abrirPainelResumo('RECOLHIDAS', 'Armas recolhidas', 'Armamento recolhido e indisponível para utilização.') : undefined}
-            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('RECOLHIDAS', 'Recolhidas', 'Armamento recolhido e indisponível para utilização.', detalhe)}
-          />
-          <ArmaResumoCard
-            titulo="Apreendidas"
-            detalhes={detalhesEspecies(resumo.apreendidas)}
-            descricao="Registradas como apreendidas"
-            destaque="roxo"
-            onClick={resumo.apreendidas.total ? () => abrirPainelResumo('APREENDIDAS', 'Armas apreendidas', 'Armamento registrado como apreendido.') : undefined}
-            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('APREENDIDAS', 'Apreendidas', 'Armamento registrado como apreendido.', detalhe)}
-          />
-          <ArmaResumoCard
-            titulo="Baixadas"
-            detalhes={detalhesEspecies(resumo.baixadas)}
-            descricao="Controle patrimonial encerrado"
-            destaque="vermelho"
-            onClick={resumo.baixadas.total ? () => abrirPainelResumo('BAIXADAS', 'Armas baixadas', 'Armamento com controle patrimonial encerrado.') : undefined}
-            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('BAIXADAS', 'Baixadas', 'Armamento com controle patrimonial encerrado.', detalhe)}
-          />
+          />          {!ehPerfilSVDD && (
+            <ArmaResumoCard
+              titulo="Recolhidas"
+              detalhes={detalhesEspecies(resumo.recolhidas)}
+              descricao="Recolhidas e indisponíveis"
+              destaque="azul"
+              onClick={resumo.recolhidas.total ? () => abrirPainelResumo('RECOLHIDAS', 'Armas recolhidas', 'Armamento recolhido e indisponível para utilização.') : undefined}
+              onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('RECOLHIDAS', 'Recolhidas', 'Armamento recolhido e indisponível para utilização.', detalhe)}
+            />
+          )}          {!ehPerfilSVDD && (
+            <ArmaResumoCard
+              titulo="Apreendidas"
+              detalhes={detalhesEspecies(resumo.apreendidas)}
+              descricao="Registradas como apreendidas"
+              destaque="roxo"
+              onClick={resumo.apreendidas.total ? () => abrirPainelResumo('APREENDIDAS', 'Armas apreendidas', 'Armamento registrado como apreendido.') : undefined}
+              onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('APREENDIDAS', 'Apreendidas', 'Armamento registrado como apreendido.', detalhe)}
+            />
+          )}          {!ehPerfilSVDD && (
+            <ArmaResumoCard
+              titulo="Baixadas"
+              detalhes={detalhesEspecies(resumo.baixadas)}
+              descricao="Controle patrimonial encerrado"
+              destaque="vermelho"
+              onClick={resumo.baixadas.total ? () => abrirPainelResumo('BAIXADAS', 'Armas baixadas', 'Armamento com controle patrimonial encerrado.') : undefined}
+              onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('BAIXADAS', 'Baixadas', 'Armamento com controle patrimonial encerrado.', detalhe)}
+            />
+          )}
           <ArmaResumoCard
             titulo="Não localizadas"
             detalhes={detalhesEspecies(resumo.naoLocalizadas)}
@@ -1739,14 +1756,15 @@ setFotoSelecionadaVisualizacao(
             destaque="vermelho"
             onClick={resumo.naoLocalizadas.total ? () => abrirPainelResumo('NAO_LOCALIZADAS', 'Armas não localizadas', 'Armamento com localização pendente de regularização.') : undefined}
             onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('NAO_LOCALIZADAS', 'Não localizadas', 'Armamento com localização pendente de regularização.', detalhe)}
-          />
-          <ArmaResumoCard
-            titulo="Outras situações"
-            detalhes={detalhesEspecies(resumo.outros)}
-            descricao="Demais classificações patrimoniais"
-            onClick={resumo.outros.total ? () => abrirPainelResumo('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.') : undefined}
-            onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.', detalhe)}
-          />
+          />          {!ehPerfilSVDD && (
+            <ArmaResumoCard
+              titulo="Outras situações"
+              detalhes={detalhesEspecies(resumo.outros)}
+              descricao="Demais classificações patrimoniais"
+              onClick={resumo.outros.total ? () => abrirPainelResumo('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.') : undefined}
+              onDetalheClick={(detalhe) => abrirPainelResumoPorEspecie('OUTROS', 'Outras situações', 'Armas em situações não contempladas nos demais grupos.', detalhe)}
+            />
+          )}
           <ArmaResumoCard
   titulo="Armas particulares"
   detalhes={detalhesEspecies(resumo.particulares)}
@@ -1783,8 +1801,8 @@ setFotoSelecionadaVisualizacao(
         </div>
 
         <div className="armas-graficos-verticais">
-          <GraficoRoscaArmas resumo={resumo} />
-          <GraficoBarrasArmas resumo={resumo} />
+          <GraficoRoscaArmas resumo={resumo} ehPerfilSVDD={ehPerfilSVDD} />
+          <GraficoBarrasArmas resumo={resumo} ehPerfilSVDD={ehPerfilSVDD} />
         </div>
       </section>
 

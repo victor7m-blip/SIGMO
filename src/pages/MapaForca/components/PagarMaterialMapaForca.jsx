@@ -37,7 +37,8 @@ const TIPOS_MATERIAL = [
   { id: 'COP', label: 'COP' },
   { id: 'MUNICAO', label: 'Munição' },
   { id: 'TONFA', label: 'Tonfa' },
-  { id: 'CASSETETE', label: 'Cassetete' }
+  { id: 'CASSETETE', label: 'Cassetete' },
+  { id: 'VIATURA', label: 'Viatura' }
 ]
 
 function normalizarTexto(valor) {
@@ -159,6 +160,24 @@ function ehCOP(item) {
   )
 }
 
+function ehViatura(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tabela_origem
+  ].map(normalizarTexto)
+
+  return (
+    Boolean(item?.viatura_id) ||
+    campos.includes('VIATURA') ||
+    campos.includes('VIATURAS') ||
+    campos.includes('SIGMO_VIATURAS')
+  )
+}
+
+
 function ehMunicao(item) {
   const campos = [
     item?.modulo,
@@ -227,12 +246,28 @@ function correspondeTipo(item, tipo) {
       return ehTonfa(item)
     case 'CASSETETE':
       return ehCassetete(item)
+    case 'VIATURA':
+      return ehViatura(item)
     default:
       return false
   }
 }
 
 function rotuloItem(item) {
+  if (ehViatura(item)) {
+    return [
+      'VIATURA',
+      item?.prefixo,
+      item?.modelo,
+      item?.placa
+    ]
+      .map((valor) =>
+        String(valor ?? '').trim()
+      )
+      .filter(Boolean)
+      .join(' • ')
+  }
+
   if (ehMunicao(item)) {
     return (
       item?.descricao ||
@@ -450,6 +485,150 @@ function formatarHora(valor) {
 
 
 
+function funcaoRecebeViaturaAutomaticamente(funcao) {
+  const funcaoNormalizada =
+    normalizarTexto(funcao)
+
+  return (
+    funcaoNormalizada === 'MOTORISTA' ||
+    funcaoNormalizada.includes('MOTORISTA / AUXILIAR') ||
+    funcaoNormalizada.includes('MOTORISTA/AUXILIAR')
+  )
+}
+
+
+function montarItemViaturaDaUnidade(unidade) {
+  const viatura =
+    unidade?.viatura
+
+  if (!viatura?.id) {
+    return null
+  }
+
+  return {
+    ...viatura,
+    id: viatura.id,
+    viatura_id: viatura.id,
+    referencia_id: viatura.id,
+    tabela_origem: 'sigmo_viaturas',
+    modulo: 'VIATURA',
+    categoria: 'VIATURA',
+    tipo: 'VIATURA',
+    descricao:
+      `VIATURA ${viatura.prefixo || ''}`.trim(),
+    patrimonio:
+      viatura.prefixo || null,
+    disponivel: true,
+    controla_quantidade: false,
+    quantidade: 1,
+    item_especial_mapa_forca: true
+  }
+}
+
+
+function adicionarViaturaDaUnidade(lista, unidade) {
+  const base =
+    Array.isArray(lista)
+      ? lista
+      : []
+
+  const viatura =
+    montarItemViaturaDaUnidade(
+      unidade
+    )
+
+  if (!viatura) {
+    return base
+  }
+
+  const jaExiste =
+    base.some(
+      (item) =>
+        ehViatura(item) &&
+        String(
+          item?.viatura_id ||
+          item?.referencia_id ||
+          item?.id ||
+          ''
+        ) ===
+        String(viatura.id)
+    )
+
+  return jaExiste
+    ? base
+    : [...base, viatura]
+}
+
+
+function garantirViaturaDaUsNoKit({
+  itens = [],
+  unidade,
+  funcao,
+  itensJaPagos = []
+}) {
+  const base =
+    Array.isArray(itens)
+      ? itens
+      : []
+
+  if (!funcaoRecebeViaturaAutomaticamente(funcao)) {
+    return base
+  }
+
+  const viatura =
+    montarItemViaturaDaUnidade(unidade)
+
+  if (!viatura) {
+    return base
+  }
+
+  const jaPaga =
+    (Array.isArray(itensJaPagos)
+      ? itensJaPagos
+      : []
+    ).some(
+      (pago) =>
+        mesmoItemJaPago(
+          viatura,
+          pago
+        )
+    )
+
+  if (jaPaga) {
+    return base.filter(
+      (item) =>
+        !(
+          ehViatura(item) &&
+          mesmoItemJaPago(
+            item,
+            viatura
+          )
+        )
+    )
+  }
+
+  const jaNoKit =
+    base.some(
+      (item) =>
+        ehViatura(item) &&
+        mesmoItemJaPago(
+          item,
+          viatura
+        )
+    )
+
+  return jaNoKit
+    ? base
+    : [
+        ...base,
+        {
+          ...viatura,
+          vinculada_automaticamente_us: true
+        }
+      ]
+}
+
+
 function normalizarComparacao(valor) {
   return normalizarTexto(valor)
     .replace(/\s+/g, ' ')
@@ -601,6 +780,33 @@ function mesmoItemJaPago(
 ) {
   if (!atual || !pago) {
     return false
+  }
+
+  if (
+    ehViatura(atual) &&
+    ehViatura(pago)
+  ) {
+    const atualId =
+      String(
+        atual?.viatura_id ||
+        atual?.referencia_id ||
+        atual?.id ||
+        ''
+      )
+
+    const pagoId =
+      String(
+        pago?.viatura_id ||
+        pago?.referencia_id ||
+        pago?.id ||
+        ''
+      )
+
+    return Boolean(
+      atualId &&
+      pagoId &&
+      atualId === pagoId
+    )
   }
 
   if (
@@ -913,6 +1119,20 @@ function chaveReservaMaterial(item) {
     return ''
   }
 
+  if (ehViatura(item)) {
+    const viaturaId =
+      String(
+        item?.viatura_id ||
+        item?.referencia_id ||
+        item?.id ||
+        ''
+      ).trim()
+
+    return viaturaId
+      ? `VIATURA:${viaturaId}`
+      : ''
+  }
+
   if (ehMunicao(item)) {
     const municaoId =
       String(
@@ -1157,6 +1377,27 @@ function resumirItemPago(item) {
     municao_id:
       item?.municao_id ||
       null,
+
+    viatura_id:
+      item?.viatura_id ||
+      (ehViatura(item)
+        ? item?.referencia_id || item?.id || null
+        : null),
+
+    prefixo:
+      ehViatura(item)
+        ? item?.prefixo || null
+        : null,
+
+    placa:
+      ehViatura(item)
+        ? item?.placa || null
+        : null,
+
+    modelo:
+      ehViatura(item)
+        ? item?.modelo || null
+        : null,
 
     tabela_origem:
       item?.tabela_origem ||
@@ -1648,14 +1889,17 @@ export default function PagarMaterialMapaForca({
           ])
 
         const listaAtualizada =
-          aplicarReservasLocaisMapa(
-            aplicarDisponibilidadeMunicoes(
-              Array.isArray(lista)
-                ? lista
-                : [],
-              disponibilidadesMunicoes
+          adicionarViaturaDaUnidade(
+            aplicarReservasLocaisMapa(
+              aplicarDisponibilidadeMunicoes(
+                Array.isArray(lista)
+                  ? lista
+                  : [],
+                disponibilidadesMunicoes
+              ),
+              itensReservadosMapa
             ),
-            itensReservadosMapa
+            unidade
           )
 
         let cautelasDoContexto =
@@ -1690,11 +1934,25 @@ export default function PagarMaterialMapaForca({
           )
 
           setItensSelecionados(
-            Array.isArray(
-              itensPreparados
-            )
-              ? itensPreparados
-              : []
+            garantirViaturaDaUsNoKit({
+              itens:
+                Array.isArray(
+                  itensPreparados
+                )
+                  ? itensPreparados
+                  : [],
+              unidade,
+              funcao,
+              itensJaPagos:
+                cautelasDoContexto.flatMap(
+                  (cautela) =>
+                    Array.isArray(
+                      cautela?.resumo_itens
+                    )
+                      ? cautela.resumo_itens
+                      : []
+                )
+            })
           )
         }
       } catch (error) {
@@ -1801,7 +2059,9 @@ export default function PagarMaterialMapaForca({
             item?.calibre,
             item?.marca,
             item?.modelo,
-            item?.numero_serie
+            item?.numero_serie,
+            item?.prefixo,
+            item?.placa
           ].some(
             (valor) =>
               normalizarTexto(
@@ -2058,14 +2318,17 @@ export default function PagarMaterialMapaForca({
       ])
 
     setMateriais(
-      aplicarReservasLocaisMapa(
-        aplicarDisponibilidadeMunicoes(
-          Array.isArray(lista)
-            ? lista
-            : [],
-          disponibilidadesMunicoes
+      adicionarViaturaDaUnidade(
+        aplicarReservasLocaisMapa(
+          aplicarDisponibilidadeMunicoes(
+            Array.isArray(lista)
+              ? lista
+              : [],
+            disponibilidadesMunicoes
+          ),
+          itensReservadosMapa
         ),
-        itensReservadosMapa
+        unidade
       )
     )
   }
@@ -2122,14 +2385,17 @@ export default function PagarMaterialMapaForca({
       }
 
       const materiaisAtuais =
-        aplicarReservasLocaisMapa(
-          aplicarDisponibilidadeMunicoes(
-            Array.isArray(listaAtual)
-              ? listaAtual
-              : [],
-            disponibilidadesMunicoes
+        adicionarViaturaDaUnidade(
+          aplicarReservasLocaisMapa(
+            aplicarDisponibilidadeMunicoes(
+              Array.isArray(listaAtual)
+                ? listaAtual
+                : [],
+              disponibilidadesMunicoes
+            ),
+            itensReservadosMapa
           ),
-          itensReservadosMapa
+          unidade
         )
 
       setMateriais(
@@ -2232,10 +2498,18 @@ export default function PagarMaterialMapaForca({
   }
 
   async function confirmar(itensForcados = null) {
-    const itensOperacao =
+    const itensBase =
       Array.isArray(itensForcados)
         ? itensForcados
         : itensSelecionados
+
+    const itensOperacao =
+      garantirViaturaDaUsNoKit({
+        itens: itensBase,
+        unidade,
+        funcao,
+        itensJaPagos
+      })
 
     if (!policial?.id) {
       setErro(
@@ -3147,7 +3421,13 @@ export default function PagarMaterialMapaForca({
                             >
                               {item?.controla_quantidade
                                 ? `${item?.quantidade_disponivel || 0} UN disponível(is)`
-                                : item?.patrimonio || '1 UN'}
+                                : ehViatura(item)
+                                  ? [
+                                      item?.prefixo,
+                                      item?.placa,
+                                      item?.modelo
+                                    ].filter(Boolean).join(' • ') || 'VIATURA DA US'
+                                  : item?.patrimonio || '1 UN'}
                             </small>
                           </span>
 
@@ -3421,6 +3701,12 @@ export default function PagarMaterialMapaForca({
                             </span>
                           )}
 
+                          {!(
+                            ehViatura(item) &&
+                            funcaoRecebeViaturaAutomaticamente(
+                              funcao
+                            )
+                          ) && (
                           <button
                             type="button"
                             onClick={() =>
@@ -3455,6 +3741,30 @@ export default function PagarMaterialMapaForca({
                               ? 'Não pagar'
                               : 'Remover'}
                           </button>
+                          )}
+
+                          {ehViatura(item) &&
+                            funcaoRecebeViaturaAutomaticamente(
+                              funcao
+                            ) && (
+                            <span
+                              style={{
+                                marginLeft: 'auto',
+                                minHeight: '32px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '5px 9px',
+                                border: '1px solid rgba(52,211,153,.28)',
+                                borderRadius: '8px',
+                                background: 'rgba(16,185,129,.07)',
+                                color: '#6ee7b7',
+                                fontSize: '11px',
+                                fontWeight: 800
+                              }}
+                            >
+                              VINCULADA À US
+                            </span>
+                          )}
                         </div>
                       </div>
                     )

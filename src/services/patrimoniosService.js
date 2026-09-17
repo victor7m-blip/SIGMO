@@ -12,6 +12,10 @@ function ehCOP(tipo) {
   return texto(tipo).toUpperCase() === 'COP'
 }
 
+function ehTorniquete(tipo) {
+  return texto(tipo).toUpperCase() === 'TORNIQUETE'
+}
+
 function numeroCOP(dados = {}) {
   const numero = texto(dados.numero)
 
@@ -190,6 +194,29 @@ export async function criarOuAtualizarPatrimonio({
   if (erroBusca) throw erroBusca
 
   if (existente?.id) {
+    if (ehTorniquete(tipo)) {
+      const {
+        error
+      } = await supabase
+        .from(TABLE)
+        .update(payload)
+        .eq('id', existente.id)
+
+      if (error) throw error
+
+      /*
+       * Torniquete é patrimônio quantitativo agregado.
+       * Não dependemos da representação retornada pelo PostgREST após UPDATE,
+       * evitando PGRST116 ("Cannot coerce the result to a single JSON object")
+       * depois da movimentação segura por RPC.
+       */
+      return {
+        id:
+          existente.id,
+        ...payload
+      }
+    }
+
     const {
       data,
       error

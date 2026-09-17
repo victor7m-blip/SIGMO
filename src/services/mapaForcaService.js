@@ -710,6 +710,157 @@ function cautelaRecebidaContinuaAtiva({
     : null
 }
 
+
+function itemResumoEhViatura(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tabela_origem
+  ]
+    .map(normalizarStatusCautela)
+    .filter(Boolean)
+
+  return Boolean(
+    item?.viatura_id ||
+    campos.includes('VIATURA') ||
+    campos.includes('VIATURAS') ||
+    campos.includes('SIGMO_VIATURAS')
+  )
+}
+
+function chaveResumoCautela(item) {
+  if (!item) {
+    return ''
+  }
+
+  if (itemResumoEhMunicao(item)) {
+    return `MUNICAO:${
+      item?.municao_id ||
+      item?.referencia_id ||
+      item?.id ||
+      ''
+    }`
+  }
+
+  if (itemResumoEhViatura(item)) {
+    return `VIATURA:${
+      item?.viatura_id ||
+      item?.referencia_id ||
+      item?.id ||
+      ''
+    }`
+  }
+
+  if (item?.patrimonio_id) {
+    return `PATRIMONIO:${item.patrimonio_id}`
+  }
+
+  if (item?.referencia_id) {
+    return `REFERENCIA:${item.referencia_id}`
+  }
+
+  return `ITEM:${item?.tabela_origem || ''}:${item?.id || ''}`
+}
+
+function mesclarResumoCautela(
+  anterior = [],
+  novo = []
+) {
+  const mapa = new Map()
+
+  for (const item of [
+    ...(Array.isArray(anterior) ? anterior : []),
+    ...(Array.isArray(novo) ? novo : [])
+  ]) {
+    const chave =
+      chaveResumoCautela(item)
+
+    if (!chave) {
+      continue
+    }
+
+    mapa.set(
+      chave,
+      {
+        ...(mapa.get(chave) || {}),
+        ...item,
+        quantidade:
+          Math.max(
+            1,
+            Number(
+              item?.quantidade ||
+              mapa.get(chave)?.quantidade ||
+              1
+            ) || 1
+          )
+      }
+    )
+  }
+
+  return Array.from(
+    mapa.values()
+  )
+}
+
+async function localizarVinculoExistenteParaComplemento({
+  mapaId,
+  usId,
+  policialId
+}) {
+  if (!mapaId || !policialId) {
+    return null
+  }
+
+  let consulta =
+    supabase
+      .from(TABLE_CAUTELAS)
+      .select(
+        'id, mapa_id, us_id, policial_id, movimentacao_principal_id, transferencias_municao_ids, resumo_itens, quantidade_itens, created_at'
+      )
+      .eq('mapa_id', mapaId)
+      .eq('policial_id', policialId)
+      .order('created_at', {
+        ascending: false
+      })
+      .limit(10)
+
+  if (
+    usId &&
+    !String(usId).startsWith('nova-')
+  ) {
+    consulta =
+      consulta.eq('us_id', usId)
+  }
+
+  const {
+    data,
+    error
+  } = await consulta
+
+  if (error) {
+    throw error
+  }
+
+  return (
+    (data || []).find(
+      (item) =>
+        Boolean(
+          item?.movimentacao_principal_id
+        ) ||
+        (
+          Array.isArray(
+            item?.transferencias_municao_ids
+          ) &&
+          item.transferencias_municao_ids
+            .length > 0
+        )
+    ) ||
+    null
+  )
+}
+
 export async function registrarCautelaMapaForca({
   mapaId,
   usId = null,
@@ -733,7 +884,11 @@ export async function registrarCautelaMapaForca({
     )
   }
 
-  const idsMunicao =
+  let movimentacaoPrincipalIdEfetiva =
+    movimentacaoPrincipalId ||
+    null
+
+  let idsMunicao =
     Array.from(
       new Set(
         (transferenciasMunicaoIds || [])
@@ -744,8 +899,79 @@ export async function registrarCautelaMapaForca({
       )
     )
 
+  let resumoItensEfetivo =
+    Array.isArray(resumoItens)
+      ? resumoItens
+      : []
+
+  let quantidadeItensEfetiva =
+    Math.max(
+      0,
+      Number(
+        quantidadeItens ||
+        resumoItensEfetivo.length ||
+        0
+      ) || 0
+    )
+
+  /*
+   * Complemento operacional de viatura:
+   * a VTR não gera uma nova movimentação patrimonial.
+   * Quando o policial já possui uma cautela real nesta US, reaproveitamos
+   * o identificador dessa cautela e apenas mesclamos a VIATURA ao resumo.
+   */
   if (
-    !movimentacaoPrincipalId &&
+    !movimentacaoPrincipalIdEfetiva &&
+    idsMunicao.length === 0 &&
+    resumoItensEfetivo.some(
+      itemResumoEhViatura
+    )
+  ) {
+    const vinculoExistente =
+      await localizarVinculoExistenteParaComplemento({
+        mapaId,
+        usId,
+        policialId:
+          policial.id
+      })
+
+    if (vinculoExistente) {
+      movimentacaoPrincipalIdEfetiva =
+        vinculoExistente
+          ?.movimentacao_principal_id ||
+        null
+
+      idsMunicao =
+        Array.from(
+          new Set([
+            ...(
+              Array.isArray(
+                vinculoExistente
+                  ?.transferencias_municao_ids
+              )
+                ? vinculoExistente
+                    .transferencias_municao_ids
+                : []
+            ),
+            ...idsMunicao
+          ])
+        )
+
+      resumoItensEfetivo =
+        mesclarResumoCautela(
+          vinculoExistente
+            ?.resumo_itens ||
+          [],
+          resumoItensEfetivo
+        )
+
+      quantidadeItensEfetiva =
+        resumoItensEfetivo.length
+    }
+  }
+
+  if (
+    !movimentacaoPrincipalIdEfetiva &&
     idsMunicao.length === 0
   ) {
     throw new Error(
@@ -810,25 +1036,17 @@ export async function registrarCautelaMapaForca({
           null,
 
         p_movimentacao_principal_id:
-          movimentacaoPrincipalId ||
+          movimentacaoPrincipalIdEfetiva ||
           null,
 
         p_transferencias_municao_ids:
           idsMunicao,
 
         p_resumo_itens:
-          Array.isArray(resumoItens)
-            ? resumoItens
-            : [],
+          resumoItensEfetivo,
 
         p_quantidade_itens:
-          Math.max(
-            0,
-            Number(
-              quantidadeItens ||
-              0
-            ) || 0
-          )
+          quantidadeItensEfetiva
       }
     )
 

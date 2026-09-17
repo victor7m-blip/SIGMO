@@ -85,6 +85,24 @@ function numeroInteiro(valor) {
   return Math.max(0, Math.trunc(numero))
 }
 
+function ehViaturaMapa(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tabela_origem
+  ].map(normalizarEquipamento)
+
+  return (
+    Boolean(item?.viatura_id) ||
+    campos.includes('VIATURA') ||
+    campos.includes('VIATURAS') ||
+    campos.includes('SIGMO_VIATURAS')
+  )
+}
+
+
 function ehMunicaoMapa(item) {
   const campos = [
     item?.modulo,
@@ -115,6 +133,15 @@ function chaveMaterialPreparado(item) {
   if (ehMunicaoMapa(item)) {
     return `MUNICAO:${
       item?.municao_id ||
+      item?.referencia_id ||
+      item?.id ||
+      ''
+    }`
+  }
+
+  if (ehViaturaMapa(item)) {
+    return `VIATURA:${
+      item?.viatura_id ||
       item?.referencia_id ||
       item?.id ||
       ''
@@ -205,6 +232,188 @@ function mesclarItensPreparados(
     mapa.values()
   )
 }
+
+function funcaoResponsavelViatura(unidade) {
+  if (!unidade?.viatura?.id) {
+    return null
+  }
+
+  const policiais =
+    unidade?.policiais || {}
+
+  const funcoesOcupadas =
+    Object.entries(policiais)
+      .filter(([, policial]) =>
+        Boolean(policial?.id)
+      )
+      .map(([funcao]) => funcao)
+
+  const motorista =
+    funcoesOcupadas.find(
+      (funcao) =>
+        normalizarEquipamento(
+          funcao
+        ).includes('MOTORISTA')
+    )
+
+  if (motorista) {
+    return motorista
+  }
+
+  const encarregado =
+    funcoesOcupadas.find(
+      (funcao) =>
+        normalizarEquipamento(
+          funcao
+        ) === 'ENCARREGADO'
+    )
+
+  return encarregado || null
+}
+
+function montarViaturaComoMaterialMapa(
+  unidade
+) {
+  const viatura =
+    unidade?.viatura
+
+  if (!viatura?.id) {
+    return null
+  }
+
+  return {
+    ...viatura,
+    id: viatura.id,
+    viatura_id: viatura.id,
+    referencia_id: viatura.id,
+    tabela_origem: 'sigmo_viaturas',
+    modulo: 'VIATURA',
+    categoria: 'VIATURA',
+    tipo: 'VIATURA',
+    descricao:
+      `VIATURA ${viatura.prefixo || ''}`.trim(),
+    patrimonio:
+      viatura.prefixo || null,
+    disponivel: true,
+    controla_quantidade: false,
+    quantidade: 1,
+    item_especial_mapa_forca: true,
+    vinculada_automaticamente_us: true
+  }
+}
+
+function garantirViaturaNaPreparacaoMapa({
+  itens = [],
+  resumoItens = [],
+  unidade,
+  funcao
+}) {
+  const funcaoResponsavel =
+    funcaoResponsavelViatura(
+      unidade
+    )
+
+  if (
+    !funcaoResponsavel ||
+    normalizarEquipamento(
+      funcaoResponsavel
+    ) !==
+      normalizarEquipamento(
+        funcao
+      )
+  ) {
+    return {
+      itens:
+        Array.isArray(itens)
+          ? itens
+          : [],
+      resumoItens:
+        Array.isArray(resumoItens)
+          ? resumoItens
+          : []
+    }
+  }
+
+  const viatura =
+    montarViaturaComoMaterialMapa(
+      unidade
+    )
+
+  if (!viatura) {
+    return {
+      itens:
+        Array.isArray(itens)
+          ? itens
+          : [],
+      resumoItens:
+        Array.isArray(resumoItens)
+          ? resumoItens
+          : []
+    }
+  }
+
+  const itensComViatura =
+    mesclarItensPreparados(
+      Array.isArray(itens)
+        ? itens
+        : [],
+      [viatura]
+    )
+
+  const resumoBase =
+    Array.isArray(resumoItens)
+      ? resumoItens
+      : []
+
+  const resumoComViatura =
+    resumoBase.some(
+      (item) =>
+        chaveMaterialPreparado(
+          item
+        ) ===
+        chaveMaterialPreparado(
+          viatura
+        )
+    )
+      ? resumoBase
+      : [
+          ...resumoBase,
+          {
+            id: viatura.id,
+            patrimonio_id: null,
+            referencia_id:
+              viatura.referencia_id,
+            municao_id: null,
+            viatura_id:
+              viatura.viatura_id,
+            prefixo:
+              viatura.prefixo || null,
+            placa:
+              viatura.placa || null,
+            modelo:
+              viatura.modelo || null,
+            tabela_origem:
+              'sigmo_viaturas',
+            modulo: 'VIATURA',
+            categoria: 'VIATURA',
+            tipo: 'VIATURA',
+            descricao:
+              viatura.descricao,
+            patrimonio:
+              viatura.patrimonio,
+            calibre: null,
+            quantidade: 1
+          }
+        ]
+
+  return {
+    itens:
+      itensComViatura,
+    resumoItens:
+      resumoComViatura
+  }
+}
+
 
 async function listarDisponibilidadeMunicaoSvddMapa() {
   const token =
@@ -539,10 +748,21 @@ async function efetivarMateriaisPreparadosMapa({
       ehMunicaoMapa
     )
 
+  /*
+   * A viatura é um item especial do serviço:
+   * ela participa do vínculo do Mapa Força / Receber Material,
+   * mas NÃO passa pelo motor de patrimônio comum.
+   */
+  const viaturas =
+    itens.filter(
+      ehViaturaMapa
+    )
+
   const patrimoniais =
     itens.filter(
       (item) =>
-        !ehMunicaoMapa(item)
+        !ehMunicaoMapa(item) &&
+        !ehViaturaMapa(item)
     )
 
   if (municoes.length > 0) {
@@ -729,7 +949,11 @@ async function efetivarMateriaisPreparadosMapa({
         preparacao?.resumoItens
       )
         ? preparacao.resumoItens
-        : [],
+        : [
+            ...patrimoniais,
+            ...municoes,
+            ...viaturas
+          ],
     quantidadeItens:
       itens.length
   }
@@ -743,6 +967,7 @@ function rotuloEquipamento(item) {
     item?.descricao
   ].filter(Boolean).join(' '))
 
+  if (texto.includes('VIATURA')) return 'VIATURA'
   if (texto.includes('CASSETETE')) return 'CASSETETE'
   if (texto.includes('TONFA')) return 'TONFA'
   if (texto.includes('TASER')) return 'TASER'
@@ -1212,7 +1437,8 @@ function UnidadeServico({
                         id: unidade.id,
                         prefixo: unidade.prefixo,
                         inicioUs: unidade.inicioUs,
-                        fimUs: unidade.fimUs
+                        fimUs: unidade.fimUs,
+                        viatura: unidade.viatura || null
                       }
                     })
                   : null
@@ -2101,10 +2327,26 @@ export default function MapaForca({
         )
       }
 
+      const funcaoResponsavelVtr =
+        funcaoResponsavelViatura(
+          editor?.unidade ||
+          contexto?.unidade
+        )
+
       setPagarMaterialMapa({
         ...contexto,
         mapaId:
-          idMapaAtual
+          idMapaAtual,
+        responsavelViatura:
+          Boolean(
+            funcaoResponsavelVtr &&
+            normalizarEquipamento(
+              funcaoResponsavelVtr
+            ) ===
+              normalizarEquipamento(
+                contexto?.funcao
+              )
+          )
       })
     } catch (error) {
       console.error(
@@ -2147,6 +2389,19 @@ export default function MapaForca({
           resumo?.funcao ||
           'EFETIVO'
 
+        const resumoComViatura =
+          garantirViaturaNaPreparacaoMapa({
+            itens:
+              resumo?.itensPreparados ||
+              [],
+            resumoItens:
+              resumo?.resumoItens ||
+              [],
+            unidade:
+              unidadeAtual,
+            funcao
+          })
+
         const existentes =
           unidadeAtual
             ?.materiaisPreparados?.[
@@ -2159,8 +2414,8 @@ export default function MapaForca({
             existentes
               ?.itensPreparados ||
               [],
-            resumo
-              ?.itensPreparados ||
+            resumoComViatura
+              ?.itens ||
               []
           )
 
@@ -2169,7 +2424,7 @@ export default function MapaForca({
             (item) => {
               const correspondente =
                 (
-                  resumo
+                  resumoComViatura
                     ?.resumoItens ||
                   []
                 ).find(
@@ -2856,13 +3111,33 @@ export default function MapaForca({
           user={user}
           policial={pagarMaterialMapa.policial}
           funcao={pagarMaterialMapa.funcao}
-          unidade={pagarMaterialMapa.unidade}
+          unidade={{
+            ...pagarMaterialMapa.unidade,
+            viatura:
+              editor?.unidade?.viatura ||
+              pagarMaterialMapa.unidade?.viatura ||
+              null
+          }}
           itensPreparados={
-            editor?.unidade
-              ?.materiaisPreparados?.[
+            garantirViaturaNaPreparacaoMapa({
+              itens:
+                editor?.unidade
+                  ?.materiaisPreparados?.[
+                    pagarMaterialMapa.funcao
+                  ]?.itensPreparados ||
+                [],
+              resumoItens:
+                editor?.unidade
+                  ?.materiaisPreparados?.[
+                    pagarMaterialMapa.funcao
+                  ]?.resumoItens ||
+                [],
+              unidade:
+                editor?.unidade ||
+                pagarMaterialMapa.unidade,
+              funcao:
                 pagarMaterialMapa.funcao
-              ]?.itensPreparados ||
-            []
+            }).itens
           }
           itensReservadosMapa={
             Object.entries(

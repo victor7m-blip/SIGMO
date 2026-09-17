@@ -1455,3 +1455,311 @@
 .riv__manutencao-atual-grid small{display:block;color:#8fa8bd;font-size:.67rem;text-transform:uppercase}
 .riv__manutencao-atual-grid strong{display:block;margin-top:4px;color:#fff;overflow-wrap:anywhere}
 @media(max-width:720px){.riv__manutencao-atual-card>header{flex-direction:column}.riv__manutencao-atual-grid{grid-template-columns:1fr}}
+
+
+/* =========================================================
+   VIATURAS — padronização visual com os demais módulos
+   ========================================================= */
+
+.viaturas-page {
+  gap: 18px;
+  color: #0f172a;
+}
+
+.viaturas-hero,
+.viaturas-painel,
+.viaturas-resumo button {
+  border: 1px solid #d7e0ea;
+  box-shadow: 0 8px 24px rgba(15, 39, 66, .06);
+}
+
+.viaturas-hero {
+  padding: 24px 26px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0d2d52, #0b315d);
+}
+
+.viaturas-kicker {
+  color: #80bdff;
+}
+
+.viaturas-hero h1 {
+  color: #ffffff;
+  text-transform: none;
+}
+
+.viaturas-hero p {
+  color: #e1ecf7;
+}
+
+.viaturas-hero button {
+  min-height: 42px;
+  border-radius: 9px;
+  border-color: rgba(37, 99, 235, .35);
+  background: #1f5fa7;
+  color: #fff;
+}
+
+.viaturas-resumo {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.viaturas-resumo button {
+  position: relative;
+  min-height: 112px;
+  padding: 18px 16px 15px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.viaturas-resumo button::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #2563eb;
+}
+
+.viaturas-resumo button:nth-child(2)::before {
+  background: #0f9f6e;
+}
+
+.viaturas-resumo button:nth-child(3)::before {
+  background: #d97706;
+}
+
+.viaturas-resumo button:nth-child(4)::before {
+  background: #dc2626;
+}
+
+.viaturas-resumo button:nth-child(5)::before {
+  background: #7c3aed;
+}
+
+.viaturas-resumo button:nth-child(6)::before {
+  background: #475569;
+}
+
+.viaturas-resumo small {
+  color: #475569;
+  font-size: .73rem;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.viaturas-resumo strong {
+  margin-top: 9px;
+  color: #0f172a;
+  font-size: 1.65rem;
+}
+
+.viaturas-painel {
+  padding: 16px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.viaturas-toolbar {
+  margin-bottom: 16px;
+}
+
+.viaturas-toolbar input,
+.viaturas-toolbar select {
+  min-height: 44px;
+  border: 1px solid #cfd9e6;
+  border-radius: 9px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.viaturas-toolbar input::placeholder {
+  color: #94a3b8;
+}
+
+.viaturas-grid {
+  gap: 14px;
+}
+
+.viatura-card {
+  padding: 14px;
+  border: 1px solid #d8e1eb;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 39, 66, .05);
+}
+
+.viatura-card--clicavel {
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.viatura-card--clicavel:hover {
+  transform: translateY(-2px);
+  border-color: #9ec5ef;
+  box-shadow: 0 10px 24px rgba(15, 39, 66, .09);
+}
+
+.viatura-card__foto {
+  border: 1px solid #d9e4ef;
+  border-radius: 11px;
+  background: #f8fafc;
+}
+
+.viatura-card__topo small {
+  color: #2563a7;
+}
+
+.viatura-card h2 {
+  color: #0f172a;
+}
+
+.viatura-card dl div {
+  border-bottom-color: #edf1f5;
+}
+
+.viatura-card dt {
+  color: #64748b;
+}
+
+.viatura-card dd {
+  color: #0f172a;
+}
+
+.viatura-card__situacao span {
+  color: #2563a7;
+}
+
+.viatura-card select {
+  min-height: 42px;
+  border: 1px solid #cfd9e6;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.viatura-status {
+  border-color: #d5dee8;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.viatura-status--disponivel {
+  border-color: #a7e3c7;
+  background: #eefbf5;
+  color: #047857;
+}
+
+.viatura-status--manutencao_interna,
+.viatura-status--manutencao_externa {
+  border-color: #f6d28b;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.viatura-status--processo_descarga {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+.viatura-status--a_disposicao_outras_unidades {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.viatura-card__acoes {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.viatura-card__editar,
+.viatura-card__ficha,
+.viatura-card__acoes > button {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+.viatura-card__ficha {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.viatura-card__editar {
+  border-color: #d7e0ea;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.viaturas-vazio {
+  color: #64748b;
+}
+
+.viaturas-erro {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+/* Operações permitidas: botões criados no Viaturas.jsx */
+[aria-label="Operações permitidas"] button {
+  min-height: 92px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 5px;
+  padding: 14px 15px;
+  border: 1px solid #d8e1eb;
+  border-radius: 11px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+[aria-label="Operações permitidas"] button:hover {
+  transform: translateY(-1px);
+  border-color: #a9c9ea;
+  box-shadow: 0 6px 16px rgba(15, 39, 66, .07);
+}
+
+[aria-label="Operações permitidas"] button strong {
+  color: #0f172a;
+  font-size: .92rem;
+}
+
+[aria-label="Operações permitidas"] button span {
+  color: #64748b;
+  font-size: .78rem;
+  line-height: 1.35;
+}
+
+/* Modais de cadastro permanecem escuros para combinar com a ficha/RIV existente. */
+.viaturas-modal {
+  border-color: rgba(102, 162, 218, .4);
+  background: #061b31;
+}
+
+@media (max-width: 1350px) {
+  .viaturas-resumo {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .viaturas-resumo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .viaturas-resumo {
+    grid-template-columns: 1fr;
+  }
+}

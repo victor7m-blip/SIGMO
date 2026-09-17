@@ -35,6 +35,11 @@ import {
   confirmarItensDevolucao
 } from '../../services/devolucoesPendentesService'
 
+import {
+  MODULOS_MANUTENCAO,
+  registrarManutencao
+} from '../../services/manutencoesService'
+
 import RecebedorCard from '../PagarMaterial/components/RecebedorCard'
 import CarrinhoMateriais from '../PagarMaterial/components/CarrinhoMateriais'
 
@@ -45,6 +50,26 @@ function normalizarTexto(valor) {
   return String(valor ?? '')
     .trim()
     .toUpperCase()
+}
+
+function itemEhTorniquete(item) {
+  return (
+    normalizarTexto(
+      item?.tipo_registro
+    ) === 'TORNIQUETE_QUANTIDADE' ||
+    normalizarTexto(
+      item?.tipo_patrimonio
+    ) === 'TORNIQUETE' ||
+    normalizarTexto(
+      item?.tipo
+    ) === 'TORNIQUETE' ||
+    normalizarTexto(
+      item?.categoria
+    ) === 'TORNIQUETE' ||
+    normalizarTexto(
+      item?.modulo
+    ) === 'TORNIQUETE'
+  )
 }
 
 function ehUuidValido(valor) {
@@ -242,6 +267,16 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
   const patrimonioIds = [
     ...new Set(
       (itens || [])
+        /*
+         * Torniquete é quantitativo e compartilha um único patrimônio
+         * agregado entre várias unidades/cautelas. Uma novidade antiga
+         * desse patrimônio não pode ser reaproveitada automaticamente
+         * em outra devolução.
+         */
+        .filter(
+          (item) =>
+            !itemEhTorniquete(item)
+        )
         .map((item) => item?.patrimonio_id || item?.id)
         .filter(ehUuidValido)
         .map(String)
@@ -481,6 +516,80 @@ async function listarDevolucoesMunicaoPendentesSvdd() {
   }
 
   return data || []
+}
+
+
+async function receberDevolucaoTorniqueteSvdd({
+  item,
+  observacao = ''
+}) {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const movimentacaoId =
+    item?.devolucao_movimentacao_id ||
+    null
+
+  const itemId =
+    item?.devolucao_item_id ||
+    null
+
+  if (!movimentacaoId || !itemId) {
+    throw new Error(
+      'A devolução de Torniquete não possui identificação válida.'
+    )
+  }
+
+  const quantidade =
+    Math.max(
+      1,
+      Number(
+        item?.quantidade_receber ||
+        item?.quantidade ||
+        1
+      ) || 1
+    )
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_torniquetes_receber_devolucao_policial',
+    {
+      p_token:
+        token,
+
+      p_movimentacao_id:
+        movimentacaoId,
+
+      p_item_id:
+        itemId,
+
+      p_quantidade:
+        quantidade,
+
+      p_observacao:
+        normalizarTexto(
+          observacao
+        ) ||
+        'TORNIQUETE RECEBIDO PELO SVDD.'
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível receber a devolução do Torniquete.'
+    )
+  }
+
+  return data
 }
 
 
@@ -1121,8 +1230,11 @@ export default function ReceberMaterial({
                 ...item,
 
                 novidade_pendente:
-                  item?.tipo_registro ===
-                  'MUNICAO_DEVOLUCAO'
+                  (
+                    item?.tipo_registro ===
+                      'MUNICAO_DEVOLUCAO' ||
+                    itemEhTorniquete(item)
+                  )
                     ? null
                     : novidadesPorPatrimonio.get(
                         String(
@@ -1689,11 +1801,14 @@ export default function ReceberMaterial({
         ),
 
       quantidade_afetada:
-        [
-          'TONFA_QUANTIDADE',
-          'MUNICAO_DEVOLUCAO'
-        ].includes(
-          item?.tipo_registro
+        (
+          [
+            'TONFA_QUANTIDADE',
+            'MUNICAO_DEVOLUCAO'
+          ].includes(
+            item?.tipo_registro
+          ) ||
+          itemEhTorniquete(item)
         )
           ? Math.max(
               1,
@@ -2106,6 +2221,12 @@ async function confirmarRecebimento() {
           'TONFA_QUANTIDADE'
       )
 
+    const itensTorniquete =
+      itensSelecionados.filter(
+        (item) =>
+          itemEhTorniquete(item)
+      )
+
     const entregasHTAtivas =
       await listarEntregasHTAtivas()
 
@@ -2170,6 +2291,7 @@ async function confirmarRecebimento() {
             'TONFA_QUANTIDADE' &&
           item?.tipo_registro !==
             'MUNICAO_DEVOLUCAO' &&
+          !itemEhTorniquete(item) &&
           Boolean(
             localizarMovimentacaoHT(item)
           )
@@ -2189,6 +2311,7 @@ async function confirmarRecebimento() {
             'TONFA_QUANTIDADE' &&
           item?.tipo_registro !==
             'MUNICAO_DEVOLUCAO' &&
+          !itemEhTorniquete(item) &&
           !chavesHT.has(
             criarChaveItem(item)
           )
@@ -2390,6 +2513,148 @@ async function confirmarRecebimento() {
       })
     }
 
+    const resultadosTorniquete = []
+
+    for (
+      const item of
+      itensTorniquete
+    ) {
+      const novidadeItem =
+        prepararNovidadeItem(
+          item
+        )
+
+      const providencia =
+        normalizarTexto(
+          novidadeItem?.providencia ||
+          'COFRE'
+        )
+
+      /*
+       * Torniquete é quantitativo. Primeiro confirmamos fisicamente a
+       * devolução para o SVDD (EM SERVIÇO -> SVDD). Quando a providência
+       * escolhida é MANUTENÇÃO, usamos o serviço oficial de manutenção para
+       * criar a novidade patrimonial, registrar sigmo_manutencoes e mover
+       * a quantidade recebida do SVDD para MANUTENÇÃO.
+       *
+       * Antes deste bloco, a novidade preenchida na tela era ignorada e o
+       * fluxo terminava somente no Cofre do SVDD.
+       */
+      const recebimento =
+        await receberDevolucaoTorniqueteSvdd({
+          item,
+          observacao:
+            normalizarTexto(
+              [
+                observacoes,
+                novidadeItem
+                  ? `NOVIDADE: ${novidadeItem.tipo} - ${novidadeItem.descricao} | PROVIDÊNCIA: ${providencia} | QUANTIDADE AFETADA: ${novidadeItem.quantidade_afetada}`
+                  : ''
+              ]
+                .filter(Boolean)
+                .join(' | ')
+            ) ||
+            'TORNIQUETE RECEBIDO PELO SVDD.'
+        })
+
+      let manutencao = null
+
+      if (
+        providencia ===
+        'MANUTENCAO'
+      ) {
+        const referenciaId =
+          item?.referencia_id ||
+          item?.torniquete_id ||
+          null
+
+        if (!referenciaId) {
+          throw new Error(
+            'Não foi possível identificar o estoque do Torniquete para encaminhamento à manutenção.'
+          )
+        }
+
+        manutencao =
+          await registrarManutencao({
+            modulo:
+              MODULOS_MANUTENCAO.TORNIQUETE,
+
+            tipoMaterial:
+              'TORNIQUETE',
+
+            referenciaId,
+
+            patrimonioId:
+              item?.patrimonio_id ||
+              item?.id ||
+              null,
+
+            novidadePatrimonialId:
+              novidadeItem?.novidade_id ||
+              null,
+
+            movimentacaoId:
+              item?.devolucao_movimentacao_id ||
+              null,
+
+            quantidade:
+              Math.max(
+                1,
+                Number(
+                  novidadeItem?.quantidade_afetada ||
+                  item?.quantidade_receber ||
+                  item?.quantidade ||
+                  1
+                ) || 1
+              ),
+
+            tipoNovidade:
+              novidadeItem?.tipo ||
+              'AVARIA',
+
+            descricao:
+              novidadeItem?.descricao ||
+              'TORNIQUETE ENCAMINHADO PARA MANUTENÇÃO NO RECEBIMENTO PELO SVDD.',
+
+            observacoes:
+              normalizarTexto(
+                [
+                  observacoes,
+                  'ORIGEM: DEVOLUÇÃO DE CAUTELA INDIVIDUAL',
+                  `MOVIMENTAÇÃO DE DEVOLUÇÃO: ${item?.devolucao_movimentacao_id || 'NÃO INFORMADA'}`
+                ]
+                  .filter(Boolean)
+                  .join(' | ')
+              ),
+
+            origem:
+              'COFRE DO SVDD',
+
+            destino:
+              'MANUTENCAO',
+
+            policial:
+              policialEntregador,
+
+            fotos:
+              novidadeItem?.fotos ||
+              [],
+
+            estoqueJaMovido:
+              false,
+
+            user
+          })
+      }
+
+      resultadosTorniquete.push({
+        item,
+        resultado:
+          recebimento,
+        manutencao
+      })
+    }
+
     const resultadosMunicoes = []
 
     for (
@@ -2437,6 +2702,10 @@ async function confirmarRecebimento() {
       const itemIdsDevolucao = [
         ...new Set(
           itensSelecionados
+            .filter(
+              (item) =>
+                !itemEhTorniquete(item)
+            )
             .map((item) => item?.devolucao_item_id)
             .filter(Boolean)
         )
@@ -2463,6 +2732,7 @@ async function confirmarRecebimento() {
       itensIndividuais.length +
       itensHT.length +
       itensTonfa.length +
+      itensTorniquete.length +
       itensMunicao.length
 
     const resultadoFinal = {
@@ -2476,7 +2746,11 @@ async function confirmarRecebimento() {
         itensHT.length,
 
       total_quantitativos:
-        itensTonfa.length,
+        itensTonfa.length +
+        itensTorniquete.length,
+
+      total_torniquetes:
+        itensTorniquete.length,
 
       total_municoes:
         itensMunicao.length,
@@ -2485,6 +2759,7 @@ async function confirmarRecebimento() {
         ...resultadosIndividuais,
         ...resultadosHT,
         ...resultadosTonfas,
+        ...resultadosTorniquete,
         ...resultadosMunicoes
       ],
 
@@ -2942,11 +3217,14 @@ async function confirmarRecebimento() {
     </div>
   )}
 
-  {[
-    'TONFA_QUANTIDADE',
-    'MUNICAO_DEVOLUCAO'
-  ].includes(
-    item.tipo_registro
+  {(
+    [
+      'TONFA_QUANTIDADE',
+      'MUNICAO_DEVOLUCAO'
+    ].includes(
+      item.tipo_registro
+    ) ||
+    itemEhTorniquete(item)
   ) && (
     <small
       style={{

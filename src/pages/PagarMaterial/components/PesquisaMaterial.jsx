@@ -5,6 +5,10 @@ import {
 } from '../../../services/pagarMaterialService'
 
 import {
+  listarTorniquetes
+} from '../../../services/torniquetesService'
+
+import {
   buscarArmaPorId
 } from '../../../services/armasService'
 
@@ -205,6 +209,162 @@ function ehCassetete(material) {
   return campos.some((valor) => valor.includes('CASSETETE'))
 }
 
+function ehTorniquete(material) {
+  const campos = [
+    material?.modulo,
+    material?.categoria,
+    material?.tipo,
+    material?.tipo_patrimonio,
+    material?.tipo_material,
+    material?.tabela_origem,
+    material?.descricao
+  ].map(normalizarTexto)
+
+  return (
+    campos.includes('TORNIQUETE') ||
+    campos.includes('TORNIQUETES') ||
+    campos.includes('SIGMO_TORNIQUETES') ||
+    campos.some((valor) =>
+      valor.startsWith('TORNIQUETE ')
+    )
+  )
+}
+
+function numeroInteiroNaoNegativo(valor) {
+  const convertido = Number(valor)
+
+  if (!Number.isFinite(convertido)) {
+    return 0
+  }
+
+  return Math.max(
+    0,
+    Math.trunc(convertido)
+  )
+}
+
+function montarItemTorniquete(
+  torniquete,
+  origemLocal
+) {
+  const origem =
+    normalizarTexto(origemLocal)
+
+  const origemP4 =
+    origem.includes('P4')
+
+  const origemSVDD =
+    origem.includes('SVDD') ||
+    origem.includes('SERVIÇO DE DIA') ||
+    origem.includes('SERVICO DE DIA')
+
+  const quantidadeDisponivel =
+    origemP4
+      ? numeroInteiroNaoNegativo(
+          torniquete?.quantidade_p4
+        )
+      : origemSVDD
+        ? numeroInteiroNaoNegativo(
+            torniquete?.quantidade_svdd
+          )
+        : 0
+
+  const localAtual =
+    origemP4
+      ? 'COFRE DO P4'
+      : origemSVDD
+        ? 'COFRE DO SVDD'
+        : (
+            torniquete?.local_atual ||
+            'ESTOQUE DE TORNIQUETES'
+          )
+
+  return {
+    id:
+      torniquete?.id,
+
+    referencia_id:
+      torniquete?.id,
+
+    torniquete_id:
+      torniquete?.id,
+
+    tabela_origem:
+      'sigmo_torniquetes',
+
+    modulo:
+      'TORNIQUETE',
+
+    categoria:
+      'TORNIQUETE',
+
+    tipo:
+      'TORNIQUETE',
+
+    tipo_patrimonio:
+      'TORNIQUETE',
+
+    tipo_material:
+      'TORNIQUETE',
+
+    patrimonio:
+      'ESTOQUE CONTROLADO',
+
+    descricao:
+      'TORNIQUETE',
+
+    local_atual:
+      localAtual,
+
+    status:
+      quantidadeDisponivel > 0
+        ? 'DISPONÍVEL'
+        : 'SEM SALDO',
+
+    controla_quantidade:
+      true,
+
+    quantidade_disponivel:
+      quantidadeDisponivel,
+
+    quantidade_maxima:
+      quantidadeDisponivel,
+
+    disponivel:
+      quantidadeDisponivel > 0,
+
+    quantidade_total:
+      numeroInteiroNaoNegativo(
+        torniquete?.quantidade_total
+      ),
+
+    quantidade_p4:
+      numeroInteiroNaoNegativo(
+        torniquete?.quantidade_p4
+      ),
+
+    quantidade_svdd:
+      numeroInteiroNaoNegativo(
+        torniquete?.quantidade_svdd
+      ),
+
+    quantidade_em_servico:
+      numeroInteiroNaoNegativo(
+        torniquete?.quantidade_em_servico
+      ),
+
+    quantidade_carga_permanente:
+      numeroInteiroNaoNegativo(
+        torniquete?.quantidade_carga_permanente
+      ),
+
+    quantidade_manutencao:
+      numeroInteiroNaoNegativo(
+        torniquete?.quantidade_manutencao
+      )
+  }
+}
+
 function correspondeFiltro(material, filtro) {
   switch (filtro) {
     case 'ARMAS':
@@ -223,6 +383,8 @@ function correspondeFiltro(material, filtro) {
       return ehTonfa(material)
     case 'CASSETETE':
       return ehCassetete(material)
+    case 'TORNIQUETE':
+      return ehTorniquete(material)
     default:
       return true
   }
@@ -278,11 +440,98 @@ export default function PesquisaMaterial({
     try {
       setLoading(true)
       setErro('')
-      const resultado = await listarPatrimoniosParaEntrega({ origemLocal })
-      setMateriais(resultado)
+
+      const resultado =
+        await listarPatrimoniosParaEntrega({
+          origemLocal
+        })
+
+      let estoqueTorniquetes = []
+
+      try {
+        estoqueTorniquetes =
+          await listarTorniquetes()
+      } catch (erroTorniquetes) {
+        console.warn(
+          'Não foi possível carregar torniquetes no Pagar Material:',
+          erroTorniquetes
+        )
+
+        setErro(
+          'Os demais materiais foram carregados, mas não foi possível consultar o estoque de torniquetes.'
+        )
+      }
+
+      const materiaisBase =
+        Array.isArray(resultado)
+          ? resultado
+          : []
+
+      const chavesExistentes =
+        new Set(
+          materiaisBase.map(
+            (material) =>
+              [
+                normalizarTexto(
+                  material?.tabela_origem
+                ),
+                String(
+                  material?.referencia_id ||
+                  material?.id ||
+                  ''
+                )
+              ].join(':')
+          )
+        )
+
+      const torniquetes =
+        (
+          Array.isArray(
+            estoqueTorniquetes
+          )
+            ? estoqueTorniquetes
+            : []
+        )
+          .filter(
+            (item) =>
+              item?.id &&
+              item?.ativo !== false
+          )
+          .map(
+            (item) =>
+              montarItemTorniquete(
+                item,
+                origemLocal
+              )
+          )
+          .filter((material) => {
+            const chave =
+              [
+                normalizarTexto(
+                  material?.tabela_origem
+                ),
+                String(
+                  material?.referencia_id ||
+                  material?.id ||
+                  ''
+                )
+              ].join(':')
+
+            return !chavesExistentes.has(
+              chave
+            )
+          })
+
+      setMateriais([
+        ...torniquetes,
+        ...materiaisBase
+      ])
     } catch (error) {
       console.error(error)
-      setErro('Não foi possível carregar os materiais.')
+      setErro(
+        error?.message ||
+        'Não foi possível carregar os materiais.'
+      )
     } finally {
       setLoading(false)
     }
@@ -312,7 +561,10 @@ export default function PesquisaMaterial({
         material.qr_code,
         material.especie,
         material.marca,
-        material.modelo
+        material.modelo,
+        material.categoria,
+        material.tipo_material,
+        material.torniquete_id
       ].some((valor) => normalizarTexto(valor).includes(termo))
     })
   }, [busca, filtroTipo, materiais])
@@ -519,7 +771,8 @@ export default function PesquisaMaterial({
                   ['COP', 'COP'],
                   ['MUNICAO', 'Munição'],
                   ['TONFA', 'Tonfa'],
-                  ['CASSETETE', 'Cassetete']
+                  ['CASSETETE', 'Cassetete'],
+                  ['TORNIQUETE', 'Torniquete']
                 ].map(([valor, rotulo]) => {
                   const ativo = filtroTipo === valor
 

@@ -48,6 +48,7 @@ import Tonfas from './Tonfas/Tonfas'
 import Municoes from './Municoes/Municoes'
 import ColeteBalistico from './ColeteBalistico/ColeteBalistico'
 import ColeteRefletivo from './ColeteRefletivo/ColeteRefletivo'
+import Torniquete from './Torniquete/Torniquete'
 import PagarMaterial from './PagarMaterial/PagarMaterial'
 import ReceberMaterial from './ReceberMaterial/ReceberMaterial'
 import ReceberMaterialHibrido from './ReceberMaterial/ReceberMaterialHibrido'
@@ -4787,6 +4788,15 @@ if (route === 'tonfas') {
     if (route === 'colete-refletivo') {
       return (
         <ColeteRefletivo
+          user={user}
+          onVoltar={voltarDashboard}
+        />
+      )
+    }
+
+    if (route === 'torniquete') {
+      return (
+        <Torniquete
           user={user}
           onVoltar={voltarDashboard}
         />

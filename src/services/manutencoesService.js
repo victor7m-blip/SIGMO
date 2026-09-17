@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 import { loadSessionToken } from './authService'
 import { criarOuAtualizarPatrimonio } from './patrimoniosService'
+import { listarTorniquetes } from './torniquetesService'
 import { criarNotificacaoParaPerfil } from './notificacoesService'
 
 const TABLE = 'sigmo_manutencoes'
@@ -15,6 +16,7 @@ export const MODULOS_MANUTENCAO = Object.freeze({
   TPD: 'TPD',
   TASER: 'TASER',
   MUNICAO: 'MUNICAO',
+  TORNIQUETE: 'TORNIQUETE',
   COLETE: 'COLETE',
   OUTROS: 'OUTROS'
 })
@@ -31,6 +33,34 @@ function texto(valor) {
 
 function maiusculo(valor) {
   return texto(valor).toUpperCase()
+}
+
+async function buscarTorniqueteSeguroPorId(referenciaId) {
+  const referencia =
+    texto(referenciaId)
+
+  if (!referencia) {
+    throw new Error(
+      'A referência do torniquete não foi informada.'
+    )
+  }
+
+  const lista =
+    await listarTorniquetes()
+
+  const torniquete =
+    (Array.isArray(lista) ? lista : []).find(
+      (item) =>
+        String(item?.id || '') === referencia
+    ) || null
+
+  if (!torniquete?.id) {
+    throw new Error(
+      'Torniquete não localizado no estoque ativo.'
+    )
+  }
+
+  return torniquete
 }
 
 function inteiroPositivo(valor, padrao = 0) {
@@ -825,6 +855,261 @@ async function aplicarEntradaManutencaoCOP({
 }
 
 
+
+async function garantirPatrimonioTorniqueteManutencao({
+  referenciaId,
+  origem = null,
+  user = null
+}) {
+  const torniquete =
+    await buscarTorniqueteSeguroPorId(
+      referenciaId
+    )
+
+  const origemNormalizada =
+    maiusculo(origem)
+
+  const localAtual =
+    origemNormalizada.includes('SVDD') ||
+    origemNormalizada.includes('SERVIÇO DE DIA') ||
+    origemNormalizada.includes('SERVICO DE DIA')
+      ? 'COFRE DO SVDD'
+      : 'COFRE DO P4'
+
+  const patrimonio =
+    await criarOuAtualizarPatrimonio({
+      tipo:
+        'torniquete',
+
+      referencia_id:
+        torniquete.id,
+
+      dados: {
+        ...torniquete,
+        torniquete_id:
+          torniquete.id,
+        tipo_registro:
+          'TORNIQUETE_QUANTIDADE',
+        descricao:
+          'TORNIQUETE',
+        status_operacional:
+          'MANUTENCAO',
+        local_atual:
+          localAtual
+      },
+
+      user,
+
+      local_atual:
+        localAtual,
+
+      companhia_atual:
+        ''
+    })
+
+  return {
+    torniquete,
+    patrimonio
+  }
+}
+
+
+async function aplicarEntradaManutencaoTorniquete({
+  referenciaId,
+  quantidade,
+  origem = null,
+  user = null
+}) {
+  const quantidadeValida =
+    inteiroPositivo(
+      quantidade
+    )
+
+  if (quantidadeValida <= 0) {
+    throw new Error(
+      'A quantidade de torniquetes enviada para manutenção deve ser maior que zero.'
+    )
+  }
+
+  const origemNormalizada =
+    maiusculo(origem)
+
+  const origemSVDD =
+    origemNormalizada.includes('SVDD') ||
+    origemNormalizada.includes('SERVIÇO DE DIA') ||
+    origemNormalizada.includes('SERVICO DE DIA')
+
+  const origemCodigo =
+    origemSVDD
+      ? 'SVDD'
+      : 'P4'
+
+  const origemLocal =
+    origemSVDD
+      ? 'COFRE DO SVDD'
+      : 'COFRE DO P4'
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_torniquetes_movimentar_manutencao',
+    {
+      p_token:
+        token,
+
+      p_origem:
+        origemCodigo,
+
+      p_quantidade:
+        quantidadeValida,
+
+      p_acao:
+        'ENVIAR'
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível movimentar o torniquete para manutenção.'
+    )
+  }
+
+  const atualizado = {
+    id:
+      data?.torniquete_id ||
+      referenciaId,
+
+    quantidade_p4:
+      inteiroPositivo(
+        data?.quantidade_p4
+      ),
+
+    quantidade_svdd:
+      inteiroPositivo(
+        data?.quantidade_svdd
+      ),
+
+    quantidade_manutencao:
+      inteiroPositivo(
+        data?.quantidade_manutencao
+      ),
+
+    status_operacional:
+      data?.status_operacional ||
+      'MANUTENCAO',
+
+    local_atual:
+      data?.local_atual ||
+      origemLocal,
+
+    ativo:
+      true
+  }
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo:
+        'torniquete',
+
+      referencia_id:
+        atualizado.id,
+
+      dados: {
+        ...atualizado,
+        torniquete_id:
+          atualizado.id,
+        tipo_registro:
+          'TORNIQUETE_QUANTIDADE',
+        descricao:
+          'TORNIQUETE',
+        status_operacional:
+          atualizado.status_operacional,
+        local_atual:
+          atualizado.local_atual
+      },
+
+      user,
+
+      local_atual:
+        atualizado.local_atual,
+
+      companhia_atual:
+        ''
+    })
+  } catch (errorPatrimonio) {
+    const {
+      error: rollbackError
+    } = await supabase.rpc(
+      'sigmo_torniquetes_movimentar_manutencao',
+      {
+        p_token:
+          token,
+
+        p_origem:
+          origemCodigo,
+
+        p_quantidade:
+          quantidadeValida,
+
+        p_acao:
+          'DESFAZER'
+      }
+    )
+
+    if (rollbackError) {
+      console.error(
+        'Erro ao desfazer movimentação de manutenção do torniquete:',
+        rollbackError
+      )
+    }
+
+    throw errorPatrimonio
+  }
+
+  return {
+    torniquete:
+      atualizado,
+
+    rollback:
+      async () => {
+        const {
+          error: rollbackError
+        } = await supabase.rpc(
+          'sigmo_torniquetes_movimentar_manutencao',
+          {
+            p_token:
+              token,
+
+            p_origem:
+              origemCodigo,
+
+            p_quantidade:
+              quantidadeValida,
+
+            p_acao:
+              'DESFAZER'
+          }
+        )
+
+        if (rollbackError) {
+          throw rollbackError
+        }
+      }
+  }
+}
+
+
 async function garantirPatrimonioMunicaoManutencao({
   referenciaId,
   origem = null,
@@ -1097,7 +1382,10 @@ async function registrarNovidadePatrimonialManutencaoDireta({
   // direta em manutenção deve gerar sua própria novidade. Quando o fluxo
   // já possui uma novidade específica, ela é informada explicitamente ao
   // registrarManutencao.
-  if (maiusculo(modulo) !== MODULOS_MANUTENCAO.MUNICAO) {
+  if (
+    maiusculo(modulo) !== MODULOS_MANUTENCAO.MUNICAO &&
+    maiusculo(modulo) !== MODULOS_MANUTENCAO.TORNIQUETE
+  ) {
     const { data: novidadesExistentes, error: buscaError } = await supabase
       .from('sigmo_patrimonio_novidades')
       .select('id, patrimonio_id, titulo, status, created_at')
@@ -1278,6 +1566,24 @@ export async function registrarManutencao({
       null
   }
 
+
+  if (
+    moduloValido === MODULOS_MANUTENCAO.TORNIQUETE &&
+    !patrimonioVinculado
+  ) {
+    const contextoTorniquete =
+      await garantirPatrimonioTorniqueteManutencao({
+        referenciaId:
+          referenciaValida,
+        origem,
+        user
+      })
+
+    patrimonioVinculado =
+      contextoTorniquete?.patrimonio?.id ||
+      null
+  }
+
   const {
     arquivos,
     existentes: fotosExistentes
@@ -1348,7 +1654,8 @@ export async function registrarManutencao({
       (
         moduloValido === MODULOS_MANUTENCAO.HT ||
         moduloValido === MODULOS_MANUTENCAO.COP ||
-        moduloValido === MODULOS_MANUTENCAO.MUNICAO
+        moduloValido === MODULOS_MANUTENCAO.MUNICAO ||
+        moduloValido === MODULOS_MANUTENCAO.TORNIQUETE
       )
     ) {
       novidadePatrimonial =
@@ -1563,6 +1870,22 @@ export async function registrarManutencao({
           quantidade: quantidadeValida,
           origem,
           manutencao: data,
+          user
+        })
+    }
+
+
+    if (
+      moduloValido === MODULOS_MANUTENCAO.TORNIQUETE &&
+      !estoqueJaMovido
+    ) {
+      movimentacaoPatrimonial =
+        await aplicarEntradaManutencaoTorniquete({
+          referenciaId:
+            referenciaValida,
+          quantidade:
+            quantidadeValida,
+          origem,
           user
         })
     }
@@ -1937,12 +2260,22 @@ export async function listarManutencoes({
       .map((item) => String(item.referencia_id))
   )]
 
+  const referenciasTorniquete = [...new Set(
+    manutencoesComOrigemInstitucional
+      .filter((item) =>
+        item.modulo === MODULOS_MANUTENCAO.TORNIQUETE &&
+        item.referencia_id
+      )
+      .map((item) => String(item.referencia_id))
+  )]
+
   let armasPorId = new Map()
   let htsPorId = new Map()
   let copsPorId = new Map()
   let tpdsPorId = new Map()
   let tasersPorId = new Map()
   let municoesPorId = new Map()
+  let torniquetesPorId = new Map()
 
   if (referenciasArmas.length > 0) {
     const { data: armas, error: armasError } = await supabase
@@ -2056,6 +2389,36 @@ export async function listarManutencoes({
       municoesPorId = new Map(
         (municoes || []).map((municao) => [String(municao.id), municao])
       )
+    }
+  }
+
+
+  if (referenciasTorniquete.length > 0) {
+    const {
+      data: torniquetes,
+      error: torniquetesError
+    } = await supabase
+      .from('sigmo_torniquetes')
+      .select(
+        'id, quantidade_total, quantidade_p4, quantidade_svdd, quantidade_em_servico, quantidade_carga_permanente, quantidade_manutencao, quantidade_descarga, status_operacional, local_atual, ativo'
+      )
+      .in('id', referenciasTorniquete)
+
+    if (torniquetesError) {
+      console.warn(
+        'Não foi possível carregar a identificação dos torniquetes em manutenção:',
+        torniquetesError
+      )
+    } else {
+      torniquetesPorId =
+        new Map(
+          (torniquetes || []).map(
+            (torniquete) => [
+              String(torniquete.id),
+              torniquete
+            ]
+          )
+        )
     }
   }
 
@@ -2199,6 +2562,35 @@ return {
           ...item,
           calibre: municao.calibre || null,
           descricao_municao: municao.descricao || null
+        }
+      }
+
+      if (item.modulo === MODULOS_MANUTENCAO.TORNIQUETE) {
+        const torniquete =
+          torniquetesPorId.get(
+            referenciaId
+          )
+
+        if (!torniquete) {
+          return item
+        }
+
+        return {
+          ...item,
+          descricao_torniquete:
+            'TORNIQUETE',
+          quantidade_total:
+            torniquete.quantidade_total,
+          quantidade_p4:
+            torniquete.quantidade_p4,
+          quantidade_svdd:
+            torniquete.quantidade_svdd,
+          quantidade_manutencao:
+            torniquete.quantidade_manutencao,
+          status_operacional:
+            torniquete.status_operacional,
+          local_atual:
+            torniquete.local_atual
         }
       }
 
@@ -2902,6 +3294,177 @@ async function aplicarRetornoMunicao(manutencao, user) {
 }
 
 
+
+async function aplicarRetornoTorniquete(
+  manutencao,
+  user
+) {
+  const quantidade =
+    inteiroPositivo(
+      manutencao?.quantidade
+    )
+
+  if (quantidade <= 0) {
+    throw new Error(
+      'A manutenção de torniquete não possui quantidade válida para retorno.'
+    )
+  }
+
+  if (!manutencao?.id) {
+    throw new Error(
+      'A manutenção de torniquete não possui identificação válida.'
+    )
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_torniquetes_retornar_manutencao',
+    {
+      p_token:
+        token,
+
+      p_manutencao_id:
+        manutencao.id,
+
+      p_acao:
+        'RETORNAR'
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível devolver o torniquete da manutenção ao estoque.'
+    )
+  }
+
+  const atualizado = {
+    id:
+      data?.torniquete_id ||
+      manutencao?.referencia_id ||
+      null,
+
+    quantidade_p4:
+      inteiroPositivo(
+        data?.quantidade_p4
+      ),
+
+    quantidade_svdd:
+      inteiroPositivo(
+        data?.quantidade_svdd
+      ),
+
+    quantidade_manutencao:
+      inteiroPositivo(
+        data?.quantidade_manutencao
+      ),
+
+    status_operacional:
+      data?.status_operacional ||
+      'RESERVA',
+
+    local_atual:
+      data?.local_atual ||
+      null,
+
+    ativo:
+      true
+  }
+
+  try {
+    await criarOuAtualizarPatrimonio({
+      tipo:
+        'torniquete',
+
+      referencia_id:
+        atualizado.id,
+
+      dados: {
+        ...atualizado,
+        torniquete_id:
+          atualizado.id,
+        tipo_registro:
+          'TORNIQUETE_QUANTIDADE',
+        descricao:
+          'TORNIQUETE'
+      },
+
+      user,
+
+      local_atual:
+        atualizado.local_atual,
+
+      companhia_atual:
+        ''
+    })
+  } catch (errorPatrimonio) {
+    const {
+      error: rollbackError
+    } = await supabase.rpc(
+      'sigmo_torniquetes_retornar_manutencao',
+      {
+        p_token:
+          token,
+
+        p_manutencao_id:
+          manutencao.id,
+
+        p_acao:
+          'DESFAZER'
+      }
+    )
+
+    if (rollbackError) {
+      console.error(
+        'Erro ao desfazer retorno da manutenção do torniquete:',
+        rollbackError
+      )
+    }
+
+    throw errorPatrimonio
+  }
+
+  return {
+    torniquete:
+      atualizado,
+
+    rollback:
+      async () => {
+        const {
+          error: rollbackError
+        } = await supabase.rpc(
+          'sigmo_torniquetes_retornar_manutencao',
+          {
+            p_token:
+              token,
+
+            p_manutencao_id:
+              manutencao.id,
+
+            p_acao:
+              'DESFAZER'
+          }
+        )
+
+        if (rollbackError) {
+          throw rollbackError
+        }
+      }
+  }
+}
+
+
 async function aplicarRetornoPatrimonial(manutencao, user) {
   if (manutencao.modulo === MODULOS_MANUTENCAO.ARMAS) {
     return aplicarRetornoArma(manutencao, user)
@@ -2924,6 +3487,13 @@ async function aplicarRetornoPatrimonial(manutencao, user) {
 
   if (manutencao.modulo === MODULOS_MANUTENCAO.MUNICAO) {
     return aplicarRetornoMunicao(
+      manutencao,
+      user
+    )
+  }
+
+  if (manutencao.modulo === MODULOS_MANUTENCAO.TORNIQUETE) {
+    return aplicarRetornoTorniquete(
       manutencao,
       user
     )

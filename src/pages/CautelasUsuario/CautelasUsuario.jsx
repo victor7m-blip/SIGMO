@@ -24,6 +24,19 @@ import {
   listarManutencoes
 } from '../../services/manutencoesService'
 
+import {
+  carregarMapaEmElaboracao,
+  listarCautelasMapaForca
+} from '../../services/mapaForcaService'
+
+import {
+  ORIGENS_NOVIDADE_VTR,
+  SEVERIDADES_NOVIDADE_VTR,
+  enviarFotosOcorrenciaRiv,
+  obterRivResumo,
+  registrarOcorrenciaRiv
+} from '../../services/viaturasRivService'
+
 import './CautelasUsuario.css'
 import './CautelasUsuarioNovidades.css'
 
@@ -71,6 +84,131 @@ function normalizar(valor) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 }
+
+function itemEhViatura(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tabela_origem
+  ].map(normalizar)
+
+  return (
+    Boolean(item?.viatura_id) ||
+    campos.includes('viatura') ||
+    campos.includes('viaturas') ||
+    campos.includes('sigmo_viaturas')
+  )
+}
+
+function montarViaturaMapaForca(item, cautelaMapa) {
+  const viaturaId =
+    item?.viatura_id ||
+    item?.referencia_id ||
+    item?.id ||
+    null
+
+  if (!viaturaId) {
+    return null
+  }
+
+  return {
+    ...item,
+    id: `VIATURA-MAPA-${viaturaId}`,
+    patrimonio_id: null,
+    referencia_id: viaturaId,
+    viatura_id: viaturaId,
+    tipo_registro: 'VIATURA_MAPA_FORCA',
+    modulo: 'VIATURA',
+    tipo: 'VIATURA',
+    categoria: 'VIATURA',
+    tabela_origem: 'sigmo_viaturas',
+    descricao:
+      item?.descricao ||
+      `VIATURA ${item?.prefixo || ''}`.trim(),
+    patrimonio:
+      item?.prefixo ||
+      item?.placa ||
+      item?.modelo ||
+      'VIATURA',
+    identificador:
+      item?.prefixo ||
+      item?.placa ||
+      'VIATURA',
+    quantidade: 1,
+    item_especial_mapa_forca: true,
+    cautela_mapa_forca_id:
+      cautelaMapa?.id || null,
+    us_id:
+      cautelaMapa?.us_id || null
+  }
+}
+
+function policialCorrespondeCautelaMapa(user, cautela) {
+  const idsUsuario = [
+    user?.policial_id,
+    user?.id_policial,
+    user?.policial?.id,
+    user?.id
+  ]
+    .filter(Boolean)
+    .map(String)
+
+  const reUsuario = String(
+    user?.re ||
+    user?.policial?.re ||
+    ''
+  )
+    .replace(/[^0-9A-Z]/gi, '')
+    .slice(0, 6)
+
+  const idCautela =
+    String(cautela?.policial_id || '')
+
+  const reCautela =
+    String(cautela?.policial_re || '')
+      .replace(/[^0-9A-Z]/gi, '')
+      .slice(0, 6)
+
+  return (
+    (idCautela && idsUsuario.includes(idCautela)) ||
+    (reUsuario && reCautela && reUsuario === reCautela)
+  )
+}
+
+async function listarCautelasMapaUsuario(user) {
+  try {
+    const mapaAtual =
+      await carregarMapaEmElaboracao()
+
+    if (!mapaAtual?.mapa?.id) {
+      return []
+    }
+
+    const cautelas =
+      await listarCautelasMapaForca({
+        mapaId: mapaAtual.mapa.id
+      })
+
+    return (cautelas || []).filter(
+      (cautela) =>
+        cautela?.ativa !== false &&
+        policialCorrespondeCautelaMapa(
+          user,
+          cautela
+        )
+    )
+  } catch (error) {
+    console.warn(
+      'Não foi possível carregar as viaturas vinculadas pelo Mapa Força:',
+      error
+    )
+
+    return []
+  }
+}
+
 
 function obterDescricao(item) {
   const descricaoOriginal = String(
@@ -168,10 +306,34 @@ function lerObservacao(item) {
   }
 }
 
+function itemEhTorniquete(item) {
+  const observacao = lerObservacao(item)
+
+  return (
+    normalizar(item?.tipo_patrimonio) ===
+      'torniquete' ||
+    normalizar(item?.tipo) ===
+      'torniquete' ||
+    normalizar(item?.categoria) ===
+      'torniquete' ||
+    normalizar(item?.modulo) ===
+      'torniquete_quantidade' ||
+    normalizar(item?.tipo_registro) ===
+      'torniquete_quantidade' ||
+    normalizar(observacao?.tipo_registro) ===
+      'torniquete_quantidade' ||
+    Boolean(
+      item?.torniquete_id ||
+      observacao?.torniquete_id
+    )
+  )
+}
+
 function itemEhQuantitativo(item) {
   const observacao = lerObservacao(item)
 
   return (
+    itemEhTorniquete(item) ||
     ['tonfa', 'cassetete'].includes(
       normalizar(item?.tipo_patrimonio)
     ) ||
@@ -195,6 +357,25 @@ function quantidadeEnviada(item) {
 
 function chaveItemEstavel(item) {
   const observacao = lerObservacao(item)
+
+  if (itemEhViatura(item)) {
+    return String(
+      item?.viatura_id ||
+      item?.referencia_id ||
+      item?.id ||
+      ''
+    )
+  }
+
+  if (itemEhTorniquete(item)) {
+    return String(
+      item?.movimentacao_cautela_id ||
+      observacao?.movimentacao_cautela_id ||
+      item?.id ||
+      item?.patrimonio_id ||
+      ''
+    )
+  }
 
   if (itemEhQuantitativo(item)) {
     return String(
@@ -553,7 +734,8 @@ export default function CautelasUsuario({
         devolucoesPendentes,
         cargasPermanentes,
         cautelasMunicao,
-        manutencoesCOP
+        manutencoesCOP,
+        cautelasMapaUsuario
       ] =
         await Promise.all([
           listarCautelasAguardandoUsuario(user),
@@ -561,10 +743,74 @@ export default function CautelasUsuario({
           listarDevolucoesPendentesUsuario(user),
           listarCargasPermanentesPendentesPolicial(),
           listarCautelasPendentesPolicial(),
-          carregarUltimasManutencoesCOP()
+          carregarUltimasManutencoesCOP(),
+          listarCautelasMapaUsuario(user)
         ])
 
-      const listaPendentes = pendentes || []
+      /*
+       * A viatura não é patrimônio comum e, por isso, não aparece dentro
+       * de movimentacao.itens. O vínculo dela é preservado em
+       * sigmo_mapa_forca_cautelas.resumo_itens.
+       *
+       * Aqui unimos somente a representação visual da VTR ao carrinho
+       * patrimonial correspondente. A confirmação patrimonial continua
+       * recebendo apenas os itens que pertencem ao motor de cautelas.
+       */
+      const listaPendentes =
+        (pendentes || []).map((movimentacao) => {
+          const vinculoMapa =
+            (cautelasMapaUsuario || []).find(
+              (cautela) =>
+                String(
+                  cautela?.movimentacao_principal_id ||
+                  ''
+                ) ===
+                String(
+                  movimentacao?.id ||
+                  ''
+                )
+            )
+
+          const viaturas =
+            (vinculoMapa?.resumo_itens || [])
+              .filter(itemEhViatura)
+              .map((item) =>
+                montarViaturaMapaForca(
+                  item,
+                  vinculoMapa
+                )
+              )
+              .filter(Boolean)
+
+          if (viaturas.length === 0) {
+            return movimentacao
+          }
+
+          const itensAtuais =
+            Array.isArray(movimentacao?.itens)
+              ? movimentacao.itens
+              : []
+
+          const idsAtuais =
+            new Set(
+              itensAtuais
+                .filter(itemEhViatura)
+                .map(chaveItemEstavel)
+            )
+
+          return {
+            ...movimentacao,
+            itens: [
+              ...itensAtuais,
+              ...viaturas.filter(
+                (item) =>
+                  !idsAtuais.has(
+                    chaveItemEstavel(item)
+                  )
+              )
+            ]
+          }
+        })
 
       setCautelas(listaPendentes)
       setCargasPermanentesPendentes(
@@ -934,6 +1180,165 @@ function alterarQuantidadeDevolver(
   }))
 }
 
+  function novidadeViaturaVazia() {
+    return {
+      aberta: true,
+      tipo: 'AVARIA',
+      titulo: '',
+      descricao: '',
+      origemConstatacao: 'ASSUNCAO_VTR',
+      localAvaria: '',
+      componenteAvariado: '',
+      severidade: 'BAIXA',
+      disponibilidadeVtr: 'NAO_AVALIADA',
+      responsabilidadeStatus: 'NAO_DEFINIDA',
+      quantidade_afetada: 1,
+      fotos: [],
+      previews: []
+    }
+  }
+
+  function alternarNovidadeViatura(chave) {
+    setNovidadesRecebimento((estadoAtual) => {
+      const atual = estadoAtual[chave]
+
+      if (!atual) {
+        return {
+          ...estadoAtual,
+          [chave]: novidadeViaturaVazia()
+        }
+      }
+
+      return {
+        ...estadoAtual,
+        [chave]: {
+          ...atual,
+          aberta: !atual.aberta
+        }
+      }
+    })
+
+    setErro('')
+    setMensagem('')
+  }
+
+  function alterarNovidadeViatura(chave, campo, valor) {
+    setNovidadesRecebimento((estadoAtual) => {
+      const atual =
+        estadoAtual[chave] ||
+        novidadeViaturaVazia()
+
+      let novoValor = valor
+
+      if (
+        [
+          'titulo',
+          'descricao',
+          'localAvaria',
+          'componenteAvariado'
+        ].includes(campo)
+      ) {
+        novoValor =
+          String(valor ?? '').toUpperCase()
+      }
+
+      return {
+        ...estadoAtual,
+        [chave]: {
+          ...atual,
+          [campo]: novoValor
+        }
+      }
+    })
+  }
+
+  async function registrarNovidadeViaturaNoRiv({
+    item,
+    novidade
+  }) {
+    const viaturaId =
+      item?.viatura_id ||
+      item?.referencia_id ||
+      null
+
+    if (!viaturaId) {
+      throw new Error(
+        'A viatura vinculada à US não possui identificação válida para registrar a novidade.'
+      )
+    }
+
+    const titulo =
+      String(
+        novidade?.titulo || ''
+      ).trim()
+
+    if (!titulo) {
+      throw new Error(
+        'Informe o título da novidade registrada na viatura.'
+      )
+    }
+
+    const resumo =
+      await obterRivResumo(
+        viaturaId
+      )
+
+    const registro =
+      await registrarOcorrenciaRiv({
+        viatura: {
+          id: viaturaId,
+          quilometragem_atual:
+            Number(
+              resumo?.quilometragemAtual ||
+              0
+            )
+        },
+        tipo: 'AVARIA',
+        titulo,
+        descricao:
+          novidade?.descricao || '',
+        origemConstatacao:
+          novidade?.origemConstatacao ||
+          'ASSUNCAO_VTR',
+        localAvaria:
+          novidade?.localAvaria || '',
+        componenteAvariado:
+          novidade?.componenteAvariado ||
+          '',
+        severidade:
+          novidade?.severidade ||
+          'BAIXA',
+        disponibilidadeVtr:
+          novidade?.disponibilidadeVtr ||
+          'NAO_AVALIADA',
+        responsabilidadeStatus:
+          novidade?.responsabilidadeStatus ||
+          'NAO_DEFINIDA',
+        agravamento: false,
+        ocorrenciaPaiId: null,
+        agravamentoDescricao: '',
+        user
+      })
+
+    if (
+      registro?.id &&
+      (novidade?.fotos || []).length > 0
+    ) {
+      await enviarFotosOcorrenciaRiv({
+        viaturaId,
+        ocorrenciaId:
+          registro.id,
+        tipo: 'AVARIA',
+        fase: 'ANTES',
+        arquivos:
+          novidade.fotos,
+        user
+      })
+    }
+
+    return registro
+  }
+
   function obterNovidadeRecebimento(chave) {
     return (
       novidadesRecebimento[chave] ||
@@ -1279,7 +1684,12 @@ function alterarQuantidadeDevolver(
   }
 
   function prepararItensRecebimento(movimentacao) {
-    return (movimentacao?.itens || []).map(
+    return (movimentacao?.itens || [])
+      .filter(
+        (item) =>
+          !itemEhViatura(item)
+      )
+      .map(
       (item, index) => {
         const enviada = quantidadeEnviada(item)
         const quantitativo = itemEhQuantitativo(item)
@@ -1353,6 +1763,10 @@ function alterarQuantidadeDevolver(
     const itensRecebimento =
       prepararItensRecebimento(movimentacao)
 
+    const viaturasDoCarrinho =
+      (movimentacao?.itens || [])
+        .filter(itemEhViatura)
+
     const municoesDoCarrinho =
       associacaoMunicoesCarrinhos
         .porCarrinho
@@ -1362,6 +1776,16 @@ function alterarQuantidadeDevolver(
             ''
           )
         ) || []
+
+    if (
+      itensRecebimento.length === 0 &&
+      viaturasDoCarrinho.length > 0
+    ) {
+      setErro(
+        'A viatura está vinculada à US, mas o vínculo operacional próprio da VTR ainda precisa ser concluído antes de um carrinho exclusivamente de viatura ser confirmado.'
+      )
+      return
+    }
 
     for (const item of itensRecebimento) {
       if (!item.novidade) {
@@ -1378,6 +1802,33 @@ function alterarQuantidadeDevolver(
       if (!item.novidade.descricao) {
         setErro(
           'Descreva todas as novidades registradas.'
+        )
+        return
+      }
+    }
+
+    for (const viatura of viaturasDoCarrinho) {
+      const chaveViatura =
+        chaveQuantidadeRecebimento(
+          movimentacao.id,
+          viatura
+        )
+
+      const novidadeViatura =
+        obterNovidadeRecebimento(
+          chaveViatura
+        )
+
+      if (!novidadeViatura) {
+        continue
+      }
+
+      if (!String(
+        novidadeViatura.titulo ||
+        ''
+      ).trim()) {
+        setErro(
+          'Informe o título da novidade registrada na viatura.'
         )
         return
       }
@@ -1467,6 +1918,28 @@ function alterarQuantidadeDevolver(
           : 'Confirma o recebimento de todos os materiais e munições deste carrinho?'
     }
 
+    if (viaturasDoCarrinho.length > 0) {
+      const possuiNovidadeViatura =
+        viaturasDoCarrinho.some(
+          (viatura) =>
+            Boolean(
+              obterNovidadeRecebimento(
+                chaveQuantidadeRecebimento(
+                  movimentacao.id,
+                  viatura
+                )
+              )
+            )
+        )
+
+      mensagemConfirmacao =
+        possuiNovidadeViatura
+          ? 'Confirma o recebimento da cautela e o registro da novidade da viatura no RIV? A VTR não será encaminhada automaticamente para manutenção.'
+          : possuiMunicaoVinculada
+            ? 'Confirma o recebimento dos materiais, munições e da viatura vinculada a esta US?'
+            : 'Confirma o recebimento dos materiais e da viatura vinculada a esta US?'
+    }
+
     if (
       !window.confirm(
         mensagemConfirmacao
@@ -1490,6 +1963,56 @@ function alterarQuantidadeDevolver(
             itensRecebimento,
           user
         })
+
+      const resultadosViaturas = []
+      const falhasViaturas = []
+
+      for (
+        const viatura of
+        viaturasDoCarrinho
+      ) {
+        const chaveViatura =
+          chaveQuantidadeRecebimento(
+            movimentacao.id,
+            viatura
+          )
+
+        const novidadeViatura =
+          obterNovidadeRecebimento(
+            chaveViatura
+          )
+
+        if (!novidadeViatura) {
+          continue
+        }
+
+        try {
+          const registroRiv =
+            await registrarNovidadeViaturaNoRiv({
+              item: viatura,
+              novidade:
+                novidadeViatura
+            })
+
+          resultadosViaturas.push({
+            viatura,
+            registro:
+              registroRiv
+          })
+        } catch (error) {
+          console.error(
+            'Erro ao registrar novidade da viatura no RIV:',
+            error
+          )
+
+          falhasViaturas.push({
+            viatura,
+            erro:
+              error?.message ||
+              'Não foi possível registrar a novidade da viatura no RIV.'
+          })
+        }
+      }
 
       const resultadosMunicoes = []
 
@@ -1552,7 +2075,15 @@ function alterarQuantidadeDevolver(
         )
 
       setMensagem(
-        possuiMunicaoVinculada
+        viaturasDoCarrinho.length > 0
+          ? (
+              falhasViaturas.length > 0
+                ? `Cautela recebida com sucesso, mas ${falhasViaturas.length} novidade(s) de viatura não puderam ser registrada(s) no RIV: ${falhasViaturas.map((item) => item.erro).join(' | ')}`
+                : resultadosViaturas.length > 0
+                  ? 'Cautela recebida com sucesso. A novidade da viatura foi registrada no RIV e ficará aguardando avaliação do SVDD.'
+                  : 'Cautela recebida com sucesso. A viatura vinculada à US está sob sua responsabilidade.'
+            )
+          : possuiMunicaoVinculada
           ? (
               totalMunicoes > 0
                 ? `Cautela recebida com sucesso. Materiais e ${totalMunicoes} unidade(s) de munição já estão sob sua responsabilidade.`
@@ -1611,7 +2142,9 @@ function alterarQuantidadeDevolver(
             : {}
         ),
         municoes:
-          resultadosMunicoes
+          resultadosMunicoes,
+        viaturas:
+          resultadosViaturas
       })
     } catch (error) {
       setErro(
@@ -1883,25 +2416,48 @@ function alterarQuantidadeDevolver(
 
     const itensParaDevolucao =
       itensSelecionados.map((item) => {
-        if (!itemEhQuantitativo(item)) {
-          return item
-        }
+        const quantitativo =
+          itemEhQuantitativo(item)
 
         const chave =
           chaveQuantidadeDevolucao(item)
 
+        const quantidadeFinal =
+          quantitativo
+            ? Math.max(
+                1,
+                Math.min(
+                  Number(
+                    quantidadesDevolver[chave] ??
+                    quantidadeEnviada(item)
+                  ) || 1,
+                  quantidadeEnviada(item)
+                )
+              )
+            : Math.max(
+                1,
+                Number(
+                  item?.quantidade ||
+                  1
+                ) || 1
+              )
+
         return {
           ...item,
-          quantidade: Math.max(
-            1,
-            Math.min(
-              Number(
-                quantidadesDevolver[chave] ??
-                quantidadeEnviada(item)
-              ) || 1,
-              quantidadeEnviada(item)
+
+          quantidade:
+            quantidadeFinal,
+
+          /*
+           * A novidade informada na tela de DEVOLUÇÃO precisa viajar
+           * junto com o item até o service. Antes ela ficava apenas no
+           * estado visual e era perdida ao clicar em "Enviar devolução".
+           */
+          novidade:
+            novidadeParaEnvio(
+              chave,
+              quantidadeFinal
             )
-          )
         }
       })
 
@@ -1912,6 +2468,39 @@ function alterarQuantidadeDevolver(
 
     setMensagem(
       'Solicitação de devolução enviada ao setor responsável. Aguarde a conferência e o aceite.'
+    )
+
+    setNovidadesRecebimento(
+      (estadoAtual) => {
+        const proximo = {
+          ...estadoAtual
+        }
+
+        for (
+          const item of
+          itensSelecionados
+        ) {
+          const chave =
+            chaveQuantidadeDevolucao(item)
+
+          ;(
+            proximo[chave]
+              ?.previews || []
+          ).forEach(
+            (preview) => {
+              if (preview?.url) {
+                URL.revokeObjectURL(
+                  preview.url
+                )
+              }
+            }
+          )
+
+          delete proximo[chave]
+        }
+
+        return proximo
+      }
     )
 
     setItensSelecionados([])
@@ -2188,6 +2777,208 @@ function alterarQuantidadeDevolver(
                 </small>
               </label>
             )}
+
+            {itemEhTorniquete(item) && (
+              <div
+                className="cautela-usuario-novidade-acoes"
+                style={{
+                  marginTop: 10
+                }}
+              >
+                <button
+                  type="button"
+                  className="cautela-usuario-novidade-botao"
+                  onClick={() =>
+                    alternarNovidadeRecebimento(
+                      chave
+                    )
+                  }
+                >
+                  {obterNovidadeRecebimento(chave)
+                    ? obterNovidadeRecebimento(chave)?.aberta
+                      ? 'Fechar novidade'
+                      : 'Editar novidade'
+                    : 'Registrar novidade'}
+                </button>
+
+                {obterNovidadeRecebimento(chave) && (
+                  <>
+                    <span className="cautela-usuario-novidade-ok">
+                      ✓ Novidade registrada
+                    </span>
+
+                    <button
+                      type="button"
+                      className="cautela-usuario-novidade-remover"
+                      onClick={() =>
+                        removerNovidadeRecebimento(
+                          chave
+                        )
+                      }
+                    >
+                      Remover
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {itemEhTorniquete(item) &&
+              obterNovidadeRecebimento(chave)?.aberta && (
+                <div className="cautela-usuario-novidade-card">
+                  <div className="cautela-usuario-novidade-titulo">
+                    <span>REGISTRO DE NOVIDADE NA DEVOLUÇÃO</span>
+                    <strong>
+                      {obterDescricao(item)}
+                    </strong>
+                  </div>
+
+                  <div className="cautela-usuario-novidade-grid">
+                    <label>
+                      Tipo
+
+                      <select
+                        value={
+                          obterNovidadeRecebimento(chave)?.tipo ||
+                          ''
+                        }
+                        onChange={(event) =>
+                          alterarNovidadeRecebimento(
+                            chave,
+                            'tipo',
+                            event.target.value,
+                            quantidadeDevolver
+                          )
+                        }
+                      >
+                        <option value="">
+                          SELECIONE
+                        </option>
+                        <option value="AVARIA">
+                          AVARIA
+                        </option>
+                        <option value="DEFEITO">
+                          DEFEITO
+                        </option>
+                        <option value="IMPROPRIO_PARA_USO">
+                          IMPRÓPRIO PARA USO
+                        </option>
+                        <option value="OUTRO">
+                          OUTRO
+                        </option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Quantidade com novidade
+
+                      <input
+                        type="number"
+                        min="1"
+                        max={quantidadeDevolver}
+                        value={
+                          obterNovidadeRecebimento(chave)
+                            ?.quantidade_afetada ||
+                          1
+                        }
+                        onChange={(event) =>
+                          alterarNovidadeRecebimento(
+                            chave,
+                            'quantidade_afetada',
+                            event.target.value,
+                            quantidadeDevolver
+                          )
+                        }
+                      />
+                    </label>
+
+                    <label className="cautela-usuario-novidade-full">
+                      Descrição
+
+                      <textarea
+                        value={
+                          obterNovidadeRecebimento(chave)
+                            ?.descricao ||
+                          ''
+                        }
+                        onChange={(event) =>
+                          alterarNovidadeRecebimento(
+                            chave,
+                            'descricao',
+                            event.target.value,
+                            quantidadeDevolver
+                          )
+                        }
+                        placeholder="DESCREVA A NOVIDADE IDENTIFICADA NO TORNIQUETE"
+                      />
+                    </label>
+
+                    <label className="cautela-usuario-novidade-full">
+                      Fotos
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        multiple
+                        onChange={(event) =>
+                          selecionarFotosNovidadeRecebimento(
+                            chave,
+                            event
+                          )
+                        }
+                      />
+
+                      <small>
+                        Cada foto pode ter no máximo 5 MB.
+                      </small>
+                    </label>
+                  </div>
+
+                  {(obterNovidadeRecebimento(chave)?.previews || [])
+                    .length > 0 && (
+                    <div className="cautela-usuario-novidade-fotos">
+                      {(obterNovidadeRecebimento(chave)?.previews || [])
+                        .map((preview, indice) => (
+                          <article
+                            key={preview.id}
+                            className="cautela-usuario-novidade-foto"
+                          >
+                            <a
+                              href={preview.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Ampliar foto"
+                            >
+                              <img
+                                src={preview.url}
+                                alt={`Foto ${indice + 1} da novidade`}
+                              />
+                            </a>
+
+                            <div>
+                              <span>
+                                Foto {indice + 1}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removerFotoNovidadeRecebimento(
+                                    chave,
+                                    indice
+                                  )
+                                }
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
           </div>
 
           <button
@@ -2825,9 +3616,13 @@ function alterarQuantidadeDevolver(
                                   type="button"
                                   className="cautela-usuario-novidade-botao"
                                   onClick={() =>
-                                    alternarNovidadeRecebimento(
-                                      chave
-                                    )
+                                    itemEhViatura(item)
+                                      ? alternarNovidadeViatura(
+                                          chave
+                                        )
+                                      : alternarNovidadeRecebimento(
+                                          chave
+                                        )
                                   }
                                 >
                                   {obterNovidadeRecebimento(chave)
@@ -2858,7 +3653,228 @@ function alterarQuantidadeDevolver(
                                 )}
                               </div>
 
-                              {obterNovidadeRecebimento(chave)?.aberta && (
+                              {itemEhViatura(item) &&
+                                obterNovidadeRecebimento(chave)?.aberta && (
+                                  <div className="cautela-usuario-novidade-card">
+                                    <div className="cautela-usuario-novidade-titulo">
+                                      <span>NOVIDADE DA VIATURA • RIV</span>
+                                      <strong>
+                                        {obterDescricao(item)}
+                                      </strong>
+                                    </div>
+
+                                    <div className="cautela-usuario-novidade-grid">
+                                      <label className="cautela-usuario-novidade-full">
+                                        Título *
+                                        <input
+                                          value={
+                                            obterNovidadeRecebimento(chave)
+                                              ?.titulo ||
+                                            ''
+                                          }
+                                          onChange={(event) =>
+                                            alterarNovidadeViatura(
+                                              chave,
+                                              'titulo',
+                                              event.target.value
+                                            )
+                                          }
+                                          placeholder="EX.: RISCO NA PORTA DIANTEIRA DIREITA"
+                                        />
+                                      </label>
+
+                                      <label>
+                                        Constatada em
+                                        <select
+                                          value={
+                                            obterNovidadeRecebimento(chave)
+                                              ?.origemConstatacao ||
+                                            'ASSUNCAO_VTR'
+                                          }
+                                          onChange={(event) =>
+                                            alterarNovidadeViatura(
+                                              chave,
+                                              'origemConstatacao',
+                                              event.target.value
+                                            )
+                                          }
+                                        >
+                                          {ORIGENS_NOVIDADE_VTR.map(
+                                            (opcao) => (
+                                              <option
+                                                key={opcao.value}
+                                                value={opcao.value}
+                                              >
+                                                {opcao.label}
+                                              </option>
+                                            )
+                                          )}
+                                        </select>
+                                      </label>
+
+                                      <label>
+                                        Gravidade
+                                        <select
+                                          value={
+                                            obterNovidadeRecebimento(chave)
+                                              ?.severidade ||
+                                            'BAIXA'
+                                          }
+                                          onChange={(event) =>
+                                            alterarNovidadeViatura(
+                                              chave,
+                                              'severidade',
+                                              event.target.value
+                                            )
+                                          }
+                                        >
+                                          {SEVERIDADES_NOVIDADE_VTR.map(
+                                            (opcao) => (
+                                              <option
+                                                key={opcao.value}
+                                                value={opcao.value}
+                                              >
+                                                {opcao.label}
+                                              </option>
+                                            )
+                                          )}
+                                        </select>
+                                      </label>
+
+                                      <label>
+                                        Local da avaria
+                                        <input
+                                          value={
+                                            obterNovidadeRecebimento(chave)
+                                              ?.localAvaria ||
+                                            ''
+                                          }
+                                          onChange={(event) =>
+                                            alterarNovidadeViatura(
+                                              chave,
+                                              'localAvaria',
+                                              event.target.value
+                                            )
+                                          }
+                                          placeholder="EX.: PORTA DIANTEIRA DIREITA"
+                                        />
+                                      </label>
+
+                                      <label>
+                                        Componente
+                                        <input
+                                          value={
+                                            obterNovidadeRecebimento(chave)
+                                              ?.componenteAvariado ||
+                                            ''
+                                          }
+                                          onChange={(event) =>
+                                            alterarNovidadeViatura(
+                                              chave,
+                                              'componenteAvariado',
+                                              event.target.value
+                                            )
+                                          }
+                                          placeholder="EX.: LATARIA / RETROVISOR"
+                                        />
+                                      </label>
+
+                                      <label className="cautela-usuario-novidade-full">
+                                        Descrição
+                                        <textarea
+                                          value={
+                                            obterNovidadeRecebimento(chave)
+                                              ?.descricao ||
+                                            ''
+                                          }
+                                          onChange={(event) =>
+                                            alterarNovidadeViatura(
+                                              chave,
+                                              'descricao',
+                                              event.target.value
+                                            )
+                                          }
+                                          placeholder="DESCREVA O QUE FOI CONSTATADO NA ASSUNÇÃO DA VIATURA"
+                                        />
+                                      </label>
+
+                                      <label className="cautela-usuario-novidade-full">
+                                        Fotos
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          capture="environment"
+                                          multiple
+                                          onChange={(event) =>
+                                            selecionarFotosNovidadeRecebimento(
+                                              chave,
+                                              event
+                                            )
+                                          }
+                                        />
+                                        <small>
+                                          Cada foto pode ter no máximo 5 MB.
+                                        </small>
+                                      </label>
+                                    </div>
+
+                                    {(obterNovidadeRecebimento(chave)?.previews || [])
+                                      .length > 0 && (
+                                      <div className="cautela-usuario-novidade-fotos">
+                                        {(obterNovidadeRecebimento(chave)?.previews || [])
+                                          .map((preview, indice) => (
+                                            <article
+                                              key={preview.id}
+                                              className="cautela-usuario-novidade-foto"
+                                            >
+                                              <a
+                                                href={preview.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                title="Ampliar foto"
+                                              >
+                                                <img
+                                                  src={preview.url}
+                                                  alt={`Foto ${indice + 1} da novidade da viatura`}
+                                                />
+                                              </a>
+
+                                              <div>
+                                                <span>
+                                                  Foto {indice + 1}
+                                                </span>
+
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    removerFotoNovidadeRecebimento(
+                                                      chave,
+                                                      indice
+                                                    )
+                                                  }
+                                                >
+                                                  Remover
+                                                </button>
+                                              </div>
+                                            </article>
+                                          ))}
+                                      </div>
+                                    )}
+
+                                    <div
+                                      className="cautela-usuario-alerta info"
+                                      style={{
+                                        marginTop: 10,
+                                        marginBottom: 0
+                                      }}
+                                    >
+                                      A novidade será registrada no RIV. O recebimento da VTR não a encaminha automaticamente para manutenção; essa decisão ficará para o SVDD.
+                                    </div>
+                                  </div>
+                                )}
+
+                              {!itemEhViatura(item) &&
+                                obterNovidadeRecebimento(chave)?.aberta && (
                                 <div className="cautela-usuario-novidade-card">
                                   <div className="cautela-usuario-novidade-titulo">
                                     <span>REGISTRO DE NOVIDADE</span>

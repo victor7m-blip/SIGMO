@@ -238,20 +238,113 @@ function ehItemMunicao(item) {
   )
 }
 
+function obterConfiguracaoQuantitativa(item) {
+  if (!item?.controla_quantidade) {
+    return null
+  }
+
+  const tabela =
+    String(
+      item?.tabela_origem ||
+      ''
+    )
+      .trim()
+      .toLowerCase()
+
+  const modulo =
+    String(
+      item?.modulo ||
+      item?.categoria ||
+      item?.tipo ||
+      ''
+    )
+      .trim()
+      .toUpperCase()
+
+  const torniqueteId =
+    item?.torniquete_id ||
+    (
+      tabela ===
+        'sigmo_torniquetes' ||
+      modulo ===
+        'TORNIQUETE'
+        ? item?.referencia_id ||
+          item?.id
+        : null
+    )
+
+  if (torniqueteId) {
+    return {
+      tipoPatrimonio:
+        'torniquete',
+      referenciaId:
+        torniqueteId,
+      tipoRegistro:
+        'TORNIQUETE_QUANTIDADE',
+      campoReferencia:
+        'torniquete_id',
+      descricaoPadrao:
+        'TORNIQUETE'
+    }
+  }
+
+  const tonfaId =
+    item?.tonfa_id ||
+    (
+      tabela ===
+        'sigmo_tonfas'
+        ? item?.referencia_id ||
+          item?.id
+        : null
+    )
+
+  if (tonfaId) {
+    return {
+      tipoPatrimonio:
+        'tonfa',
+      referenciaId:
+        tonfaId,
+      tipoRegistro:
+        'TONFA_QUANTIDADE',
+      campoReferencia:
+        'tonfa_id',
+      descricaoPadrao:
+        'TONFA/CASSETETE'
+    }
+  }
+
+  return null
+}
+
 async function resolverPatrimonioIdItem(item) {
   if (item?.patrimonio_id) {
     return item.patrimonio_id
   }
 
-  if (!item?.controla_quantidade || !item?.tonfa_id) {
+  if (!item?.controla_quantidade) {
+    return null
+  }
+
+  const configuracao =
+    obterConfiguracaoQuantitativa(
+      item
+    )
+
+  if (!configuracao?.referenciaId) {
     return null
   }
 
   const { data, error } = await supabase
     .from('sigmo_patrimonios')
     .select('id')
-    .eq('tipo', 'tonfa')
-    .eq('referencia_id', item.tonfa_id)
+    .eq(
+      'tipo',
+      configuracao.tipoPatrimonio
+    )
+    .eq(
+      'referencia_id',
+      configuracao.referenciaId
+    )
     .eq('ativo', true)
     .maybeSingle()
 
@@ -261,7 +354,11 @@ async function resolverPatrimonioIdItem(item) {
 
   if (!data?.id) {
     throw new Error(
-      `O registro patrimonial de ${item.descricao || item.categoria || 'Tonfa/Cassetete'} não foi encontrado.`
+      `O registro patrimonial de ${
+        item.descricao ||
+        item.categoria ||
+        configuracao.descricaoPadrao
+      } não foi encontrado.`
     )
   }
 
@@ -281,18 +378,52 @@ async function prepararItensPendentes(itens) {
       )
     }
 
+    const quantidade =
+      Number(
+        item.quantidade ||
+        1
+      )
+
+    const configuracao =
+      item.controla_quantidade
+        ? obterConfiguracaoQuantitativa(
+            item
+          )
+        : null
+
+    if (
+      item.controla_quantidade &&
+      !configuracao
+    ) {
+      throw new Error(
+        `O tipo quantitativo de ${item.descricao || item.categoria || 'material'} ainda não está configurado para cautela.`
+      )
+    }
+
+    const observacaoQuantitativa =
+      configuracao
+        ? {
+            tipo_registro:
+              configuracao.tipoRegistro,
+            [configuracao.campoReferencia]:
+              configuracao.referenciaId,
+            categoria:
+              item.categoria,
+            quantidade
+          }
+        : null
+
     preparados.push({
       ...item,
-      patrimonio_id: patrimonioId,
-      quantidade: Number(item.quantidade || 1),
-      observacao: item.controla_quantidade
-        ? JSON.stringify({
-            tipo_registro: 'TONFA_QUANTIDADE',
-            tonfa_id: item.tonfa_id,
-            categoria: item.categoria,
-            quantidade: Number(item.quantidade || 1)
-          })
-        : item.observacao || ''
+      patrimonio_id:
+        patrimonioId,
+      quantidade,
+      observacao:
+        observacaoQuantitativa
+          ? JSON.stringify(
+              observacaoQuantitativa
+            )
+          : item.observacao || ''
     })
   }
 

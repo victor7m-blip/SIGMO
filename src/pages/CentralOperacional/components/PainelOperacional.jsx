@@ -284,6 +284,67 @@ function itemEhTransferenciaMunicao(item) {
   )
 }
 
+
+function itemEhTransferenciaTorniquete(item) {
+  return (
+    normalizarOperacional(
+      item?.origem_aprovacao
+    ) === 'TORNIQUETE_TRANSFERENCIA' ||
+    normalizarOperacional(
+      item?.tipo_solicitacao
+    ) === 'TRANSFERENCIA_TORNIQUETE' ||
+    normalizarOperacional(
+      item?.modulo
+    ) === 'TORNIQUETE'
+  )
+}
+
+
+function itemEhRecebimentoTorniquete(
+  item,
+  secao
+) {
+  if (!ehTransferencia(secao)) {
+    return false
+  }
+
+  const status =
+    normalizarOperacional(
+      item?.status ||
+      item?.status_movimentacao
+    )
+      .replace(/ /g, '_')
+
+  const origem =
+    normalizarOperacional(
+      item?.origem_aprovacao
+    )
+
+  const tipoSolicitacao =
+    normalizarOperacional(
+      item?.tipo_solicitacao
+    )
+
+  const modulo =
+    normalizarOperacional(
+      item?.modulo ||
+      item?.categoria
+    )
+
+  return (
+    status ===
+      'AGUARDANDO_RECEBIMENTO' &&
+    (
+      origem ===
+        'TORNIQUETE_RECEBIMENTO' ||
+      tipoSolicitacao ===
+        'RECEBIMENTO_TORNIQUETE' ||
+      modulo ===
+        'TORNIQUETE'
+    )
+  )
+}
+
 function itemEhManutencaoMunicao(item) {
   return (
     normalizarOperacional(
@@ -529,6 +590,43 @@ function tituloItem(item, secao) {
     itemEhTransferenciaMunicao(item)
   ) {
     return `Munições — ${item?.calibre || 'calibre não informado'}`
+  }
+
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhTransferenciaTorniquete(item)
+  ) {
+    return 'Torniquete — transferência'
+  }
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhTransferenciaTorniquete(item)
+  ) {
+    return [
+      Number(
+        item?.quantidade_total ||
+        item?.quantidade ||
+        0
+      ) > 0
+        ? `${Number(
+            item?.quantidade_total ||
+            item?.quantidade ||
+            0
+          )} un.`
+        : '',
+      item?.origem_nome && item?.destino_nome
+        ? `${item.origem_nome} → ${item.destino_nome}`
+        : '',
+      item?.solicitada_por_nome
+        ? `SOLICITADO POR: ${item.solicitada_por_nome}`
+        : '',
+      item?.documento
+        ? `DOCUMENTO: ${item.documento}`
+        : '',
+      item?.observacoes
+    ].map(texto).filter(Boolean).join(' • ')
   }
 
   if (
@@ -978,6 +1076,7 @@ async function listarMunicoesVinculadasAosCarrinhos(
 export default function PainelOperacional({ dados, carregando, user, onAtualizar }) {
   const [decidindoManutencaoExternaId, setDecidindoManutencaoExternaId] = useState(null)
   const [decidindoMunicaoId, setDecidindoMunicaoId] = useState(null)
+  const [decidindoTorniqueteId, setDecidindoTorniqueteId] = useState(null)
   const [novidadesVtr, setNovidadesVtr] = useState([])
   const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
   const [novidadeVtrAberta, setNovidadeVtrAberta] = useState(null)
@@ -1214,6 +1313,256 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
       )
     } finally {
       setDecidindoMunicaoId(
+        null
+      )
+    }
+  }
+
+
+
+  async function aprovarTransferenciaTorniqueteNaCentral(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      decidindoTorniqueteId
+    ) {
+      return
+    }
+
+    const quantidade =
+      Number(
+        item?.quantidade_total ||
+        item?.quantidade ||
+        0
+      ) || 0
+
+    const confirmou =
+      window.confirm(
+        `Aprovar a transferência de ${quantidade} torniquete(s)?\n\n${
+          item?.origem_nome ||
+          item?.origem_tipo ||
+          'ORIGEM'
+        } → ${
+          item?.destino_nome ||
+          item?.destino_tipo ||
+          'DESTINO'
+        }`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    const token =
+      loadSessionToken()
+
+    if (!token) {
+      window.alert(
+        'Sessão SIGMO inválida ou expirada.'
+      )
+      return
+    }
+
+    try {
+      setDecidindoTorniqueteId(
+        transferenciaId
+      )
+
+      const { error } =
+        await supabase.rpc(
+          'sigmo_torniquetes_aprovar_transferencia',
+          {
+            p_token:
+              token,
+
+            p_transferencia_id:
+              transferenciaId
+          }
+        )
+
+      if (error) {
+        throw error
+      }
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    transferenciaId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao aprovar transferência de torniquete:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível aprovar a transferência de torniquete.'
+      )
+    } finally {
+      setDecidindoTorniqueteId(
+        null
+      )
+    }
+  }
+
+
+  async function reprovarTransferenciaTorniqueteNaCentral(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      decidindoTorniqueteId
+    ) {
+      return
+    }
+
+    const motivo =
+      window.prompt(
+        'Informe o motivo da reprovação da transferência de torniquete:'
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(motivo || '')
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo da reprovação.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        'Reprovar esta transferência de torniquete? O saldo permanecerá no setor de origem.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    const token =
+      loadSessionToken()
+
+    if (!token) {
+      window.alert(
+        'Sessão SIGMO inválida ou expirada.'
+      )
+      return
+    }
+
+    try {
+      setDecidindoTorniqueteId(
+        transferenciaId
+      )
+
+      const { error } =
+        await supabase.rpc(
+          'sigmo_torniquetes_recusar_transferencia',
+          {
+            p_token:
+              token,
+
+            p_transferencia_id:
+              transferenciaId,
+
+            p_motivo:
+              motivoNormalizado
+          }
+        )
+
+      if (error) {
+        throw error
+      }
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    transferenciaId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao reprovar transferência de torniquete:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível reprovar a transferência de torniquete.'
+      )
+    } finally {
+      setDecidindoTorniqueteId(
         null
       )
     }
@@ -2341,6 +2690,133 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     }
   }
 
+  async function receberTransferenciaTorniqueteNaCentral(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      recebendoId
+    ) {
+      return
+    }
+
+    const quantidade =
+      Number(
+        item?.quantidade_total ||
+        item?.quantidade ||
+        0
+      ) || 0
+
+    const origem =
+      item?.origem_nome ||
+      item?.origem_codigo ||
+      item?.origem_tipo ||
+      'ORIGEM'
+
+    const destino =
+      item?.destino_nome ||
+      item?.destino_codigo ||
+      item?.destino_tipo ||
+      'DESTINO'
+
+    const confirmou =
+      window.confirm(
+        `Confirmar o recebimento de ${quantidade} torniquete(s)?\n\n${origem} → ${destino}\n\nApós a confirmação, o saldo será efetivado no setor de destino.`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    const token =
+      loadSessionToken()
+
+    if (!token) {
+      window.alert(
+        'Sessão SIGMO inválida ou expirada.'
+      )
+      return
+    }
+
+    try {
+      setRecebendoId(
+        transferenciaId
+      )
+
+      const { error } =
+        await supabase.rpc(
+          'sigmo_torniquetes_receber_transferencia',
+          {
+            p_token:
+              token,
+
+            p_transferencia_id:
+              transferenciaId
+          }
+        )
+
+      if (error) {
+        throw error
+      }
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    transferenciaId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+
+      window.alert(
+        `Recebimento confirmado: ${quantidade} torniquete(s).`
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao receber transferência de torniquete:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível confirmar o recebimento do torniquete.'
+      )
+    } finally {
+      setRecebendoId(
+        null
+      )
+    }
+  }
+
+
   async function receberTransferenciaHTNoP4(item) {
     if (!item?.id || recebendoId || recusandoId) return
 
@@ -2941,6 +3417,88 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                             ehAprovacaoComandante(
                               selecionado
                             ) &&
+                            itemEhTransferenciaTorniquete(
+                              item
+                            )
+                          ) ? (
+                            <>
+                              <div>
+                                <span>Tipo</span>
+                                <strong>
+                                  Transferência de Torniquete
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Quantidade</span>
+                                <strong>
+                                  {Number(
+                                    item?.quantidade_total ||
+                                    item?.quantidade ||
+                                    0
+                                  )} un.
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Origem</span>
+                                <strong>
+                                  {item?.origem_nome ||
+                                    item?.origem_tipo ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Destino</span>
+                                <strong>
+                                  {item?.destino_nome ||
+                                    item?.destino_tipo ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Solicitado por</span>
+                                <strong>
+                                  {item?.solicitada_por_nome ||
+                                    item?.criado_por_nome ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Data da solicitação</span>
+                                <strong>
+                                  {formatarData(
+                                    item?.solicitada_em ||
+                                    item?.created_at
+                                  ) ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Documento</span>
+                                <strong>
+                                  {item?.documento ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              {item?.observacoes && (
+                                <div className="central-registro-itens">
+                                  <span>Observações</span>
+                                  <strong>
+                                    {item.observacoes}
+                                  </strong>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            ehAprovacaoComandante(
+                              selecionado
+                            ) &&
                             itemEhDescargaMunicao(
                               item
                             )
@@ -3477,6 +4035,32 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                         </button>
                       )}
 
+                      {itemEhRecebimentoTorniquete(
+                        item,
+                        selecionado
+                      ) && (
+                        <button
+                          type="button"
+                          className="central-button central-button-primary"
+                          disabled={
+                            Boolean(recebendoId)
+                          }
+                          onClick={() =>
+                            receberTransferenciaTorniqueteNaCentral(
+                              item
+                            )
+                          }
+                        >
+                          {recebendoId ===
+                          (
+                            item?.transferencia_id ||
+                            item?.id
+                          )
+                            ? 'Recebendo...'
+                            : 'Receber'}
+                        </button>
+                      )}
+
                       {ehTransferenciaHTEngine(item, selecionado) &&
                         normalizarOperacional(
                           user?.perfil_efetivo ||
@@ -3710,6 +4294,72 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               )
                                 ? 'Aprovando...'
                                 : 'Aprovar descarga'}
+                            </button>
+                          </>
+                        )}
+
+                      {ehAprovacaoComandante(
+                        selecionado
+                      ) &&
+                        itemEhTransferenciaTorniquete(
+                          item
+                        ) &&
+                        ehComandante(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                              disabled={
+                                Boolean(
+                                  decidindoTorniqueteId
+                                )
+                              }
+                              onClick={() =>
+                                reprovarTransferenciaTorniqueteNaCentral(
+                                  item
+                                )
+                              }
+                              style={{
+                                borderColor:
+                                  '#dc2626',
+                                color:
+                                  '#dc2626',
+                                fontWeight:
+                                  800
+                              }}
+                            >
+                              {decidindoTorniqueteId ===
+                              (
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Processando...'
+                                : 'Reprovar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="central-button central-button-primary"
+                              disabled={
+                                Boolean(
+                                  decidindoTorniqueteId
+                                )
+                              }
+                              onClick={() =>
+                                aprovarTransferenciaTorniqueteNaCentral(
+                                  item
+                                )
+                              }
+                            >
+                              {decidindoTorniqueteId ===
+                              (
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Aprovando...'
+                                : 'Aprovar'}
                             </button>
                           </>
                         )}

@@ -346,7 +346,7 @@ function montarDescricaoNovidadeOficial({
   ]
 
   if (
-    ['TONFA', 'CASSETETE'].includes(
+    ['TONFA', 'CASSETETE', 'TORNIQUETE'].includes(
       tipoPatrimonio
     )
   ) {
@@ -844,6 +844,284 @@ function statusEh(movimentacao, ...status) {
     .includes(atual)
 }
 
+function itemEhViaturaMapaForca(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tabela_origem
+  ].map(normalizar)
+
+  return (
+    Boolean(item?.viatura_id) ||
+    campos.includes('viatura') ||
+    campos.includes('viaturas') ||
+    campos.includes('sigmo_viaturas')
+  )
+}
+
+function lerResumoItensMapaForca(valor) {
+  if (Array.isArray(valor)) {
+    return valor
+  }
+
+  if (typeof valor === 'string') {
+    try {
+      const convertido = JSON.parse(valor)
+
+      return Array.isArray(convertido)
+        ? convertido
+        : []
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
+function montarItemViaturaMapaForca(
+  item,
+  vinculo
+) {
+  const viaturaId =
+    item?.viatura_id ||
+    item?.referencia_id ||
+    item?.id ||
+    null
+
+  if (!viaturaId) {
+    return null
+  }
+
+  const prefixo =
+    item?.prefixo ||
+    item?.patrimonio ||
+    null
+
+  return {
+    ...item,
+
+    id:
+      `VIATURA-MAPA-${viaturaId}`,
+
+    patrimonio_id:
+      null,
+
+    referencia_id:
+      viaturaId,
+
+    viatura_id:
+      viaturaId,
+
+    tipo_registro:
+      'VIATURA_MAPA_FORCA',
+
+    modulo:
+      'VIATURA',
+
+    tipo:
+      'VIATURA',
+
+    tipo_patrimonio:
+      'VIATURA',
+
+    categoria:
+      'VIATURA',
+
+    tabela_origem:
+      'sigmo_viaturas',
+
+    descricao:
+      item?.descricao ||
+      `VIATURA ${prefixo || ''}`.trim(),
+
+    patrimonio:
+      prefixo ||
+      item?.placa ||
+      item?.modelo ||
+      'VIATURA',
+
+    identificador:
+      prefixo ||
+      item?.placa ||
+      'VIATURA',
+
+    quantidade: 1,
+
+    item_especial_mapa_forca:
+      true,
+
+    cautela_mapa_forca_id:
+      vinculo?.id ||
+      null,
+
+    us_id:
+      vinculo?.us_id ||
+      null
+  }
+}
+
+async function anexarViaturasMapaForcaAosCarrinhos(
+  movimentacoes = []
+) {
+  const lista =
+    Array.isArray(movimentacoes)
+      ? movimentacoes
+      : []
+
+  const idsMovimentacao =
+    Array.from(
+      new Set(
+        lista
+          .map((item) =>
+            String(item?.id || '').trim()
+          )
+          .filter(Boolean)
+      )
+    )
+
+  if (idsMovimentacao.length === 0) {
+    return lista
+  }
+
+  const {
+    data: vinculos,
+    error
+  } = await supabase
+    .from('sigmo_mapa_forca_cautelas')
+    .select(
+      'id, us_id, movimentacao_principal_id, resumo_itens'
+    )
+    .in(
+      'movimentacao_principal_id',
+      idsMovimentacao
+    )
+
+  if (error) {
+    console.warn(
+      'Não foi possível complementar os carrinhos com a viatura do Mapa Força:',
+      error
+    )
+
+    return lista
+  }
+
+  const vinculoPorMovimentacao =
+    new Map()
+
+  for (const vinculo of vinculos || []) {
+    const movimentacaoId =
+      String(
+        vinculo
+          ?.movimentacao_principal_id ||
+        ''
+      ).trim()
+
+    if (!movimentacaoId) {
+      continue
+    }
+
+    const resumo =
+      lerResumoItensMapaForca(
+        vinculo?.resumo_itens
+      )
+
+    const viaturas =
+      resumo
+        .filter(
+          itemEhViaturaMapaForca
+        )
+        .map((item) =>
+          montarItemViaturaMapaForca(
+            item,
+            vinculo
+          )
+        )
+        .filter(Boolean)
+
+    if (viaturas.length === 0) {
+      continue
+    }
+
+    const existentes =
+      vinculoPorMovimentacao.get(
+        movimentacaoId
+      ) || []
+
+    vinculoPorMovimentacao.set(
+      movimentacaoId,
+      [
+        ...existentes,
+        ...viaturas
+      ]
+    )
+  }
+
+  return lista.map((movimentacao) => {
+    const chave =
+      String(
+        movimentacao?.id ||
+        ''
+      )
+
+    const viaturas =
+      vinculoPorMovimentacao.get(
+        chave
+      ) || []
+
+    if (viaturas.length === 0) {
+      return movimentacao
+    }
+
+    const itensAtuais =
+      Array.isArray(
+        movimentacao?.itens
+      )
+        ? movimentacao.itens
+        : []
+
+    const viaturasJaPresentes =
+      new Set(
+        itensAtuais
+          .filter(
+            itemEhViaturaMapaForca
+          )
+          .map((item) =>
+            String(
+              item?.viatura_id ||
+              item?.referencia_id ||
+              item?.id ||
+              ''
+            )
+          )
+      )
+
+    const novasViaturas =
+      viaturas.filter(
+        (item) =>
+          !viaturasJaPresentes.has(
+            String(
+              item?.viatura_id ||
+              item?.referencia_id ||
+              ''
+            )
+          )
+      )
+
+    return {
+      ...movimentacao,
+
+      itens: [
+        ...itensAtuais,
+        ...novasViaturas
+      ]
+    }
+  })
+}
+
+
 async function carregarDetalhes(movimentacoes) {
   const resultados = []
 
@@ -899,7 +1177,14 @@ export async function listarCautelasAguardandoUsuario(
     throw error
   }
 
-  return carregarDetalhes(movimentacoes || [])
+  const detalhes =
+    await carregarDetalhes(
+      movimentacoes || []
+    )
+
+  return anexarViaturasMapaForcaAosCarrinhos(
+    detalhes
+  )
 }
 
 async function buscarCautelasAtivasPorPatrimonio({
@@ -998,6 +1283,759 @@ async function buscarCautelasAtivasPorPatrimonio({
   return cautelaPorPatrimonio
 }
 
+async function listarTorniquetesEmServicoUsuario({
+  policialId
+}) {
+  if (!policialId) {
+    return []
+  }
+
+  /*
+   * Torniquete usa patrimônio agregado. Por isso o patrimônio central
+   * não pode ficar com um único policial em responsavel_atual_id.
+   *
+   * A responsabilidade individual é reconstruída pelo histórico real:
+   * - CAUTELA finalizada para o policial soma quantidade;
+   * - DEVOLUÇÃO efetivamente recebida pelo SVDD subtrai quantidade.
+   *
+   * Assim várias cautelas do mesmo estoque podem coexistir sem transformar
+   * o patrimônio agregado em um item individual.
+   */
+  const {
+    data: cautelas,
+    error: cautelasError
+  } = await supabase
+    .from('sigmo_movimentacoes')
+    .select(
+      'id, recebedor_id, fim_turno_servico, created_at'
+    )
+    .eq(
+      'tipo_movimentacao',
+      'CAUTELA'
+    )
+    .eq(
+      'recebedor_id',
+      policialId
+    )
+    .eq(
+      'status',
+      'finalizada'
+    )
+    .order(
+      'created_at',
+      { ascending: true }
+    )
+
+  if (cautelasError) {
+    throw cautelasError
+  }
+
+  const {
+    data: devolucoes,
+    error: devolucoesError
+  } = await supabase
+    .from('sigmo_movimentacoes')
+    .select(
+      'id, solicitante_id, status, created_at'
+    )
+    .eq(
+      'tipo_movimentacao',
+      'DEVOLUCAO'
+    )
+    .eq(
+      'solicitante_id',
+      policialId
+    )
+    .order(
+      'created_at',
+      { ascending: true }
+    )
+
+  if (devolucoesError) {
+    throw devolucoesError
+  }
+
+  const movimentacoes = [
+    ...(cautelas || []).map(
+      (item) => ({
+        ...item,
+        origem_evento:
+          'CAUTELA'
+      })
+    ),
+    ...(devolucoes || []).map(
+      (item) => ({
+        ...item,
+        origem_evento:
+          'DEVOLUCAO'
+      })
+    )
+  ]
+
+  const movimentacaoIds = [
+    ...new Set(
+      movimentacoes
+        .map(
+          (item) =>
+            item?.id
+        )
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (
+    movimentacaoIds.length === 0
+  ) {
+    return []
+  }
+
+  const {
+    data: itens,
+    error: itensError
+  } = await supabase
+    .from(
+      'sigmo_movimentacao_itens'
+    )
+    .select(
+      'id, movimentacao_id, patrimonio_id, quantidade, status_item, observacao, descricao, tipo_patrimonio'
+    )
+    .in(
+      'movimentacao_id',
+      movimentacaoIds
+    )
+
+  if (itensError) {
+    throw itensError
+  }
+
+  const patrimonioIds = [
+    ...new Set(
+      (itens || [])
+        .map(
+          (item) =>
+            item?.patrimonio_id
+        )
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (
+    patrimonioIds.length === 0
+  ) {
+    return []
+  }
+
+  const {
+    data: patrimonios,
+    error: patrimoniosError
+  } = await supabase
+    .from(
+      'sigmo_patrimonios'
+    )
+    .select(
+      'id, tipo, referencia_id, descricao, ativo'
+    )
+    .in(
+      'id',
+      patrimonioIds
+    )
+    .eq(
+      'ativo',
+      true
+    )
+
+  if (patrimoniosError) {
+    throw patrimoniosError
+  }
+
+  const torniquetesPorPatrimonio =
+    new Map(
+      (patrimonios || [])
+        .filter(
+          (item) =>
+            normalizar(
+              item?.tipo
+            ) === 'torniquete'
+        )
+        .map(
+          (item) => [
+            String(
+              item.id
+            ),
+            item
+          ]
+        )
+    )
+
+  if (
+    torniquetesPorPatrimonio.size ===
+    0
+  ) {
+    return []
+  }
+
+  const movimentacaoPorId =
+    new Map(
+      movimentacoes.map(
+        (item) => [
+          String(
+            item.id
+          ),
+          item
+        ]
+      )
+    )
+
+  const saldos =
+    new Map()
+
+  for (
+    const item of
+    itens || []
+  ) {
+    const patrimonio =
+      torniquetesPorPatrimonio.get(
+        String(
+          item?.patrimonio_id ||
+          ''
+        )
+      )
+
+    if (!patrimonio) {
+      continue
+    }
+
+    const movimentacao =
+      movimentacaoPorId.get(
+        String(
+          item?.movimentacao_id ||
+          ''
+        )
+      )
+
+    if (!movimentacao) {
+      continue
+    }
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          item?.quantidade ||
+          1
+        ) || 1
+      )
+
+    const chave =
+      String(
+        patrimonio.id
+      )
+
+    const atual =
+      saldos.get(chave) || {
+        patrimonio,
+        quantidade: 0,
+        ultimaCautela: null
+      }
+
+    if (
+      movimentacao.origem_evento ===
+      'CAUTELA'
+    ) {
+      atual.quantidade +=
+        quantidade
+
+      if (
+        !atual.ultimaCautela ||
+        new Date(
+          movimentacao.created_at
+        ).getTime() >
+          new Date(
+            atual.ultimaCautela
+              .created_at
+          ).getTime()
+      ) {
+        atual.ultimaCautela =
+          movimentacao
+      }
+    } else if (
+      movimentacao.origem_evento ===
+        'DEVOLUCAO' &&
+      normalizar(
+        item?.status_item
+      ) === 'recebido'
+    ) {
+      atual.quantidade =
+        Math.max(
+          0,
+          atual.quantidade -
+            quantidade
+        )
+    }
+
+    saldos.set(
+      chave,
+      atual
+    )
+  }
+
+  return [
+    ...saldos.values()
+  ]
+    .filter(
+      (registro) =>
+        Number(
+          registro?.quantidade ||
+          0
+        ) > 0
+    )
+    .map(
+      (registro) => {
+        const patrimonio =
+          registro.patrimonio
+
+        const cautela =
+          registro.ultimaCautela
+
+        const quantidade =
+          Number(
+            registro.quantidade ||
+            0
+          ) || 0
+
+        return {
+          id:
+            `TORNIQUETE-${patrimonio.id}-${policialId}`,
+
+          patrimonio_id:
+            patrimonio.id,
+
+          referencia_id:
+            patrimonio
+              .referencia_id ||
+            null,
+
+          torniquete_id:
+            patrimonio
+              .referencia_id ||
+            null,
+
+          tipo_registro:
+            'TORNIQUETE_QUANTIDADE',
+
+          modulo:
+            'TORNIQUETE_QUANTIDADE',
+
+          tipo:
+            'TORNIQUETE',
+
+          categoria:
+            'TORNIQUETE',
+
+          patrimonio:
+            'ESTOQUE CONTROLADO',
+
+          descricao:
+            patrimonio?.descricao ||
+            'TORNIQUETE',
+
+          quantidade,
+          saldo:
+            quantidade,
+
+          policial_id:
+            policialId,
+
+          movimentacao_cautela_id:
+            cautela?.id ||
+            null,
+
+          fim_turno_servico:
+            cautela
+              ?.fim_turno_servico ||
+            null,
+
+          cautela_criada_em:
+            cautela?.created_at ||
+            null,
+
+          status:
+            'EM SERVIÇO'
+        }
+      }
+    )
+}
+
+
+
+async function listarViaturasEmServicoUsuario({
+  policialId
+}) {
+  if (!policialId) {
+    return []
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    console.warn(
+      'Sessão SIGMO não encontrada para consultar viaturas em serviço.'
+    )
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_viaturas_em_servico_policial',
+    {
+      p_token: token
+    }
+  )
+
+  if (error) {
+    console.warn(
+      'Não foi possível listar as viaturas em serviço do policial:',
+      error
+    )
+    return []
+  }
+
+  const viaturasPorId =
+    new Map()
+
+  for (const registro of data || []) {
+    const viaturaId =
+      registro?.viatura_id ||
+      null
+
+    if (!viaturaId) {
+      continue
+    }
+
+    if (
+      registro?.devolucao_solicitada_em &&
+      !registro?.devolucao_recebida_em
+    ) {
+      continue
+    }
+
+    const chave =
+      String(viaturaId)
+
+    if (viaturasPorId.has(chave)) {
+      continue
+    }
+
+    viaturasPorId.set(
+      chave,
+      {
+        id:
+          `VIATURA-MAPA-${viaturaId}`,
+
+        patrimonio_id:
+          null,
+
+        referencia_id:
+          viaturaId,
+
+        viatura_id:
+          viaturaId,
+
+        tipo_registro:
+          'VIATURA_MAPA_FORCA',
+
+        modulo:
+          'VIATURA',
+
+        tipo:
+          'VIATURA',
+
+        tipo_patrimonio:
+          'VIATURA',
+
+        categoria:
+          'VIATURA',
+
+        tabela_origem:
+          'sigmo_viaturas',
+
+        descricao:
+          [
+            'VIATURA',
+            registro?.prefixo,
+            registro?.modelo,
+            registro?.placa
+          ]
+            .filter(Boolean)
+            .join(' • '),
+
+        prefixo:
+          registro?.prefixo ||
+          null,
+
+        placa:
+          registro?.placa ||
+          null,
+
+        modelo:
+          registro?.modelo ||
+          null,
+
+        patrimonio:
+          registro?.prefixo ||
+          registro?.placa ||
+          'VIATURA',
+
+        identificador:
+          registro?.prefixo ||
+          registro?.placa ||
+          'VIATURA',
+
+        quantidade:
+          1,
+
+        item_especial_mapa_forca:
+          true,
+
+        policial_id:
+          policialId,
+
+        movimentacao_cautela_id:
+          registro
+            ?.movimentacao_principal_id ||
+          null,
+
+        cautela_mapa_forca_id:
+          registro
+            ?.cautela_mapa_forca_id ||
+          null,
+
+        mapa_id:
+          registro?.mapa_id ||
+          null,
+
+        us_id:
+          registro?.us_id ||
+          null,
+
+        fim_turno_servico:
+          registro
+            ?.fim_turno_servico ||
+          null,
+
+        cautela_criada_em:
+          registro
+            ?.cautela_criada_em ||
+          null,
+
+        status:
+          'EM SERVIÇO'
+      }
+    )
+  }
+
+  return [
+    ...viaturasPorId.values()
+  ]
+}
+
+
+async function solicitarDevolucaoViaturaMapaForca({
+  item,
+  user,
+  policialId
+}) {
+  const cautelaId =
+    item?.cautela_mapa_forca_id ||
+    null
+
+  const viaturaId =
+    item?.viatura_id ||
+    item?.referencia_id ||
+    null
+
+  if (!cautelaId || !viaturaId) {
+    throw new Error(
+      'Não foi possível identificar o vínculo da viatura com o Mapa Força.'
+    )
+  }
+
+  const {
+    data: vinculo,
+    error: vinculoError
+  } = await supabase
+    .from('sigmo_mapa_forca_cautelas')
+    .select(
+      'id, policial_id, resumo_itens'
+    )
+    .eq('id', cautelaId)
+    .maybeSingle()
+
+  if (vinculoError) {
+    throw vinculoError
+  }
+
+  if (!vinculo) {
+    throw new Error(
+      'O vínculo da viatura com o Mapa Força não foi localizado.'
+    )
+  }
+
+  if (
+    String(
+      vinculo?.policial_id ||
+      ''
+    ) !==
+    String(
+      policialId ||
+      ''
+    )
+  ) {
+    throw new Error(
+      'A viatura não está vinculada ao usuário atual.'
+    )
+  }
+
+  const resumo =
+    lerResumoItensMapaForca(
+      vinculo?.resumo_itens
+    )
+
+  let encontrou =
+    false
+
+  const agora =
+    new Date().toISOString()
+
+  const resumoAtualizado =
+    resumo.map((registro) => {
+      if (
+        !itemEhViaturaMapaForca(
+          registro
+        )
+      ) {
+        return registro
+      }
+
+      const registroViaturaId =
+        String(
+          registro?.viatura_id ||
+          registro?.referencia_id ||
+          registro?.id ||
+          ''
+        )
+
+      if (
+        registroViaturaId !==
+        String(viaturaId)
+      ) {
+        return registro
+      }
+
+      encontrou = true
+
+      return {
+        ...registro,
+        devolucao_solicitada_em:
+          agora,
+        devolucao_solicitada_por_id:
+          user?.id ||
+          policialId ||
+          null,
+        devolucao_solicitada_por_nome:
+          nomeUsuario(user),
+        devolucao_status:
+          'AGUARDANDO_SVDD',
+        devolucao_novidade_riv:
+          item?.novidade ||
+          null
+      }
+    })
+
+  if (!encontrou) {
+    throw new Error(
+      'A viatura selecionada não foi localizada no vínculo do Mapa Força.'
+    )
+  }
+
+  const {
+    error: atualizarError
+  } = await supabase
+    .from('sigmo_mapa_forca_cautelas')
+    .update({
+      resumo_itens:
+        resumoAtualizado
+    })
+    .eq('id', cautelaId)
+
+  if (atualizarError) {
+    throw new Error(
+      `Não foi possível solicitar a devolução da viatura: ${atualizarError.message}`
+    )
+  }
+
+  try {
+    await criarNotificacaoParaPerfil({
+      perfil:
+        'ENCARREGADO DO SVDD',
+      titulo:
+        'VIATURA AGUARDANDO RECEBIMENTO',
+      mensagem:
+        `${normalizarMaiusculo(
+          nomeUsuario(user)
+        )} solicitou a devolução da ${
+          item?.prefixo ||
+          item?.patrimonio ||
+          item?.descricao ||
+          'VIATURA'
+        }.`,
+      tipo:
+        'ALERTA',
+      modulo:
+        'VIATURAS',
+      prioridade:
+        'ALTA',
+      link:
+        '/receber-material',
+      metadata: {
+        origem:
+          'DEVOLUÇÃO DE VIATURA',
+        cautela_mapa_forca_id:
+          cautelaId,
+        viatura_id:
+          viaturaId,
+        policial_id:
+          policialId
+      }
+    })
+  } catch (notificacaoError) {
+    console.warn(
+      'A devolução da viatura foi solicitada, mas a notificação ao SVDD não pôde ser criada:',
+      notificacaoError
+    )
+  }
+
+  return {
+    sucesso: true,
+    tipo:
+      'VIATURA',
+    cautela_mapa_forca_id:
+      cautelaId,
+    viatura_id:
+      viaturaId,
+    status:
+      'AGUARDANDO_SVDD',
+    solicitado_em:
+      agora
+  }
+}
+
+
 export async function listarMateriaisEmServicoUsuario(
   user
 ) {
@@ -1014,7 +2052,9 @@ export async function listarMateriaisEmServicoUsuario(
   const [
     patrimoniosIndividuais,
     quantitativosEmServico,
-    municoesEmServico
+    municoesEmServico,
+    torniquetesEmServico,
+    viaturasEmServico
   ] = await Promise.all([
     listarMinhaCautela(policialId),
 
@@ -1026,6 +2066,14 @@ export async function listarMateriaisEmServicoUsuario(
     listarMunicoesEmServico({
       re: policialRe,
       policialId
+    }),
+
+    listarTorniquetesEmServicoUsuario({
+      policialId
+    }),
+
+    listarViaturasEmServicoUsuario({
+      policialId
     })
   ])
 
@@ -1036,6 +2084,7 @@ export async function listarMateriaisEmServicoUsuario(
   const individuaisBase = (patrimoniosIndividuais || []).filter(
     (item) =>
       normalizar(item?.tipo) !== 'tonfa' &&
+      normalizar(item?.tipo) !== 'torniquete' &&
       !ehCargaPermanente(item) &&
       itemIndividualEmCautelaAtiva(item)
   )
@@ -1264,7 +2313,9 @@ export async function listarMateriaisEmServicoUsuario(
   return [
     ...individuais,
     ...quantitativos,
-    ...municoesAtivas
+    ...municoesAtivas,
+    ...(torniquetesEmServico || []),
+    ...(viaturasEmServico || [])
   ]
 }
 
@@ -2779,8 +3830,17 @@ async function sincronizarCargaPermanenteRecebida({
       )
       .filter(Boolean)
       .filter(
-        (patrimonio) =>
-          normalizar(patrimonio?.tipo) !== 'tonfa'
+        (patrimonio) => {
+          const tipo =
+            normalizar(
+              patrimonio?.tipo
+            )
+
+          return (
+            tipo !== 'tonfa' &&
+            tipo !== 'torniquete'
+          )
+        }
       )
 
   for (const patrimonio of individuais) {
@@ -2880,8 +3940,17 @@ async function sincronizarCautelaIndividualRecebida({
       )
       .filter(Boolean)
       .filter(
-        (patrimonio) =>
-          normalizar(patrimonio?.tipo) !== 'tonfa'
+        (patrimonio) => {
+          const tipo =
+            normalizar(
+              patrimonio?.tipo
+            )
+
+          return (
+            tipo !== 'tonfa' &&
+            tipo !== 'torniquete'
+          )
+        }
       )
 
   for (const patrimonio of individuais) {
@@ -2964,6 +4033,47 @@ async function sincronizarCautelaIndividualRecebida({
     }
   }
 }
+
+async function receberCautelaTorniquetePolicial({
+  movimentacaoId,
+  observacao = ''
+}) {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_torniquetes_receber_cautela_policial',
+    {
+      p_token:
+        token,
+
+      p_movimentacao_id:
+        movimentacaoId,
+
+      p_observacao:
+        observacao || null
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível confirmar o recebimento do Torniquete.'
+    )
+  }
+
+  return data
+}
+
 
 export async function confirmarRecebimentoCautela({
   movimentacaoId,
@@ -3086,7 +4196,13 @@ export async function confirmarRecebimentoCautela({
       normalizar(observacao?.tipo_registro) ===
         'tonfa_quantidade'
 
-    if (!ehTonfa) {
+    const ehTorniquete =
+      normalizar(patrimonio?.tipo) === 'torniquete' ||
+      normalizar(item?.tipo_patrimonio) === 'torniquete' ||
+      normalizar(observacao?.tipo_registro) ===
+        'torniquete_quantidade'
+
+    if (!ehTonfa && !ehTorniquete) {
       if (novidadePreparada) {
         itensIndividuaisComNovidade.push({
           item,
@@ -3106,17 +4222,34 @@ export async function confirmarRecebimentoCautela({
       continue
     }
 
-    const tonfaId =
-      observacao?.tonfa_id ||
-      patrimonio?.referencia_id ||
-      null
+    const tipoQuantitativo =
+      ehTorniquete
+        ? 'TORNIQUETE'
+        : 'TONFA'
 
-    if (!tonfaId) {
+    const referenciaId =
+      ehTorniquete
+        ? (
+            observacao?.torniquete_id ||
+            patrimonio?.referencia_id ||
+            null
+          )
+        : (
+            observacao?.tonfa_id ||
+            patrimonio?.referencia_id ||
+            null
+          )
+
+    if (!referenciaId) {
       throw new Error(
         `Não foi possível identificar o estoque quantitativo de ${
           item?.descricao ||
           patrimonio?.descricao ||
-          'Tonfa/Cassetete'
+          (
+            ehTorniquete
+              ? 'Torniquete'
+              : 'Tonfa/Cassetete'
+          )
         }.`
       )
     }
@@ -3142,7 +4275,16 @@ export async function confirmarRecebimentoCautela({
     itensQuantitativos.push({
       item,
       patrimonio,
-      tonfaId,
+      tipoQuantitativo,
+      referenciaId,
+      tonfaId:
+        ehTonfa
+          ? referenciaId
+          : null,
+      torniqueteId:
+        ehTorniquete
+          ? referenciaId
+          : null,
       quantidadeEnviada,
       quantidadeReceber,
       saldoNaoRecebido:
@@ -3258,12 +4400,27 @@ export async function confirmarRecebimentoCautela({
     }
 
     for (const registro of itensQuantitativos) {
+      const ehTorniquete =
+        registro.tipoQuantitativo ===
+        'TORNIQUETE'
+
       const observacaoAtualizada = {
         ...registro.observacaoObjetoOriginal,
         tipo_registro:
-          'TONFA_QUANTIDADE',
-        tonfa_id:
-          registro.tonfaId,
+          ehTorniquete
+            ? 'TORNIQUETE_QUANTIDADE'
+            : 'TONFA_QUANTIDADE',
+        ...(
+          ehTorniquete
+            ? {
+                torniquete_id:
+                  registro.torniqueteId
+              }
+            : {
+                tonfa_id:
+                  registro.tonfaId
+              }
+        ),
         quantidade_enviada:
           registro.quantidadeEnviada,
         quantidade_recebida:
@@ -3337,32 +4494,34 @@ export async function confirmarRecebimentoCautela({
         }
       }
 
-      await cautelarTonfaParaPolicial({
-        tonfaId:
-          registro.tonfaId,
-        policial,
-        quantidade:
-          registro.quantidadeReceber,
-        devolucaoPrevista:
-          movimentacao?.fim_turno_servico ||
-          null,
-        movimentacaoPrincipalId:
-          movimentacaoId,
-        observacoes:
-          [
-            registro.saldoNaoRecebido > 0
-              ? `RECEBIMENTO PARCIAL PELO USUÁRIO. ENVIADO: ${registro.quantidadeEnviada}. RECEBIDO: ${registro.quantidadeReceber}. SALDO MANTIDO NO SVDD: ${registro.saldoNaoRecebido}.`
-              : 'CARRINHO RECEBIDO INTEGRALMENTE PELO USUÁRIO.',
-            registro.novidadePreparada
-              ? `NOVIDADE RELATADA NO RECEBIMENTO: ${registro.novidadePreparada.tipo} - ${registro.novidadePreparada.descricao} | QUANTIDADE AFETADA: ${registro.novidadePreparada.quantidade_afetada}`
-              : ''
-          ]
-            .filter(Boolean)
-            .join(' | '),
-        user
-      })
+      if (!ehTorniquete) {
+        await cautelarTonfaParaPolicial({
+          tonfaId:
+            registro.tonfaId,
+          policial,
+          quantidade:
+            registro.quantidadeReceber,
+          devolucaoPrevista:
+            movimentacao?.fim_turno_servico ||
+            null,
+          movimentacaoPrincipalId:
+            movimentacaoId,
+          observacoes:
+            [
+              registro.saldoNaoRecebido > 0
+                ? `RECEBIMENTO PARCIAL PELO USUÁRIO. ENVIADO: ${registro.quantidadeEnviada}. RECEBIDO: ${registro.quantidadeReceber}. SALDO MANTIDO NO SVDD: ${registro.saldoNaoRecebido}.`
+                : 'CARRINHO RECEBIDO INTEGRALMENTE PELO USUÁRIO.',
+              registro.novidadePreparada
+                ? `NOVIDADE RELATADA NO RECEBIMENTO: ${registro.novidadePreparada.tipo} - ${registro.novidadePreparada.descricao} | QUANTIDADE AFETADA: ${registro.novidadePreparada.quantidade_afetada}`
+                : ''
+            ]
+              .filter(Boolean)
+              .join(' | '),
+          user
+        })
 
-      processados.push(registro)
+        processados.push(registro)
+      }
     }
 
     const houveRecebimentoParcial =
@@ -3371,16 +4530,34 @@ export async function confirmarRecebimentoCautela({
           item.saldoNaoRecebido > 0
       )
 
-    await confirmarRecebimentoMovimentacao({
-      movimentacao_id:
+    const possuiTorniquete =
+      itensQuantitativos.some(
+        (item) =>
+          item.tipoQuantitativo ===
+          'TORNIQUETE'
+      )
+
+    const observacaoRecebimento =
+      houveRecebimentoParcial
+        ? 'CARRINHO RECEBIDO COM AJUSTE DE QUANTIDADE. O SALDO NÃO ACEITO PERMANECEU NO COFRE DO SVDD.'
+        : 'CARRINHO RECEBIDO INTEGRALMENTE PELO USUÁRIO.'
+
+    if (possuiTorniquete) {
+      await receberCautelaTorniquetePolicial({
         movimentacaoId,
-      recebedor:
-        policial,
-      observacao:
-        houveRecebimentoParcial
-          ? 'CARRINHO RECEBIDO COM AJUSTE DE QUANTIDADE. O SALDO NÃO ACEITO PERMANECEU NO COFRE DO SVDD.'
-          : 'CARRINHO RECEBIDO INTEGRALMENTE PELO USUÁRIO.'
-    })
+        observacao:
+          observacaoRecebimento
+      })
+    } else {
+      await confirmarRecebimentoMovimentacao({
+        movimentacao_id:
+          movimentacaoId,
+        recebedor:
+          policial,
+        observacao:
+          observacaoRecebimento
+      })
+    }
 
     // A RPC finaliza a movimentação. Em seguida, sincronizamos
     // o estado operacional conforme o tipo de recebimento.
@@ -3609,6 +4786,9 @@ export async function solicitarDevolucaoCautela({
   const municoesParaDevolver =
     []
 
+  const viaturasParaDevolver =
+    []
+
   for (const item of itens) {
     const tipoRegistro =
       normalizarMaiusculo(
@@ -3621,6 +4801,23 @@ export async function solicitarDevolucaoCautela({
         item?.categoria ||
         item?.modulo
       )
+
+    const ehViatura =
+      tipoRegistro ===
+        'VIATURA_MAPA_FORCA' ||
+      tipoItem ===
+        'VIATURA' ||
+      Boolean(
+        item?.viatura_id
+      )
+
+    if (ehViatura) {
+      viaturasParaDevolver.push(
+        item
+      )
+
+      continue
+    }
 
     const ehMunicao =
       tipoRegistro ===
@@ -3672,9 +4869,22 @@ export async function solicitarDevolucaoCautela({
       continue
     }
 
-    const quantitativo =
+    const ehTonfaQuantitativa =
       tipoRegistro ===
       'TONFA_QUANTIDADE'
+
+    const ehTorniqueteQuantitativo =
+      tipoRegistro ===
+        'TORNIQUETE_QUANTIDADE' ||
+      tipoItem ===
+        'TORNIQUETE' ||
+      Boolean(
+        item?.torniquete_id
+      )
+
+    const quantitativo =
+      ehTonfaQuantitativa ||
+      ehTorniqueteQuantitativo
 
     const patrimonioId =
       item?.patrimonio_id ||
@@ -3699,26 +4909,66 @@ export async function solicitarDevolucaoCautela({
       )
     }
 
+    /*
+     * Na devolução do Torniquete, a novidade informada pelo usuário precisa
+     * ser persistida junto do item. As fotos são enviadas agora para o bucket
+     * de novidades e a movimentação guarda apenas os metadados/URLs.
+     *
+     * Antes, CautelasUsuario.jsx montava a novidade, mas este service a
+     * descartava ao criar o item da DEVOLUCAO.
+     */
+    const novidadeDevolucaoTorniquete =
+      ehTorniqueteQuantitativo
+        ? await prepararNovidadeRecebimento({
+            novidade:
+              item?.novidade ||
+              null,
+            user
+          })
+        : null
+
     const observacaoQuantitativo =
       quantitativo
-        ? JSON.stringify({
-            tipo_registro:
-              'TONFA_QUANTIDADE',
+        ? JSON.stringify(
+            ehTorniqueteQuantitativo
+              ? {
+                  tipo_registro:
+                    'TORNIQUETE_QUANTIDADE',
 
-            movimentacao_tonfa_id:
-              item?.movimentacao_tonfa_id ||
-              null,
+                  torniquete_id:
+                    item?.torniquete_id ||
+                    item?.referencia_id ||
+                    null,
 
-            tonfa_id:
-              item?.tonfa_id ||
-              item?.referencia_id ||
-              null,
+                  movimentacao_cautela_id:
+                    item?.movimentacao_cautela_id ||
+                    null,
 
-            tipo_material:
-              item?.tipo ||
-              item?.categoria ||
-              null
-          })
+                  tipo_material:
+                    'TORNIQUETE',
+
+                  novidade_recebimento:
+                    novidadeDevolucaoTorniquete
+                }
+              : {
+                  tipo_registro:
+                    'TONFA_QUANTIDADE',
+
+                  movimentacao_tonfa_id:
+                    item?.movimentacao_tonfa_id ||
+                    null,
+
+                  tonfa_id:
+                    item?.tonfa_id ||
+                    item?.referencia_id ||
+                    null,
+
+                  tipo_material:
+                    item?.tipo ||
+                    item?.categoria ||
+                    null
+                }
+          )
         : item?.observacao || ''
 
     const itemMovimentacao = {
@@ -3758,7 +5008,8 @@ export async function solicitarDevolucaoCautela({
 
   if (
     gruposPorDestino.size === 0 &&
-    municoesParaDevolver.length === 0
+    municoesParaDevolver.length === 0 &&
+    viaturasParaDevolver.length === 0
   ) {
     throw new Error(
       'Os materiais selecionados não possuem identificação válida para devolução.'
@@ -3769,6 +5020,9 @@ export async function solicitarDevolucaoCautela({
     []
 
   const devolucoesMunicaoCriadas =
+    []
+
+  const devolucoesViaturaCriadas =
     []
 
   for (
@@ -3835,6 +5089,22 @@ export async function solicitarDevolucaoCautela({
     )
   }
 
+  for (
+    const item of
+    viaturasParaDevolver
+  ) {
+    const resultado =
+      await solicitarDevolucaoViaturaMapaForca({
+        item,
+        user,
+        policialId
+      })
+
+    devolucoesViaturaCriadas.push(
+      resultado
+    )
+  }
+
   return {
     sucesso:
       true,
@@ -3845,10 +5115,16 @@ export async function solicitarDevolucaoCautela({
     devolucoes_municao:
       devolucoesMunicaoCriadas,
 
+    devolucoes_viatura:
+      devolucoesViaturaCriadas,
+
     destinos: [
       ...gruposPorDestino.keys(),
       ...(
-        devolucoesMunicaoCriadas.length > 0
+        (
+          devolucoesMunicaoCriadas.length > 0 ||
+          devolucoesViaturaCriadas.length > 0
+        )
           ? ['COFRE DO SVDD']
           : []
       )
