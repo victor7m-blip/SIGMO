@@ -11,6 +11,7 @@ import {
   listarEstoqueColetesRefletivos,
   listarTransferenciasPendentesColetesRefletivos,
   receberTransferenciaColeteRefletivo,
+  registrarEntradaColeteRefletivoP4,
   TAMANHOS,
   transferirColeteRefletivoParaSvdd
 } from '../../services/coletesRefletivosService'
@@ -291,6 +292,349 @@ function GrupoOperacao({
         {children}
       </div>
     </section>
+  )
+}
+
+
+function ModalEntradaMaterial({
+  tamanhoInicial,
+  user,
+  onFechar,
+  onConcluido
+}) {
+  const [
+    tamanho,
+    setTamanho
+  ] = useState(
+    tamanhoInicial &&
+    tamanhoInicial !== 'TODOS'
+      ? tamanhoInicial
+      : 'P'
+  )
+
+  const [
+    quantidade,
+    setQuantidade
+  ] = useState(1)
+
+  const [
+    observacoes,
+    setObservacoes
+  ] = useState('')
+
+  const [
+    salvando,
+    setSalvando
+  ] = useState(false)
+
+  const [
+    erro,
+    setErro
+  ] = useState('')
+
+  async function confirmar() {
+    const qtd =
+      Number(quantidade)
+
+    if (
+      !Number.isInteger(qtd) ||
+      qtd <= 0
+    ) {
+      setErro(
+        'Informe uma quantidade inteira maior que zero.'
+      )
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErro('')
+
+      await registrarEntradaColeteRefletivoP4({
+        tamanho,
+        quantidade: qtd,
+        observacoes,
+        user
+      })
+
+      await onConcluido?.({
+        tamanho,
+        quantidade: qtd
+      })
+    } catch (error) {
+      console.error(
+        'Erro ao registrar entrada de Colete Refletivo:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível registrar a entrada de material.'
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div
+      role="presentation"
+      onClick={
+        salvando
+          ? undefined
+          : onFechar
+      }
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10040,
+        display: 'grid',
+        placeItems: 'center',
+        padding: '24px',
+        background:
+          'rgba(3, 15, 32, .72)'
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Entrada de Colete Refletivo"
+        onClick={(event) =>
+          event.stopPropagation()
+        }
+        style={{
+          width:
+            'min(560px, 100%)',
+          borderRadius: '20px',
+          border:
+            '1px solid rgba(30, 92, 153, .28)',
+          background: '#ffffff',
+          boxShadow:
+            '0 28px 70px rgba(0, 0, 0, .30)',
+          overflow: 'hidden'
+        }}
+      >
+        <header
+          style={{
+            padding: '22px 24px',
+            color: '#ffffff',
+            background:
+              'linear-gradient(135deg, #071d39 0%, #0b315a 100%)'
+          }}
+        >
+          <span
+            style={{
+              display: 'block',
+              marginBottom: '5px',
+              color: '#8fc8ff',
+              fontSize: '12px',
+              fontWeight: 900,
+              letterSpacing: '.1em'
+            }}
+          >
+            ENTRADA DE ESTOQUE
+          </span>
+
+          <h2
+            style={{
+              margin: 0,
+              fontSize: '22px'
+            }}
+          >
+            Receber Colete Refletivo no P4
+          </h2>
+
+          <p
+            style={{
+              margin: '7px 0 0',
+              opacity: .88,
+              lineHeight: 1.45
+            }}
+          >
+            Informe o tamanho e a quantidade recebida.
+          </p>
+        </header>
+
+        <div
+          style={{
+            display: 'grid',
+            gap: '16px',
+            padding: '22px 24px'
+          }}
+        >
+          <label>
+            <span
+              style={{
+                display: 'block',
+                marginBottom: '7px',
+                color: '#344054',
+                fontSize: '12px',
+                fontWeight: 850,
+                textTransform: 'uppercase'
+              }}
+            >
+              Tamanho
+            </span>
+
+            <select
+              value={tamanho}
+              onChange={(event) => {
+                setTamanho(
+                  event.target.value
+                )
+                setErro('')
+              }}
+              disabled={salvando}
+              style={{
+                width: '100%',
+                minHeight: '44px',
+                border:
+                  '1px solid #cbd5e1',
+                borderRadius: '10px',
+                padding: '0 12px',
+                background: '#ffffff',
+                font: 'inherit',
+                fontWeight: 750
+              }}
+            >
+              {TAMANHOS.map(
+                (item) => (
+                  <option
+                    key={item}
+                    value={item}
+                  >
+                    {item}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label>
+            <span
+              style={{
+                display: 'block',
+                marginBottom: '7px',
+                color: '#344054',
+                fontSize: '12px',
+                fontWeight: 850,
+                textTransform: 'uppercase'
+              }}
+            >
+              Quantidade
+            </span>
+
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={quantidade}
+              onChange={(event) =>
+                setQuantidade(
+                  event.target.value
+                )
+              }
+              disabled={salvando}
+              style={{
+                width: '100%',
+                minHeight: '44px',
+                boxSizing: 'border-box',
+                border:
+                  '1px solid #cbd5e1',
+                borderRadius: '10px',
+                padding: '0 12px',
+                font: 'inherit',
+                fontWeight: 750
+              }}
+            />
+          </label>
+
+          <label>
+            <span
+              style={{
+                display: 'block',
+                marginBottom: '7px',
+                color: '#344054',
+                fontSize: '12px',
+                fontWeight: 850,
+                textTransform: 'uppercase'
+              }}
+            >
+              Observação
+            </span>
+
+            <textarea
+              rows={3}
+              maxLength={500}
+              value={observacoes}
+              onChange={(event) =>
+                setObservacoes(
+                  event.target.value
+                    .toUpperCase()
+                )
+              }
+              disabled={salvando}
+              placeholder="Opcional"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                resize: 'vertical',
+                border:
+                  '1px solid #cbd5e1',
+                borderRadius: '10px',
+                padding: '11px 12px',
+                font: 'inherit'
+              }}
+            />
+          </label>
+
+          {erro && (
+            <div
+              style={{
+                padding: '11px 12px',
+                borderRadius: '10px',
+                border:
+                  '1px solid #efb4b4',
+                background: '#fff1f1',
+                color: '#9f1c1c',
+                fontWeight: 750
+              }}
+            >
+              {erro}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              marginTop: '2px'
+            }}
+          >
+            <button
+              type="button"
+              className="coletes-btn-secondary"
+              onClick={onFechar}
+              disabled={salvando}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              className="coletes-btn-primary"
+              onClick={confirmar}
+              disabled={salvando}
+            >
+              {salvando
+                ? 'Registrando...'
+                : 'Confirmar entrada'}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -1333,6 +1677,11 @@ export default function ColeteRefletivo({
     setMensagem
   ] = useState('')
 
+  const [
+    modalEntrada,
+    setModalEntrada
+  ] = useState(false)
+
   const carregar =
     useCallback(
       async () => {
@@ -1584,6 +1933,19 @@ export default function ColeteRefletivo({
 
     setMensagem(
       `Movimentação registrada: ${quantidade} colete(s) tamanho ${tamanho} de ${origem} para ${destino}. Aguardando recebimento em ${destino}.`
+    )
+
+    await carregar()
+  }
+
+  async function concluirEntrada({
+    tamanho,
+    quantidade
+  }) {
+    setModalEntrada(false)
+
+    setMensagem(
+      `Entrada registrada no P4: ${quantidade} colete(s) refletivo(s) tamanho ${tamanho}.`
     )
 
     await carregar()
@@ -2032,8 +2394,20 @@ export default function ColeteRefletivo({
           >
             <button
               type="button"
-              disabled
-              title="Será habilitado na etapa de movimentações."
+              onClick={() => {
+                setMensagem('')
+                setErro('')
+                setModalEntrada(true)
+              }}
+              disabled={
+                loading ||
+                !visaoP4
+              }
+              title={
+                visaoP4
+                  ? 'Registrar entrada de novos coletes refletivos no estoque do P4.'
+                  : 'Operação restrita ao P4.'
+              }
             >
               <strong>
                 Entrada de material
@@ -2170,6 +2544,21 @@ export default function ColeteRefletivo({
           </table>
         </div>
       </section>
+
+      {modalEntrada && (
+        <ModalEntradaMaterial
+          tamanhoInicial={
+            tamanhoSelecionado
+          }
+          user={user}
+          onFechar={() =>
+            setModalEntrada(false)
+          }
+          onConcluido={
+            concluirEntrada
+          }
+        />
+      )}
 
       {operacaoEstoque && (
         <ModalTransferencia

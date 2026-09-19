@@ -55,6 +55,29 @@ async function listarAprovacoesMunicoesPendentesCentral() {
 }
 
 
+async function listarRecebimentosMunicoesPendentesCentral() {
+  const token = loadSessionToken()
+
+  if (!token) {
+    throw new Error('Sessão SIGMO inválida ou expirada.')
+  }
+
+  const { data, error } = await supabase.rpc(
+    'sigmo_municoes_listar_transferencias_pendentes',
+    {
+      p_token: token,
+      p_direcao: 'ENTRADA'
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return Array.isArray(data) ? data : []
+}
+
+
 async function listarAprovacoesTorniquetesPendentesCentral() {
   const token = loadSessionToken()
 
@@ -93,6 +116,294 @@ async function listarRecebimentosTorniquetesPendentesCentral() {
 
   return Array.isArray(data) ? data : []
 }
+
+async function listarAprovacoesTPDPendentesCentral() {
+  const { data, error } = await supabase
+    .from('sigmo_transferencias_patrimoniais')
+    .select('*')
+    .eq('status', 'PENDENTE')
+    .eq('categoria', 'TPD')
+    .eq('origem_codigo', 'P4')
+    .eq('destino_codigo', 'SVDD')
+    .order('enviado_em', { ascending: true })
+    .limit(500)
+
+  if (error) {
+    throw error
+  }
+
+  return (Array.isArray(data) ? data : []).filter(
+    (item) =>
+      item?.metadata?.cmt_aprovado !== true
+  )
+}
+
+
+function incluirAprovacoesTPDCentral(
+  dadosOperacionais,
+  transferencias,
+  { visaoCmt = false } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  if (!visaoCmt) {
+    return base
+  }
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const normalizar = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const indiceCard =
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizar(item?.titulo)
+
+      return (
+        key === 'aprovacoes-comandante' ||
+        key === 'aprovacoes-cmt' ||
+        titulo === 'APROVACOES PENDENTES'
+      )
+    })
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key: 'aprovacoes-comandante',
+          titulo: 'Aprovações pendentes',
+          tom: 'atencao',
+          total: 0,
+          itens: []
+        }
+
+  const mapa = new Map()
+
+  /*
+   * TPD é reconstruído pelo estado atual da tabela de transferências.
+   * Assim, transferência cancelada ou já aprovada não permanece no card.
+   */
+  for (const item of cardAtual?.itens || []) {
+    const ehTPD =
+      normalizar(
+        item?.origem_aprovacao
+      ) === 'TPD_TRANSFERENCIA' ||
+      normalizar(
+        item?.tipo_solicitacao
+      ) === 'TRANSFERENCIA_TPD'
+
+    if (ehTPD) {
+      continue
+    }
+
+    const id =
+      item?.transferencia_id ||
+      item?.movimentacao_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      `OUTRO-${String(id)}`,
+      item
+    )
+  }
+
+  for (const transferencia of transferencias || []) {
+    const id =
+      transferencia?.id
+
+    if (!id) {
+      continue
+    }
+
+    const metadata =
+      transferencia?.metadata &&
+      typeof transferencia.metadata === 'object'
+        ? transferencia.metadata
+        : {}
+
+    mapa.set(
+      `TPD-${String(id)}`,
+      {
+        ...transferencia,
+
+        id,
+        transferencia_id: id,
+
+        origem_aprovacao:
+          'TPD_TRANSFERENCIA',
+
+        tipo_solicitacao:
+          'TRANSFERENCIA_TPD',
+
+        modulo:
+          'TPD',
+
+        categoria:
+          'TPD',
+
+        tipo:
+          'TRANSFERÊNCIA DE TPD',
+
+        tipo_movimentacao:
+          'TRANSFERENCIA',
+
+        tipo_patrimonio:
+          'TPD',
+
+        tpd_id:
+          metadata?.tpd_id ||
+          null,
+
+        patrimonio:
+          metadata?.patrimonio_tpd ||
+          metadata?.patrimonio ||
+          null,
+
+        numero_serie:
+          metadata?.numero_serie_tpd ||
+          metadata?.numero_serie ||
+          null,
+
+        descricao_tpd:
+          metadata?.descricao_tpd ||
+          null,
+
+        marca:
+          metadata?.marca ||
+          null,
+
+        modelo:
+          metadata?.modelo ||
+          null,
+
+        quantidade_total:
+          1,
+
+        quantidade:
+          1,
+
+        origem_tipo:
+          transferencia?.origem_codigo ||
+          'P4',
+
+        origem_codigo:
+          transferencia?.origem_codigo ||
+          'P4',
+
+        origem_nome:
+          transferencia?.origem_nome ||
+          'COFRE DO P4',
+
+        destino_tipo:
+          transferencia?.destino_codigo ||
+          'SVDD',
+
+        destino_codigo:
+          transferencia?.destino_codigo ||
+          'SVDD',
+
+        destino_nome:
+          transferencia?.destino_nome ||
+          'COFRE DO SVDD',
+
+        motivo:
+          transferencia?.motivo ||
+          'DISTRIBUICAO_OPERACIONAL',
+
+        observacoes:
+          transferencia?.observacoes ||
+          null,
+
+        solicitada_por_nome:
+          transferencia?.enviado_por_nome ||
+          'P4',
+
+        criado_por_nome:
+          transferencia?.enviado_por_nome ||
+          'P4',
+
+        status:
+          'AGUARDANDO_APROVACAO',
+
+        status_movimentacao:
+          'AGUARDANDO_APROVACAO_CMT',
+
+        created_at:
+          transferencia?.enviado_em ||
+          transferencia?.updated_at ||
+          null,
+
+        solicitada_em:
+          transferencia?.enviado_em ||
+          null,
+
+        cmt_aprovado:
+          false,
+
+        metadata
+      }
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            a?.solicitada_em ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            b?.solicitada_em ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    key: 'aprovacoes-comandante',
+    titulo: 'Aprovações pendentes',
+    total: itens.length,
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] = cardNovo
+  } else {
+    alertas.push(cardNovo)
+  }
+
+  return {
+    ...base,
+    alertas
+  }
+}
+
 
 function dadosMovimentacaoPatrimonialCentral(item) {
   return item?.dados || item?.metadata?.dados_engine || {}
@@ -1009,6 +1320,281 @@ function incluirAprovacoesMunicoesCentral(
   }
 
   return { ...base, alertas }
+}
+
+
+function incluirRecebimentosMunicoesCentral(
+  dadosOperacionais,
+  recebimentos,
+  {
+    visaoP4 = false,
+    visaoSVDD = false
+  } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  if (!visaoP4 && !visaoSVDD) {
+    return base
+  }
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const normalizar = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const destinoEsperado =
+    visaoP4
+      ? 'COFRE_P4'
+      : 'COFRE_SVDD'
+
+  const lista =
+    (Array.isArray(recebimentos)
+      ? recebimentos
+      : []
+    ).filter((item) => {
+      const destino =
+        normalizar(
+          item?.destino_tipo ||
+          item?.destino ||
+          item?.destino_nome
+        )
+
+      if (destino === destinoEsperado) {
+        return true
+      }
+
+      if (visaoSVDD) {
+        return (
+          destino === 'SVDD' ||
+          destino === 'COFRE DO SVDD'
+        )
+      }
+
+      return (
+        destino === 'P4' ||
+        destino === 'COFRE DO P4'
+      )
+    })
+
+  const indiceCard =
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizar(item?.titulo)
+
+      return (
+        key === 'transferencias' ||
+        titulo === 'TRANSFERENCIAS PENDENTES'
+      )
+    })
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key: 'transferencias',
+          titulo: 'Transferências pendentes',
+          tom: 'atencao',
+          total: 0,
+          itens: []
+        }
+
+  const mapa = new Map()
+
+  for (const item of cardAtual?.itens || []) {
+    const ehRecebimentoMunicao =
+      normalizar(
+        item?.origem_aprovacao
+      ) === 'MUNICAO_RECEBIMENTO' ||
+      normalizar(
+        item?.tipo_solicitacao
+      ) === 'RECEBIMENTO_MUNICAO'
+
+    if (ehRecebimentoMunicao) {
+      continue
+    }
+
+    const id =
+      item?.transferencia_id ||
+      item?.movimentacao_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      `OUTRO-${String(id)}`,
+      item
+    )
+  }
+
+  for (const recebimento of lista) {
+    const id =
+      recebimento?.transferencia_id ||
+      recebimento?.id
+
+    if (!id) {
+      continue
+    }
+
+    mapa.set(
+      `MUNICAO-${String(id)}`,
+      {
+        ...recebimento,
+
+        id,
+        transferencia_id: id,
+
+        origem_aprovacao:
+          'MUNICAO_RECEBIMENTO',
+
+        tipo_solicitacao:
+          'RECEBIMENTO_MUNICAO',
+
+        modulo:
+          'MUNIÇÕES',
+
+        categoria:
+          'MUNIÇÕES',
+
+        tipo:
+          'TRANSFERÊNCIA DE MUNIÇÕES',
+
+        tipo_movimentacao:
+          recebimento?.tipo_movimentacao ||
+          'TRANSFERENCIA_P4_SVDD',
+
+        tipo_patrimonio:
+          'MUNIÇÕES',
+
+        municao_id:
+          recebimento?.municao_id ||
+          null,
+
+        calibre:
+          recebimento?.calibre ||
+          null,
+
+        quantidade_total:
+          Number(
+            recebimento?.quantidade_total ||
+            recebimento?.quantidade ||
+            0
+          ),
+
+        quantidade:
+          Number(
+            recebimento?.quantidade_total ||
+            recebimento?.quantidade ||
+            0
+          ),
+
+        origem_codigo:
+          recebimento?.origem_tipo ||
+          null,
+
+        origem_nome:
+          recebimento?.origem_nome ||
+          null,
+
+        destino_codigo:
+          recebimento?.destino_tipo ||
+          null,
+
+        destino_nome:
+          recebimento?.destino_nome ||
+          null,
+
+        documento:
+          recebimento?.documento ||
+          null,
+
+        observacoes:
+          recebimento?.observacoes ||
+          null,
+
+        status:
+          'AGUARDANDO_RECEBIMENTO',
+
+        status_movimentacao:
+          'AGUARDANDO_RECEBIMENTO',
+
+        created_at:
+          recebimento?.aprovado_em ||
+          recebimento?.criado_em ||
+          null,
+
+        solicitada_em:
+          recebimento?.criado_em ||
+          null,
+
+        aprovado_em:
+          recebimento?.aprovado_em ||
+          null,
+
+        aprovado_por_nome:
+          recebimento?.aprovado_por_nome ||
+          null,
+
+        criado_por_nome:
+          recebimento?.criado_por_nome ||
+          null
+      }
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            a?.aprovado_em ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            b?.aprovado_em ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    key: 'transferencias',
+    titulo: 'Transferências pendentes',
+    total: itens.length,
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] = cardNovo
+  } else {
+    alertas.push(cardNovo)
+  }
+
+  return {
+    ...base,
+    alertas
+  }
 }
 
 
@@ -2995,6 +3581,12 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
       'ADMINISTRADOR'
     )
 
+  const visaoAprovacaoTPD =
+    ehCmtCia ||
+    perfilAtual.includes(
+      'ADMINISTRADOR'
+    )
+
   const [dashboard, setDashboard] = useState(null)
   const [operacional, setOperacional] = useState(null)
 
@@ -3053,8 +3645,10 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
         aprovacoesMunicoes,
         aprovacoesManutencaoMunicoes,
         descargasManutencaoMunicoes,
+        recebimentosMunicoes,
         aprovacoesTorniquetes,
-        recebimentosTorniquetes
+        recebimentosTorniquetes,
+        aprovacoesTPD
       ] = await Promise.all([
         carregarDashboardPatrimonial(),
         listarCategoriasOperacionais(),
@@ -3077,12 +3671,20 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
           ? listarDescargasManutencaoMunicoesPendentesCentral()
           : Promise.resolve([]),
 
+        (visaoP4 || visaoSVDD)
+          ? listarRecebimentosMunicoesPendentesCentral()
+          : Promise.resolve([]),
+
         visaoAprovacaoTorniquetes
           ? listarAprovacoesTorniquetesPendentesCentral()
           : Promise.resolve([]),
 
         (visaoP4 || visaoSVDD)
           ? listarRecebimentosTorniquetesPendentesCentral()
+          : Promise.resolve([]),
+
+        visaoAprovacaoTPD
+          ? listarAprovacoesTPDPendentesCentral()
           : Promise.resolve([])
       ])
 
@@ -3238,7 +3840,33 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
       }
 
 
+      if (visaoAprovacaoTPD) {
+        dadosOperacionaisComAlertas =
+          incluirAprovacoesTPDCentral(
+            dadosOperacionaisComAlertas,
+            aprovacoesTPD,
+            {
+              visaoCmt:
+                ehCmtCia ||
+                perfilAtual.includes(
+                  'ADMINISTRADOR'
+                )
+            }
+          )
+      }
+
+
       if (visaoP4 || visaoSVDD) {
+        dadosOperacionaisComAlertas =
+          incluirRecebimentosMunicoesCentral(
+            dadosOperacionaisComAlertas,
+            recebimentosMunicoes,
+            {
+              visaoP4,
+              visaoSVDD
+            }
+          )
+
         dadosOperacionaisComAlertas =
           incluirRecebimentosTorniquetesCentral(
             dadosOperacionaisComAlertas,
@@ -3400,6 +4028,7 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
     visaoColeteCentral,
     visaoAprovacaoMunicoes,
     visaoAprovacaoTorniquetes,
+    visaoAprovacaoTPD,
     ehCmtCia,
     perfilAtual
   ])

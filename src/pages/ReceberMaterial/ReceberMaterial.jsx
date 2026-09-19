@@ -40,6 +40,13 @@ import {
   registrarManutencao
 } from '../../services/manutencoesService'
 
+import {
+  enviarFotosOcorrenciaRiv,
+  obterRivResumo,
+  registrarOcorrenciaRiv
+} from '../../services/viaturasRivService'
+
+
 import RecebedorCard from '../PagarMaterial/components/RecebedorCard'
 import CarrinhoMateriais from '../PagarMaterial/components/CarrinhoMateriais'
 
@@ -569,6 +576,126 @@ async function listarDevolucoesViaturaPendentesSvdd() {
   }
 
   return data || []
+}
+
+
+async function registrarAvariaViaturaRecebimentoSvdd({
+  item,
+  novidade,
+  user
+}) {
+  if (!novidade) {
+    return null
+  }
+
+  const viaturaId =
+    item?.viatura_id ||
+    item?.referencia_id ||
+    null
+
+  if (!viaturaId) {
+    throw new Error(
+      'A viatura não possui identificação válida para registrar a avaria no RIV.'
+    )
+  }
+
+  const descricao =
+    normalizarTexto(
+      novidade?.descricao ||
+      ''
+    )
+
+  if (!descricao) {
+    return null
+  }
+
+  const resumo =
+    await obterRivResumo(
+      viaturaId
+    )
+
+  const registro =
+    await registrarOcorrenciaRiv({
+      viatura: {
+        id:
+          viaturaId,
+
+        quilometragem_atual:
+          Number(
+            resumo?.quilometragemAtual ||
+            item?.quilometragem_atual ||
+            0
+          )
+      },
+
+      tipo:
+        'AVARIA',
+
+      titulo:
+        normalizarTexto(
+          novidade?.titulo ||
+          'AVARIA CONSTATADA NO RECEBIMENTO PELO SVDD'
+        ),
+
+      descricao,
+
+      origemConstatacao:
+        'ASSUNCAO_VTR',
+
+      localAvaria:
+        novidade?.localAvaria ||
+        '',
+
+      componenteAvariado:
+        novidade?.componenteAvariado ||
+        '',
+
+      severidade:
+        novidade?.severidade ||
+        'BAIXA',
+
+      disponibilidadeVtr:
+        'NAO_AVALIADA',
+
+      responsabilidadeStatus:
+        'NAO_DEFINIDA',
+
+      agravamento:
+        false,
+
+      ocorrenciaPaiId:
+        null,
+
+      agravamentoDescricao:
+        '',
+
+      user
+    })
+
+  if (
+    registro?.id &&
+    (novidade?.fotos || []).length > 0
+  ) {
+    await enviarFotosOcorrenciaRiv({
+      viaturaId,
+
+      ocorrenciaId:
+        registro.id,
+
+      tipo:
+        'AVARIA',
+
+      fase:
+        'ANTES',
+
+      arquivos:
+        novidade.fotos,
+
+      user
+    })
+  }
+
+  return registro
 }
 
 
@@ -3149,15 +3276,39 @@ async function confirmarRecebimento() {
           )
         )
 
+      const novidadeItem =
+        prepararNovidadeItem(
+          item
+        )
+
       const resultado =
         await receberDevolucaoViaturaSvdd({
           item,
           providencia
         })
 
+      /*
+       * A RPC de recebimento trata a situação operacional da VTR e,
+       * quando houver preventiva em alerta, cria a manutenção correspondente.
+       *
+       * A avaria constatada pelo SVDD é registrada DEPOIS da RPC para que
+       * uma preventiva (ex.: óleo do motor) não seja substituída pela avaria
+       * como motivo da manutenção. Assim os dois registros coexistem no RIV.
+       */
+      const avariaRiv =
+        novidadeItem
+          ? await registrarAvariaViaturaRecebimentoSvdd({
+              item,
+              novidade:
+                novidadeItem,
+              user
+            })
+          : null
+
       resultadosViaturas.push({
         item,
-        resultado
+        resultado,
+        avariaRiv
       })
     }
 

@@ -135,6 +135,65 @@ export async function listarEstoqueColetesRefletivos() {
   )
 }
 
+export async function registrarEntradaColeteRefletivoP4({
+  tamanho,
+  quantidade,
+  observacoes = '',
+  user
+}) {
+  const tamanhoNormalizado =
+    normalizarTamanho(
+      tamanho
+    )
+
+  const quantidadeNormalizada =
+    normalizarQuantidade(
+      quantidade
+    )
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_colete_refletivo_entrada_p4',
+    {
+      p_tamanho:
+        tamanhoNormalizado,
+
+      p_quantidade:
+        quantidadeNormalizada,
+
+      p_usuario_id:
+        normalizarUsuarioId(
+          user
+        ),
+
+      p_usuario_nome:
+        normalizarUsuarioNome(
+          user
+        ),
+
+      p_observacoes:
+        String(
+          observacoes ||
+          ''
+        )
+          .trim() ||
+        null
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível registrar a entrada de Colete Refletivo no P4.'
+    )
+  }
+
+  return data
+}
+
+
 export async function listarHistoricoColetesRefletivos({
   limite = 100,
   tamanho = null

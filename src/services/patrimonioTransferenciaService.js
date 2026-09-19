@@ -20,6 +20,7 @@ import { PERFIS } from '../constants/perfis'
 const TABLE = 'sigmo_transferencias_patrimoniais'
 const TONFAS_TABLE = 'sigmo_tonfas'
 const ARMAS_TABLE = 'sigmo_armas'
+const TPDS_TABLE = 'sigmo_tpds'
 const PATRIMONIOS_TABLE = 'sigmo_patrimonios'
 const PATRIMONIO_ITENS_TABLE = 'sigmo_patrimonio_itens'
 
@@ -83,6 +84,18 @@ function descricaoMaterial(categoria, quantidade, metadata = {}) {
       : '1 arma'
   }
 
+  if (categoriaNormalizada === 'TPD') {
+    const identificacao =
+      texto(metadata?.descricao_tpd) ||
+      texto(metadata?.identificacao) ||
+      texto(metadata?.patrimonio) ||
+      texto(metadata?.numero_serie)
+
+    return identificacao
+      ? `o TPD ${identificacao}`
+      : '1 TPD'
+  }
+
   const nome =
     categoriaNormalizada === 'CASSETETE'
       ? 'cassetete(s)'
@@ -94,6 +107,10 @@ function descricaoMaterial(categoria, quantidade, metadata = {}) {
 function linkDoModulo(categoria, recebimento = false) {
   if (upper(categoria) === 'ARMA') {
     return '/armas'
+  }
+
+  if (upper(categoria) === 'TPD') {
+    return '/tpd'
   }
 
   return recebimento
@@ -289,12 +306,88 @@ function montarDescricaoArma(arma) {
   return modelo || identificador || 'arma não identificada'
 }
 
+async function buscarVinculosDoTPD(tpdId) {
+  if (!tpdId) {
+    throw new Error('O TPD da transferência não foi informado.')
+  }
+
+  const { data: tpd, error: tpdError } = await supabase
+    .from(TPDS_TABLE)
+    .select('*')
+    .eq('id', tpdId)
+    .maybeSingle()
+
+  if (tpdError) throw tpdError
+
+  if (!tpd) {
+    throw new Error('O TPD selecionado não foi encontrado.')
+  }
+
+  const { data: patrimonio, error: patrimonioError } = await supabase
+    .from(PATRIMONIOS_TABLE)
+    .select('*')
+    .eq('tipo', 'tpd')
+    .eq('referencia_id', tpdId)
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (patrimonioError) throw patrimonioError
+
+  if (!patrimonio) {
+    throw new Error(
+      'O registro patrimonial deste TPD não foi encontrado. Sincronize o cadastro e tente novamente.'
+    )
+  }
+
+  let itemPatrimonial = null
+
+  if (patrimonio.item_id) {
+    const { data: itemVinculado, error: itemVinculadoError } = await supabase
+      .from(PATRIMONIO_ITENS_TABLE)
+      .select('*')
+      .eq('id', patrimonio.item_id)
+      .eq('ativo', true)
+      .maybeSingle()
+
+    if (itemVinculadoError) throw itemVinculadoError
+    itemPatrimonial = itemVinculado
+  }
+
+  if (!itemPatrimonial) {
+    itemPatrimonial = await buscarItemCatalogo('TPD')
+  }
+
+  return {
+    tpd,
+    patrimonio,
+    itemPatrimonial
+  }
+}
+
+function montarDescricaoTPD(tpd) {
+  const modelo = [tpd?.marca, tpd?.modelo]
+    .map(texto)
+    .filter(Boolean)
+    .join(' ')
+
+  const identificador =
+    texto(tpd?.patrimonio) ||
+    texto(tpd?.numero_serie)
+
+  if (modelo && identificador) {
+    return `${modelo} - ${identificador}`
+  }
+
+  return modelo || identificador || 'TPD não identificado'
+}
+
 
 export async function criarTransferenciaPendente({
   patrimonioId = null,
   itemId = null,
   tonfaId = null,
   armaId = null,
+  tpdId = null,
   categoria,
   quantidade = 1,
   origemTipo = 'SETOR',
@@ -311,20 +404,24 @@ export async function criarTransferenciaPendente({
   const ator = usuarioNormalizado(user)
   const categoriaNormalizada = upper(categoria)
 
-  if (!['TONFA', 'CASSETETE', 'ARMA'].includes(categoriaNormalizada)) {
+  if (!['TONFA', 'CASSETETE', 'ARMA', 'TPD'].includes(categoriaNormalizada)) {
     throw new Error('Categoria patrimonial inválida para esta transferência.')
   }
 
-  const individual = categoriaNormalizada === 'ARMA'
+  const individual = ['ARMA', 'TPD'].includes(categoriaNormalizada)
   const quantidadeNormalizada = individual
     ? 1
     : quantidadeInteira(quantidade)
 
   let vinculos
 
-  if (individual) {
+  if (categoriaNormalizada === 'ARMA') {
     vinculos = await buscarVinculosDaArma(
       armaId || metadata?.arma_id
+    )
+  } else if (categoriaNormalizada === 'TPD') {
+    vinculos = await buscarVinculosDoTPD(
+      tpdId || metadata?.tpd_id
     )
   } else {
     vinculos = await buscarVinculosDaTonfa(
@@ -353,7 +450,7 @@ export async function criarTransferenciaPendente({
 
     if (pendenteExistente) {
       throw new Error(
-        `Esta arma já possui a transferência ${pendenteExistente.protocolo} pendente de recebimento.`
+        `Este ${categoriaNormalizada} já possui a transferência ${pendenteExistente.protocolo} pendente de recebimento.`
       )
     }
   }
@@ -362,25 +459,48 @@ export async function criarTransferenciaPendente({
     itemId ||
     vinculos.itemPatrimonial.id
 
+  const exigeAprovacaoCmt =
+    categoriaNormalizada === 'TPD' &&
+    origemCodigoNormalizado === 'P4' &&
+    destinoCodigoNormalizado === 'SVDD'
+
   const metadataNormalizada = {
     ...(metadata && typeof metadata === 'object' ? metadata : {}),
     tonfa_id: individual
       ? null
       : tonfaId || metadata?.tonfa_id || null,
-    arma_id: individual
+    arma_id: categoriaNormalizada === 'ARMA'
       ? vinculos.arma.id
       : metadata?.arma_id || null,
-    descricao_arma: individual
+    descricao_arma: categoriaNormalizada === 'ARMA'
       ? montarDescricaoArma(vinculos.arma)
       : metadata?.descricao_arma || null,
-    patrimonio_arma: individual
+    patrimonio_arma: categoriaNormalizada === 'ARMA'
       ? vinculos.arma.patrimonio || null
       : metadata?.patrimonio_arma || null,
-    numero_serie_arma: individual
+    numero_serie_arma: categoriaNormalizada === 'ARMA'
       ? vinculos.arma.numero_serie || null
       : metadata?.numero_serie_arma || null,
+    tpd_id: categoriaNormalizada === 'TPD'
+      ? vinculos.tpd.id
+      : metadata?.tpd_id || null,
+    descricao_tpd: categoriaNormalizada === 'TPD'
+      ? montarDescricaoTPD(vinculos.tpd)
+      : metadata?.descricao_tpd || null,
+    patrimonio_tpd: categoriaNormalizada === 'TPD'
+      ? vinculos.tpd.patrimonio || null
+      : metadata?.patrimonio_tpd || null,
+    numero_serie_tpd: categoriaNormalizada === 'TPD'
+      ? vinculos.tpd.numero_serie || null
+      : metadata?.numero_serie_tpd || null,
     item_individual: individual,
-    criado_por_perfil: ator.perfil
+    criado_por_perfil: ator.perfil,
+    exige_aprovacao_cmt: exigeAprovacaoCmt,
+    cmt_aprovado: exigeAprovacaoCmt ? false : (metadata?.cmt_aprovado ?? true),
+    cmt_aprovado_por_id: null,
+    cmt_aprovado_por_re: null,
+    cmt_aprovado_por_nome: null,
+    cmt_aprovado_em: null
   }
 
   const horaServidor = await obterHoraServidor()
@@ -424,16 +544,26 @@ export async function criarTransferenciaPendente({
   )
   const dataHora = formatarDataHoraServidor(horaServidor)
   const mensagem =
-    `O ${origemCodigoNormalizado} enviou ${material} ao ${destinoCodigoNormalizado}. ` +
-    `A transferência ${protocolo} está pendente de recebimento. ` +
-    `Enviado por ${ator.nome}${ator.re ? `, RE ${ator.re}` : ''}, em ${dataHora}.`
+    exigeAprovacaoCmt
+      ? (
+          `O ${origemCodigoNormalizado} solicitou a transferência de ${material} ao ${destinoCodigoNormalizado}. ` +
+          `A transferência ${protocolo} aguarda aprovação do Comandante de Cia. ` +
+          `Solicitado por ${ator.nome}${ator.re ? `, RE ${ator.re}` : ''}, em ${dataHora}.`
+        )
+      : (
+          `O ${origemCodigoNormalizado} enviou ${material} ao ${destinoCodigoNormalizado}. ` +
+          `A transferência ${protocolo} está pendente de recebimento. ` +
+          `Enviado por ${ator.nome}${ator.re ? `, RE ${ator.re}` : ''}, em ${dataHora}.`
+        )
 
   const perfilDestino = destinoCodigoNormalizado === 'P4'
     ? PERFIS.P4
     : PERFIS.ENCARREGADO_SVDD
 
-  await notificarPerfis([
-    {
+  const notificacoes = []
+
+  if (!exigeAprovacaoCmt) {
+    notificacoes.push({
       titulo: `Material pendente de recebimento no ${destinoCodigoNormalizado}`,
       mensagem,
       tipo: 'PATRIMONIO',
@@ -448,13 +578,17 @@ export async function criarTransferenciaPendente({
         categoria: categoriaNormalizada,
         status: STATUS_TRANSFERENCIA.PENDENTE
       }
-    },
-    {
-      titulo: `${origemCodigoNormalizado} enviou material ao ${destinoCodigoNormalizado}`,
+    })
+  }
+
+  notificacoes.push({
+      titulo: exigeAprovacaoCmt
+        ? 'Transferência de TPD aguardando aprovação'
+        : `${origemCodigoNormalizado} enviou material ao ${destinoCodigoNormalizado}`,
       mensagem,
       tipo: 'PATRIMONIO',
       modulo: 'PATRIMONIO',
-      prioridade: 'NORMAL',
+      prioridade: exigeAprovacaoCmt ? 'ALTA' : 'NORMAL',
       destinatario_perfil: PERFIS.COMANDANTE_CIA,
       referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
       referencia_id: data.id,
@@ -462,10 +596,13 @@ export async function criarTransferenciaPendente({
       metadata: {
         protocolo,
         categoria: categoriaNormalizada,
-        status: STATUS_TRANSFERENCIA.PENDENTE
+        status: STATUS_TRANSFERENCIA.PENDENTE,
+        exige_aprovacao_cmt: exigeAprovacaoCmt,
+        cmt_aprovado: !exigeAprovacaoCmt
       }
-    }
-  ])
+    })
+
+  await notificarPerfis(notificacoes)
 
   await auditar({
     tipo: 'TRANSFERENCIA_PATRIMONIAL_ENVIADA',
@@ -478,6 +615,29 @@ export async function criarTransferenciaPendente({
   })
 
   return data
+}
+
+
+export async function listarTransferenciasTPDAguardandoAprovacaoCmt({
+  limite = 500
+} = {}) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .eq('status', STATUS_TRANSFERENCIA.PENDENTE)
+    .eq('categoria', 'TPD')
+    .eq('origem_codigo', 'P4')
+    .eq('destino_codigo', 'SVDD')
+    .order('enviado_em', { ascending: true })
+    .limit(Math.max(1, Math.min(Number(limite) || 500, 500)))
+
+  if (error) throw error
+
+  return (data ?? []).filter(
+    (item) =>
+      item?.metadata?.exige_aprovacao_cmt === true &&
+      item?.metadata?.cmt_aprovado !== true
+  )
 }
 
 
@@ -500,7 +660,22 @@ export async function listarTransferenciasPendentes({
 
   const { data, error } = await query
   if (error) throw error
-  return data ?? []
+
+  return (data ?? []).filter((item) => {
+    const categoriaItem = upper(item?.categoria)
+    const origemItem = upper(item?.origem_codigo)
+    const destinoItem = upper(item?.destino_codigo)
+
+    if (
+      categoriaItem === 'TPD' &&
+      origemItem === 'P4' &&
+      destinoItem === 'SVDD'
+    ) {
+      return item?.metadata?.cmt_aprovado === true
+    }
+
+    return true
+  })
 }
 
 export async function buscarTransferenciaPorId(id) {
@@ -642,6 +817,226 @@ async function aceitarTransferenciaDeArma({
 }
 
 
+async function aceitarTransferenciaDeTPD({
+  transferencia,
+  ator,
+  horaServidor,
+  user
+}) {
+  const tpdId = transferencia?.metadata?.tpd_id
+
+  if (!tpdId) {
+    throw new Error('A transferência não possui vínculo com o TPD.')
+  }
+
+  const { data: tpdAnterior, error: tpdBuscaError } = await supabase
+    .from(TPDS_TABLE)
+    .select('*')
+    .eq('id', tpdId)
+    .maybeSingle()
+
+  if (tpdBuscaError) throw tpdBuscaError
+  if (!tpdAnterior) throw new Error('O TPD da transferência não foi encontrado.')
+
+  let movimentacao = null
+
+  try {
+    movimentacao = await registrarMovimentacao({
+      patrimonioId: transferencia.patrimonio_id,
+      tipo: 'TRANSFERENCIA',
+      localDestino: transferencia.destino_nome,
+      motivo: transferencia.motivo,
+      observacao: transferencia.observacoes,
+      dados: {
+        transferencia_id: transferencia.id,
+        protocolo_transferencia: transferencia.protocolo,
+        quantidade: 1,
+        categoria: 'TPD',
+        item_individual: true,
+        tpd_id: tpdId,
+        origem_codigo: transferencia.origem_codigo,
+        origem_nome: transferencia.origem_nome,
+        destino_codigo: transferencia.destino_codigo,
+        destino_nome: transferencia.destino_nome,
+        guardiao_origem: {
+          tipo: 'SETOR',
+          codigo: transferencia.origem_codigo,
+          nome: transferencia.origem_nome
+        },
+        guardiao_destino: {
+          tipo: 'SETOR',
+          codigo: transferencia.destino_codigo,
+          nome: transferencia.destino_nome
+        }
+      },
+      user
+    })
+
+    const { data: tpdAtualizado, error: tpdError } = await supabase
+      .from(TPDS_TABLE)
+      .update({
+        local_atual: transferencia.destino_nome
+      })
+      .eq('id', tpdId)
+      .select('*')
+      .maybeSingle()
+
+    if (tpdError) throw tpdError
+    if (!tpdAtualizado) {
+      throw new Error('Não foi possível atualizar a localização do TPD.')
+    }
+
+    const { data, error } = await supabase
+      .from(TABLE)
+      .update({
+        status: STATUS_TRANSFERENCIA.ACEITA,
+        recebido_por_id: ator.id,
+        recebido_por_re: ator.re,
+        recebido_por_nome: ator.nome,
+        recebido_em: horaServidor,
+        movimentacao_id: movimentacao?.id || movimentacao?.movimentacao?.id || null,
+        updated_at: horaServidor
+      })
+      .eq('id', transferencia.id)
+      .eq('status', STATUS_TRANSFERENCIA.PENDENTE)
+      .select('*')
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) throw new Error('A transferência foi alterada por outro usuário.')
+
+    return {
+      transferencia: data,
+      estoque: tpdAtualizado,
+      tpd: tpdAtualizado,
+      movimentacao
+    }
+  } catch (error) {
+    await supabase
+      .from(TPDS_TABLE)
+      .update({
+        local_atual: tpdAnterior.local_atual ?? null
+      })
+      .eq('id', tpdId)
+
+    throw error
+  }
+}
+
+
+export async function aprovarTransferenciaTPDPeloCmt({
+  transferenciaId,
+  user = null
+}) {
+  const ator = usuarioNormalizado(user)
+  const transferencia = await buscarTransferenciaPorId(transferenciaId)
+
+  if (transferencia.status !== STATUS_TRANSFERENCIA.PENDENTE) {
+    throw new Error('Somente transferências pendentes podem ser aprovadas.')
+  }
+
+  if (
+    upper(transferencia.categoria) !== 'TPD' ||
+    upper(transferencia.origem_codigo) !== 'P4' ||
+    upper(transferencia.destino_codigo) !== 'SVDD'
+  ) {
+    throw new Error('Esta aprovação é exclusiva para transferências de TPD do P4 para o SVDD.')
+  }
+
+  if (transferencia?.metadata?.cmt_aprovado === true) {
+    return transferencia
+  }
+
+  const horaServidor = await obterHoraServidor()
+
+  const metadataAtualizada = {
+    ...(transferencia.metadata || {}),
+    exige_aprovacao_cmt: true,
+    cmt_aprovado: true,
+    cmt_aprovado_por_id: ator.id,
+    cmt_aprovado_por_re: ator.re,
+    cmt_aprovado_por_nome: ator.nome,
+    cmt_aprovado_em: horaServidor
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({
+      metadata: metadataAtualizada,
+      updated_at: horaServidor
+    })
+    .eq('id', transferencia.id)
+    .eq('status', STATUS_TRANSFERENCIA.PENDENTE)
+    .select('*')
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) {
+    throw new Error('A transferência foi alterada por outro usuário.')
+  }
+
+  const material = descricaoMaterial(
+    transferencia.categoria,
+    transferencia.quantidade,
+    transferencia.metadata || {}
+  )
+
+  const mensagem =
+    `O Comandante de Cia aprovou a transferência de ${material} do P4 para o SVDD. ` +
+    `Transferência ${transferencia.protocolo}. ` +
+    `Aprovado por ${ator.nome}${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}. ` +
+    `O material está liberado para recebimento pelo SVDD.`
+
+  await notificarPerfis([
+    {
+      titulo: 'TPD liberado para recebimento no SVDD',
+      mensagem,
+      tipo: 'PATRIMONIO',
+      modulo: 'PATRIMONIO',
+      prioridade: 'ALTA',
+      destinatario_perfil: PERFIS.ENCARREGADO_SVDD,
+      referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
+      referencia_id: transferencia.id,
+      link: linkDoModulo('TPD', true),
+      metadata: {
+        protocolo: transferencia.protocolo,
+        categoria: 'TPD',
+        status: STATUS_TRANSFERENCIA.PENDENTE,
+        cmt_aprovado: true
+      }
+    },
+    {
+      titulo: 'Transferência de TPD aprovada pelo Cmt',
+      mensagem,
+      tipo: 'SUCESSO',
+      modulo: 'PATRIMONIO',
+      prioridade: 'NORMAL',
+      destinatario_perfil: PERFIS.P4,
+      referencia_tipo: 'TRANSFERENCIA_PATRIMONIAL',
+      referencia_id: transferencia.id,
+      link: linkDoModulo('TPD'),
+      metadata: {
+        protocolo: transferencia.protocolo,
+        categoria: 'TPD',
+        status: STATUS_TRANSFERENCIA.PENDENTE,
+        cmt_aprovado: true
+      }
+    }
+  ])
+
+  await auditar({
+    tipo: 'TRANSFERENCIA_TPD_APROVADA_CMT',
+    descricao:
+      `Aprovou a transferência ${transferencia.protocolo}: ${material} do P4 para o SVDD, liberada para recebimento.`,
+    usuario: user,
+    modulo: 'Patrimônio',
+    severidade: 'Informativo'
+  })
+
+  return data
+}
+
+
 export async function aceitarTransferencia({
   transferenciaId,
   user = null
@@ -653,10 +1048,22 @@ export async function aceitarTransferencia({
     throw new Error(`Esta transferência já está ${transferencia.status.toLowerCase()}.`)
   }
 
-  const horaServidor = await obterHoraServidor()
   const categoria = upper(transferencia.categoria)
   const origemCodigo = upper(transferencia.origem_codigo)
   const destinoCodigo = upper(transferencia.destino_codigo)
+
+  if (
+    categoria === 'TPD' &&
+    origemCodigo === 'P4' &&
+    destinoCodigo === 'SVDD' &&
+    transferencia?.metadata?.cmt_aprovado !== true
+  ) {
+    throw new Error(
+      'A transferência deste TPD ainda aguarda aprovação do Comandante de Cia.'
+    )
+  }
+
+  const horaServidor = await obterHoraServidor()
 
   if (
     !(
@@ -673,6 +1080,13 @@ export async function aceitarTransferencia({
 
   if (categoria === 'ARMA') {
     resultado = await aceitarTransferenciaDeArma({
+      transferencia,
+      ator,
+      horaServidor,
+      user
+    })
+  } else if (categoria === 'TPD') {
+    resultado = await aceitarTransferenciaDeTPD({
       transferencia,
       ator,
       horaServidor,
@@ -791,7 +1205,7 @@ export async function aceitarTransferencia({
     }
   }
 
-  const quantidade = categoria === 'ARMA'
+  const quantidade = ['ARMA', 'TPD'].includes(categoria)
     ? 1
     : quantidadeInteira(transferencia.quantidade)
   const material = descricaoMaterial(

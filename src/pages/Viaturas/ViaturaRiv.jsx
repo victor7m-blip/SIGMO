@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { supabase } from '../../services/supabaseClient'
+import { loadSessionToken } from '../../services/authService'
+
 import {
   alterarStatusOcorrenciaRiv,
   concluirAvariaRiv,
@@ -58,6 +61,22 @@ function formatarKm(valor) {
   return `${Number(valor).toLocaleString('pt-BR')} km`
 }
 
+function normalizarPerfil(valor) {
+  return String(valor || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function usuarioEhP4(user) {
+  const perfil = normalizarPerfil(
+    user?.perfil || user?.role || user?.funcao || ''
+  )
+
+  return ['P4', 'ADMINISTRADOR'].includes(perfil)
+}
+
 export default function ViaturaRiv({ user, viatura, onUpdated }) {
   const [dados, setDados] = useState({
     quilometragemAtual: Number(viatura.quilometragem_atual || 0),
@@ -89,6 +108,9 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
   const [abaRiv, setAbaRiv] = useState('RESUMO')
   const [formNovaAvariaAberto, setFormNovaAvariaAberto] = useState(false)
   const [formNovaManutencaoAberto, setFormNovaManutencaoAberto] = useState(false)
+  const [avaliacaoExterna, setAvaliacaoExterna] = useState(null)
+  const [arquivoAvaliacaoExterna, setArquivoAvaliacaoExterna] = useState(null)
+  const [fotosAvaliacaoExterna, setFotosAvaliacaoExterna] = useState([])
 
   async function carregar() {
     try {
@@ -213,6 +235,7 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
   const podeGerenciarManutencao = podeGerenciarManutencaoRiv(user)
   const podeReabrirManutencao = podeReabrirManutencaoRiv(user)
   const podeGerenciarConhecidas = podeGerenciarAvariasConhecidas(user)
+  const podeSolicitarAvaliacaoExterna = usuarioEhP4(user)
 
   async function alternarAvariaConhecida(item) {
     try {
@@ -226,6 +249,101 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
       await carregar()
     } catch (error) {
       setErro(error?.message || 'Não foi possível atualizar as avarias conhecidas.')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  function abrirAvaliacaoExterna(item) {
+    setAvaliacaoExterna({
+      item,
+      modalidade: item?.avaliacao_externa_modalidade || 'OFICINA_EXTERNA',
+      destino: item?.avaliacao_externa_destino || '',
+      endereco: item?.avaliacao_externa_endereco || '',
+      contato: item?.avaliacao_externa_contato || '',
+      motivo: item?.avaliacao_externa_motivo || '',
+      servicoSolicitado: item?.avaliacao_externa_servico_solicitado || '',
+      documento: item?.avaliacao_externa_documento || '',
+      observacoes: item?.avaliacao_externa_observacoes || ''
+    })
+    setArquivoAvaliacaoExterna(null)
+    setFotosAvaliacaoExterna([])
+    setErro('')
+  }
+
+  async function solicitarAvaliacaoExterna(event) {
+    event.preventDefault()
+    if (!avaliacaoExterna?.item?.id) return
+
+    const token = loadSessionToken()
+    if (!token) {
+      setErro('Sessão SIGMO inválida ou expirada. Entre novamente no sistema.')
+      return
+    }
+
+    if (!String(avaliacaoExterna.destino || '').trim()) {
+      setErro('Informe a oficina, prestador ou responsável pela vistoria.')
+      return
+    }
+
+    if (
+      !String(avaliacaoExterna.motivo || '').trim() &&
+      !String(avaliacaoExterna.servicoSolicitado || '').trim()
+    ) {
+      setErro('Informe o motivo ou o serviço solicitado.')
+      return
+    }
+
+    try {
+      setOcupado(true)
+      setErro('')
+
+      const { error } = await supabase.rpc(
+        'sigmo_viaturas_solicitar_avaliacao_externa',
+        {
+          p_token: token,
+          p_ocorrencia_id: avaliacaoExterna.item.id,
+          p_modalidade: avaliacaoExterna.modalidade,
+          p_destino: String(avaliacaoExterna.destino || '').trim().toUpperCase(),
+          p_endereco: String(avaliacaoExterna.endereco || '').trim().toUpperCase() || null,
+          p_contato: String(avaliacaoExterna.contato || '').trim().toUpperCase() || null,
+          p_motivo: String(avaliacaoExterna.motivo || '').trim().toUpperCase() || null,
+          p_servico_solicitado: String(avaliacaoExterna.servicoSolicitado || '').trim().toUpperCase() || null,
+          p_documento: String(avaliacaoExterna.documento || '').trim().toUpperCase() || null,
+          p_observacoes: String(avaliacaoExterna.observacoes || '').trim().toUpperCase() || null
+        }
+      )
+
+      if (error) throw error
+
+      if (arquivoAvaliacaoExterna) {
+        await enviarDocumentoNovidadeVtr({
+          viaturaId: viatura.id,
+          ocorrenciaId: avaliacaoExterna.item.id,
+          etapa: 'AVALIACAO_EXTERNA',
+          arquivo: arquivoAvaliacaoExterna,
+          user
+        })
+      }
+
+      if (fotosAvaliacaoExterna.length > 0) {
+        await enviarFotosOcorrenciaRiv({
+          viaturaId: viatura.id,
+          ocorrenciaId: avaliacaoExterna.item.id,
+          tipo: avaliacaoExterna.item.tipo || 'AVARIA',
+          fase: 'ANTES',
+          arquivos: fotosAvaliacaoExterna,
+          user
+        })
+      }
+
+      setAvaliacaoExterna(null)
+      setArquivoAvaliacaoExterna(null)
+      setFotosAvaliacaoExterna([])
+      await carregar()
+      await onUpdated?.()
+    } catch (error) {
+      setErro(error?.message || 'Não foi possível solicitar a avaliação externa da viatura.')
     } finally {
       setOcupado(false)
     }
@@ -930,6 +1048,48 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
                         }
                       />
                     </label>
+
+                    {item.avaliacao_externa_status && (
+                      <div style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(59,130,246,.45)',
+                        background: 'rgba(59,130,246,.10)'
+                      }}>
+                        <strong style={{
+                          display: 'block',
+                          color: '#93c5fd',
+                          marginBottom: 4
+                        }}>
+                          AVALIAÇÃO EXTERNA
+                        </strong>
+                        <span style={{ color: '#f8fafc' }}>
+                          {String(item.avaliacao_externa_modalidade || '').replaceAll('_', ' ')}
+                          {' • '}
+                          {String(item.avaliacao_externa_status || '').replaceAll('_', ' ')}
+                          {item.avaliacao_externa_destino ? ` • ${item.avaliacao_externa_destino}` : ''}
+                        </span>
+                      </div>
+                    )}
+
+                    {podeSolicitarAvaliacaoExterna &&
+                      ![
+                        'AGUARDANDO_APROVACAO_CMT',
+                        'APROVADA',
+                        'EM_AVALIACAO',
+                        'AVALIACAO_CONCLUIDA'
+                      ].includes(
+                        String(item.avaliacao_externa_status || '').toUpperCase()
+                      ) && (
+                        <button
+                          type="button"
+                          disabled={ocupado}
+                          onClick={() => abrirAvaliacaoExterna(item)}
+                        >
+                          Solicitar avaliação externa
+                        </button>
+                      )}
 
                     {podeGerenciarConhecidas && (
                       <button
@@ -1697,6 +1857,220 @@ export default function ViaturaRiv({ user, viatura, onUpdated }) {
           )}
         </div>
       </section>
+      )}
+
+      {avaliacaoExterna && (
+        <div
+          className="riv__modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !ocupado) {
+              setAvaliacaoExterna(null)
+              setArquivoAvaliacaoExterna(null)
+              setFotosAvaliacaoExterna([])
+            }
+          }}
+        >
+          <form className="riv__modal" onSubmit={solicitarAvaliacaoExterna}>
+            <div className="riv__modal-header">
+              <div>
+                <small>AVALIAÇÃO EXTERNA DA VTR</small>
+                <h3>{avaliacaoExterna.item?.titulo || 'Solicitar avaliação externa'}</h3>
+              </div>
+              <button
+                type="button"
+                disabled={ocupado}
+                onClick={() => {
+                  setAvaliacaoExterna(null)
+                  setArquivoAvaliacaoExterna(null)
+                  setFotosAvaliacaoExterna([])
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="riv__correcao-aviso">
+              O P4 solicita a avaliação técnica. O Comandante de Cia deverá autorizar antes da saída da viatura para oficina ou da realização da vistoria externa no pátio da Cia.
+            </p>
+
+            <div className="riv__modal-grid">
+              <label>
+                <span>Modalidade *</span>
+                <select
+                  required
+                  value={avaliacaoExterna.modalidade}
+                  onChange={(event) =>
+                    setAvaliacaoExterna((atual) => ({
+                      ...atual,
+                      modalidade: event.target.value
+                    }))
+                  }
+                >
+                  <option value="OFICINA_EXTERNA">Enviar VTR para oficina externa</option>
+                  <option value="VISTORIA_NO_PATIO">Vistoria / orçamento no pátio da Cia</option>
+                </select>
+              </label>
+
+              <label>
+                <span>
+                  {avaliacaoExterna.modalidade === 'OFICINA_EXTERNA'
+                    ? 'Oficina / destino *'
+                    : 'Empresa / responsável pela vistoria *'}
+                </span>
+                <input
+                  required
+                  value={avaliacaoExterna.destino}
+                  onChange={(event) =>
+                    setAvaliacaoExterna((atual) => ({
+                      ...atual,
+                      destino: event.target.value.toUpperCase()
+                    }))
+                  }
+                />
+              </label>
+
+              <label>
+                <span>Endereço</span>
+                <input
+                  value={avaliacaoExterna.endereco}
+                  onChange={(event) =>
+                    setAvaliacaoExterna((atual) => ({
+                      ...atual,
+                      endereco: event.target.value.toUpperCase()
+                    }))
+                  }
+                />
+              </label>
+
+              <label>
+                <span>Contato</span>
+                <input
+                  value={avaliacaoExterna.contato}
+                  onChange={(event) =>
+                    setAvaliacaoExterna((atual) => ({
+                      ...atual,
+                      contato: event.target.value.toUpperCase()
+                    }))
+                  }
+                />
+              </label>
+
+              <label>
+                <span>Responsabilidade registrada</span>
+                <input
+                  value={String(
+                    avaliacaoExterna.item?.responsabilidade_status || 'NAO_DEFINIDA'
+                  ).replaceAll('_', ' ')}
+                  disabled
+                />
+              </label>
+
+              <label>
+                <span>Nº documento / referência</span>
+                <input
+                  value={avaliacaoExterna.documento}
+                  onChange={(event) =>
+                    setAvaliacaoExterna((atual) => ({
+                      ...atual,
+                      documento: event.target.value.toUpperCase()
+                    }))
+                  }
+                  placeholder="Ex.: OS / PARTE / OFÍCIO"
+                />
+              </label>
+            </div>
+
+            <label className="riv__modal-full">
+              <span>Motivo da avaliação</span>
+              <textarea
+                rows="3"
+                value={avaliacaoExterna.motivo}
+                onChange={(event) =>
+                  setAvaliacaoExterna((atual) => ({
+                    ...atual,
+                    motivo: event.target.value.toUpperCase()
+                  }))
+                }
+              />
+            </label>
+
+            <label className="riv__modal-full">
+              <span>Serviço / avaliação solicitada</span>
+              <textarea
+                rows="3"
+                value={avaliacaoExterna.servicoSolicitado}
+                onChange={(event) =>
+                  setAvaliacaoExterna((atual) => ({
+                    ...atual,
+                    servicoSolicitado: event.target.value.toUpperCase()
+                  }))
+                }
+                placeholder="Ex.: DIAGNÓSTICO COMPLETO, ORÇAMENTO E PARECER SOBRE VIABILIDADE DO REPARO."
+              />
+            </label>
+
+            <label className="riv__modal-full">
+              <span>Observações</span>
+              <textarea
+                rows="3"
+                value={avaliacaoExterna.observacoes}
+                onChange={(event) =>
+                  setAvaliacaoExterna((atual) => ({
+                    ...atual,
+                    observacoes: event.target.value.toUpperCase()
+                  }))
+                }
+              />
+            </label>
+
+            <div className="riv__modal-grid">
+              <label>
+                <span>Anexar documento</span>
+                <input
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={(event) =>
+                    setArquivoAvaliacaoExterna(event.target.files?.[0] || null)
+                  }
+                />
+                {arquivoAvaliacaoExterna && <small>{arquivoAvaliacaoExterna.name}</small>}
+              </label>
+
+              <label>
+                <span>Fotos para avaliação</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) =>
+                    setFotosAvaliacaoExterna(Array.from(event.target.files || []))
+                  }
+                />
+                {fotosAvaliacaoExterna.length > 0 && (
+                  <small>{fotosAvaliacaoExterna.length} foto(s)</small>
+                )}
+              </label>
+            </div>
+
+            <div className="riv__modal-actions">
+              <button
+                type="button"
+                disabled={ocupado}
+                onClick={() => {
+                  setAvaliacaoExterna(null)
+                  setArquivoAvaliacaoExterna(null)
+                  setFotosAvaliacaoExterna([])
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" disabled={ocupado}>
+                {ocupado ? 'Enviando...' : 'Enviar para autorização do Cmt de Cia'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {fechandoAvaria && (

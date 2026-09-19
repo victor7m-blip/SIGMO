@@ -9,6 +9,10 @@ import {
 } from '../../../services/torniquetesService'
 
 import {
+  listarEstoqueColetesRefletivos
+} from '../../../services/coletesRefletivosService'
+
+import {
   buscarArmaPorId
 } from '../../../services/armasService'
 
@@ -209,6 +213,27 @@ function ehCassetete(material) {
   return campos.some((valor) => valor.includes('CASSETETE'))
 }
 
+function ehColeteRefletivo(material) {
+  const campos = [
+    material?.modulo,
+    material?.categoria,
+    material?.tipo,
+    material?.tipo_patrimonio,
+    material?.tipo_material,
+    material?.tabela_origem,
+    material?.descricao
+  ].map(normalizarTexto)
+
+  return (
+    campos.includes('COLETE REFLETIVO') ||
+    campos.includes('COLETE_REFLETIVO') ||
+    campos.includes('SIGMO_COLETES_REFLETIVOS') ||
+    campos.some((valor) =>
+      valor.startsWith('COLETE REFLETIVO ')
+    )
+  )
+}
+
 function ehTorniquete(material) {
   const campos = [
     material?.modulo,
@@ -241,6 +266,111 @@ function numeroInteiroNaoNegativo(valor) {
     0,
     Math.trunc(convertido)
   )
+}
+
+function montarItemColeteRefletivo(
+  colete,
+  origemLocal
+) {
+  const origem =
+    normalizarTexto(origemLocal)
+
+  const origemSVDD =
+    origem.includes('SVDD') ||
+    origem.includes('SERVIÇO DE DIA') ||
+    origem.includes('SERVICO DE DIA')
+
+  const quantidadeDisponivel =
+    origemSVDD
+      ? numeroInteiroNaoNegativo(
+          colete?.quantidade_svdd
+        )
+      : 0
+
+  const tamanho =
+    normalizarTexto(
+      colete?.tamanho
+    )
+
+  return {
+    id:
+      colete?.id,
+
+    referencia_id:
+      colete?.id,
+
+    colete_refletivo_id:
+      colete?.id,
+
+    tabela_origem:
+      'sigmo_coletes_refletivos',
+
+    modulo:
+      'COLETE REFLETIVO',
+
+    categoria:
+      'COLETE REFLETIVO',
+
+    tipo:
+      'COLETE REFLETIVO',
+
+    tipo_patrimonio:
+      'COLETE REFLETIVO',
+
+    tipo_material:
+      'COLETE REFLETIVO',
+
+    tipo_registro:
+      'COLETE_REFLETIVO_QUANTIDADE',
+
+    patrimonio:
+      'ESTOQUE CONTROLADO',
+
+    descricao:
+      `COLETE REFLETIVO ${tamanho}`.trim(),
+
+    tamanho,
+
+    local_atual:
+      'COFRE DO SVDD',
+
+    status:
+      quantidadeDisponivel > 0
+        ? 'DISPONÍVEL - COFRE DO SVDD'
+        : 'SEM SALDO',
+
+    controla_quantidade:
+      true,
+
+    quantidade_disponivel:
+      quantidadeDisponivel,
+
+    quantidade_maxima:
+      quantidadeDisponivel,
+
+    disponivel:
+      quantidadeDisponivel > 0,
+
+    quantidade_total:
+      numeroInteiroNaoNegativo(
+        colete?.quantidade_total
+      ),
+
+    quantidade_p4:
+      numeroInteiroNaoNegativo(
+        colete?.quantidade_p4
+      ),
+
+    quantidade_svdd:
+      numeroInteiroNaoNegativo(
+        colete?.quantidade_svdd
+      ),
+
+    quantidade_em_servico:
+      numeroInteiroNaoNegativo(
+        colete?.quantidade_em_servico
+      )
+  }
 }
 
 function montarItemTorniquete(
@@ -385,6 +515,8 @@ function correspondeFiltro(material, filtro) {
       return ehCassetete(material)
     case 'TORNIQUETE':
       return ehTorniquete(material)
+    case 'COLETE_REFLETIVO':
+      return ehColeteRefletivo(material)
     default:
       return true
   }
@@ -447,6 +579,7 @@ export default function PesquisaMaterial({
         })
 
       let estoqueTorniquetes = []
+      let estoqueColetesRefletivos = []
 
       try {
         estoqueTorniquetes =
@@ -462,10 +595,49 @@ export default function PesquisaMaterial({
         )
       }
 
-      const materiaisBase =
+      try {
+        estoqueColetesRefletivos =
+          await listarEstoqueColetesRefletivos()
+      } catch (erroColetesRefletivos) {
+        console.warn(
+          'Não foi possível carregar Coletes Refletivos no Pagar Material:',
+          erroColetesRefletivos
+        )
+
+        setErro(
+          'Os demais materiais foram carregados, mas não foi possível consultar o estoque de Coletes Refletivos.'
+        )
+      }
+
+      const materiaisBaseBrutos =
         Array.isArray(resultado)
           ? resultado
           : []
+
+      const materiaisBase =
+        materiaisBaseBrutos.filter((material) => {
+          const descricao =
+            normalizarTexto(
+              material?.descricao
+            )
+
+          const patrimonio =
+            normalizarTexto(
+              material?.patrimonio
+            )
+
+          const ehRegistroAuxiliarTonfa =
+            ehTonfa(material) &&
+            !material?.controla_quantidade &&
+            (
+              descricao.includes('SIGMO-TONFA') ||
+              descricao.includes('SIGMO TONFA') ||
+              patrimonio.includes('SIGMO-TONFA') ||
+              patrimonio.includes('SIGMO TONFA')
+            )
+
+          return !ehRegistroAuxiliarTonfa
+        })
 
       const chavesExistentes =
         new Set(
@@ -522,7 +694,32 @@ export default function PesquisaMaterial({
             )
           })
 
+      const coletesRefletivos =
+        (
+          Array.isArray(
+            estoqueColetesRefletivos
+          )
+            ? estoqueColetesRefletivos
+            : []
+        )
+          .filter(
+            (item) =>
+              item?.id &&
+              item?.ativo !== false &&
+              numeroInteiroNaoNegativo(
+                item?.quantidade_svdd
+              ) > 0
+          )
+          .map(
+            (item) =>
+              montarItemColeteRefletivo(
+                item,
+                origemLocal
+              )
+          )
+
       setMateriais([
+        ...coletesRefletivos,
         ...torniquetes,
         ...materiaisBase
       ])
@@ -564,7 +761,9 @@ export default function PesquisaMaterial({
         material.modelo,
         material.categoria,
         material.tipo_material,
-        material.torniquete_id
+        material.torniquete_id,
+        material.colete_refletivo_id,
+        material.tamanho
       ].some((valor) => normalizarTexto(valor).includes(termo))
     })
   }, [busca, filtroTipo, materiais])
@@ -772,7 +971,8 @@ export default function PesquisaMaterial({
                   ['MUNICAO', 'Munição'],
                   ['TONFA', 'Tonfa'],
                   ['CASSETETE', 'Cassetete'],
-                  ['TORNIQUETE', 'Torniquete']
+                  ['TORNIQUETE', 'Torniquete'],
+                  ['COLETE_REFLETIVO', 'Colete Refletivo']
                 ].map(([valor, rotulo]) => {
                   const ativo = filtroTipo === valor
 

@@ -21,6 +21,12 @@ import {
 } from '../../../services/coletesBalisticosService'
 
 import {
+  aceitarTransferencia,
+  aprovarTransferenciaTPDPeloCmt,
+  recusarTransferencia
+} from '../../../services/patrimonioTransferenciaService'
+
+import {
   aceitarTransferenciaHT,
   recusarTransferenciaHT
 } from '../../../services/htsTransferenciaService'
@@ -55,51 +61,6 @@ function formatarData(valor) {
   const data = new Date(valor)
   if (Number.isNaN(data.getTime())) return ''
   return data.toLocaleString('pt-BR')
-}
-
-function formatarObservacoesManutencaoVtr(valor) {
-  const bruto = texto(valor)
-  if (!bruto) return ''
-
-  return bruto
-    .split('•')
-    .map((parte) => parte.trim())
-    .filter(Boolean)
-    .filter((parte) => {
-      const normalizado = normalizarOperacional(parte)
-      return (
-        !normalizado.startsWith('CAUTELA:') &&
-        !normalizado.startsWith('PREVENTIVA_ID:')
-      )
-    })
-    .map((parte) => {
-      const normalizado = normalizarOperacional(parte)
-
-      if (normalizado === 'ORIGEM: DEVOLUCAO MAPA FORCA') {
-        return 'Origem: devolução pelo Mapa Força'
-      }
-
-      if (normalizado.startsWith('PROXIMA KM:')) {
-        const numero = Number(
-          parte
-            .split(':')
-            .slice(1)
-            .join(':')
-            .trim()
-        )
-
-        return Number.isFinite(numero)
-          ? `Próxima manutenção: ${numero.toLocaleString('pt-BR')} km`
-          : parte
-      }
-
-      if (normalizado.startsWith('PROXIMA DATA:')) {
-        return `Próxima data: ${parte.split(':').slice(1).join(':').trim()}`
-      }
-
-      return parte
-    })
-    .join(' • ')
 }
 
 function tempoPendente(valor) {
@@ -341,6 +302,124 @@ function itemEhTransferenciaTorniquete(item) {
     normalizarOperacional(
       item?.modulo
     ) === 'TORNIQUETE'
+  )
+}
+
+
+function itemEhTransferenciaTPD(item) {
+  return (
+    normalizarOperacional(
+      item?.origem_aprovacao
+    ) === 'TPD_TRANSFERENCIA' ||
+    normalizarOperacional(
+      item?.tipo_solicitacao
+    ) === 'TRANSFERENCIA_TPD'
+  )
+}
+
+
+function itemEhRecebimentoPatrimonialSVDD(
+  item,
+  secao
+) {
+  if (!ehTransferencia(secao)) {
+    return false
+  }
+
+  const categoria =
+    normalizarOperacional(
+      item?.categoria ||
+      item?.modulo
+    )
+
+  const destino =
+    normalizarOperacional(
+      item?.destino_codigo ||
+      item?.destino_nome
+    )
+
+  const categoriasPatrimoniais =
+    new Set([
+      'ARMA',
+      'TPD',
+      'TONFA',
+      'CASSETETE'
+    ])
+
+  if (
+    !categoriasPatrimoniais.has(
+      categoria
+    )
+  ) {
+    return false
+  }
+
+  const vaiParaSVDD =
+    destino === 'SVDD' ||
+    destino.includes(
+      'COFRE DO SVDD'
+    )
+
+  if (!vaiParaSVDD) {
+    return false
+  }
+
+  /*
+   * TPD só pode ser recebido depois da aprovação do Cmt.
+   * Os demais materiais patrimoniais mantêm o fluxo próprio já existente.
+   */
+  if (
+    categoria === 'TPD' &&
+    item?.metadata?.cmt_aprovado !== true
+  ) {
+    return false
+  }
+
+  return true
+}
+
+
+function itemEhRecebimentoTPDSVDD(
+  item,
+  secao
+) {
+  if (!ehTransferencia(secao)) {
+    return false
+  }
+
+  const categoria =
+    normalizarOperacional(
+      item?.categoria ||
+      item?.modulo
+    )
+
+  const origem =
+    normalizarOperacional(
+      item?.origem_codigo ||
+      item?.origem_nome
+    )
+
+  const destino =
+    normalizarOperacional(
+      item?.destino_codigo ||
+      item?.destino_nome
+    )
+
+  const aprovado =
+    item?.metadata?.cmt_aprovado === true
+
+  return (
+    categoria === 'TPD' &&
+    (
+      origem === 'P4' ||
+      origem.includes('COFRE P4') ||
+      origem.includes('COFRE DO P4')
+    ) &&
+    (
+      destino === 'SVDD' ||
+      destino.includes('COFRE DO SVDD')
+    ) &&
+    aprovado
   )
 }
 
@@ -632,11 +711,60 @@ function tituloItem(item, secao) {
 
   if (
     ehAprovacao(secao) &&
+    itemEhTransferenciaTPD(item)
+  ) {
+    const metadata =
+      item?.metadata &&
+      typeof item.metadata === 'object'
+        ? item.metadata
+        : {}
+
+    return [
+      metadata?.descricao_tpd ||
+        [
+          item?.marca || metadata?.marca,
+          item?.modelo || metadata?.modelo
+        ].map(texto).filter(Boolean).join(' '),
+      item?.origem_nome && item?.destino_nome
+        ? `${item.origem_nome} → ${item.destino_nome}`
+        : '',
+      item?.protocolo
+        ? `PROTOCOLO: ${item.protocolo}`
+        : '',
+      item?.solicitada_por_nome
+        ? `SOLICITADO POR: ${item.solicitada_por_nome}`
+        : ''
+    ].map(texto).filter(Boolean).join(' • ')
+  }
+
+  if (
+    ehAprovacao(secao) &&
     itemEhTransferenciaMunicao(item)
   ) {
     return `Munições — ${item?.calibre || 'calibre não informado'}`
   }
 
+
+  if (
+    ehAprovacao(secao) &&
+    itemEhTransferenciaTPD(item)
+  ) {
+    const metadata =
+      item?.metadata &&
+      typeof item.metadata === 'object'
+        ? item.metadata
+        : {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      metadata?.patrimonio_tpd ||
+      metadata?.numero_serie_tpd ||
+      metadata?.descricao_tpd ||
+      'TPD'
+
+    return `TPD — ${identificacao}`
+  }
 
   if (
     ehAprovacao(secao) &&
@@ -982,6 +1110,9 @@ function detalheItem(item, secao) {
   if (ehTransferencia(secao)) {
     const metadata = item?.metadata && typeof item.metadata === 'object' ? item.metadata : {}
     const material =
+      metadata?.descricao_tpd ||
+      metadata?.patrimonio_tpd ||
+      metadata?.numero_serie_tpd ||
       metadata?.descricao_arma ||
       metadata?.patrimonio_arma ||
       item?.categoria ||
@@ -1122,6 +1253,9 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   const [decidindoManutencaoExternaId, setDecidindoManutencaoExternaId] = useState(null)
   const [decidindoMunicaoId, setDecidindoMunicaoId] = useState(null)
   const [decidindoTorniqueteId, setDecidindoTorniqueteId] = useState(null)
+  const [decidindoTPDId, setDecidindoTPDId] = useState(null)
+  const [aprovandoTodosTPDs, setAprovandoTodosTPDs] = useState(false)
+  const [recebendoTodosTPDs, setRecebendoTodosTPDs] = useState(false)
   const [novidadesVtr, setNovidadesVtr] = useState([])
   const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
   const [manutencoesVtr, setManutencoesVtr] = useState([])
@@ -1250,32 +1384,27 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   const novidadesVtrExibidas = useMemo(() => {
     if (!perfilVtr) return []
 
-    // Manutenções possuem card próprio na Central Operacional.
-    // Evita duplicar a mesma ocorrência também em "Novidades de VTR".
-    const somenteNovidades = novidadesVtr.filter((item) => {
-      const tipo = normalizarOperacional(item?.tipo)
-      const titulo = normalizarOperacional(item?.titulo)
-
-      return (
-        tipo !== 'MANUTENCAO' &&
-        !titulo.startsWith('MANUTENCAO INTERNA') &&
-        !titulo.startsWith('MANUTENCAO EXTERNA')
-      )
-    })
-
     if (perfilVtr === 'SVDD') {
-      return somenteNovidades.filter((item) =>
+      return novidadesVtr.filter((item) =>
         String(item.fluxo_novidade_status || '') === 'PENDENTE_SVDD'
       )
     }
 
     if (perfilVtr === 'P4') {
-      return somenteNovidades.filter((item) =>
-        String(item.fluxo_novidade_status || '') === 'PENDENTE_P4'
-      )
+      return novidadesVtr.filter((item) => {
+        const status =
+          String(
+            item.fluxo_novidade_status || ''
+          )
+
+        return [
+          'PENDENTE_SVDD',
+          'PENDENTE_P4'
+        ].includes(status)
+      })
     }
 
-    return somenteNovidades
+    return novidadesVtr
   }, [novidadesVtr, perfilVtr])
 
   async function abrirNovidadeVtr(item) {
@@ -1461,6 +1590,775 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     }
   }
 
+
+
+  async function receberTransferenciaTPDNoSVDD(
+    item,
+    { semConfirmacao = false } = {}
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      recebendoId ||
+      recusandoId ||
+      recebendoTodosTPDs
+    ) {
+      return false
+    }
+
+    const metadata =
+      item?.metadata &&
+      typeof item.metadata === 'object'
+        ? item.metadata
+        : {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      metadata?.patrimonio_tpd ||
+      metadata?.numero_serie_tpd ||
+      metadata?.descricao_tpd ||
+      'TPD'
+
+    if (!semConfirmacao) {
+      const confirmou =
+        window.confirm(
+          `Confirmar o recebimento do TPD ${identificacao}?\n\n` +
+          `${item?.origem_nome || 'COFRE DO P4'} → ${item?.destino_nome || 'COFRE DO SVDD'}`
+        )
+
+      if (!confirmou) {
+        return false
+      }
+    }
+
+    try {
+      setRecebendoId(
+        transferenciaId
+      )
+
+      await aceitarTransferencia({
+        transferenciaId,
+        user
+      })
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                String(
+                  registro?.transferencia_id ||
+                  registro?.id ||
+                  ''
+                ) !==
+                String(
+                  transferenciaId
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+
+      return true
+    } catch (error) {
+      console.error(
+        'Erro ao receber transferência de TPD no SVDD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível receber a transferência do TPD.'
+      )
+
+      return false
+    } finally {
+      setRecebendoId(
+        null
+      )
+    }
+  }
+
+
+  async function recusarTransferenciaTPDNoSVDD(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      recebendoId ||
+      recusandoId ||
+      recebendoTodosTPDs
+    ) {
+      return
+    }
+
+    const metadata =
+      item?.metadata &&
+      typeof item.metadata === 'object'
+        ? item.metadata
+        : {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      metadata?.patrimonio_tpd ||
+      metadata?.numero_serie_tpd ||
+      metadata?.descricao_tpd ||
+      'TPD'
+
+    const motivo =
+      window.prompt(
+        `Informe o motivo da recusa do TPD ${identificacao}:`
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo da recusa.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Recusar o recebimento do TPD ${identificacao}?\n\n` +
+        'O TPD permanecerá no COFRE DO P4.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setRecusandoId(
+        transferenciaId
+      )
+
+      await recusarTransferencia({
+        transferenciaId,
+        motivoRecusa:
+          `RECUSADA PELO SVDD: ${motivoNormalizado}`,
+        user
+      })
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                String(
+                  registro?.transferencia_id ||
+                  registro?.id ||
+                  ''
+                ) !==
+                String(
+                  transferenciaId
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao recusar transferência de TPD no SVDD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível recusar a transferência do TPD.'
+      )
+    } finally {
+      setRecusandoId(
+        null
+      )
+    }
+  }
+
+
+  async function receberTodosNoSVDD() {
+    if (
+      recebendoTodosTPDs ||
+      recebendoId ||
+      recusandoId
+    ) {
+      return
+    }
+
+    const itensRecebiveis =
+      (selecionado?.itens || [])
+        .filter(
+          (item) =>
+            itemEhRecebimentoPatrimonialSVDD(
+              item,
+              selecionado
+            )
+        )
+
+    if (itensRecebiveis.length === 0) {
+      window.alert(
+        'Não há materiais compatíveis liberados para recebimento.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Confirmar o recebimento de ${itensRecebiveis.length} material(is)?\n\n` +
+        'Cada item será recebido conforme o fluxo patrimonial já definido para sua categoria.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setRecebendoTodosTPDs(
+        true
+      )
+
+      const recebidos = []
+      const falhas = []
+
+      for (const item of itensRecebiveis) {
+        const transferenciaId =
+          item?.transferencia_id ||
+          item?.id
+
+        if (!transferenciaId) {
+          continue
+        }
+
+        try {
+          await aceitarTransferencia({
+            transferenciaId,
+            user
+          })
+
+          recebidos.push(
+            String(
+              transferenciaId
+            )
+          )
+        } catch (error) {
+          falhas.push({
+            item,
+            error
+          })
+        }
+      }
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                !recebidos.includes(
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  )
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+
+      if (falhas.length > 0) {
+        const descricoes =
+          falhas
+            .slice(0, 5)
+            .map(({ item, error }) => {
+              const categoria =
+                item?.categoria ||
+                item?.modulo ||
+                'MATERIAL'
+
+              const identificacao =
+                item?.patrimonio ||
+                item?.numero_serie ||
+                item?.metadata?.patrimonio_tpd ||
+                item?.metadata?.numero_serie_tpd ||
+                item?.metadata?.descricao_arma ||
+                item?.metadata?.patrimonio_arma ||
+                item?.protocolo ||
+                ''
+
+              return `• ${categoria}${identificacao ? ` — ${identificacao}` : ''}: ${error?.message || 'falha no recebimento'}`
+            })
+            .join('\n')
+
+        window.alert(
+          `${recebidos.length} material(is) recebido(s).\n` +
+          `${falhas.length} item(ns) não foram recebidos e permaneceram na lista.\n\n` +
+          descricoes
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao receber materiais em lote no SVDD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível concluir o recebimento em lote.'
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } finally {
+      setRecebendoTodosTPDs(
+        false
+      )
+    }
+  }
+
+
+  async function aprovarTransferenciaTPDNaCentral(
+    item,
+    { semConfirmacao = false } = {}
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      decidindoTPDId ||
+      aprovandoTodosTPDs
+    ) {
+      return false
+    }
+
+    const metadata =
+      item?.metadata &&
+      typeof item.metadata === 'object'
+        ? item.metadata
+        : {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      metadata?.patrimonio_tpd ||
+      metadata?.numero_serie_tpd ||
+      metadata?.descricao_tpd ||
+      'TPD'
+
+    if (!semConfirmacao) {
+      const confirmou =
+        window.confirm(
+          `Aprovar a transferência do TPD ${identificacao}?\n\n` +
+          `${item?.origem_nome || 'COFRE DO P4'} → ${item?.destino_nome || 'COFRE DO SVDD'}\n\n` +
+          'Após a aprovação, o TPD ficará liberado para recebimento pelo SVDD.'
+        )
+
+      if (!confirmou) {
+        return false
+      }
+    }
+
+    try {
+      setDecidindoTPDId(
+        transferenciaId
+      )
+
+      await aprovarTransferenciaTPDPeloCmt({
+        transferenciaId,
+        user
+      })
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          return {
+            ...atual,
+            total: Math.max(
+              0,
+              Number(atual.total || 0) - 1
+            ),
+            itens:
+              (atual.itens || []).filter(
+                (registro) =>
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    transferenciaId
+                  )
+              )
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+
+      return true
+    } catch (error) {
+      console.error(
+        'Erro ao aprovar transferência de TPD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível aprovar a transferência do TPD.'
+      )
+
+      return false
+    } finally {
+      setDecidindoTPDId(
+        null
+      )
+    }
+  }
+
+
+  async function reprovarTransferenciaTPDNaCentral(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      decidindoTPDId ||
+      aprovandoTodosTPDs
+    ) {
+      return
+    }
+
+    const metadata =
+      item?.metadata &&
+      typeof item.metadata === 'object'
+        ? item.metadata
+        : {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      metadata?.patrimonio_tpd ||
+      metadata?.numero_serie_tpd ||
+      metadata?.descricao_tpd ||
+      'TPD'
+
+    const motivo =
+      window.prompt(
+        `Informe o motivo da reprovação da transferência do TPD ${identificacao}:`
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo da reprovação.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Reprovar a transferência do TPD ${identificacao}?\n\n` +
+        'O TPD permanecerá no COFRE DO P4.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setDecidindoTPDId(
+        transferenciaId
+      )
+
+      await recusarTransferencia({
+        transferenciaId,
+        motivoRecusa:
+          `REPROVADA PELO CMT DE CIA: ${motivoNormalizado}`,
+        user
+      })
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                String(
+                  registro?.transferencia_id ||
+                  registro?.id ||
+                  ''
+                ) !==
+                String(
+                  transferenciaId
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao reprovar transferência de TPD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível reprovar a transferência do TPD.'
+      )
+    } finally {
+      setDecidindoTPDId(
+        null
+      )
+    }
+  }
+
+
+  async function aprovarTodosTPDsNaCentral() {
+    if (
+      aprovandoTodosTPDs ||
+      decidindoTPDId
+    ) {
+      return
+    }
+
+    const itensTPD =
+      (selecionado?.itens || [])
+        .filter(
+          (item) =>
+            itemEhTransferenciaTPD(
+              item
+            )
+        )
+
+    if (itensTPD.length === 0) {
+      window.alert(
+        'Não há transferências de TPD aguardando aprovação.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Aprovar todas as ${itensTPD.length} transferência(ões) de TPD?\n\n` +
+        'Após a aprovação, os TPDs ficarão liberados para recebimento pelo SVDD.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setAprovandoTodosTPDs(
+        true
+      )
+
+      const aprovados = []
+
+      for (const item of itensTPD) {
+        const transferenciaId =
+          item?.transferencia_id ||
+          item?.id
+
+        if (!transferenciaId) {
+          continue
+        }
+
+        await aprovarTransferenciaTPDPeloCmt({
+          transferenciaId,
+          user
+        })
+
+        aprovados.push(
+          String(
+            transferenciaId
+          )
+        )
+      }
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                !aprovados.includes(
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  )
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao aprovar todas as transferências de TPD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível concluir a aprovação em lote dos TPDs.'
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } finally {
+      setAprovandoTodosTPDs(
+        false
+      )
+    }
+  }
 
 
   async function aprovarTransferenciaTorniqueteNaCentral(
@@ -3337,13 +4235,42 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                   {novidadeVtrAberta.prefixo || 'VTR'} — {novidadeVtrAberta.titulo || 'Novidade'}
                 </h3>
               </div>
-              <button
-                type="button"
-                className="central-link-button"
-                onClick={() => setNovidadeVtrAberta(null)}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end'
+                }}
               >
-                Fechar
-              </button>
+                {novidadeVtrAberta?.viatura_id &&
+                  typeof onAbrirRivViatura === 'function' && (
+                    <button
+                      type="button"
+                      className="central-button central-button-primary"
+                      onClick={() => {
+                        const viaturaId =
+                          novidadeVtrAberta.viatura_id
+
+                        setNovidadeVtrAberta(null)
+                        setSelecionado(null)
+                        setRegistroAberto(null)
+                        onAbrirRivViatura(viaturaId)
+                      }}
+                    >
+                      Abrir VTR / Ir para RIV
+                    </button>
+                  )}
+
+                <button
+                  type="button"
+                  className="central-link-button"
+                  onClick={() => setNovidadeVtrAberta(null)}
+                >
+                  Fechar
+                </button>
+              </div>
             </header>
 
             <div className="central-modal-body">
@@ -3520,9 +4447,89 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                 <span className="central-section-eyebrow">Central Operacional</span>
                 <h3>{selecionado.titulo}</h3>
               </div>
-              <button type="button" className="central-link-button" onClick={() => setSelecionado(null)}>
-                Fechar
-              </button>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10
+                }}
+              >
+                {ehAprovacaoComandante(
+                  selecionado
+                ) &&
+                  ehComandante(
+                    user
+                  ) &&
+                  (selecionado?.itens || []).some(
+                    (item) =>
+                      itemEhTransferenciaTPD(
+                        item
+                      )
+                  ) && (
+                    <button
+                      type="button"
+                      className="central-button central-button-primary"
+                      disabled={
+                        aprovandoTodosTPDs ||
+                        Boolean(
+                          decidindoTPDId
+                        )
+                      }
+                      onClick={
+                        aprovarTodosTPDsNaCentral
+                      }
+                    >
+                      {aprovandoTodosTPDs
+                        ? 'Aprovando todos...'
+                        : 'Aprovar todos os TPDs'}
+                    </button>
+                  )}
+
+                {ehTransferencia(
+                  selecionado
+                ) &&
+                  ehEncarregado(
+                    user
+                  ) &&
+                  (selecionado?.itens || []).some(
+                    (item) =>
+                      itemEhRecebimentoPatrimonialSVDD(
+                        item,
+                        selecionado
+                      )
+                  ) && (
+                    <button
+                      type="button"
+                      className="central-button central-button-primary"
+                      disabled={
+                        recebendoTodosTPDs ||
+                        Boolean(
+                          recebendoId
+                        ) ||
+                        Boolean(
+                          recusandoId
+                        )
+                      }
+                      onClick={
+                        receberTodosNoSVDD
+                      }
+                    >
+                      {recebendoTodosTPDs
+                        ? 'Recebendo todos...'
+                        : 'Receber todos'}
+                    </button>
+                  )}
+
+                <button
+                  type="button"
+                  className="central-link-button"
+                  onClick={() =>
+                    setSelecionado(null)
+                  }
+                >
+                  Fechar
+                </button>
+              </div>
             </header>
 
             <div className="central-modal-body">
@@ -3584,6 +4591,94 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               <div><span>Nº de série</span><strong>{item?.numero_serie || 'Não informado'}</strong></div>
                               <div><span>Local atual</span><strong>{item?.local_atual || 'Sem localização'}</strong></div>
                               <div><span>Responsável</span><strong>{item?.responsavel_atual_nome || item?.responsavel_nome || 'Não informado'}</strong></div>
+                            </>
+                          ) : (
+                            ehAprovacaoComandante(
+                              selecionado
+                            ) &&
+                            itemEhTransferenciaTPD(
+                              item
+                            )
+                          ) ? (
+                            <>
+                              <div>
+                                <span>Tipo</span>
+                                <strong>Transferência de TPD</strong>
+                              </div>
+
+                              <div>
+                                <span>Patrimônio / Série</span>
+                                <strong>
+                                  {item?.patrimonio ||
+                                    item?.numero_serie ||
+                                    item?.metadata?.patrimonio_tpd ||
+                                    item?.metadata?.numero_serie_tpd ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Equipamento</span>
+                                <strong>
+                                  {item?.metadata?.descricao_tpd ||
+                                    [
+                                      item?.marca ||
+                                        item?.metadata?.marca,
+                                      item?.modelo ||
+                                        item?.metadata?.modelo
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' ') ||
+                                    'TPD'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Origem</span>
+                                <strong>
+                                  {item?.origem_nome ||
+                                    item?.origem_codigo ||
+                                    'COFRE DO P4'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Destino</span>
+                                <strong>
+                                  {item?.destino_nome ||
+                                    item?.destino_codigo ||
+                                    'COFRE DO SVDD'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Protocolo</span>
+                                <strong>
+                                  {item?.protocolo ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Solicitado por</span>
+                                <strong>
+                                  {item?.solicitada_por_nome ||
+                                    item?.criado_por_nome ||
+                                    item?.enviado_por_nome ||
+                                    'P4'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Data da solicitação</span>
+                                <strong>
+                                  {formatarData(
+                                    item?.solicitada_em ||
+                                    item?.created_at
+                                  ) ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
                             </>
                           ) : (
                             ehAprovacaoComandante(
@@ -4113,36 +5208,8 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               )}
                               {item?.manutencao_observacoes && (
                                 <div className="central-registro-itens">
-                                  <span>Observações da manutenção</span>
-                                  <strong>
-                                    {formatarObservacoesManutencaoVtr(
-                                      item.manutencao_observacoes
-                                    )}
-                                  </strong>
-                                </div>
-                              )}
-
-                              {item?.viatura_id && typeof onAbrirRivViatura === 'function' && (
-                                <div
-                                  className="central-registro-itens"
-                                  style={{
-                                    gridColumn: '1 / -1',
-                                    display: 'flex',
-                                    justifyContent: 'flex-end',
-                                    marginTop: 6
-                                  }}
-                                >
-                                  <button
-                                    type="button"
-                                    className="central-button central-button-primary"
-                                    onClick={() => {
-                                      setSelecionado(null)
-                                      setRegistroAberto(null)
-                                      onAbrirRivViatura(item.viatura_id)
-                                    }}
-                                  >
-                                    Abrir VTR / Ir para RIV
-                                  </button>
+                                  <span>Observações / serviço</span>
+                                  <strong>{item.manutencao_observacoes}</strong>
                                 </div>
                               )}
                             </>
@@ -4287,6 +5354,78 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                             : 'Receber'}
                         </button>
                       )}
+
+                      {itemEhRecebimentoTPDSVDD(
+                        item,
+                        selecionado
+                      ) &&
+                        ehEncarregado(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                              disabled={
+                                Boolean(
+                                  recebendoId
+                                ) ||
+                                Boolean(
+                                  recusandoId
+                                ) ||
+                                recebendoTodosTPDs
+                              }
+                              onClick={() =>
+                                recusarTransferenciaTPDNoSVDD(
+                                  item
+                                )
+                              }
+                              style={{
+                                borderColor:
+                                  '#dc2626',
+                                color:
+                                  '#dc2626',
+                                fontWeight:
+                                  800
+                              }}
+                            >
+                              {recusandoId ===
+                              (
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Recusando...'
+                                : 'Recusar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="central-button central-button-primary"
+                              disabled={
+                                Boolean(
+                                  recebendoId
+                                ) ||
+                                Boolean(
+                                  recusandoId
+                                ) ||
+                                recebendoTodosTPDs
+                              }
+                              onClick={() =>
+                                receberTransferenciaTPDNoSVDD(
+                                  item
+                                )
+                              }
+                            >
+                              {recebendoId ===
+                              (
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Recebendo...'
+                                : 'Receber'}
+                            </button>
+                          </>
+                        )}
 
                       {itemEhRecebimentoTorniquete(
                         item,
@@ -4547,6 +5686,74 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               )
                                 ? 'Aprovando...'
                                 : 'Aprovar descarga'}
+                            </button>
+                          </>
+                        )}
+
+                      {ehAprovacaoComandante(
+                        selecionado
+                      ) &&
+                        itemEhTransferenciaTPD(
+                          item
+                        ) &&
+                        ehComandante(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                            disabled={
+                              Boolean(
+                                decidindoTPDId
+                              ) ||
+                              aprovandoTodosTPDs
+                            }
+                            onClick={() =>
+                              reprovarTransferenciaTPDNaCentral(
+                                item
+                              )
+                            }
+                            style={{
+                              borderColor:
+                                '#dc2626',
+                              color:
+                                '#dc2626',
+                              fontWeight:
+                                800
+                            }}
+                          >
+                            {decidindoTPDId ===
+                            (
+                              item?.transferencia_id ||
+                              item?.id
+                            )
+                              ? 'Processando...'
+                              : 'Reprovar'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="central-button central-button-primary"
+                            disabled={
+                              Boolean(
+                                decidindoTPDId
+                              ) ||
+                              aprovandoTodosTPDs
+                            }
+                            onClick={() =>
+                              aprovarTransferenciaTPDNaCentral(
+                                item
+                              )
+                            }
+                          >
+                            {decidindoTPDId ===
+                            (
+                              item?.transferencia_id ||
+                              item?.id
+                            )
+                              ? 'Aprovando...'
+                              : 'Aprovar'}
                             </button>
                           </>
                         )}

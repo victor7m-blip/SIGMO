@@ -462,6 +462,7 @@ export default function HT({ user }) {
   const [salvandoManutencao, setSalvandoManutencao] = useState(false)
   const [seletorManutencaoAberto, setSeletorManutencaoAberto] = useState(false)
   const [buscaSeletorManutencao, setBuscaSeletorManutencao] = useState('')
+  const [destinoTransferenciaModalAberto, setDestinoTransferenciaModalAberto] = useState(false)
   const [transferenciaModalAberta, setTransferenciaModalAberta] = useState(false)
   const [destinoTransferenciaSelecionado, setDestinoTransferenciaSelecionado] = useState('')
   const [destinoTransferenciaOutro, setDestinoTransferenciaOutro] = useState('')
@@ -1114,8 +1115,49 @@ export default function HT({ user }) {
     setReRecebedorTransferencia('')
     setRecebedorTransferencia(null)
     setErroRecebedorTransferencia('')
-    setTransferenciaModalAberta(true)
     setMensagemSucesso('')
+
+    if (contextoOrigemSVDD) {
+      setTransferenciaModalAberta(true)
+      return
+    }
+
+    setDestinoTransferenciaModalAberto(true)
+  }
+
+  function selecionarDestinoPrincipalHT(tipo) {
+    if (tipo === 'CARGA') {
+      setDestinoTransferenciaModalAberto(false)
+      abrirOperacao('CARGA')
+      return
+    }
+
+    if (tipo === 'SVDD') {
+      setDestinoTransferenciaSelecionado('SVDD')
+      setDestinoTransferenciaModalAberto(false)
+      setTransferenciaModalAberta(true)
+      return
+    }
+
+    if (tipo === 'BATALHAO') {
+      setDestinoTransferenciaSelecionado('BTL')
+      setDestinoTransferenciaModalAberto(false)
+      setTransferenciaModalAberta(true)
+      return
+    }
+
+    if (tipo === 'OUTROS') {
+      setDestinoTransferenciaSelecionado('OUTROS')
+      setDestinoTransferenciaModalAberto(false)
+      setTransferenciaModalAberta(true)
+      return
+    }
+
+    if (tipo === 'OUTRAS_CIAS') {
+      setDestinoTransferenciaSelecionado('')
+      setDestinoTransferenciaModalAberto(false)
+      setTransferenciaModalAberta(true)
+    }
   }
 
   async function abrirCancelamentoTransferencia() {
@@ -1964,6 +2006,90 @@ export default function HT({ user }) {
         </div>
       )}
 
+      {destinoTransferenciaModalAberto && (
+        <div
+          className="ht-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setDestinoTransferenciaModalAberto(false)
+            }
+          }}
+        >
+          <section
+            className="ht-transfer-modal ht-transfer-destination-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Transferir HT"
+          >
+            <header>
+              <div>
+                <span>SIGMO • HT</span>
+                <h2>Transferir HT</h2>
+                <p>Escolha o destino da movimentação.</p>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Fechar"
+                onClick={() => setDestinoTransferenciaModalAberto(false)}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="ht-transfer-body">
+              <div className="ht-transfer-destination-grid">
+                <button
+                  type="button"
+                  className="ht-transfer-destination-card"
+                  onClick={() => selecionarDestinoPrincipalHT('SVDD')}
+                >
+                  <strong>SVDD</strong>
+                  <span>Transferir rádios HT para o Serviço de Dia.</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="ht-transfer-destination-card"
+                  onClick={() => selecionarDestinoPrincipalHT('CARGA')}
+                >
+                  <strong>Carga permanente</strong>
+                  <span>Destinar rádio HT para carga permanente.</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="ht-transfer-destination-card"
+                  onClick={() => selecionarDestinoPrincipalHT('OUTRAS_CIAS')}
+                >
+                  <strong>Outras Cias</strong>
+                  <span>Transferir rádio HT para outra Companhia.</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="ht-transfer-destination-card"
+                  onClick={() => selecionarDestinoPrincipalHT('BATALHAO')}
+                >
+                  <strong>Batalhão</strong>
+                  <span>Transferir rádio HT para carga do Batalhão.</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="ht-transfer-destination-card"
+                  onClick={() => selecionarDestinoPrincipalHT('OUTROS')}
+                >
+                  <strong>Outra unidade / Outros</strong>
+                  <span>Registrar transferência para outro destino ou unidade.</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
       {transferenciaModalAberta && (
         <div className="ht-modal-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !processandoTransferenciaId) setTransferenciaModalAberta(false)
@@ -1972,15 +2098,35 @@ export default function HT({ user }) {
             <header>
               <div>
                 <span>Transferência patrimonial</span>
-                <h2>{origemTransferencia} → {destinoTransferencia || 'Selecionar destino'}</h2>
-                <p>{contextoOrigemSVDD ? 'Selecione os rádios HT que serão devolvidos ao P4.' : 'Escolha o destino e selecione um ou vários rádios HT.'}</p>
+                <h2>
+                  {contextoOrigemSVDD
+                    ? 'SVDD → COFRE DO P4'
+                    : destinoTransferenciaSelecionado
+                      ? `COFRE DO P4 → ${
+                          destinoTransferenciaSelecionado === 'SVDD'
+                            ? 'COFRE DO SVDD'
+                            : destinoTransferenciaSelecionado === 'BTL'
+                              ? 'BATALHÃO'
+                              : destinoTransferenciaSelecionado === 'OUTROS'
+                                ? 'OUTRA UNIDADE / OUTROS'
+                                : destinoTransferenciaSelecionado
+                        }`
+                      : 'COFRE DO P4 → OUTRAS CIAS'}
+                </h2>
+                <p>
+                  {contextoOrigemSVDD
+                    ? 'Selecione os rádios HT que serão devolvidos ao P4.'
+                    : destinoTransferenciaSelecionado
+                      ? 'Selecione um ou vários rádios HT para esta movimentação.'
+                      : 'Escolha a Companhia e selecione um ou vários rádios HT.'}
+                </p>
               </div>
               <button type="button" onClick={() => setTransferenciaModalAberta(false)} disabled={Boolean(processandoTransferenciaId)}>×</button>
             </header>
             <div className="ht-transfer-body">
-              {!contextoOrigemSVDD && (
+              {!contextoOrigemSVDD && !destinoTransferenciaSelecionado && (
                 <div className="ht-transfer-destination">
-                  <label htmlFor="ht-destino-transferencia">Destino</label>
+                  <label htmlFor="ht-destino-transferencia">Companhia de destino</label>
                   <select
                     id="ht-destino-transferencia"
                     value={destinoTransferenciaSelecionado}
@@ -1990,13 +2136,20 @@ export default function HT({ user }) {
                     }}
                     autoFocus
                   >
-                    <option value="">Selecione o destino</option>
-                    {DESTINOS_TRANSFERENCIA_P4.map((destino) => (
-                      <option key={destino.codigo} value={destino.codigo}>{destino.nome}</option>
-                    ))}
+                    <option value="">Selecione a Companhia</option>
+                    {DESTINOS_TRANSFERENCIA_P4
+                      .filter((destino) =>
+                        ['1 CIA', '2 CIA', '3 CIA', '4 CIA', '5 CIA', '6 CIA', 'FT'].includes(destino.codigo)
+                      )
+                      .map((destino) => (
+                        <option key={destino.codigo} value={destino.codigo}>{destino.nome}</option>
+                      ))}
                   </select>
-                  {destinoTransferenciaSelecionado === 'OUTROS' && (
-                    <>
+                </div>
+              )}
+
+              {!contextoOrigemSVDD && destinoTransferenciaSelecionado === 'OUTROS' && (
+                <div className="ht-transfer-destination">
                       <input
                         type="text"
                         value={destinoTransferenciaOutro}
@@ -2045,10 +2198,8 @@ export default function HT({ user }) {
                           <span>{recebedorTransferencia.re || reRecebedorTransferencia} · {recebedorTransferencia.perfil || 'USUARIO EXTERNO'}</span>
                         </div>
                       )}
-                      {erroRecebedorTransferencia && <small className="ht-transfer-receiver-error">{erroRecebedorTransferencia}</small>}
-                      </div>
-                    </>
-                  )}
+                  {erroRecebedorTransferencia && <small className="ht-transfer-receiver-error">{erroRecebedorTransferencia}</small>}
+                  </div>
                 </div>
               )}
               <input

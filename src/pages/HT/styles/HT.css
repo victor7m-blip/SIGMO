@@ -1829,3 +1829,124 @@ button.ht-summary-card:hover { transform: translateY(-2px); border-color: #9fb3c
     overflow-y: auto;
   }
 }
+/* =====================================================
+   MODAL DE DESTINOS — padrão Munições / TPD
+   ===================================================== */
+
+.ht-transfer-destination-modal {
+  width: min(820px, 100%);
+}
+
+.ht-transfer-destination-modal .ht-transfer-body {
+  padding: 34px 36px 36px;
+  overflow: visible;
+}
+
+.ht-transfer-destination-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ht-transfer-destination-card {
+  display: flex;
+  min-height: 88px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  padding: 16px 15px;
+  border: 1px solid #cfd9e6;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #172033;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease,
+    background 0.16s ease;
+}
+
+.ht-transfer-destination-card:hover {
+  transform: translateY(-1px);
+  border-color: #8eb0d4;
+  background: #f8fbff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.ht-transfer-destination-card:focus-visible {
+  outline: none;
+  border-color: #3f78b5;
+  box-shadow: 0 0 0 3px rgba(63, 120, 181, 0.14);
+}
+
+.ht-transfer-destination-card strong {
+  color: #153d6d;
+  font-size: 0.89rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ht-transfer-destination-card span {
+  color: #667085;
+  font-size: 0.74rem;
+  line-height: 1.42;
+}
+
+/* 3 cards na primeira linha e 2 na segunda, igual ao padrão visual */
+.ht-transfer-destination-card:nth-child(4),
+.ht-transfer-destination-card:nth-child(5) {
+  grid-column: span 1;
+}
+
+/* evita que os ajustes antigos de .ht-transfer-body deixem
+   esse primeiro modal com altura/rolagem estranhas */
+.ht-transfer-destination-modal .ht-transfer-body > .ht-transfer-list {
+  margin-top: 0;
+}
+
+/* deixa o modal de destinos mais próximo do Munições:
+   cabeçalho compacto e conteúdo bem separado */
+.ht-transfer-destination-modal > header {
+  padding: 22px 24px;
+}
+
+.ht-transfer-destination-modal > header h2 {
+  font-size: 1.28rem;
+}
+
+.ht-transfer-destination-modal > header p {
+  margin-top: 6px;
+  font-size: 0.79rem;
+}
+
+@media (max-width: 760px) {
+  .ht-transfer-destination-modal .ht-transfer-body {
+    padding: 24px;
+  }
+
+  .ht-transfer-destination-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ht-transfer-destination-modal {
+    width: 100%;
+  }
+
+  .ht-transfer-destination-modal .ht-transfer-body {
+    padding: 18px;
+  }
+
+  .ht-transfer-destination-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ht-transfer-destination-card {
+    min-height: 82px;
+  }
+}

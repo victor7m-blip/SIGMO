@@ -792,9 +792,17 @@ export async function sincronizarTPDsComPatrimonios(
 }
 
 export async function obterResumoTPDs() {
+  /*
+   * A situação operacional vigente do TPD vem da Engine Patrimonial.
+   * sigmo_tpds continua sendo a fonte cadastral/técnica.
+   *
+   * Isso é necessário porque cautelas pelo Pagar Material alteram
+   * sigmo_patrimonios para CAUTELADO / CAUTELA INDIVIDUAL, enquanto
+   * sigmo_tpds pode continuar como RESERVA / COFRE DO SVDD.
+   */
   const {
-    data,
-    error
+    data: tpds,
+    error: tpdsError
   } = await supabase
     .from(TABLE)
     .select(
@@ -802,18 +810,62 @@ export async function obterResumoTPDs() {
     )
     .eq('ativo', true)
 
-  if (error) throw error
+  if (tpdsError) throw tpdsError
+
+  const {
+    data: patrimonios,
+    error: patrimoniosError
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select(
+      'id, referencia_id, status, local_atual, ativo'
+    )
+    .eq('tipo', 'tpd')
+    .eq('ativo', true)
+
+  if (patrimoniosError) throw patrimoniosError
+
+  const patrimonioPorReferencia =
+    new Map(
+      (patrimonios || []).map(
+        (item) => [
+          String(
+            item?.referencia_id || ''
+          ),
+          item
+        ]
+      )
+    )
 
   const itens =
-    (data || []).map(
-      normalizarTPD
-    )
+    (tpds || []).map((tpd) => {
+      const patrimonio =
+        patrimonioPorReferencia.get(
+          String(tpd?.id || '')
+        )
+
+      return {
+        id: tpd?.id,
+
+        status_operacional:
+          patrimonio?.status ||
+          tpd?.status_operacional,
+
+        local_atual:
+          patrimonio?.local_atual ||
+          tpd?.local_atual
+      }
+    })
 
   const resumo = {
     total: itens.length,
+    cofreP4: 0,
     cofreSvdd: 0,
+    cargaPermanente: 0,
     cautelasAtivas: 0,
     manutencao: 0,
+    outrasCias: 0,
+    batalhao: 0,
     recolhidos: 0,
     baixados: 0,
     outros: 0
@@ -852,6 +904,7 @@ export async function obterResumoTPDs() {
     }
 
     if (
+      status === 'CAUTELADO' ||
       status === 'EM_SERVICO' ||
       local.includes('CAUTELA') ||
       local.includes('SERVIÇO') ||
@@ -862,13 +915,51 @@ export async function obterResumoTPDs() {
     }
 
     if (
+      status === 'CARGA' ||
+      local === 'CARGA PERMANENTE'
+    ) {
+      resumo.cargaPermanente += 1
+      continue
+    }
+
+    if (
       status === 'RESERVA' &&
       (
-        local.includes('SVDD') ||
-        local.includes('COFRE')
+        local === 'COFRE P4' ||
+        local === 'COFRE DO P4' ||
+        local === 'GUARDA DO P4' ||
+        local === 'P4'
+      )
+    ) {
+      resumo.cofreP4 += 1
+      continue
+    }
+
+    if (
+      status === 'RESERVA' &&
+      (
+        local === 'COFRE DO SVDD' ||
+        local === 'COFRE SVDD' ||
+        local === 'SVDD'
       )
     ) {
       resumo.cofreSvdd += 1
+      continue
+    }
+
+    if (
+      local.includes('OUTRA CIA') ||
+      local.includes('OUTRAS CIAS')
+    ) {
+      resumo.outrasCias += 1
+      continue
+    }
+
+    if (
+      local.includes('BATALHAO') ||
+      local.includes('BATALHÃO')
+    ) {
+      resumo.batalhao += 1
       continue
     }
 

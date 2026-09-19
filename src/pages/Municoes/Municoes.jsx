@@ -6546,6 +6546,14 @@ export default function Municoes({
                           ? ''
                           : 'municoes-calibre-main-svdd'
                       }`}
+                      style={
+                        !visaoP4
+                          ? {
+                              gridTemplateColumns:
+                                'minmax(180px, 1.5fr) repeat(2, minmax(100px, 0.8fr))'
+                            }
+                          : undefined
+                      }
                     >
                       <div className="municoes-calibre-identificacao">
                         <small>
@@ -6601,17 +6609,19 @@ export default function Municoes({
                         </strong>
                       </div>
 
-                      <div className="municoes-saldo-item">
-                        <small>
-                          TOTAL ATUAL
-                        </small>
+                      {visaoP4 && (
+                        <div className="municoes-saldo-item">
+                          <small>
+                            TOTAL ATUAL
+                          </small>
 
-                        <strong>
-                          {numero(
-                            item.quantidade_total_atual
-                          )}
-                        </strong>
-                      </div>
+                          <strong>
+                            {numero(
+                              item.quantidade_total_atual
+                            )}
+                          </strong>
+                        </div>
+                      )}
 
                     </div>
 
