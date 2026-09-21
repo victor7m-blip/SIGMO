@@ -32,6 +32,12 @@ import {
 } from '../../../services/htsTransferenciaService'
 
 import {
+  aceitarTransferenciaTaser,
+  decidirTransferenciaTaserCmt,
+  recusarTransferenciaTaser
+} from '../../../services/tasersTransferenciaService'
+
+import {
   aceitarTransferenciaManutencaoMunicao,
   aprovarDescargaManutencaoMunicaoCmt,
   recusarDescargaManutencaoMunicaoCmt,
@@ -318,6 +324,29 @@ function itemEhTransferenciaTPD(item) {
 }
 
 
+function itemEhTransferenciaTaser(item) {
+  const dados =
+    item?.dados ||
+    item?.metadata?.dados_engine ||
+    {}
+
+  return (
+    normalizarOperacional(
+      item?.origem_aprovacao
+    ) === 'TASER_TRANSFERENCIA' ||
+    normalizarOperacional(
+      item?.tipo_solicitacao
+    ) === 'TRANSFERENCIA_TASER' ||
+    normalizarOperacional(
+      item?.modulo ||
+      item?.categoria ||
+      dados?.modulo ||
+      dados?.categoria
+    ) === 'TASER'
+  )
+}
+
+
 function itemEhRecebimentoPatrimonialSVDD(
   item,
   secao
@@ -343,7 +372,8 @@ function itemEhRecebimentoPatrimonialSVDD(
       'ARMA',
       'TPD',
       'TONFA',
-      'CASSETETE'
+      'CASSETETE',
+      'TASER'
     ])
 
   if (
@@ -365,7 +395,7 @@ function itemEhRecebimentoPatrimonialSVDD(
   }
 
   /*
-   * TPD só pode ser recebido depois da aprovação do Cmt.
+   * TPD e Taser só podem ser recebidos depois da aprovação do Cmt.
    * Os demais materiais patrimoniais mantêm o fluxo próprio já existente.
    */
   if (
@@ -375,7 +405,92 @@ function itemEhRecebimentoPatrimonialSVDD(
     return false
   }
 
+  if (categoria === 'TASER') {
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const exigeAprovacao =
+      dados?.exige_aprovacao_cmt === true
+
+    const aprovacao =
+      normalizarOperacional(
+        dados?.status_aprovacao_cmt
+      )
+
+    if (
+      exigeAprovacao &&
+      aprovacao !== 'APROVADA'
+    ) {
+      return false
+    }
+  }
+
   return true
+}
+
+
+function itemEhRecebimentoTaserSVDD(
+  item,
+  secao
+) {
+  if (!ehTransferencia(secao)) {
+    return false
+  }
+
+  const dados =
+    item?.dados ||
+    item?.metadata?.dados_engine ||
+    {}
+
+  const modulo =
+    normalizarOperacional(
+      item?.modulo ||
+      item?.categoria ||
+      dados?.modulo ||
+      dados?.categoria
+    )
+
+  const origem =
+    normalizarOperacional(
+      item?.origem_codigo ||
+      item?.origem_nome ||
+      dados?.guardiao_origem?.codigo ||
+      dados?.guardiao_origem?.nome
+    )
+
+  const destino =
+    normalizarOperacional(
+      item?.destino_codigo ||
+      item?.destino_nome ||
+      dados?.guardiao_destino?.codigo ||
+      dados?.guardiao_destino?.nome
+    )
+
+  const exigeAprovacao =
+    dados?.exige_aprovacao_cmt === true
+
+  const aprovado =
+    !exigeAprovacao ||
+    normalizarOperacional(
+      dados?.status_aprovacao_cmt
+    ) === 'APROVADA'
+
+  return (
+    modulo === 'TASER' &&
+    (
+      origem === 'P4' ||
+      origem.includes('COFRE DO P4') ||
+      origem.includes('GUARDA DO P4')
+    ) &&
+    (
+      destino === 'SVDD' ||
+      destino.includes('COFRE DO SVDD') ||
+      destino.includes('SERVICO DE DIA')
+    ) &&
+    aprovado
+  )
 }
 
 
@@ -697,6 +812,23 @@ function ehIndicadorPatrimonio(secao) {
 }
 
 function tituloItem(item, secao) {
+  if (itemEhTransferenciaTaser(item)) {
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      dados?.patrimonio ||
+      dados?.numero_serie ||
+      item?.metadata?.patrimonio?.identificacao ||
+      'Taser'
+
+    return `Taser — ${identificacao}`
+  }
+
   if (ehRecebimentoUsuario(secao)) {
     return (
       item?.recebedor_nome ||
@@ -1003,6 +1135,53 @@ function obterFotosDescargaMunicao(item) {
 
 
 function detalheItem(item, secao) {
+  if (itemEhTransferenciaTaser(item)) {
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const equipamento =
+      [
+        item?.marca || dados?.marca,
+        item?.modelo || dados?.modelo
+      ]
+        .map(texto)
+        .filter(Boolean)
+        .join(' ')
+
+    const origem =
+      item?.origem_nome ||
+      item?.origem_codigo ||
+      dados?.guardiao_origem?.nome ||
+      dados?.guardiao_origem?.codigo ||
+      'COFRE DO P4'
+
+    const destino =
+      item?.destino_nome ||
+      item?.destino_codigo ||
+      dados?.destino_nome ||
+      dados?.guardiao_destino?.nome ||
+      dados?.guardiao_destino?.codigo ||
+      'DESTINO NÃO INFORMADO'
+
+    const solicitante =
+      item?.solicitada_por_nome ||
+      item?.criado_por_nome ||
+      item?.enviado_por_nome ||
+      item?.metadata?.realizado_por?.nome ||
+      'P4'
+
+    return [
+      equipamento,
+      `${origem} → ${destino}`,
+      `SOLICITADO POR: ${solicitante}`
+    ]
+      .map(texto)
+      .filter(Boolean)
+      .join(' • ')
+  }
+
   if (ehIndicadorPatrimonio(secao)) {
     return [
       item?.tipo,
@@ -1255,6 +1434,8 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   const [decidindoTorniqueteId, setDecidindoTorniqueteId] = useState(null)
   const [decidindoTPDId, setDecidindoTPDId] = useState(null)
   const [aprovandoTodosTPDs, setAprovandoTodosTPDs] = useState(false)
+  const [decidindoTaserId, setDecidindoTaserId] = useState(null)
+  const [aprovandoTodosTasers, setAprovandoTodosTasers] = useState(false)
   const [recebendoTodosTPDs, setRecebendoTodosTPDs] = useState(false)
   const [novidadesVtr, setNovidadesVtr] = useState([])
   const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
@@ -1592,6 +1773,252 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
 
 
 
+  async function receberTransferenciaTaserNoSVDD(
+    item,
+    { semConfirmacao = false } = {}
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      recebendoId ||
+      recusandoId ||
+      recebendoTodosTPDs
+    ) {
+      return false
+    }
+
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      dados?.patrimonio ||
+      dados?.numero_serie ||
+      item?.metadata?.patrimonio?.identificacao ||
+      'Taser'
+
+    if (!semConfirmacao) {
+      const confirmou =
+        window.confirm(
+          `Confirmar o recebimento da Taser ${identificacao} no COFRE DO SVDD?`
+        )
+
+      if (!confirmou) {
+        return false
+      }
+    }
+
+    try {
+      setRecebendoId(
+        movimentacaoId
+      )
+
+      await aceitarTransferenciaTaser({
+        movimentacaoId,
+        user
+      })
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                String(
+                  registro?.movimentacao_id ||
+                  registro?.transferencia_id ||
+                  registro?.id ||
+                  ''
+                ) !==
+                String(
+                  movimentacaoId
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+
+      return true
+    } catch (error) {
+      console.error(
+        'Erro ao receber transferência de Taser no SVDD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível receber a Taser no SVDD.'
+      )
+
+      return false
+    } finally {
+      setRecebendoId(
+        null
+      )
+    }
+  }
+
+
+  async function recusarTransferenciaTaserNoSVDD(
+    item
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      recebendoId ||
+      recusandoId ||
+      recebendoTodosTPDs
+    ) {
+      return
+    }
+
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      dados?.patrimonio ||
+      dados?.numero_serie ||
+      item?.metadata?.patrimonio?.identificacao ||
+      'Taser'
+
+    const motivo =
+      window.prompt(
+        `Informe o motivo da recusa da Taser ${identificacao}:`
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo da recusa.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Recusar o recebimento da Taser ${identificacao}?\n\nO patrimônio permanecerá no COFRE DO P4.`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setRecusandoId(
+        movimentacaoId
+      )
+
+      await recusarTransferenciaTaser({
+        movimentacaoId,
+        motivo:
+          `RECUSADA PELO SVDD: ${motivoNormalizado}`,
+        user
+      })
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                String(
+                  registro?.movimentacao_id ||
+                  registro?.transferencia_id ||
+                  registro?.id ||
+                  ''
+                ) !==
+                String(
+                  movimentacaoId
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao recusar transferência de Taser no SVDD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível recusar a transferência da Taser.'
+      )
+    } finally {
+      setRecusandoId(
+        null
+      )
+    }
+  }
+
+
   async function receberTransferenciaTPDNoSVDD(
     item,
     { semConfirmacao = false } = {}
@@ -1888,10 +2315,23 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
         }
 
         try {
-          await aceitarTransferencia({
-            transferenciaId,
-            user
-          })
+          if (
+            itemEhRecebimentoTaserSVDD(
+              item,
+              selecionado
+            )
+          ) {
+            await aceitarTransferenciaTaser({
+              movimentacaoId:
+                transferenciaId,
+              user
+            })
+          } else {
+            await aceitarTransferencia({
+              transferenciaId,
+              user
+            })
+          }
 
           recebidos.push(
             String(
@@ -1992,6 +2432,404 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
       }
     } finally {
       setRecebendoTodosTPDs(
+        false
+      )
+    }
+  }
+
+
+  async function aprovarTransferenciaTaserNaCentral(
+    item,
+    { semConfirmacao = false } = {}
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      decidindoTaserId ||
+      aprovandoTodosTasers
+    ) {
+      return false
+    }
+
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      dados?.patrimonio ||
+      dados?.numero_serie ||
+      item?.metadata?.patrimonio?.identificacao ||
+      'Taser'
+
+    const destino =
+      item?.destino_nome ||
+      item?.destino_codigo ||
+      dados?.destino_nome ||
+      dados?.guardiao_destino?.nome ||
+      dados?.guardiao_destino?.codigo ||
+      'destino informado'
+
+    if (!semConfirmacao) {
+      const confirmou =
+        window.confirm(
+          `Aprovar a movimentação da Taser ${identificacao}?\n\nDestino: ${destino}`
+        )
+
+      if (!confirmou) {
+        return false
+      }
+    }
+
+    try {
+      setDecidindoTaserId(
+        movimentacaoId
+      )
+
+      await decidirTransferenciaTaserCmt({
+        movimentacaoId,
+        decisao:
+          'APROVAR',
+        observacoes:
+          'APROVADA PELO COMANDANTE DE CIA NA CENTRAL OPERACIONAL.',
+        user
+      })
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                String(
+                  registro?.movimentacao_id ||
+                  registro?.transferencia_id ||
+                  registro?.id ||
+                  ''
+                ) !==
+                String(
+                  movimentacaoId
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+
+      return true
+    } catch (error) {
+      console.error(
+        'Erro ao aprovar movimentação de Taser:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível aprovar a movimentação da Taser.'
+      )
+
+      return false
+    } finally {
+      setDecidindoTaserId(
+        null
+      )
+    }
+  }
+
+
+  async function reprovarTransferenciaTaserNaCentral(
+    item
+  ) {
+    const movimentacaoId =
+      item?.movimentacao_id ||
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !movimentacaoId ||
+      decidindoTaserId ||
+      aprovandoTodosTasers
+    ) {
+      return
+    }
+
+    const dados =
+      item?.dados ||
+      item?.metadata?.dados_engine ||
+      {}
+
+    const identificacao =
+      item?.patrimonio ||
+      item?.numero_serie ||
+      dados?.patrimonio ||
+      dados?.numero_serie ||
+      item?.metadata?.patrimonio?.identificacao ||
+      'Taser'
+
+    const motivo =
+      window.prompt(
+        `Informe o motivo da reprovação da movimentação da Taser ${identificacao}:`
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo da reprovação.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Reprovar a movimentação da Taser ${identificacao}?\n\nO patrimônio permanecerá na origem.`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setDecidindoTaserId(
+        movimentacaoId
+      )
+
+      await decidirTransferenciaTaserCmt({
+        movimentacaoId,
+        decisao:
+          'REPROVAR',
+        observacoes:
+          motivoNormalizado,
+        user
+      })
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                String(
+                  registro?.movimentacao_id ||
+                  registro?.transferencia_id ||
+                  registro?.id ||
+                  ''
+                ) !==
+                String(
+                  movimentacaoId
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao reprovar movimentação de Taser:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível reprovar a movimentação da Taser.'
+      )
+    } finally {
+      setDecidindoTaserId(
+        null
+      )
+    }
+  }
+
+
+  async function aprovarTodosTasersNaCentral() {
+    if (
+      aprovandoTodosTasers ||
+      decidindoTaserId
+    ) {
+      return
+    }
+
+    const itensTaser =
+      (selecionado?.itens || [])
+        .filter(
+          (item) =>
+            itemEhTransferenciaTaser(
+              item
+            )
+        )
+
+    if (itensTaser.length === 0) {
+      window.alert(
+        'Não há movimentações de Taser aguardando aprovação.'
+      )
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `Aprovar todas as ${itensTaser.length} movimentação(ões) de Taser pendente(s)?`
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setAprovandoTodosTasers(
+        true
+      )
+
+      const aprovados =
+        []
+
+      const falhas =
+        []
+
+      for (const item of itensTaser) {
+        const movimentacaoId =
+          item?.movimentacao_id ||
+          item?.transferencia_id ||
+          item?.id
+
+        if (!movimentacaoId) {
+          continue
+        }
+
+        try {
+          await decidirTransferenciaTaserCmt({
+            movimentacaoId,
+            decisao:
+              'APROVAR',
+            observacoes:
+              'APROVADA EM LOTE PELO COMANDANTE DE CIA NA CENTRAL OPERACIONAL.',
+            user
+          })
+
+          aprovados.push(
+            String(
+              movimentacaoId
+            )
+          )
+        } catch (error) {
+          falhas.push({
+            item,
+            error
+          })
+        }
+      }
+
+      setRegistroAberto(
+        null
+      )
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || []).filter(
+              (registro) =>
+                !aprovados.includes(
+                  String(
+                    registro?.movimentacao_id ||
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  )
+                )
+            )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+
+      if (falhas.length > 0) {
+        window.alert(
+          `${aprovados.length} movimentação(ões) aprovada(s).\n${falhas.length} não puderam ser aprovadas e permaneceram na lista.`
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao aprovar Tasers em lote:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível concluir a aprovação em lote dos Tasers.'
+      )
+    } finally {
+      setAprovandoTodosTasers(
         false
       )
     }
@@ -4462,6 +5300,37 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                   ) &&
                   (selecionado?.itens || []).some(
                     (item) =>
+                      itemEhTransferenciaTaser(
+                        item
+                      )
+                  ) && (
+                    <button
+                      type="button"
+                      className="central-button central-button-primary"
+                      disabled={
+                        aprovandoTodosTasers ||
+                        Boolean(
+                          decidindoTaserId
+                        )
+                      }
+                      onClick={
+                        aprovarTodosTasersNaCentral
+                      }
+                    >
+                      {aprovandoTodosTasers
+                        ? 'Aprovando Tasers...'
+                        : 'Aprovar todos os Tasers'}
+                    </button>
+                  )}
+
+                {ehAprovacaoComandante(
+                  selecionado
+                ) &&
+                  ehComandante(
+                    user
+                  ) &&
+                  (selecionado?.itens || []).some(
+                    (item) =>
                       itemEhTransferenciaTPD(
                         item
                       )
@@ -4677,6 +5546,127 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                                     item?.created_at
                                   ) ||
                                     'Não informada'}
+                                </strong>
+                              </div>
+                            </>
+                          ) : itemEhTransferenciaTaser(
+                            item
+                          ) ? (
+                            <>
+                              <div>
+                                <span>Material</span>
+                                <strong>Taser</strong>
+                              </div>
+
+                              <div>
+                                <span>Tipo da operação</span>
+                                <strong>
+                                  {String(
+                                    item?.dados?.tipo_operacao_taser ||
+                                    item?.metadata?.dados_engine?.tipo_operacao_taser ||
+                                    item?.tipo_movimentacao ||
+                                    item?.tipo ||
+                                    'TRANSFERÊNCIA'
+                                  ).replaceAll('_', ' ')}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Identificação</span>
+                                <strong>
+                                  {item?.patrimonio ||
+                                    item?.numero_serie ||
+                                    item?.dados?.patrimonio ||
+                                    item?.dados?.numero_serie ||
+                                    item?.metadata?.dados_engine?.patrimonio ||
+                                    item?.metadata?.dados_engine?.numero_serie ||
+                                    item?.metadata?.patrimonio?.identificacao ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Marca / Modelo</span>
+                                <strong>
+                                  {[
+                                    item?.marca ||
+                                      item?.dados?.marca ||
+                                      item?.metadata?.dados_engine?.marca,
+                                    item?.modelo ||
+                                      item?.dados?.modelo ||
+                                      item?.metadata?.dados_engine?.modelo
+                                  ]
+                                    .map(texto)
+                                    .filter(Boolean)
+                                    .join(' ') ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Origem</span>
+                                <strong>
+                                  {item?.origem_nome ||
+                                    item?.origem_codigo ||
+                                    item?.dados?.guardiao_origem?.nome ||
+                                    item?.metadata?.dados_engine?.guardiao_origem?.nome ||
+                                    'COFRE DO P4'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Destino</span>
+                                <strong>
+                                  {item?.destino_nome ||
+                                    item?.destino_codigo ||
+                                    item?.dados?.destino_nome ||
+                                    item?.dados?.guardiao_destino?.nome ||
+                                    item?.metadata?.dados_engine?.destino_nome ||
+                                    item?.metadata?.dados_engine?.guardiao_destino?.nome ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Protocolo</span>
+                                <strong>
+                                  {item?.protocolo ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Solicitado por</span>
+                                <strong>
+                                  {item?.solicitada_por_nome ||
+                                    item?.criado_por_nome ||
+                                    item?.enviado_por_nome ||
+                                    item?.metadata?.realizado_por?.nome ||
+                                    'P4'}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Data da solicitação</span>
+                                <strong>
+                                  {formatarData(
+                                    item?.solicitada_em ||
+                                    item?.created_at
+                                  ) ||
+                                    'Não informada'}
+                                </strong>
+                              </div>
+
+                              <div className="central-registro-itens">
+                                <span>Observações / Documento</span>
+                                <strong>
+                                  {item?.observacoes ||
+                                    item?.documento ||
+                                    item?.dados?.observacoes_transferencia ||
+                                    item?.metadata?.dados_engine?.observacoes_transferencia ||
+                                    item?.observacao ||
+                                    item?.metadata?.movimentacao?.observacao ||
+                                    'Não informado'}
                                 </strong>
                               </div>
                             </>
@@ -5355,6 +6345,80 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                         </button>
                       )}
 
+                      {itemEhRecebimentoTaserSVDD(
+                        item,
+                        selecionado
+                      ) &&
+                        ehEncarregado(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                              disabled={
+                                Boolean(
+                                  recebendoId
+                                ) ||
+                                Boolean(
+                                  recusandoId
+                                ) ||
+                                recebendoTodosTPDs
+                              }
+                              onClick={() =>
+                                recusarTransferenciaTaserNoSVDD(
+                                  item
+                                )
+                              }
+                              style={{
+                                borderColor:
+                                  '#dc2626',
+                                color:
+                                  '#dc2626',
+                                fontWeight:
+                                  800
+                              }}
+                            >
+                              {recusandoId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Recusando...'
+                                : 'Recusar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="central-button central-button-primary"
+                              disabled={
+                                Boolean(
+                                  recebendoId
+                                ) ||
+                                Boolean(
+                                  recusandoId
+                                ) ||
+                                recebendoTodosTPDs
+                              }
+                              onClick={() =>
+                                receberTransferenciaTaserNoSVDD(
+                                  item
+                                )
+                              }
+                            >
+                              {recebendoId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Recebendo...'
+                                : 'Receber'}
+                            </button>
+                          </>
+                        )}
+
                       {itemEhRecebimentoTPDSVDD(
                         item,
                         selecionado
@@ -5686,6 +6750,76 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               )
                                 ? 'Aprovando...'
                                 : 'Aprovar descarga'}
+                            </button>
+                          </>
+                        )}
+
+                      {ehAprovacaoComandante(
+                        selecionado
+                      ) &&
+                        itemEhTransferenciaTaser(
+                          item
+                        ) &&
+                        ehComandante(
+                          user
+                        ) && (
+                          <>
+                            <button
+                              type="button"
+                              className="central-detalhe-button"
+                              disabled={
+                                Boolean(
+                                  decidindoTaserId
+                                ) ||
+                                aprovandoTodosTasers
+                              }
+                              onClick={() =>
+                                reprovarTransferenciaTaserNaCentral(
+                                  item
+                                )
+                              }
+                              style={{
+                                borderColor:
+                                  '#dc2626',
+                                color:
+                                  '#dc2626',
+                                fontWeight:
+                                  800
+                              }}
+                            >
+                              {decidindoTaserId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Processando...'
+                                : 'Reprovar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="central-button central-button-primary"
+                              disabled={
+                                Boolean(
+                                  decidindoTaserId
+                                ) ||
+                                aprovandoTodosTasers
+                              }
+                              onClick={() =>
+                                aprovarTransferenciaTaserNaCentral(
+                                  item
+                                )
+                              }
+                            >
+                              {decidindoTaserId ===
+                              (
+                                item?.movimentacao_id ||
+                                item?.transferencia_id ||
+                                item?.id
+                              )
+                                ? 'Aprovando...'
+                                : 'Aprovar'}
                             </button>
                           </>
                         )}

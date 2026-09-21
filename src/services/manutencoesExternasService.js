@@ -184,6 +184,55 @@ export async function listarHTsElegiveisManutencaoExterna() {
   return manutencoes.filter((item) => !bloqueadas.has(String(item.id)))
 }
 
+export async function listarTasersElegiveisManutencaoExterna() {
+  const resultado = await listarManutencoes({
+    modulo: 'TASER',
+    status: 'EM_MANUTENCAO',
+    pagina: 1,
+    limite: 200
+  })
+
+  // Proteção do fluxo do Taser:
+  // primeiro usa origem_institucional quando ela existe;
+  // para manutenções abertas diretamente pelo P4, aceita também
+  // a origem gravada na própria manutenção.
+  const manutencoes = (resultado?.data || []).filter(origemEhP4)
+
+  if (manutencoes.length === 0) return []
+
+  const manutencaoIds = manutencoes.map((item) => item.id)
+
+  const { data: itensExternos, error } = await supabase
+    .from(TABLE_ITENS)
+    .select(`
+      manutencao_id,
+      manutencao_externa_id,
+      sigmo_manutencoes_externas!inner (
+        id,
+        status
+      )
+    `)
+    .in('manutencao_id', manutencaoIds)
+
+  if (error) throw error
+
+  const bloqueadas = new Set(
+    (itensExternos || [])
+      .filter((item) => {
+        const status = maiusculo(item?.sigmo_manutencoes_externas?.status)
+        return [
+          STATUS_MANUTENCAO_EXTERNA.AGUARDANDO_APROVACAO,
+          STATUS_MANUTENCAO_EXTERNA.DILIGENCIA,
+          STATUS_MANUTENCAO_EXTERNA.APROVADA,
+          STATUS_MANUTENCAO_EXTERNA.EM_MANUTENCAO_EXTERNA
+        ].includes(status)
+      })
+      .map((item) => String(item.manutencao_id))
+  )
+
+  return manutencoes.filter((item) => !bloqueadas.has(String(item.id)))
+}
+
 export async function criarSolicitacaoManutencaoExterna({
   manutencoes = [],
   destinoNome,

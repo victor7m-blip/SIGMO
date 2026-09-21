@@ -5,6 +5,15 @@ import {
   desativarPatrimonioPorReferencia
 } from './patrimoniosService'
 
+import {
+  MODULOS_MANUTENCAO,
+  registrarManutencao
+} from './manutencoesService'
+
+import {
+  criarNotificacaoParaPerfil
+} from './notificacoesService'
+
 const TABLE = 'sigmo_tasers'
 
 function normalizarTexto(valor) {
@@ -785,3 +794,108 @@ export async function sincronizarTasersComPatrimonios(
 
   return tasersNormalizados.length
 }
+async function buscarPatrimonioCentralTaser(taserId) {
+  const { data, error } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id')
+    .eq('tipo', 'taser')
+    .eq('referencia_id', taserId)
+    .maybeSingle()
+
+  if (error) throw error
+
+  return data
+}
+
+async function notificarP4EntradaManutencaoTaser({ taser, manutencao, user }) {
+  const identificacao = taser.patrimonio || taser.numero_serie || 'TASER'
+  const perfis = ['ADMINISTRADOR']
+
+  for (const perfil of perfis) {
+    try {
+      await criarNotificacaoParaPerfil({
+        perfil,
+        titulo: 'Taser enviado para manutenção',
+        mensagem: `${identificacao} foi encaminhado para manutenção e aguarda acompanhamento do P4.`,
+        tipo: 'PATRIMONIO',
+        modulo: 'TASER',
+        prioridade: 'ALTA',
+        link: 'manutencoes',
+        metadata: {
+          modulo: 'TASER',
+          taser_id: taser.id,
+          manutencao_id: manutencao?.id || null,
+          patrimonio: taser.patrimonio || null,
+          numero_serie: taser.numero_serie || null,
+          registrado_por: user?.nome || user?.nome_guerra || user?.email || null
+        }
+      })
+    } catch (error) {
+      console.warn(`Taser enviado, mas não foi possível notificar o perfil ${perfil}:`, error)
+    }
+  }
+}
+
+export async function enviarTaserParaManutencao({
+  taserId,
+  tipoNovidade = 'MANUTENÇÃO CORRETIVA',
+  descricao = null,
+  observacoes = null,
+  foto = null,
+  fotos = [],
+  user = null
+}) {
+  if (!taserId) {
+    throw new Error('Taser não informado para manutenção.')
+  }
+
+  const taser = await buscarTaserPorId(taserId)
+
+  if (taser.ativo === false || taser.status_operacional === 'BAIXADO') {
+    throw new Error('Um Taser baixado ou inativo não pode ser colocado em manutenção.')
+  }
+
+  if (taser.status_operacional === 'MANUTENCAO') {
+    throw new Error('Este Taser já está em manutenção.')
+  }
+
+  if (!normalizarTexto(descricao)) {
+    throw new Error('Informe a descrição da novidade ou do defeito.')
+  }
+
+  const patrimonio = await buscarPatrimonioCentralTaser(taser.id)
+
+  const manutencao = await registrarManutencao({
+    modulo: MODULOS_MANUTENCAO.TASER || 'TASER',
+    tipoMaterial: 'TASER',
+    referenciaId: taser.id,
+    patrimonioId: patrimonio?.id || null,
+    quantidade: 1,
+    tipoNovidade,
+    descricao,
+    observacoes: [
+      normalizarTexto(observacoes),
+      `STATUS ANTERIOR: ${taser.status_operacional || 'NÃO INFORMADO'}`,
+      `LOCAL ANTERIOR: ${taser.local_atual || 'NÃO INFORMADO'}`
+    ].filter(Boolean).join(' | '),
+    origem: taser.local_atual || 'P4',
+    destino: 'MANUTENCAO',
+    foto,
+    fotos,
+    user
+  })
+
+  const taserAtualizado = await buscarTaserPorId(taser.id)
+
+  await notificarP4EntradaManutencaoTaser({
+    taser: taserAtualizado,
+    manutencao,
+    user
+  })
+
+  return {
+    taser: taserAtualizado,
+    manutencao
+  }
+}
+

@@ -34,6 +34,10 @@ import {
 import { supabase } from '../../services/supabaseClient'
 import { loadSessionToken } from '../../services/authService'
 import { listarMovimentacoesPendentes } from '../../services/patrimonioMovimentacaoService'
+import {
+  listarTransferenciasTaserAguardandoAprovacao,
+  listarTransferenciasTaserPendentes
+} from '../../services/tasersTransferenciaService'
 
 async function listarAprovacoesMunicoesPendentesCentral() {
   const token = loadSessionToken()
@@ -396,6 +400,666 @@ function incluirAprovacoesTPDCentral(
     alertas[indiceCard] = cardNovo
   } else {
     alertas.push(cardNovo)
+  }
+
+  return {
+    ...base,
+    alertas
+  }
+}
+
+
+
+function incluirRecebimentosTaserCentral(
+  dadosOperacionais,
+  movimentacoes,
+  {
+    visaoSVDD = false
+  } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  if (!visaoSVDD) {
+    return base
+  }
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const normalizar = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const indiceCard =
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizar(item?.titulo)
+
+      return (
+        key === 'transferencias' ||
+        titulo === 'TRANSFERENCIAS PENDENTES'
+      )
+    })
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key: 'transferencias',
+          titulo: 'Transferências pendentes',
+          tom: 'atencao',
+          total: 0,
+          itens: []
+        }
+
+  const mapa =
+    new Map()
+
+  for (const item of cardAtual?.itens || []) {
+    const id =
+      item?.movimentacao_id ||
+      item?.transferencia_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      `BASE-${String(id)}`,
+      item
+    )
+  }
+
+  for (const movimentacao of movimentacoes || []) {
+    const dados =
+      movimentacao?.dados ||
+      movimentacao?.metadata?.dados_engine ||
+      {}
+
+    const metadata =
+      movimentacao?.metadata &&
+      typeof movimentacao.metadata === 'object'
+        ? movimentacao.metadata
+        : {}
+
+    const id =
+      movimentacao?.id
+
+    if (!id) {
+      continue
+    }
+
+    const origemCodigo =
+      dados?.guardiao_origem?.codigo ||
+      metadata?.guardiao_origem?.codigo ||
+      'P4'
+
+    const origemNome =
+      dados?.guardiao_origem?.nome ||
+      metadata?.guardiao_origem?.nome ||
+      'COFRE DO P4'
+
+    const destinoCodigo =
+      dados?.guardiao_destino?.codigo ||
+      metadata?.guardiao_destino?.codigo ||
+      null
+
+    const destinoNome =
+      dados?.destino_nome ||
+      dados?.guardiao_destino?.nome ||
+      metadata?.guardiao_destino?.nome ||
+      destinoCodigo ||
+      'COFRE DO SVDD'
+
+    /*
+     * A Central do SVDD só deve avisar sobre Taser realmente destinada
+     * ao SVDD e já liberada pelo Cmt quando a aprovação é exigida.
+     */
+    const vaiParaSVDD =
+      normalizar(destinoCodigo) === 'SVDD' ||
+      normalizar(destinoNome).includes('COFRE DO SVDD')
+
+    if (!vaiParaSVDD) {
+      continue
+    }
+
+    const exigeAprovacaoCmt =
+      dados?.exige_aprovacao_cmt === true
+
+    const statusAprovacao =
+      normalizar(
+        dados?.status_aprovacao_cmt
+      )
+
+    if (
+      exigeAprovacaoCmt &&
+      statusAprovacao !== 'APROVADA'
+    ) {
+      continue
+    }
+
+    mapa.set(
+      `TASER-RECEBIMENTO-${String(id)}`,
+      {
+        ...movimentacao,
+
+        id,
+        movimentacao_id:
+          id,
+        transferencia_id:
+          id,
+
+        modulo:
+          'TASER',
+
+        categoria:
+          'TASER',
+
+        origem_aprovacao:
+          'TASER_RECEBIMENTO',
+
+        tipo_solicitacao:
+          'RECEBIMENTO_TASER',
+
+        tipo:
+          'TRANSFERÊNCIA DE TASER',
+
+        tipo_movimentacao:
+          'TRANSFERENCIA',
+
+        tipo_patrimonio:
+          'TASER',
+
+        origem_transferencia:
+          'ENGINE_PATRIMONIAL',
+
+        taser_id:
+          dados?.taser_id ||
+          dados?.referencia_id ||
+          metadata?.patrimonio?.referencia_id ||
+          null,
+
+        patrimonio:
+          dados?.patrimonio ||
+          metadata?.patrimonio?.identificacao ||
+          null,
+
+        numero_serie:
+          dados?.numero_serie ||
+          metadata?.patrimonio?.identificacao ||
+          null,
+
+        marca:
+          dados?.marca ||
+          null,
+
+        modelo:
+          dados?.modelo ||
+          null,
+
+        quantidade:
+          Number(
+            dados?.quantidade ||
+            movimentacao?.quantidade ||
+            1
+          ),
+
+        quantidade_total:
+          Number(
+            dados?.quantidade ||
+            movimentacao?.quantidade ||
+            1
+          ),
+
+        origem_codigo:
+          origemCodigo,
+
+        origem_nome:
+          origemNome,
+
+        destino_codigo:
+          destinoCodigo,
+
+        destino_nome:
+          destinoNome,
+
+        status:
+          movimentacao?.status_movimentacao ||
+          dados?.status_movimentacao ||
+          'PENDENTE',
+
+        solicitado_por_nome:
+          movimentacao?.criado_por_nome ||
+          metadata?.realizado_por?.nome ||
+          'P4',
+
+        enviado_por_nome:
+          movimentacao?.criado_por_nome ||
+          metadata?.realizado_por?.nome ||
+          'P4',
+
+        observacoes:
+          dados?.observacoes_transferencia ||
+          movimentacao?.observacao ||
+          metadata?.movimentacao?.observacao ||
+          null,
+
+        created_at:
+          movimentacao?.created_at ||
+          movimentacao?.criado_em ||
+          metadata?.registrado_em ||
+          null
+      }
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    key:
+      'transferencias',
+    titulo:
+      'Transferências pendentes',
+    total:
+      itens.length,
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] =
+      cardNovo
+  } else {
+    alertas.push(
+      cardNovo
+    )
+  }
+
+  return {
+    ...base,
+    alertas
+  }
+}
+
+
+function incluirAprovacoesTaserCentral(
+  dadosOperacionais,
+  movimentacoes,
+  {
+    visaoP4 = false,
+    visaoCmt = false
+  } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  if (!visaoP4 && !visaoCmt) {
+    return base
+  }
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const normalizar = (valor) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+
+  const localizarCard = () =>
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizar(item?.titulo)
+
+      if (visaoCmt) {
+        return (
+          key === 'aprovacoes-comandante' ||
+          key === 'aprovacoes-cmt' ||
+          titulo === 'APROVACOES PENDENTES'
+        )
+      }
+
+      return (
+        key === 'manutencao-externa-acompanhamento' ||
+        key === 'aguardando-aprovacao-cmt' ||
+        titulo === 'AGUARDANDO APROVACAO DO CMT'
+      )
+    })
+
+  const indiceCard =
+    localizarCard()
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key:
+            visaoCmt
+              ? 'aprovacoes-comandante'
+              : 'manutencao-externa-acompanhamento',
+
+          titulo:
+            visaoCmt
+              ? 'Aprovações pendentes'
+              : 'Aguardando aprovação do Cmt',
+
+          tom: 'atencao',
+          total: 0,
+          itens: []
+        }
+
+  const mapa =
+    new Map()
+
+  /*
+   * Reconstrói somente os itens de Taser a partir do estado atual
+   * da Engine Patrimonial. Assim, cancelada/aprovada/reprovada
+   * desaparece da Central ao atualizar.
+   */
+  for (const item of cardAtual?.itens || []) {
+    const ehTaser =
+      normalizar(
+        item?.origem_aprovacao
+      ) === 'TASER_TRANSFERENCIA' ||
+      normalizar(
+        item?.tipo_solicitacao
+      ) === 'TRANSFERENCIA_TASER'
+
+    if (ehTaser) {
+      continue
+    }
+
+    const id =
+      item?.movimentacao_id ||
+      item?.transferencia_id ||
+      item?.id ||
+      item?.protocolo ||
+      `${item?.created_at || ''}-${item?.titulo || ''}`
+
+    mapa.set(
+      `OUTRO-${String(id)}`,
+      item
+    )
+  }
+
+  for (const movimentacao of movimentacoes || []) {
+    const dados =
+      movimentacao?.dados ||
+      movimentacao?.metadata?.dados_engine ||
+      {}
+
+    const id =
+      movimentacao?.id
+
+    if (!id) {
+      continue
+    }
+
+    const metadata =
+      movimentacao?.metadata &&
+      typeof movimentacao.metadata === 'object'
+        ? movimentacao.metadata
+        : {}
+
+    const realizadoPor =
+      metadata?.realizado_por &&
+      typeof metadata.realizado_por === 'object'
+        ? metadata.realizado_por
+        : {}
+
+    const origemCodigo =
+      dados?.guardiao_origem?.codigo ||
+      metadata?.guardiao_origem?.codigo ||
+      'P4'
+
+    const origemNome =
+      dados?.guardiao_origem?.nome ||
+      metadata?.guardiao_origem?.nome ||
+      'COFRE DO P4'
+
+    const destinoCodigo =
+      dados?.guardiao_destino?.codigo ||
+      metadata?.guardiao_destino?.codigo ||
+      null
+
+    const destinoNome =
+      dados?.destino_nome ||
+      dados?.guardiao_destino?.nome ||
+      metadata?.guardiao_destino?.nome ||
+      destinoCodigo ||
+      'DESTINO NÃO INFORMADO'
+
+    mapa.set(
+      `TASER-${String(id)}`,
+      {
+        ...movimentacao,
+
+        id,
+        movimentacao_id:
+          id,
+        transferencia_id:
+          id,
+
+        origem_aprovacao:
+          'TASER_TRANSFERENCIA',
+
+        tipo_solicitacao:
+          'TRANSFERENCIA_TASER',
+
+        modulo:
+          'TASER',
+
+        categoria:
+          'TASER',
+
+        tipo:
+          'TRANSFERÊNCIA DE TASER',
+
+        tipo_movimentacao:
+          'TRANSFERENCIA',
+
+        tipo_patrimonio:
+          'TASER',
+
+        origem_transferencia:
+          'ENGINE_PATRIMONIAL',
+
+        taser_id:
+          dados?.taser_id ||
+          dados?.referencia_id ||
+          metadata?.patrimonio?.referencia_id ||
+          null,
+
+        patrimonio:
+          dados?.patrimonio ||
+          metadata?.patrimonio?.identificacao ||
+          null,
+
+        numero_serie:
+          dados?.numero_serie ||
+          metadata?.patrimonio?.identificacao ||
+          null,
+
+        marca:
+          dados?.marca ||
+          null,
+
+        modelo:
+          dados?.modelo ||
+          null,
+
+        quantidade_total:
+          Number(
+            dados?.quantidade ||
+            movimentacao?.quantidade ||
+            1
+          ),
+
+        quantidade:
+          Number(
+            dados?.quantidade ||
+            movimentacao?.quantidade ||
+            1
+          ),
+
+        origem_codigo:
+          origemCodigo,
+
+        origem_nome:
+          origemNome,
+
+        destino_codigo:
+          destinoCodigo,
+
+        destino_nome:
+          destinoNome,
+
+        local_origem:
+          dados?.local_origem ||
+          origemNome,
+
+        local_destino:
+          dados?.local_destino ||
+          destinoNome,
+
+        observacoes:
+          movimentacao?.observacao ||
+          movimentacao?.observacoes ||
+          null,
+
+        solicitada_por_nome:
+          movimentacao?.solicitado_por_nome ||
+          movimentacao?.realizado_por_nome ||
+          realizadoPor?.nome ||
+          'P4',
+
+        criado_por_nome:
+          movimentacao?.solicitado_por_nome ||
+          movimentacao?.realizado_por_nome ||
+          realizadoPor?.nome ||
+          'P4',
+
+        status:
+          normalizar(
+            dados?.status_aprovacao_cmt
+          ) === 'DILIGENCIA'
+            ? 'DILIGENCIA'
+            : 'AGUARDANDO_APROVACAO',
+
+        status_movimentacao:
+          movimentacao?.status_movimentacao ||
+          'PENDENTE',
+
+        status_aprovacao_cmt:
+          dados?.status_aprovacao_cmt ||
+          'PENDENTE',
+
+        exige_aprovacao_cmt:
+          dados?.exige_aprovacao_cmt === true,
+
+        created_at:
+          movimentacao?.criado_em ||
+          movimentacao?.created_at ||
+          metadata?.registrado_em ||
+          null,
+
+        solicitada_em:
+          movimentacao?.criado_em ||
+          movimentacao?.created_at ||
+          metadata?.registrado_em ||
+          null,
+
+        dados
+      }
+    )
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            a?.solicitada_em ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            b?.solicitada_em ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+
+    key:
+      visaoCmt
+        ? 'aprovacoes-comandante'
+        : 'manutencao-externa-acompanhamento',
+
+    titulo:
+      visaoCmt
+        ? 'Aprovações pendentes'
+        : 'Aguardando aprovação do Cmt',
+
+    total:
+      itens.length,
+
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] =
+      cardNovo
+  } else {
+    alertas.push(
+      cardNovo
+    )
   }
 
   return {
@@ -3587,6 +4251,13 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
       'ADMINISTRADOR'
     )
 
+  const visaoAprovacaoTaser =
+    visaoP4 ||
+    ehCmtCia ||
+    perfilAtual.includes(
+      'ADMINISTRADOR'
+    )
+
   const [dashboard, setDashboard] = useState(null)
   const [operacional, setOperacional] = useState(null)
 
@@ -3648,7 +4319,9 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
         recebimentosMunicoes,
         aprovacoesTorniquetes,
         recebimentosTorniquetes,
-        aprovacoesTPD
+        aprovacoesTPD,
+        aprovacoesTaser,
+        recebimentosTaser
       ] = await Promise.all([
         carregarDashboardPatrimonial(),
         listarCategoriasOperacionais(),
@@ -3685,6 +4358,19 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
 
         visaoAprovacaoTPD
           ? listarAprovacoesTPDPendentesCentral()
+          : Promise.resolve([]),
+
+        visaoAprovacaoTaser
+          ? listarTransferenciasTaserAguardandoAprovacao({
+              limite: 500
+            })
+          : Promise.resolve([]),
+
+        visaoSVDD
+          ? listarTransferenciasTaserPendentes({
+              destinoCodigo: 'SVDD',
+              limite: 500
+            })
           : Promise.resolve([])
       ])
 
@@ -3856,6 +4542,23 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
       }
 
 
+      if (visaoAprovacaoTaser) {
+        dadosOperacionaisComAlertas =
+          incluirAprovacoesTaserCentral(
+            dadosOperacionaisComAlertas,
+            aprovacoesTaser,
+            {
+              visaoP4,
+              visaoCmt:
+                ehCmtCia ||
+                perfilAtual.includes(
+                  'ADMINISTRADOR'
+                )
+            }
+          )
+      }
+
+
       if (visaoP4 || visaoSVDD) {
         dadosOperacionaisComAlertas =
           incluirRecebimentosMunicoesCentral(
@@ -3873,6 +4576,15 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
             recebimentosTorniquetes,
             {
               visaoP4,
+              visaoSVDD
+            }
+          )
+
+        dadosOperacionaisComAlertas =
+          incluirRecebimentosTaserCentral(
+            dadosOperacionaisComAlertas,
+            recebimentosTaser,
+            {
               visaoSVDD
             }
           )

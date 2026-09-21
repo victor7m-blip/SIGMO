@@ -111,3 +111,76 @@ export async function decidirBaixaHT({ solicitacao, decisao, observacoes = '', u
   await criarNotificacaoParaPerfil({ perfil: 'P4', titulo: acao === 'APROVAR' ? 'Baixa de HT aprovada' : 'Solicitação de baixa atualizada', mensagem: `A solicitação do HT ${solicitacao.patrimonio || solicitacao.numero_serie || ''} foi marcada como ${novoStatus}.`, tipo: acao === 'APROVAR' ? 'SUCESSO' : 'ALERTA', modulo: 'HT', prioridade: 'NORMAL', link: 'ht', metadata: { modulo: 'HT', referencia_id: solicitacao.referencia_id, baixa_id: solicitacao.id } })
   return data
 }
+
+export async function solicitarBaixaTaser({ taser, motivo, observacoes, fotos = [], user }) {
+  if (!ehP4(user)) throw new Error('Somente o P4 pode solicitar a baixa patrimonial.')
+  if (!taser?.id) throw new Error('Taser não informado.')
+  if (!texto(motivo)) throw new Error('Informe o motivo da baixa.')
+  if (!texto(observacoes)) throw new Error('Informe as observações da solicitação.')
+  if (!Array.isArray(fotos) || fotos.length === 0) throw new Error('Inclua pelo menos uma foto da solicitação de baixa.')
+
+  const statusAtual = maiusculo(taser.status_operacional || taser.status)
+  if (['BAIXADO', 'AGUARDANDO_APROVACAO_BAIXA'].includes(statusAtual)) throw new Error('Este Taser já possui baixa concluída ou aguardando aprovação.')
+
+  const { data: solicitacao, error } = await supabase.from(TABLE).insert({
+    modulo: 'TASER', referencia_id: taser.id, patrimonio: taser.patrimonio || null, numero_serie: taser.numero_serie || null,
+    status: 'AGUARDANDO_APROVACAO', motivo: texto(motivo), observacoes: texto(observacoes),
+    status_anterior: statusAtual || 'RESERVA', local_anterior: taser.local_atual || null,
+    solicitada_por_id: usuarioId(user), solicitada_por_nome: usuarioNome(user)
+  }).select().single()
+  if (error) throw error
+
+  const enviados = []
+  try {
+    for (let i = 0; i < fotos.length; i += 1) {
+      const foto = await uploadFoto({ modulo: 'TASER', referenciaId: taser.id, arquivo: fotos[i] })
+      enviados.push(foto.foto_caminho)
+      const { error: fotoError } = await supabase.from(FOTOS_TABLE).insert({
+        baixa_id: solicitacao.id, foto_url: foto.foto_url, foto_caminho: foto.foto_caminho,
+        legenda: `Evidência da solicitação ${i + 1}`, ordem: i, criada_por_id: usuarioId(user), criada_por_nome: usuarioNome(user)
+      })
+      if (fotoError) throw fotoError
+    }
+
+    const { error: htError } = await supabase.from('sigmo_tasers').update({ status_operacional: 'AGUARDANDO_APROVACAO_BAIXA' }).eq('id', taser.id)
+    if (htError) throw htError
+
+    await criarOuAtualizarPatrimonio({ tipo: 'taser', referencia_id: taser.id, dados: { ...taser, status_operacional: 'AGUARDANDO_APROVACAO_BAIXA' }, user, local_atual: taser.local_atual || '' })
+    await criarNotificacaoParaPerfil({ perfil: 'COMANDANTE DE CIA', titulo: 'Solicitação de baixa de Taser', mensagem: `${usuarioNome(user)} solicitou a baixa do Taser ${taser.patrimonio || taser.numero_serie || ''}.`, tipo: 'APROVACAO', modulo: 'TASER', prioridade: 'ALTA', link: 'taser', metadata: { modulo: 'TASER', referencia_id: taser.id, baixa_id: solicitacao.id } })
+    return solicitacao
+  } catch (erro) {
+    if (enviados.length) await supabase.storage.from(BUCKET).remove(enviados)
+    await supabase.from(TABLE).delete().eq('id', solicitacao.id)
+    throw erro
+  }
+}
+
+export async function decidirBaixaTaser({ solicitacao, decisao, observacoes = '', user }) {
+  if (!ehComandante(user)) throw new Error('Somente o Comandante da Cia pode decidir a solicitação de baixa.')
+  if (maiusculo(solicitacao?.modulo) !== 'TASER') {
+    throw new Error('A solicitação informada não pertence ao módulo Taser.')
+  }
+  const acao = maiusculo(decisao)
+  if (!['APROVAR', 'REPROVAR', 'DILIGENCIA'].includes(acao)) throw new Error('Decisão inválida.')
+  if (acao !== 'APROVAR' && !texto(observacoes)) throw new Error('Informe a justificativa da decisão.')
+
+  const novoStatus = acao === 'APROVAR' ? 'APROVADA' : acao === 'REPROVAR' ? 'REPROVADA' : 'DILIGENCIA'
+  const { data, error } = await supabase.from(TABLE).update({
+    status: novoStatus, decisao_observacoes: texto(observacoes) || null,
+    decidida_em: new Date().toISOString(), decidida_por_id: usuarioId(user), decidida_por_nome: usuarioNome(user)
+  }).eq('id', solicitacao.id).eq('status', 'AGUARDANDO_APROVACAO').select().single()
+  if (error) throw error
+
+  const statusTaser = acao === 'APROVAR' ? 'BAIXADO' : (solicitacao.status_anterior || 'RESERVA')
+  const ativo = acao !== 'APROVAR'
+  const { data: taser, error: taserError } = await supabase.from('sigmo_tasers').update({ status_operacional: statusTaser, ativo }).eq('id', solicitacao.referencia_id).select().single()
+  if (taserError) throw taserError
+
+  if (acao === 'APROVAR') {
+    await desativarPatrimonioPorReferencia({ tipo: 'taser', referencia_id: solicitacao.referencia_id, user, motivo: solicitacao.motivo })
+  } else {
+    await criarOuAtualizarPatrimonio({ tipo: 'taser', referencia_id: solicitacao.referencia_id, dados: { ...ht, status_operacional: statusTaser, ativo }, user, local_atual: solicitacao.local_anterior || taser.local_atual || '' })
+  }
+  await criarNotificacaoParaPerfil({ perfil: 'P4', titulo: acao === 'APROVAR' ? 'Baixa de Taser aprovada' : 'Solicitação de baixa atualizada', mensagem: `A solicitação do Taser ${solicitacao.patrimonio || solicitacao.numero_serie || ''} foi marcada como ${novoStatus}.`, tipo: acao === 'APROVAR' ? 'SUCESSO' : 'ALERTA', modulo: 'TASER', prioridade: 'NORMAL', link: 'taser', metadata: { modulo: 'TASER', referencia_id: solicitacao.referencia_id, baixa_id: solicitacao.id } })
+  return data
+}
