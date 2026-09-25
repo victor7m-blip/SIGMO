@@ -26,8 +26,36 @@ import {
   cautelarMunicaoParaPolicial
 } from '../../../services/municoesMovimentacoesService'
 
+import {
+  listarTorniquetes
+} from '../../../services/torniquetesService'
+
+import {
+  listarEstoqueColetesRefletivos
+} from '../../../services/coletesRefletivosService'
+
+import {
+  obterResumoSuportesCOP
+} from '../../../services/copsService'
+
 const ORIGEM_SVDD = 'COFRE DO SVDD'
 const DESTINO_CAUTELA = 'CAUTELA INDIVIDUAL'
+
+const RESUMO_SUPORTES_COP_INICIAL = {
+  modular: {
+    total: 0,
+    disponivel: 0,
+    emServico: 0
+  },
+  comum: {
+    total: 0,
+    disponivel: 0,
+    emServico: 0
+  },
+  total: 0,
+  disponivel: 0,
+  emServico: 0
+}
 
 const TIPOS_MATERIAL = [
   { id: 'ARMAS', label: 'Armas' },
@@ -36,9 +64,9 @@ const TIPOS_MATERIAL = [
   { id: 'TPD', label: 'TPD' },
   { id: 'COP', label: 'COP' },
   { id: 'MUNICAO', label: 'Munição' },
-  { id: 'TONFA', label: 'Tonfa' },
-  { id: 'CASSETETE', label: 'Cassetete' },
-  { id: 'VIATURA', label: 'Viatura' }
+  { id: 'TONFA_CASSETETE', label: 'Tonfa/Cassetete' },
+  { id: 'TORNIQUETE', label: 'Torniquete' },
+  { id: 'COLETE_REFLETIVO', label: 'Colete Refletivo' }
 ]
 
 function normalizarTexto(valor) {
@@ -160,24 +188,6 @@ function ehCOP(item) {
   )
 }
 
-function ehViatura(item) {
-  const campos = [
-    item?.modulo,
-    item?.categoria,
-    item?.tipo,
-    item?.tipo_patrimonio,
-    item?.tabela_origem
-  ].map(normalizarTexto)
-
-  return (
-    Boolean(item?.viatura_id) ||
-    campos.includes('VIATURA') ||
-    campos.includes('VIATURAS') ||
-    campos.includes('SIGMO_VIATURAS')
-  )
-}
-
-
 function ehMunicao(item) {
   const campos = [
     item?.modulo,
@@ -228,6 +238,415 @@ function ehCassetete(item) {
   )
 }
 
+function ehTorniquete(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tipo_material,
+    item?.tabela_origem,
+    item?.descricao
+  ].map(normalizarTexto)
+
+  return (
+    Boolean(item?.torniquete_id) ||
+    campos.includes('TORNIQUETE') ||
+    campos.includes('TORNIQUETES') ||
+    campos.includes('SIGMO_TORNIQUETES') ||
+    campos.some(
+      (valor) =>
+        valor.startsWith('TORNIQUETE ')
+    )
+  )
+}
+
+function ehColeteRefletivo(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tipo_material,
+    item?.tabela_origem
+  ].map(normalizarTexto)
+
+  const descricao =
+    normalizarTexto(
+      item?.descricao
+    )
+
+  return (
+    Boolean(
+      item?.colete_refletivo_id
+    ) ||
+    campos.includes(
+      'COLETE REFLETIVO'
+    ) ||
+    campos.includes(
+      'SIGMO_COLETES_REFLETIVOS'
+    ) ||
+    descricao ===
+      'COLETE REFLETIVO' ||
+    descricao.startsWith(
+      'COLETE REFLETIVO '
+    )
+  )
+}
+
+function montarItemTorniquete(
+  torniquete
+) {
+  const quantidadeDisponivel =
+    Math.max(
+      0,
+      numeroInteiro(
+        torniquete?.quantidade_svdd
+      )
+    )
+
+  return {
+    id:
+      torniquete?.id,
+
+    referencia_id:
+      torniquete?.id,
+
+    torniquete_id:
+      torniquete?.id,
+
+    tabela_origem:
+      'sigmo_torniquetes',
+
+    modulo:
+      'TORNIQUETE',
+
+    categoria:
+      'TORNIQUETE',
+
+    tipo:
+      'TORNIQUETE',
+
+    tipo_patrimonio:
+      'TORNIQUETE',
+
+    tipo_material:
+      'TORNIQUETE',
+
+    patrimonio:
+      'ESTOQUE CONTROLADO',
+
+    descricao:
+      'TORNIQUETE',
+
+    local_atual:
+      ORIGEM_SVDD,
+
+    status:
+      quantidadeDisponivel > 0
+        ? 'DISPONÍVEL'
+        : 'SEM SALDO',
+
+    controla_quantidade:
+      true,
+
+    quantidade_disponivel:
+      quantidadeDisponivel,
+
+    quantidade_maxima:
+      quantidadeDisponivel,
+
+    disponivel:
+      quantidadeDisponivel > 0,
+
+    quantidade_total:
+      Math.max(
+        0,
+        numeroInteiro(
+          torniquete?.quantidade_total
+        )
+      ),
+
+    quantidade_p4:
+      Math.max(
+        0,
+        numeroInteiro(
+          torniquete?.quantidade_p4
+        )
+      ),
+
+    quantidade_svdd:
+      quantidadeDisponivel,
+
+    quantidade_em_servico:
+      Math.max(
+        0,
+        numeroInteiro(
+          torniquete
+            ?.quantidade_em_servico
+        )
+      ),
+
+    quantidade_manutencao:
+      Math.max(
+        0,
+        numeroInteiro(
+          torniquete
+            ?.quantidade_manutencao
+        )
+      )
+  }
+}
+
+function montarItemColeteRefletivo(
+  colete
+) {
+  const quantidadeDisponivel =
+    Math.max(
+      0,
+      numeroInteiro(
+        colete?.quantidade_svdd
+      )
+    )
+
+  const tamanho =
+    String(
+      colete?.tamanho || ''
+    )
+      .trim()
+      .toUpperCase()
+
+  return {
+    id:
+      colete?.id,
+
+    referencia_id:
+      colete?.id,
+
+    colete_refletivo_id:
+      colete?.id,
+
+    tabela_origem:
+      'sigmo_coletes_refletivos',
+
+    modulo:
+      'COLETE REFLETIVO',
+
+    categoria:
+      'COLETE REFLETIVO',
+
+    tipo:
+      'COLETE REFLETIVO',
+
+    tipo_patrimonio:
+      'COLETE REFLETIVO',
+
+    tipo_material:
+      'COLETE REFLETIVO',
+
+    patrimonio:
+      tamanho
+        ? `COLETE REFLETIVO ${tamanho}`
+        : 'COLETE REFLETIVO',
+
+    descricao:
+      tamanho
+        ? `COLETE REFLETIVO • TAMANHO ${tamanho}`
+        : 'COLETE REFLETIVO',
+
+    tamanho,
+
+    local_atual:
+      ORIGEM_SVDD,
+
+    status:
+      quantidadeDisponivel > 0
+        ? 'DISPONÍVEL'
+        : 'SEM SALDO',
+
+    controla_quantidade:
+      true,
+
+    quantidade_disponivel:
+      quantidadeDisponivel,
+
+    quantidade_maxima:
+      quantidadeDisponivel,
+
+    disponivel:
+      quantidadeDisponivel > 0,
+
+    quantidade_total:
+      Math.max(
+        0,
+        numeroInteiro(
+          colete?.quantidade_total
+        )
+      ),
+
+    quantidade_p4:
+      Math.max(
+        0,
+        numeroInteiro(
+          colete?.quantidade_p4
+        )
+      ),
+
+    quantidade_svdd:
+      quantidadeDisponivel,
+
+    quantidade_em_servico:
+      Math.max(
+        0,
+        numeroInteiro(
+          colete
+            ?.quantidade_em_servico
+        )
+      )
+  }
+}
+
+async function listarMateriaisDisponiveisMapa() {
+  const listaBase =
+    await listarPatrimoniosParaEntrega({
+      origemLocal:
+        ORIGEM_SVDD,
+
+      apenasDisponiveis:
+        true
+    })
+
+  let estoqueTorniquetes = []
+  let estoqueColetesRefletivos = []
+
+  try {
+    estoqueTorniquetes =
+      await listarTorniquetes()
+  } catch (error) {
+    console.warn(
+      'Não foi possível carregar torniquetes no Mapa Força:',
+      error
+    )
+  }
+
+  try {
+    estoqueColetesRefletivos =
+      await listarEstoqueColetesRefletivos()
+  } catch (error) {
+    console.warn(
+      'Não foi possível carregar coletes refletivos no Mapa Força:',
+      error
+    )
+  }
+
+  const base =
+    Array.isArray(listaBase)
+      ? listaBase
+      : []
+
+  const chavesExistentes =
+    new Set(
+      base.map(
+        (material) => [
+          normalizarTexto(
+            material?.tabela_origem
+          ),
+          String(
+            material?.referencia_id ||
+            material?.id ||
+            ''
+          )
+        ].join(':')
+      )
+    )
+
+  const torniquetes =
+    (
+      Array.isArray(
+        estoqueTorniquetes
+      )
+        ? estoqueTorniquetes
+        : []
+    )
+      .filter(
+        (item) =>
+          item?.id &&
+          item?.ativo !== false
+      )
+      .map(
+        montarItemTorniquete
+      )
+      .filter(
+        (material) => {
+          const chave = [
+            normalizarTexto(
+              material
+                ?.tabela_origem
+            ),
+            String(
+              material
+                ?.referencia_id ||
+              material?.id ||
+              ''
+            )
+          ].join(':')
+
+          return (
+            material?.disponivel &&
+            !chavesExistentes.has(
+              chave
+            )
+          )
+        }
+      )
+
+  const coletesRefletivos =
+    (
+      Array.isArray(
+        estoqueColetesRefletivos
+      )
+        ? estoqueColetesRefletivos
+        : []
+    )
+      .filter(
+        (item) =>
+          item?.id &&
+          item?.ativo !== false
+      )
+      .map(
+        montarItemColeteRefletivo
+      )
+      .filter(
+        (material) => {
+          const chave = [
+            normalizarTexto(
+              material
+                ?.tabela_origem
+            ),
+            String(
+              material
+                ?.referencia_id ||
+              material?.id ||
+              ''
+            )
+          ].join(':')
+
+          return (
+            material?.disponivel &&
+            !chavesExistentes.has(
+              chave
+            )
+          )
+        }
+      )
+
+  return [
+    ...base,
+    ...torniquetes,
+    ...coletesRefletivos
+  ]
+}
+
 function correspondeTipo(item, tipo) {
   switch (tipo) {
     case 'ARMAS':
@@ -242,30 +661,32 @@ function correspondeTipo(item, tipo) {
       return ehCOP(item)
     case 'MUNICAO':
       return ehMunicao(item)
-    case 'TONFA':
-      return ehTonfa(item)
-    case 'CASSETETE':
-      return ehCassetete(item)
-    case 'VIATURA':
-      return ehViatura(item)
+    case 'TONFA_CASSETETE':
+      return (
+        ehTonfa(item) ||
+        ehCassetete(item)
+      )
+    case 'TORNIQUETE':
+      return ehTorniquete(item)
+    case 'COLETE_REFLETIVO':
+      return ehColeteRefletivo(item)
     default:
       return false
   }
 }
 
 function rotuloItem(item) {
-  if (ehViatura(item)) {
-    return [
-      'VIATURA',
-      item?.prefixo,
-      item?.modelo,
-      item?.placa
-    ]
-      .map((valor) =>
-        String(valor ?? '').trim()
+  if (ehColeteRefletivo(item)) {
+    const tamanho =
+      String(
+        item?.tamanho || ''
       )
-      .filter(Boolean)
-      .join(' • ')
+        .trim()
+        .toUpperCase()
+
+    return tamanho
+      ? `COLETE REFLETIVO • TAMANHO ${tamanho}`
+      : 'COLETE REFLETIVO'
   }
 
   if (ehMunicao(item)) {
@@ -485,150 +906,6 @@ function formatarHora(valor) {
 
 
 
-function funcaoRecebeViaturaAutomaticamente(funcao) {
-  const funcaoNormalizada =
-    normalizarTexto(funcao)
-
-  return (
-    funcaoNormalizada === 'MOTORISTA' ||
-    funcaoNormalizada.includes('MOTORISTA / AUXILIAR') ||
-    funcaoNormalizada.includes('MOTORISTA/AUXILIAR')
-  )
-}
-
-
-function montarItemViaturaDaUnidade(unidade) {
-  const viatura =
-    unidade?.viatura
-
-  if (!viatura?.id) {
-    return null
-  }
-
-  return {
-    ...viatura,
-    id: viatura.id,
-    viatura_id: viatura.id,
-    referencia_id: viatura.id,
-    tabela_origem: 'sigmo_viaturas',
-    modulo: 'VIATURA',
-    categoria: 'VIATURA',
-    tipo: 'VIATURA',
-    descricao:
-      `VIATURA ${viatura.prefixo || ''}`.trim(),
-    patrimonio:
-      viatura.prefixo || null,
-    disponivel: true,
-    controla_quantidade: false,
-    quantidade: 1,
-    item_especial_mapa_forca: true
-  }
-}
-
-
-function adicionarViaturaDaUnidade(lista, unidade) {
-  const base =
-    Array.isArray(lista)
-      ? lista
-      : []
-
-  const viatura =
-    montarItemViaturaDaUnidade(
-      unidade
-    )
-
-  if (!viatura) {
-    return base
-  }
-
-  const jaExiste =
-    base.some(
-      (item) =>
-        ehViatura(item) &&
-        String(
-          item?.viatura_id ||
-          item?.referencia_id ||
-          item?.id ||
-          ''
-        ) ===
-        String(viatura.id)
-    )
-
-  return jaExiste
-    ? base
-    : [...base, viatura]
-}
-
-
-function garantirViaturaDaUsNoKit({
-  itens = [],
-  unidade,
-  funcao,
-  itensJaPagos = []
-}) {
-  const base =
-    Array.isArray(itens)
-      ? itens
-      : []
-
-  if (!funcaoRecebeViaturaAutomaticamente(funcao)) {
-    return base
-  }
-
-  const viatura =
-    montarItemViaturaDaUnidade(unidade)
-
-  if (!viatura) {
-    return base
-  }
-
-  const jaPaga =
-    (Array.isArray(itensJaPagos)
-      ? itensJaPagos
-      : []
-    ).some(
-      (pago) =>
-        mesmoItemJaPago(
-          viatura,
-          pago
-        )
-    )
-
-  if (jaPaga) {
-    return base.filter(
-      (item) =>
-        !(
-          ehViatura(item) &&
-          mesmoItemJaPago(
-            item,
-            viatura
-          )
-        )
-    )
-  }
-
-  const jaNoKit =
-    base.some(
-      (item) =>
-        ehViatura(item) &&
-        mesmoItemJaPago(
-          item,
-          viatura
-        )
-    )
-
-  return jaNoKit
-    ? base
-    : [
-        ...base,
-        {
-          ...viatura,
-          vinculada_automaticamente_us: true
-        }
-      ]
-}
-
-
 function normalizarComparacao(valor) {
   return normalizarTexto(valor)
     .replace(/\s+/g, ' ')
@@ -780,33 +1057,6 @@ function mesmoItemJaPago(
 ) {
   if (!atual || !pago) {
     return false
-  }
-
-  if (
-    ehViatura(atual) &&
-    ehViatura(pago)
-  ) {
-    const atualId =
-      String(
-        atual?.viatura_id ||
-        atual?.referencia_id ||
-        atual?.id ||
-        ''
-      )
-
-    const pagoId =
-      String(
-        pago?.viatura_id ||
-        pago?.referencia_id ||
-        pago?.id ||
-        ''
-      )
-
-    return Boolean(
-      atualId &&
-      pagoId &&
-      atualId === pagoId
-    )
   }
 
   if (
@@ -1119,20 +1369,6 @@ function chaveReservaMaterial(item) {
     return ''
   }
 
-  if (ehViatura(item)) {
-    const viaturaId =
-      String(
-        item?.viatura_id ||
-        item?.referencia_id ||
-        item?.id ||
-        ''
-      ).trim()
-
-    return viaturaId
-      ? `VIATURA:${viaturaId}`
-      : ''
-  }
-
   if (ehMunicao(item)) {
     const municaoId =
       String(
@@ -1217,9 +1453,7 @@ function quantidadeReservadaMapa(
         ) !== chave
       ) {
         return total
-      }
-
-      return (
+      }return (
         total +
         Math.max(
           1,
@@ -1378,27 +1612,6 @@ function resumirItemPago(item) {
       item?.municao_id ||
       null,
 
-    viatura_id:
-      item?.viatura_id ||
-      (ehViatura(item)
-        ? item?.referencia_id || item?.id || null
-        : null),
-
-    prefixo:
-      ehViatura(item)
-        ? item?.prefixo || null
-        : null,
-
-    placa:
-      ehViatura(item)
-        ? item?.placa || null
-        : null,
-
-    modelo:
-      ehViatura(item)
-        ? item?.modelo || null
-        : null,
-
     tabela_origem:
       item?.tabela_origem ||
       null,
@@ -1435,7 +1648,37 @@ function resumirItemPago(item) {
           item?.quantidade ||
           1
         ) || 1
-      )
+      ),
+
+    suporte_modular:
+      Boolean(
+        item?.suporte_modular ||
+        item?.suportes_cop
+          ?.modular
+      ),
+
+    suporte_comum:
+      Boolean(
+        item?.suporte_comum ||
+        item?.suportes_cop
+          ?.comum
+      ),
+
+    suportes_cop: {
+      modular:
+        Boolean(
+          item?.suporte_modular ||
+          item?.suportes_cop
+            ?.modular
+        ),
+
+      comum:
+        Boolean(
+          item?.suporte_comum ||
+          item?.suportes_cop
+            ?.comum
+        )
+    }
   }
 }
 
@@ -1843,6 +2086,13 @@ export default function PagarMaterialMapaForca({
     useState('')
 
   const [
+    resumoSuportesCOP,
+    setResumoSuportesCOP
+  ] = useState(
+    RESUMO_SUPORTES_COP_INICIAL
+  )
+
+  const [
     cautelasExistentes,
     setCautelasExistentes
   ] = useState([])
@@ -1872,34 +2122,36 @@ export default function PagarMaterialMapaForca({
         const [
           lista,
           disponibilidadesMunicoes,
-          mapaAtual
+          mapaAtual,
+          resumoSuportes
         ] =
           await Promise.all([
-            listarPatrimoniosParaEntrega({
-              origemLocal:
-                ORIGEM_SVDD,
-
-              apenasDisponiveis:
-                true
-            }),
+            listarMateriaisDisponiveisMapa(),
 
             listarDisponibilidadeAtualMunicoesSvdd(),
 
-            carregarMapaEmElaboracao()
+            carregarMapaEmElaboracao(),
+
+            obterResumoSuportesCOP()
+              .catch((error) => {
+                console.warn(
+                  'Não foi possível carregar os suportes das COPs no Mapa Força:',
+                  error
+                )
+
+                return RESUMO_SUPORTES_COP_INICIAL
+              })
           ])
 
         const listaAtualizada =
-          adicionarViaturaDaUnidade(
-            aplicarReservasLocaisMapa(
-              aplicarDisponibilidadeMunicoes(
-                Array.isArray(lista)
-                  ? lista
-                  : [],
-                disponibilidadesMunicoes
-              ),
-              itensReservadosMapa
+          aplicarReservasLocaisMapa(
+            aplicarDisponibilidadeMunicoes(
+              Array.isArray(lista)
+                ? lista
+                : [],
+              disponibilidadesMunicoes
             ),
-            unidade
+            itensReservadosMapa
           )
 
         let cautelasDoContexto =
@@ -1933,26 +2185,17 @@ export default function PagarMaterialMapaForca({
             cautelasDoContexto
           )
 
+          setResumoSuportesCOP(
+            resumoSuportes ||
+            RESUMO_SUPORTES_COP_INICIAL
+          )
+
           setItensSelecionados(
-            garantirViaturaDaUsNoKit({
-              itens:
-                Array.isArray(
-                  itensPreparados
-                )
-                  ? itensPreparados
-                  : [],
-              unidade,
-              funcao,
-              itensJaPagos:
-                cautelasDoContexto.flatMap(
-                  (cautela) =>
-                    Array.isArray(
-                      cautela?.resumo_itens
-                    )
-                      ? cautela.resumo_itens
-                      : []
-                )
-            })
+            Array.isArray(
+              itensPreparados
+            )
+              ? itensPreparados
+              : []
           )
         }
       } catch (error) {
@@ -1988,6 +2231,9 @@ export default function PagarMaterialMapaForca({
       setErro('')
       setCautelasExistentes([])
       setIndisponiveisUltimoRecebido([])
+      setResumoSuportesCOP(
+        RESUMO_SUPORTES_COP_INICIAL
+      )
     }
   }, [open])
 
@@ -2016,14 +2262,38 @@ export default function PagarMaterialMapaForca({
         const tipo of
         TIPOS_MATERIAL
       ) {
-        contagem[tipo.id] =
+        const itensDoTipo =
           materiais.filter(
             (item) =>
               correspondeTipo(
                 item,
                 tipo.id
               )
-          ).length
+          )
+
+        contagem[tipo.id] =
+          itensDoTipo.reduce(
+            (total, item) => {
+              if (
+                item?.controla_quantidade
+              ) {
+                return (
+                  total +
+                  Math.max(
+                    0,
+                    numeroInteiro(
+                      item?.quantidade_disponivel ??
+                      item?.quantidade_maxima ??
+                      0
+                    )
+                  )
+                )
+              }
+
+              return total + 1
+            },
+            0
+          )
       }
 
       return contagem
@@ -2036,42 +2306,59 @@ export default function PagarMaterialMapaForca({
           busca
         )
 
-      return materiais.filter(
-        (item) => {
-          if (
-            !correspondeTipo(
-              item,
-              tipoAtivo
-            )
-          ) {
-            return false
-          }
-
-          if (!termo) {
-            return true
-          }
-
-          return [
-            rotuloItem(item),
-            item?.patrimonio,
-            item?.descricao,
-            item?.categoria,
-            item?.calibre,
-            item?.marca,
-            item?.modelo,
-            item?.numero_serie,
-            item?.prefixo,
-            item?.placa
-          ].some(
-            (valor) =>
-              normalizarTexto(
-                valor
-              ).includes(
-                termo
+      const filtrados =
+        materiais.filter(
+          (item) => {
+            if (
+              !correspondeTipo(
+                item,
+                tipoAtivo
               )
+            ) {
+              return false
+            }
+
+            if (!termo) {
+              return true
+            }
+
+            return [
+              rotuloItem(item),
+              item?.patrimonio,
+              item?.descricao,
+              item?.categoria,
+              item?.calibre,
+              item?.marca,
+              item?.modelo,
+              item?.numero_serie
+            ].some(
+              (valor) =>
+                normalizarTexto(
+                  valor
+                ).includes(
+                  termo
+                )
+            )
+          }
+        )
+
+      if (
+        tipoAtivo ===
+        'TONFA_CASSETETE'
+      ) {
+        return [
+          ...filtrados.filter(
+            ehTonfa
+          ),
+          ...filtrados.filter(
+            (item) =>
+              !ehTonfa(item) &&
+              ehCassetete(item)
           )
-        }
-      )
+        ]
+      }
+
+      return filtrados
     }, [
       materiais,
       tipoAtivo,
@@ -2228,6 +2515,112 @@ export default function PagarMaterialMapaForca({
     setErro('')
   }
 
+  function quantidadeSuporteCOPSelecionada(
+    tipo
+  ) {
+    const campo =
+      tipo === 'MODULAR'
+        ? 'suporte_modular'
+        : 'suporte_comum'
+
+    return itensSelecionados.reduce(
+      (total, item) =>
+        total +
+        (
+          ehCOP(item) &&
+          item?.[campo]
+            ? 1
+            : 0
+        ),
+      0
+    )
+  }
+
+  function alternarSuporteCOP(
+    item,
+    tipo
+  ) {
+    const chave =
+      criarChaveItem(
+        item
+      )
+
+    const campo =
+      tipo === 'MODULAR'
+        ? 'suporte_modular'
+        : 'suporte_comum'
+
+    const disponivel =
+      tipo === 'MODULAR'
+        ? Number(
+            resumoSuportesCOP
+              ?.modular
+              ?.disponivel ||
+            0
+          )
+        : Number(
+            resumoSuportesCOP
+              ?.comum
+              ?.disponivel ||
+            0
+          )
+
+    setItensSelecionados(
+      (atuais) =>
+        atuais.map(
+          (selecionado) => {
+            if (
+              criarChaveItem(
+                selecionado
+              ) !== chave
+            ) {
+              return selecionado
+            }
+
+            const marcado =
+              Boolean(
+                selecionado?.[campo]
+              )
+
+            if (
+              !marcado &&
+              quantidadeSuporteCOPSelecionada(
+                tipo
+              ) >= disponivel
+            ) {
+              return selecionado
+            }
+
+            return {
+              ...selecionado,
+              [campo]:
+                !marcado,
+
+              suportes_cop: {
+                modular:
+                  campo ===
+                  'suporte_modular'
+                    ? !marcado
+                    : Boolean(
+                        selecionado
+                          ?.suporte_modular
+                      ),
+
+                comum:
+                  campo ===
+                  'suporte_comum'
+                    ? !marcado
+                    : Boolean(
+                        selecionado
+                          ?.suporte_comum
+                      )
+              }
+            }
+          }
+        )
+    )
+  }
+
   function removerItem(
     item
   ) {
@@ -2257,8 +2650,7 @@ export default function PagarMaterialMapaForca({
       )
 
     setItensSelecionados(
-      (atuais) =>
-        atuais.map(
+      (atuais) =>atuais.map(
           (selecionado) => {
             if (
               criarChaveItem(
@@ -2306,29 +2698,20 @@ export default function PagarMaterialMapaForca({
       disponibilidadesMunicoes
     ] =
       await Promise.all([
-        listarPatrimoniosParaEntrega({
-          origemLocal:
-            ORIGEM_SVDD,
-
-          apenasDisponiveis:
-            true
-        }),
+        listarMateriaisDisponiveisMapa(),
 
         listarDisponibilidadeAtualMunicoesSvdd()
       ])
 
     setMateriais(
-      adicionarViaturaDaUnidade(
-        aplicarReservasLocaisMapa(
-          aplicarDisponibilidadeMunicoes(
-            Array.isArray(lista)
-              ? lista
-              : [],
-            disponibilidadesMunicoes
-          ),
-          itensReservadosMapa
+      aplicarReservasLocaisMapa(
+        aplicarDisponibilidadeMunicoes(
+          Array.isArray(lista)
+            ? lista
+            : [],
+          disponibilidadesMunicoes
         ),
-        unidade
+        itensReservadosMapa
       )
     )
   }
@@ -2361,12 +2744,7 @@ export default function PagarMaterialMapaForca({
             policial
           }),
 
-          listarPatrimoniosParaEntrega({
-            origemLocal:
-              ORIGEM_SVDD,
-            apenasDisponiveis:
-              true
-          }),
+          listarMateriaisDisponiveisMapa(),
 
           listarDisponibilidadeAtualMunicoesSvdd()
         ])
@@ -2385,17 +2763,14 @@ export default function PagarMaterialMapaForca({
       }
 
       const materiaisAtuais =
-        adicionarViaturaDaUnidade(
-          aplicarReservasLocaisMapa(
-            aplicarDisponibilidadeMunicoes(
-              Array.isArray(listaAtual)
-                ? listaAtual
-                : [],
-              disponibilidadesMunicoes
-            ),
-            itensReservadosMapa
+        aplicarReservasLocaisMapa(
+          aplicarDisponibilidadeMunicoes(
+            Array.isArray(listaAtual)
+              ? listaAtual
+              : [],
+            disponibilidadesMunicoes
           ),
-          unidade
+          itensReservadosMapa
         )
 
       setMateriais(
@@ -2498,18 +2873,10 @@ export default function PagarMaterialMapaForca({
   }
 
   async function confirmar(itensForcados = null) {
-    const itensBase =
+    const itensOperacao =
       Array.isArray(itensForcados)
         ? itensForcados
         : itensSelecionados
-
-    const itensOperacao =
-      garantirViaturaDaUsNoKit({
-        itens: itensBase,
-        unidade,
-        funcao,
-        itensJaPagos
-      })
 
     if (!policial?.id) {
       setErro(
@@ -3271,8 +3638,7 @@ export default function PagarMaterialMapaForca({
                 <strong
                   style={{
                     fontSize:
-                      '13px'
-                  }}
+                      '13px'}}
                 >
                   Disponíveis
                 </strong>
@@ -3421,13 +3787,7 @@ export default function PagarMaterialMapaForca({
                             >
                               {item?.controla_quantidade
                                 ? `${item?.quantidade_disponivel || 0} UN disponível(is)`
-                                : ehViatura(item)
-                                  ? [
-                                      item?.prefixo,
-                                      item?.placa,
-                                      item?.modelo
-                                    ].filter(Boolean).join(' • ') || 'VIATURA DA US'
-                                  : item?.patrimonio || '1 UN'}
+                                : item?.patrimonio || '1 UN'}
                             </small>
                           </span>
 
@@ -3614,6 +3974,203 @@ export default function PagarMaterialMapaForca({
                           )}
                         </strong>
 
+                        {ehCOP(item) && (
+                          <div
+                            style={{
+                              display:
+                                'grid',
+                              gridTemplateColumns:
+                                'repeat(2, minmax(0, 1fr))',
+                              gap:
+                                '7px',
+                              marginBottom:
+                                '8px'
+                            }}
+                          >
+                            {[
+                              {
+                                tipo:
+                                  'MODULAR',
+                                campo:
+                                  'suporte_modular',
+                                label:
+                                  'Suporte modular',
+                                disponivel:
+                                  Number(
+                                    resumoSuportesCOP
+                                      ?.modular
+                                      ?.disponivel ||
+                                    0
+                                  )
+                              },
+                              {
+                                tipo:
+                                  'COMUM',
+                                campo:
+                                  'suporte_comum',
+                                label:
+                                  'Suporte comum',
+                                disponivel:
+                                  Number(
+                                    resumoSuportesCOP
+                                      ?.comum
+                                      ?.disponivel ||
+                                    0
+                                  )
+                              }
+                            ].map(
+                              (suporte) => {
+                                const marcado =
+                                  Boolean(
+                                    item?.[
+                                      suporte.campo
+                                    ]
+                                  )
+
+                                const selecionados =
+                                  quantidadeSuporteCOPSelecionada(
+                                    suporte.tipo
+                                  )
+
+                                const semSaldo =
+                                  !marcado &&
+                                  selecionados >=
+                                    suporte.disponivel
+
+                                return (
+                                  <button
+                                    key={
+                                      suporte.tipo
+                                    }
+                                    type="button"
+                                    disabled={
+                                      semSaldo
+                                    }
+                                    onClick={() =>
+                                      alternarSuporteCOP(
+                                        item,
+                                        suporte.tipo
+                                      )
+                                    }
+                                    style={{
+                                      display:
+                                        'grid',
+                                      gridTemplateColumns:
+                                        '22px minmax(0, 1fr)',
+                                      gap:
+                                        '7px',
+                                      alignItems:
+                                        'center',
+                                      width:
+                                        '100%',
+                                      padding:
+                                        '7px 8px',
+                                      border:
+                                        marcado
+                                          ? '1px solid rgba(56,189,248,.45)'
+                                          : '1px solid rgba(148,163,184,.22)',
+                                      borderRadius:
+                                        '8px',
+                                      background:
+                                        marcado
+                                          ? 'rgba(14,165,233,.10)'
+                                          : '#071b2e',
+                                      color:
+                                        '#f8fafc',
+                                      textAlign:
+                                        'left',
+                                      cursor:
+                                        semSaldo
+                                          ? 'not-allowed'
+                                          : 'pointer',
+                                      opacity:
+                                        semSaldo
+                                          ? 0.55
+                                          : 1
+                                    }}
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      style={{
+                                        width:
+                                          '20px',
+                                        height:
+                                          '20px',
+                                        display:
+                                          'inline-flex',
+                                        alignItems:
+                                          'center',
+                                        justifyContent:
+                                          'center',
+                                        border:
+                                          marcado
+                                            ? '2px solid #38bdf8'
+                                            : '2px solid #64748b',
+                                        borderRadius:
+                                          '4px',
+                                        background:
+                                          marcado
+                                            ? '#0ea5e9'
+                                            : 'transparent',
+                                        color:
+                                          '#ffffff',
+                                        fontSize:
+                                          '13px',
+                                        fontWeight:
+                                          900,
+                                        lineHeight:
+                                          1
+                                      }}
+                                    >
+                                      {marcado
+                                        ? '×'
+                                        : ''}
+                                    </span>
+
+                                    <span
+                                      style={{
+                                        minWidth:
+                                          0
+                                      }}
+                                    >
+                                      <strong
+                                        style={{
+                                          display:
+                                            'block',
+                                          fontSize:
+                                            '11px'
+                                        }}
+                                      >
+                                        {
+                                          suporte.label
+                                        }
+                                      </strong>
+
+                                      <small
+                                        style={{
+                                          display:
+                                            'block',
+                                          marginTop:
+                                            '2px',
+                                          color:
+                                            '#94a3b8',
+                                          fontSize:
+                                            '10px'
+                                        }}
+                                      >
+                                        {
+                                          suporte.disponivel
+                                        }{' '}
+                                        disponível(is)
+                                      </small>
+                                    </span>
+                                  </button>
+                                )
+                              }
+                            )}
+                          </div>
+                        )}
+
                         {ehMunicao(item) && (
                           <small
                             style={{
@@ -3701,12 +4258,6 @@ export default function PagarMaterialMapaForca({
                             </span>
                           )}
 
-                          {!(
-                            ehViatura(item) &&
-                            funcaoRecebeViaturaAutomaticamente(
-                              funcao
-                            )
-                          ) && (
                           <button
                             type="button"
                             onClick={() =>
@@ -3741,30 +4292,6 @@ export default function PagarMaterialMapaForca({
                               ? 'Não pagar'
                               : 'Remover'}
                           </button>
-                          )}
-
-                          {ehViatura(item) &&
-                            funcaoRecebeViaturaAutomaticamente(
-                              funcao
-                            ) && (
-                            <span
-                              style={{
-                                marginLeft: 'auto',
-                                minHeight: '32px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                padding: '5px 9px',
-                                border: '1px solid rgba(52,211,153,.28)',
-                                borderRadius: '8px',
-                                background: 'rgba(16,185,129,.07)',
-                                color: '#6ee7b7',
-                                fontSize: '11px',
-                                fontWeight: 800
-                              }}
-                            >
-                              VINCULADA À US
-                            </span>
-                          )}
                         </div>
                       </div>
                     )

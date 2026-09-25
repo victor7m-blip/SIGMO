@@ -38,8 +38,282 @@ import {
   registrarQuilometragem
 } from '../../services/viaturasRivService'
 
+import { supabase } from '../../services/supabaseClient'
+
 import './CautelasUsuario.css'
 import './CautelasUsuarioNovidades.css'
+
+function obterPolicialIdColeteRefletivo(user) {
+  return (
+    user?.policial_id ||
+    user?.policial?.id ||
+    user?.id ||
+    null
+  )
+}
+
+
+async function listarCautelasColeteRefletivoPendentesPolicial(
+  user
+) {
+  const policialId =
+    obterPolicialIdColeteRefletivo(
+      user
+    )
+
+  if (!policialId) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(
+      'sigmo_coletes_refletivos_movimentacoes'
+    )
+    .select('*')
+    .eq(
+      'tipo_movimentacao',
+      'CAUTELA'
+    )
+    .eq(
+      'status',
+      'PENDENTE_RECEBIMENTO'
+    )
+    .eq(
+      'policial_id',
+      policialId
+    )
+    .order(
+      'criado_em',
+      {
+        ascending: false
+      }
+    )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+
+async function listarCautelasColeteRefletivoEmServicoPolicial(
+  user
+) {
+  const policialId =
+    obterPolicialIdColeteRefletivo(
+      user
+    )
+
+  if (!policialId) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from(
+      'sigmo_coletes_refletivos_movimentacoes'
+    )
+    .select('*')
+    .eq(
+      'tipo_movimentacao',
+      'CAUTELA'
+    )
+    .eq(
+      'status',
+      'EM_SERVICO'
+    )
+    .eq(
+      'policial_id',
+      policialId
+    )
+    .gt(
+      'saldo',
+      0
+    )
+    .order(
+      'criado_em',
+      {
+        ascending: false
+      }
+    )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+
+async function solicitarDevolucaoColeteRefletivoPolicial({
+  cautelaId,
+  quantidade,
+  user
+}) {
+  const policialId =
+    obterPolicialIdColeteRefletivo(
+      user
+    )
+
+  if (!cautelaId) {
+    throw new Error(
+      'Cautela de Colete Refletivo não identificada.'
+    )
+  }
+
+  if (!policialId) {
+    throw new Error(
+      'Policial não identificado.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_colete_refletivo_solicitar_devolucao_policial',
+    {
+      p_cautela_id:
+        cautelaId,
+      p_quantidade:
+        Math.max(
+          1,
+          Number(quantidade || 1) || 1
+        ),
+      p_policial_id:
+        policialId,
+      p_solicitado_por_nome:
+        user?.nome_guerra ||
+        user?.nome ||
+        user?.name ||
+        null,
+      p_observacoes:
+        'DEVOLUÇÃO SOLICITADA PELO POLICIAL'
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+function montarColeteRefletivoParaDevolucao(
+  cautela
+) {
+  const tamanho =
+    String(
+      cautela?.tamanho || ''
+    )
+      .trim()
+      .toUpperCase()
+
+  const quantidade =
+    Math.max(
+      1,
+      Number(
+        cautela?.saldo ??
+        cautela?.quantidade ??
+        1
+      ) || 1
+    )
+
+  return {
+    ...cautela,
+    id:
+      cautela?.id,
+    cautela_colete_refletivo_id:
+      cautela?.id,
+    colete_refletivo_id:
+      cautela?.colete_refletivo_id,
+    tipo_registro:
+      'COLETE_REFLETIVO_QUANTIDADE',
+    modulo:
+      'COLETE_REFLETIVO',
+    categoria:
+      'COLETE_REFLETIVO',
+    tipo:
+      'COLETE_REFLETIVO',
+    tipo_patrimonio:
+      'COLETE_REFLETIVO',
+    tabela_origem:
+      'sigmo_coletes_refletivos_movimentacoes',
+    descricao:
+      `COLETE REFLETIVO ${tamanho}`.trim(),
+    patrimonio:
+      `TAMANHO ${tamanho}`.trim(),
+    identificador:
+      `TAMANHO ${tamanho}`.trim(),
+    quantidade,
+    saldo:
+      quantidade,
+    fim_turno_servico:
+      cautela?.metadata?.fim_turno_servico ||
+      cautela?.fim_turno_servico ||
+      null,
+    item_especial_colete_refletivo:
+      true
+  }
+}
+
+
+async function receberCautelaColeteRefletivoPolicial({
+  movimentacaoId,
+  user
+}) {
+  const policialId =
+    obterPolicialIdColeteRefletivo(
+      user
+    )
+
+  if (!movimentacaoId) {
+    throw new Error(
+      'Cautela de Colete Refletivo não informada.'
+    )
+  }
+
+  if (!policialId) {
+    throw new Error(
+      'Policial não identificado.'
+    )
+  }
+
+  const recebidoPorNome =
+    user?.nome_guerra ||
+    user?.nome ||
+    user?.name ||
+    null
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_colete_refletivo_receber_cautela_policial',
+    {
+      p_movimentacao_id:
+        movimentacaoId,
+      p_policial_id:
+        policialId,
+      p_recebido_por_nome:
+        recebidoPorNome
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
 
 function formatarData(valor) {
   if (!valor) return 'Não informada'
@@ -330,10 +604,39 @@ function itemEhTorniquete(item) {
   )
 }
 
+function itemEhColeteRefletivo(item) {
+  const observacao =
+    lerObservacao(item)
+
+  return (
+    normalizar(item?.tipo_registro) ===
+      'colete_refletivo_quantidade' ||
+    normalizar(item?.modulo) ===
+      'colete_refletivo' ||
+    normalizar(item?.categoria) ===
+      'colete_refletivo' ||
+    normalizar(item?.tipo) ===
+      'colete_refletivo' ||
+    normalizar(item?.tipo_patrimonio) ===
+      'colete_refletivo' ||
+    normalizar(
+      observacao?.tipo_registro
+    ) ===
+      'colete_refletivo_quantidade' ||
+    Boolean(
+      item?.colete_refletivo_id ||
+      item?.cautela_colete_refletivo_id ||
+      item?.item_especial_colete_refletivo
+    )
+  )
+}
+
+
 function itemEhQuantitativo(item) {
   const observacao = lerObservacao(item)
 
   return (
+    itemEhColeteRefletivo(item) ||
     itemEhTorniquete(item) ||
     ['tonfa', 'cassetete'].includes(
       normalizar(item?.tipo_patrimonio)
@@ -364,6 +667,15 @@ function chaveItemEstavel(item) {
       item?.viatura_id ||
       item?.referencia_id ||
       item?.id ||
+      ''
+    )
+  }
+
+  if (itemEhColeteRefletivo(item)) {
+    return String(
+      item?.cautela_colete_refletivo_id ||
+      item?.id ||
+      item?.colete_refletivo_id ||
       ''
     )
   }
@@ -708,6 +1020,11 @@ export default function CautelasUsuario({
     setCautelasMunicaoPendentes
   ] = useState([])
 
+  const [
+    cautelasColeteRefletivoPendentes,
+    setCautelasColeteRefletivoPendentes
+  ] = useState([])
+
   const [materiais, setMateriais] = useState([])
   const [itensSelecionados, setItensSelecionados] = useState([])
   const [quantidadesDevolver, setQuantidadesDevolver] = useState({})
@@ -736,6 +1053,8 @@ export default function CautelasUsuario({
         devolucoesPendentes,
         cargasPermanentes,
         cautelasMunicao,
+        cautelasColeteRefletivo,
+        cautelasColeteRefletivoEmServico,
         manutencoesCOP,
         cautelasMapaUsuario
       ] =
@@ -745,6 +1064,12 @@ export default function CautelasUsuario({
           listarDevolucoesPendentesUsuario(user),
           listarCargasPermanentesPendentesPolicial(),
           listarCautelasPendentesPolicial(),
+          listarCautelasColeteRefletivoPendentesPolicial(
+            user
+          ),
+          listarCautelasColeteRefletivoEmServicoPolicial(
+            user
+          ),
           carregarUltimasManutencoesCOP(),
           listarCautelasMapaUsuario(user)
         ])
@@ -827,6 +1152,14 @@ export default function CautelasUsuario({
           : []
       )
 
+      setCautelasColeteRefletivoPendentes(
+        Array.isArray(
+          cautelasColeteRefletivo
+        )
+          ? cautelasColeteRefletivo
+          : []
+      )
+
       setUltimasManutencoesCOP(
         manutencoesCOP &&
         typeof manutencoesCOP === 'object'
@@ -834,7 +1167,21 @@ export default function CautelasUsuario({
           : {}
       )
 
-      setMateriais(ativos || [])
+      const coletesRefletivosEmServico =
+        (
+          Array.isArray(
+            cautelasColeteRefletivoEmServico
+          )
+            ? cautelasColeteRefletivoEmServico
+            : []
+        ).map(
+          montarColeteRefletivoParaDevolucao
+        )
+
+      setMateriais([
+        ...(ativos || []),
+        ...coletesRefletivosEmServico
+      ])
       setDevolucoes(devolucoesPendentes || [])
 
       setQuantidadesReceber((estadoAtual) => {
@@ -2193,6 +2540,88 @@ function alterarQuilometragemDevolucao(chave, valor) {
     }
   }
 
+  async function receberCautelaColeteRefletivo(
+    cautela
+  ) {
+    const movimentacaoId =
+      cautela?.cautela_colete_refletivo_id ||
+      cautela?.movimentacao_id ||
+      cautela?.id ||
+      null
+
+    if (!movimentacaoId) {
+      setErro(
+        'Cautela de Colete Refletivo inválida.'
+      )
+      return
+    }
+
+    const tamanho =
+      String(
+        cautela?.tamanho ||
+        ''
+      )
+        .trim()
+        .toUpperCase()
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          cautela?.quantidade ||
+          cautela?.quantidade_total ||
+          1
+        ) || 1
+      )
+
+    if (
+      !window.confirm(
+        `Confirma o recebimento de ${quantidade} Colete(s) Refletivo(s) tamanho ${tamanho || 'NÃO INFORMADO'}?`
+      )
+    ) {
+      return
+    }
+
+    try {
+      setProcessando(
+        `COLETE_REFLETIVO:${movimentacaoId}`
+      )
+      setErro('')
+      setMensagem('')
+
+      const resultado =
+        await receberCautelaColeteRefletivoPolicial({
+          movimentacaoId,
+          user
+        })
+
+      setMensagem(
+        `Colete Refletivo recebido com sucesso: ${quantidade} unidade(s) tamanho ${tamanho || 'NÃO INFORMADO'}.`
+      )
+
+      await carregar()
+
+      onConcluido?.({
+        tipo:
+          'COLETE_REFLETIVO_CAUTELA',
+        resultado
+      })
+    } catch (error) {
+      console.error(
+        'Erro ao receber cautela de Colete Refletivo:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível confirmar o recebimento do Colete Refletivo.'
+      )
+    } finally {
+      setProcessando('')
+    }
+  }
+
+
   async function receberCautelaMunicao(
     transferencia
   ) {
@@ -2581,10 +3010,43 @@ function alterarQuilometragemDevolucao(chave, valor) {
       })
     }
 
-    await solicitarDevolucaoCautela({
-      user,
-      itens: itensParaDevolucao
-    })
+    const coletesRefletivos =
+      itensParaDevolucao.filter(
+        itemEhColeteRefletivo
+      )
+
+    const demaisMateriais =
+      itensParaDevolucao.filter(
+        (item) =>
+          !itemEhColeteRefletivo(
+            item
+          )
+      )
+
+    for (
+      const colete of
+      coletesRefletivos
+    ) {
+      await solicitarDevolucaoColeteRefletivoPolicial({
+        cautelaId:
+          colete?.cautela_colete_refletivo_id ||
+          colete?.id,
+        quantidade:
+          colete?.quantidade ||
+          1,
+        user
+      })
+    }
+
+    if (
+      demaisMateriais.length > 0
+    ) {
+      await solicitarDevolucaoCautela({
+        user,
+        itens:
+          demaisMateriais
+      })
+    }
 
     setMensagem(
       'Solicitação de devolução enviada ao setor responsável. Aguarde a conferência e o aceite.'
@@ -3173,7 +3635,8 @@ function alterarQuilometragemDevolucao(chave, valor) {
         <section className="cautela-usuario-lista">
           {cautelas.length === 0 &&
           cargasPermanentesPendentes.length === 0 &&
-          cautelasMunicaoSemCarrinho.length === 0 ? (
+          cautelasMunicaoSemCarrinho.length === 0 &&
+          cautelasColeteRefletivoPendentes.length === 0 ? (
             <div className="cautela-usuario-estado">
               <strong>
                 Nenhum material aguardando seu aceite.
@@ -3184,6 +3647,161 @@ function alterarQuilometragemDevolucao(chave, valor) {
             </div>
           ) : (
             <>
+              {cautelasColeteRefletivoPendentes.map(
+                (cautela) => {
+                  const movimentacaoId =
+                    cautela?.cautela_colete_refletivo_id ||
+                    cautela?.movimentacao_id ||
+                    cautela?.id
+
+                  const chaveProcessamento =
+                    `COLETE_REFLETIVO:${movimentacaoId}`
+
+                  const recebendo =
+                    processando ===
+                    chaveProcessamento
+
+                  const quantidade =
+                    Math.max(
+                      1,
+                      Number(
+                        cautela?.quantidade ||
+                        cautela?.quantidade_total ||
+                        1
+                      ) || 1
+                    )
+
+                  const tamanho =
+                    String(
+                      cautela?.tamanho ||
+                      ''
+                    )
+                      .trim()
+                      .toUpperCase()
+
+                  return (
+                    <article
+                      key={movimentacaoId}
+                      className="cautela-usuario-card"
+                    >
+                      <div className="cautela-usuario-card-topo">
+                        <div>
+                          <span>
+                            CAUTELA • COLETE REFLETIVO
+                          </span>
+
+                          <h2>
+                            Tamanho {tamanho || '—'}
+                          </h2>
+                        </div>
+
+                        <small>
+                          {formatarData(
+                            cautela?.criado_em ||
+                            cautela?.created_at
+                          )}
+                        </small>
+                      </div>
+
+                      <div className="cautela-usuario-carrinho">
+                        <h3>
+                          Material para recebimento
+                        </h3>
+
+                        <article className="cautela-usuario-carrinho-item">
+                          <div className="cautela-usuario-carrinho-info">
+                            <strong>
+                              COLETE REFLETIVO {tamanho}
+                            </strong>
+
+                            <span>
+                              Cautela individual • Origem: COFRE DO SVDD
+                            </span>
+
+                            {cautela?.policial_re && (
+                              <small
+                                style={{
+                                  display: 'block',
+                                  marginTop: '5px'
+                                }}
+                              >
+                                RE vinculado: {cautela.policial_re}
+                              </small>
+                            )}
+
+                            {(cautela?.fim_turno_servico ||
+                              cautela?.metadata?.fim_turno_servico) && (
+                              <small
+                                style={{
+                                  display: 'block',
+                                  marginTop: '5px',
+                                  fontWeight: 700,
+                                  color: turnoVencido({
+                                    fim_turno_servico:
+                                      cautela?.fim_turno_servico ||
+                                      cautela?.metadata?.fim_turno_servico
+                                  })
+                                    ? '#b42318'
+                                    : '#475467'
+                                }}
+                              >
+                                {turnoVencido({
+                                  fim_turno_servico:
+                                    cautela?.fim_turno_servico ||
+                                    cautela?.metadata?.fim_turno_servico
+                                })
+                                  ? `CAUTELA VENCIDA • ${formatarData(
+                                      cautela?.fim_turno_servico ||
+                                      cautela?.metadata?.fim_turno_servico
+                                    )}`
+                                  : `TÉRMINO DO TURNO • ${formatarData(
+                                      cautela?.fim_turno_servico ||
+                                      cautela?.metadata?.fim_turno_servico
+                                    )}`}
+                              </small>
+                            )}
+
+                            {cautela?.observacoes && (
+                              <small
+                                style={{
+                                  display: 'block',
+                                  marginTop: '5px'
+                                }}
+                              >
+                                Observações: {cautela.observacoes}
+                              </small>
+                            )}
+                          </div>
+
+                          <b>
+                            Qtd. {quantidade}
+                          </b>
+                        </article>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="cautela-usuario-primary"
+                        onClick={() =>
+                          receberCautelaColeteRefletivo(
+                            cautela
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            processando
+                          )
+                        }
+                      >
+                        {recebendo
+                          ? 'Confirmando...'
+                          : 'Confirmar recebimento'}
+                      </button>
+                    </article>
+                  )
+                }
+              )}
+
               {cautelasMunicaoSemCarrinho.map(
                 (transferencia) => {
                   const chaveProcessamento =

@@ -145,6 +145,49 @@ function ehCancelavelAguardandoUsuario(item, secao) {
   )
 }
 
+function ehRecebimentoSVDDDevolucao(
+  item,
+  secao
+) {
+  if (!ehRecebimentoUsuario(secao)) {
+    return false
+  }
+
+  const status =
+    normalizarOperacional(
+      item?.status
+    ).replace(/ /g, '_')
+
+  const destino =
+    normalizarOperacional(
+      item?.destino_local ||
+      item?.destino_nome ||
+      item?.destino_codigo
+    )
+
+  const tipo =
+    normalizarOperacional(
+      item?.tipo_movimentacao ||
+      item?.tipo
+    )
+
+  return (
+    status ===
+      'AGUARDANDO_RECEBIMENTO' &&
+    tipo.includes('DEVOLUCAO') &&
+    (
+      destino.includes('SVDD') ||
+      destino.includes(
+        'COFRE DO SVDD'
+      ) ||
+      destino.includes(
+        'SERVICO DE DIA'
+      )
+    )
+  )
+}
+
+
 function ehRecebimentoP4(item, secao) {
   if (!ehRecebimentoUsuario(secao)) return false
 
@@ -1328,6 +1371,366 @@ function detalheItem(item, secao) {
   ].map(texto).filter(Boolean)
 
   return [...new Set(partes)].join(' • ')
+}
+
+
+function registroEhCOP(registro) {
+  const tipo =
+    normalizarOperacional(
+      registro?.tipo_patrimonio ||
+      registro?.tipo ||
+      registro?.categoria ||
+      registro?.modulo ||
+      ''
+    )
+
+  const descricao =
+    normalizarOperacional(
+      registro?.descricao ||
+      ''
+    )
+
+  return (
+    tipo === 'COP' ||
+    descricao.startsWith('COP ')
+  )
+}
+
+
+function resumoEhCOP(registro) {
+  const tipo =
+    normalizarOperacional(
+      registro?.tipo_patrimonio ||
+      registro?.tipo ||
+      registro?.categoria ||
+      registro?.modulo ||
+      registro?.tabela_origem ||
+      ''
+    )
+
+  const descricao =
+    normalizarOperacional(
+      registro?.descricao ||
+      ''
+    )
+
+  return (
+    tipo === 'COP' ||
+    tipo === 'SIGMO_COPS' ||
+    descricao.startsWith('COP ')
+  )
+}
+
+
+async function localizarSuportesCOPDaDevolucao(
+  movimentacao
+) {
+  const itens =
+    Array.isArray(
+      movimentacao?.itens
+    )
+      ? movimentacao.itens
+      : []
+
+  const cops =
+    itens.filter(
+      registroEhCOP
+    )
+
+  if (cops.length === 0) {
+    return {
+      modular: 0,
+      comum: 0
+    }
+  }
+
+  let modular = 0
+  let comum = 0
+
+  for (const cop of cops) {
+    const patrimonioId =
+      cop?.patrimonio_id ||
+      null
+
+    if (!patrimonioId) {
+      continue
+    }
+
+    const {
+      data: itensHistorico,
+      error: itensHistoricoError
+    } = await supabase
+      .from(
+        'sigmo_movimentacao_itens'
+      )
+      .select(
+        'movimentacao_id'
+      )
+      .eq(
+        'patrimonio_id',
+        patrimonioId
+      )
+
+    if (itensHistoricoError) {
+      throw itensHistoricoError
+    }
+
+    const idsMovimentacao = [
+      ...new Set(
+        (itensHistorico || [])
+          .map(
+            (registro) =>
+              registro
+                ?.movimentacao_id
+          )
+          .filter(Boolean)
+          .map(String)
+      )
+    ]
+
+    if (
+      idsMovimentacao.length === 0
+    ) {
+      continue
+    }
+
+    let queryCautela = supabase
+      .from('sigmo_movimentacoes')
+      .select(
+        'id, recebedor_id, created_at'
+      )
+      .in(
+        'id',
+        idsMovimentacao
+      )
+      .eq(
+        'tipo_movimentacao',
+        'CAUTELA'
+      )
+      .eq(
+        'status',
+        'finalizada'
+      )
+
+    if (
+      movimentacao
+        ?.solicitante_id
+    ) {
+      queryCautela =
+        queryCautela.eq(
+          'recebedor_id',
+          movimentacao
+            .solicitante_id
+        )
+    }
+
+    const {
+      data: cautelas,
+      error: cautelasError
+    } = await queryCautela
+      .order(
+        'created_at',
+        { ascending: false }
+      )
+      .limit(1)
+
+    if (cautelasError) {
+      throw cautelasError
+    }
+
+    const cautelaId =
+      cautelas?.[0]?.id ||
+      null
+
+    if (!cautelaId) {
+      continue
+    }
+
+    const {
+      data: vinculoMapa,
+      error: vinculoMapaError
+    } = await supabase
+      .from(
+        'sigmo_mapa_forca_cautelas'
+      )
+      .select(
+        'resumo_itens'
+      )
+      .eq(
+        'movimentacao_principal_id',
+        cautelaId
+      )
+      .order(
+        'created_at',
+        { ascending: false }
+      )
+      .limit(1)
+      .maybeSingle()
+
+    if (vinculoMapaError) {
+      throw vinculoMapaError
+    }
+
+    const resumo =
+      Array.isArray(
+        vinculoMapa?.resumo_itens
+      )
+        ? vinculoMapa
+            .resumo_itens
+        : (
+            typeof vinculoMapa
+              ?.resumo_itens ===
+              'string'
+              ? (() => {
+                  try {
+                    const valor =
+                      JSON.parse(
+                        vinculoMapa
+                          .resumo_itens
+                      )
+
+                    return Array.isArray(
+                      valor
+                    )
+                      ? valor
+                      : []
+                  } catch {
+                    return []
+                  }
+                })()
+              : []
+          )
+
+    const referenciaCOP =
+      cop?.referencia_id ||
+      null
+
+    const registroCOP =
+      resumo.find(
+        (registro) => {
+          if (
+            !resumoEhCOP(
+              registro
+            )
+          ) {
+            return false
+          }
+
+          const patrimonioResumo =
+            String(
+              registro
+                ?.patrimonio_id ||
+              ''
+            )
+
+          const referenciaResumo =
+            String(
+              registro
+                ?.referencia_id ||
+              registro?.id ||
+              ''
+            )
+
+          return (
+            (
+              patrimonioResumo &&
+              patrimonioResumo ===
+                String(
+                  patrimonioId
+                )
+            ) ||
+            (
+              referenciaCOP &&
+              referenciaResumo &&
+              referenciaResumo ===
+                String(
+                  referenciaCOP
+                )
+            )
+          )
+        }
+      )
+
+    if (!registroCOP) {
+      continue
+    }
+
+    if (
+      registroCOP
+        ?.suporte_modular ||
+      registroCOP
+        ?.suportes_cop
+        ?.modular
+    ) {
+      modular += 1
+    }
+
+    if (
+      registroCOP
+        ?.suporte_comum ||
+      registroCOP
+        ?.suportes_cop
+        ?.comum
+    ) {
+      comum += 1
+    }
+  }
+
+  return {
+    modular,
+    comum
+  }
+}
+
+
+async function devolverSuportesCOPAoEstoque({
+  modular = 0,
+  comum = 0
+} = {}) {
+  if (
+    modular <= 0 &&
+    comum <= 0
+  ) {
+    return null
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_cop_suportes_receber_servico',
+    {
+      p_token:
+        token,
+
+      p_quantidade_modular:
+        Math.max(
+          0,
+          Number(modular) || 0
+        ),
+
+      p_quantidade_comum:
+        Math.max(
+          0,
+          Number(comum) || 0
+        )
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
 }
 
 
@@ -4896,6 +5299,73 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     }
   }
 
+  async function receberDevolucaoNoSVDD(
+    item
+  ) {
+    if (
+      !item?.id ||
+      recebendoId
+    ) {
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        'Confirmar o recebimento desta devolução no COFRE DO SVDD?'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setRecebendoId(
+        item.id
+      )
+
+      const suportes =
+        await localizarSuportesCOPDaDevolucao(
+          item
+        )
+
+      await confirmarRecebimentoMovimentacao({
+        movimentacao_id:
+          item.id,
+        recebedor:
+          user,
+        observacao:
+          'Recebimento confirmado pelo SVDD na Central Operacional.'
+      })
+
+      await devolverSuportesCOPAoEstoque(
+        suportes
+      )
+
+      setSelecionado(null)
+      setRegistroAberto(null)
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao confirmar recebimento da devolução no SVDD:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível confirmar o recebimento no SVDD.'
+      )
+    } finally {
+      setRecebendoId(null)
+    }
+  }
+
+
   async function receberNoP4(item) {
     if (!item?.id || recebendoId) return
 
@@ -6331,6 +6801,37 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                             : 'Cancelar movimentação'}
                         </button>
                       )}
+
+                      {ehRecebimentoSVDDDevolucao(
+                        item,
+                        selecionado
+                      ) &&
+                        ehEncarregado(
+                          user
+                        ) && (
+                          <button
+                            type="button"
+                            className="central-button central-button-primary"
+                            disabled={
+                              Boolean(
+                                recebendoId
+                              ) ||
+                              Boolean(
+                                cancelandoId
+                              )
+                            }
+                            onClick={() =>
+                              receberDevolucaoNoSVDD(
+                                item
+                              )
+                            }
+                          >
+                            {recebendoId ===
+                            item.id
+                              ? 'Recebendo...'
+                              : 'Receber'}
+                          </button>
+                        )}
 
                       {ehRecebimentoP4(item, selecionado) && (
                         <button

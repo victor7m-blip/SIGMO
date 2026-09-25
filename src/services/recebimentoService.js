@@ -442,6 +442,22 @@ function obterModuloManutencao(tipo) {
       .trim()
       .toLowerCase()
 
+  const valorNormalizado =
+    valor
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+  if (
+    valorNormalizado === 'colete refletivo' ||
+    valorNormalizado === 'coletes refletivos' ||
+    valorNormalizado === 'sigmo coletes refletivos'
+  ) {
+    return MODULOS_MANUTENCAO.COLETE_REFLETIVO
+  }
+
   if (
     valor === 'arma' ||
     valor === 'armas'

@@ -6,6 +6,7 @@ import {
 } from 'react'
 
 import {
+  cadastrarEstoqueTorniquetes,
   listarTorniquetes
 } from '../../services/torniquetesService'
 
@@ -313,6 +314,135 @@ function Campo({
       <span>{label}</span>
       {children}
     </label>
+  )
+}
+
+
+function CadastroTorniqueteModal({
+  user,
+  onClose,
+  onSalvo
+}) {
+  const [quantidade, setQuantidade] =
+    useState('')
+
+  const [salvando, setSalvando] =
+    useState(false)
+
+  const [erro, setErro] =
+    useState('')
+
+  async function salvar(event) {
+    event.preventDefault()
+
+    const quantidadeFinal =
+      numero(quantidade)
+
+    if (quantidadeFinal <= 0) {
+      setErro(
+        'Informe uma quantidade maior que zero.'
+      )
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErro('')
+
+      await cadastrarEstoqueTorniquetes({
+        quantidade:
+          quantidadeFinal,
+        user
+      })
+
+      await onSalvo?.(
+        `Estoque inicial de ${quantidadeFinal} torniquete(s) cadastrado no Cofre do P4.`
+      )
+
+      onClose?.()
+    } catch (error) {
+      setErro(
+        error?.message ||
+        'Não foi possível cadastrar o estoque inicial de torniquetes.'
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <Modal
+      titulo="Cadastrar Torniquete"
+      subtitulo="Cadastrar o estoque inicial de torniquetes no Cofre do P4."
+      onClose={onClose}
+    >
+      <form onSubmit={salvar}>
+        <div className="torniquete-form-grid">
+          <Campo label="MATERIAL">
+            <input
+              className="torniquete-input torniquete-input-readonly"
+              value="TORNIQUETE"
+              readOnly
+            />
+          </Campo>
+
+          <Campo label="LOCAL INICIAL">
+            <input
+              className="torniquete-input torniquete-input-readonly"
+              value="COFRE DO P4"
+              readOnly
+            />
+          </Campo>
+
+          <Campo label="QUANTIDADE INICIAL">
+            <input
+              autoFocus
+              className="torniquete-input"
+              type="number"
+              min="1"
+              step="1"
+              value={quantidade}
+              onChange={(event) =>
+                setQuantidade(
+                  event.target.value
+                )
+              }
+              placeholder="Ex.: 20"
+            />
+          </Campo>
+        </div>
+
+        {erro && (
+          <div className="torniquete-alert torniquete-alert-error">
+            {erro}
+          </div>
+        )}
+
+        <footer className="torniquete-modal-actions">
+          <button
+            type="button"
+            className="torniquete-btn-secondary"
+            onClick={onClose}
+            disabled={salvando}
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="submit"
+            className="torniquete-btn-primary"
+            disabled={
+              salvando ||
+              numero(quantidade) <= 0
+            }
+          >
+            {salvando
+              ? 'Cadastrando...'
+              : 'Criar estoque'}
+          </button>
+        </footer>
+      </form>
+    </Modal>
   )
 }
 
@@ -1694,6 +1824,11 @@ export default function Torniquete({
     useState('')
 
   const [
+    cadastroAberto,
+    setCadastroAberto
+  ] = useState(false)
+
+  const [
     transferenciaAberta,
     setTransferenciaAberta
   ] = useState(false)
@@ -2201,16 +2336,16 @@ export default function Torniquete({
               </span>
 
               <h2>
-                Movimentações de torniquetes
+                Movimentações patrimoniais
               </h2>
             </div>
           </div>
 
           <div className="torniquete-operation-groups">
             <GrupoOperacao
-              icone="📦"
-              titulo="Saídas e movimentações"
-              descricao="Distribuição e movimentação de torniquetes."
+              icone="↔️"
+              titulo="Movimentação interna"
+              descricao="Transferências entre o Cofre do P4 e o Cofre do SVDD."
             >
               <button
                 type="button"
@@ -2225,14 +2360,87 @@ export default function Torniquete({
               >
                 <strong>
                   {visaoP4
-                    ? 'Transferir torniquete'
+                    ? 'Transferir para SVDD'
                     : 'Devolver ao P4'}
                 </strong>
 
                 <span>
                   {visaoP4
-                    ? 'Informar quantidade e transferir ao SVDD'
-                    : 'Informar quantidade e devolver ao P4'}
+                    ? 'Informar a quantidade e encaminhar torniquetes ao Cofre do SVDD'
+                    : 'Informar a quantidade e encaminhar torniquetes ao Cofre do P4'}
+                </span>
+              </button>
+            </GrupoOperacao>
+
+            <GrupoOperacao
+              icone="📥"
+              titulo="Entradas e recebimentos"
+              descricao="Entrada, cadastro e retorno de torniquetes."
+            >
+              {visaoP4 && (
+                <button
+                  type="button"
+                  disabled={
+                    estoque.length > 0
+                  }
+                  onClick={() =>
+                    setCadastroAberto(
+                      true
+                    )
+                  }
+                >
+                  <strong>
+                    Cadastrar Torniquete
+                  </strong>
+
+                  <span>
+                    {estoque.length > 0
+                      ? 'O estoque inicial de torniquetes já está cadastrado'
+                      : 'Cadastrar o estoque inicial de torniquetes no Cofre do P4'}
+                  </span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setRecebimentoAberto(
+                    true
+                  )
+                }
+              >
+                <strong>
+                  {visaoP4
+                    ? 'Receber do SVDD'
+                    : 'Receber do P4'}
+                </strong>
+
+                <span>
+                  {visaoP4
+                    ? 'Confirmar torniquetes devolvidos pelo SVDD ao Cofre do P4'
+                    : 'Confirmar torniquetes enviados pelo P4 ao Cofre do SVDD'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  visaoP4
+                    ? totalManutencaoP4 <= 0
+                    : totalManutencaoSvdd <= 0
+                }
+                onClick={() =>
+                  setRetornoManutencaoAberto(
+                    true
+                  )
+                }
+              >
+                <strong>
+                  Receber manutenção
+                </strong>
+
+                <span>
+                  Registrar o serviço executado e o retorno do material
                 </span>
               </button>
             </GrupoOperacao>
@@ -2240,7 +2448,7 @@ export default function Torniquete({
             <GrupoOperacao
               icone="🛠️"
               titulo="Condição do material"
-              descricao="Manutenção e recolhimento de torniquetes."
+              descricao="Manutenção e encaminhamento de torniquetes."
             >
               <button
                 type="button"
@@ -2263,58 +2471,8 @@ export default function Torniquete({
 
                 <span>
                   {visaoP4
-                    ? 'Registrar torniquete avariado, deteriorado ou impróprio para uso sob responsabilidade do P4'
-                    : `${totalManutencaoSvdd} torniquete(s) em manutenção no SVDD • envie uma, várias ou todas ao P4`}
-                </span>
-              </button>
-            </GrupoOperacao>
-
-            <GrupoOperacao
-              icone="📥"
-              titulo="Entradas e recebimentos"
-              descricao="Entrada e confirmação de transferências de torniquetes."
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  setRecebimentoAberto(
-                    true
-                  )
-                }
-              >
-                <strong>
-                  {visaoP4
-                    ? 'Receber do SVDD'
-                    : 'Receber do P4'}
-                </strong>
-
-                <span>
-                  {visaoP4
-                    ? 'Confirmar torniquetes devolvidos pelo SVDD'
-                    : 'Confirmar torniquetes enviados pelo P4'}
-                </span>
-              </button>
-
-
-              <button
-                type="button"
-                disabled={
-                  visaoP4
-                    ? totalManutencaoP4 <= 0
-                    : totalManutencaoSvdd <= 0
-                }
-                onClick={() =>
-                  setRetornoManutencaoAberto(
-                    true
-                  )
-                }
-              >
-                <strong>
-                  Receber manutenção
-                </strong>
-
-                <span>
-                  Visualizar torniquetes em reparo e registrar o retorno
+                    ? 'Registrar torniquete avariado, deteriorado ou impróprio para uso'
+                    : `${totalManutencaoSvdd} torniquete(s) em manutenção no SVDD • encaminhar ao P4`}
                 </span>
               </button>
             </GrupoOperacao>
@@ -2428,6 +2586,20 @@ export default function Torniquete({
           </div>
         )}
       </section>
+
+      {cadastroAberto && (
+        <CadastroTorniqueteModal
+          user={user}
+          onClose={() =>
+            setCadastroAberto(
+              false
+            )
+          }
+          onSalvo={
+            aposAlteracao
+          }
+        />
+      )}
 
       {transferenciaAberta && (
         <TransferenciaTorniqueteModal

@@ -103,6 +103,119 @@ function ehViaturaMapa(item) {
 }
 
 
+function ehColeteRefletivoMapa(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tipo_material,
+    item?.tabela_origem
+  ].map(normalizarEquipamento)
+
+  const descricao =
+    normalizarEquipamento(
+      item?.descricao
+    )
+
+  return (
+    Boolean(
+      item?.colete_refletivo_id
+    ) ||
+    campos.includes(
+      'COLETE REFLETIVO'
+    ) ||
+    campos.includes(
+      'COLETE_REFLETIVO'
+    ) ||
+    campos.includes(
+      'SIGMO_COLETES_REFLETIVOS'
+    ) ||
+    descricao.startsWith(
+      'COLETE REFLETIVO'
+    )
+  )
+}
+
+
+function ehHTMapa(item) {
+  const campos = [
+    item?.modulo,
+    item?.categoria,
+    item?.tipo,
+    item?.tipo_patrimonio,
+    item?.tipo_material,
+    item?.tabela_origem,
+    item?.descricao
+  ].map(normalizarEquipamento)
+
+  return (
+    campos.includes('HT') ||
+    campos.includes('HTS') ||
+    campos.includes('SIGMO_HTS') ||
+    campos.some(
+      (valor) =>
+        valor === 'RADIO' ||
+        valor === 'RÁDIO' ||
+        valor.startsWith('HT ') ||
+        valor.includes(' RADIO ') ||
+        valor.includes(' RÁDIO ')
+    )
+  )
+}
+
+
+async function sincronizarHTsCauteladosMapa(
+  itens = [],
+  unidade = null
+) {
+  const hts =
+    (itens || []).filter(
+      ehHTMapa
+    )
+
+  for (const item of hts) {
+    const htId =
+      item?.referencia_id ||
+      item?.ht_id ||
+      null
+
+    if (!htId) {
+      continue
+    }
+
+    const payload = {
+      status:
+        'EM_SERVICO',
+      status_operacional:
+        'EM_SERVICO',
+      local_atual:
+        'CAUTELA INDIVIDUAL',
+      equipe_vinculada:
+        unidade?.prefixo ||
+        null,
+      viatura_vinculada:
+        unidade?.viatura?.prefixo ||
+        unidade?.viatura?.patrimonio ||
+        null,
+      atualizado_em:
+        new Date().toISOString()
+    }
+
+    const {
+      error
+    } = await supabase
+      .from('sigmo_hts')
+      .update(payload)
+      .eq('id', htId)
+
+    if (error) {
+      throw error
+    }
+  }
+}
+
+
 function ehMunicaoMapa(item) {
   const campos = [
     item?.modulo,
@@ -452,10 +565,18 @@ async function resolverPatrimonioPreparadoMapa(
     return item.patrimonio_id
   }
 
-  if (
-    !item?.controla_quantidade ||
-    !item?.tonfa_id
-  ) {
+  if (!item?.controla_quantidade) {
+    return null
+  }
+
+  const referenciaId =
+    item?.tonfa_id ||
+    item?.torniquete_id ||
+    item?.referencia_id ||
+    item?.id ||
+    null
+
+  if (!referenciaId) {
     return null
   }
 
@@ -464,30 +585,34 @@ async function resolverPatrimonioPreparadoMapa(
     error
   } = await supabase
     .from('sigmo_patrimonios')
-    .select('id')
-    .eq('tipo', 'tonfa')
+    .select('id, tipo, referencia_id')
     .eq(
       'referencia_id',
-      item.tonfa_id
+      referenciaId
     )
     .eq('ativo', true)
-    .maybeSingle()
+    .limit(1)
 
   if (error) {
     throw error
   }
 
-  if (!data?.id) {
+  const patrimonio =
+    Array.isArray(data)
+      ? data[0]
+      : data
+
+  if (!patrimonio?.id) {
     throw new Error(
       `O patrimônio central de ${
         item?.descricao ||
         item?.categoria ||
-        'Tonfa/Cassetete'
+        'material quantitativo'
       } não foi localizado.`
     )
   }
 
-  return data.id
+  return patrimonio.id
 }
 
 async function prepararItensPatrimoniaisMapa(
@@ -525,26 +650,62 @@ async function prepararItensPatrimoniaisMapa(
         ),
       observacao:
         item?.controla_quantidade
-          ? JSON.stringify({
-              tipo_registro:
-                'TONFA_QUANTIDADE',
-              tonfa_id:
-                item?.tonfa_id ||
-                item?.referencia_id ||
-                null,
-              categoria:
-                item?.categoria ||
-                item?.tipo ||
-                null,
-              quantidade:
-                Math.max(
-                  1,
-                  Number(
-                    item?.quantidade ||
-                    1
-                  ) || 1
+          ? (() => {
+              const categoria =
+                String(
+                  item?.categoria ||
+                  item?.tipo ||
+                  item?.modulo ||
+                  ''
                 )
-            })
+                  .trim()
+                  .toUpperCase()
+
+              const ehTorniquete =
+                categoria ===
+                  'TORNIQUETE' ||
+                Boolean(
+                  item?.torniquete_id
+                )
+
+              return JSON.stringify({
+                tipo_registro:
+                  ehTorniquete
+                    ? 'TORNIQUETE_QUANTIDADE'
+                    : 'TONFA_QUANTIDADE',
+
+                ...(
+                  ehTorniquete
+                    ? {
+                        torniquete_id:
+                          item?.torniquete_id ||
+                          item?.referencia_id ||
+                          item?.id ||
+                          null
+                      }
+                    : {
+                        tonfa_id:
+                          item?.tonfa_id ||
+                          item?.referencia_id ||
+                          null
+                      }
+                ),
+
+                categoria:
+                  item?.categoria ||
+                  item?.tipo ||
+                  null,
+
+                quantidade:
+                  Math.max(
+                    1,
+                    Number(
+                      item?.quantidade ||
+                      1
+                    ) || 1
+                  )
+              })
+            })()
           : (
               item?.observacao ||
               ''
@@ -748,6 +909,11 @@ async function efetivarMateriaisPreparadosMapa({
       ehMunicaoMapa
     )
 
+  const coletesRefletivos =
+    itens.filter(
+      ehColeteRefletivoMapa
+    )
+
   /*
    * A viatura é um item especial do serviço:
    * ela participa do vínculo do Mapa Força / Receber Material,
@@ -762,7 +928,8 @@ async function efetivarMateriaisPreparadosMapa({
     itens.filter(
       (item) =>
         !ehMunicaoMapa(item) &&
-        !ehViaturaMapa(item)
+        !ehViaturaMapa(item) &&
+        !ehColeteRefletivoMapa(item)
     )
 
   if (municoes.length > 0) {
@@ -863,6 +1030,11 @@ async function efetivarMateriaisPreparadosMapa({
       resultado?.movimentacaoId ||
       null
 
+    await sincronizarHTsCauteladosMapa(
+      patrimoniais,
+      unidade
+    )
+
     if (
       !movimentacaoPrincipalId &&
       municoes.length > 0
@@ -930,6 +1102,84 @@ async function efetivarMateriaisPreparadosMapa({
     )
   }
 
+  for (const item of coletesRefletivos) {
+    const coleteRefletivoId =
+      item?.colete_refletivo_id ||
+      item?.referencia_id ||
+      item?.id ||
+      null
+
+    if (!coleteRefletivoId) {
+      throw new Error(
+        `Não foi possível identificar ${
+          item?.descricao ||
+          'o Colete Refletivo'
+        } para a cautela.`
+      )
+    }
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          item?.quantidade ||
+          1
+        ) || 1
+      )
+
+    const policialRe =
+      String(
+        policial?.re ||
+        policial?.policial_re ||
+        ''
+      )
+        .replace(/\D/g, '')
+        .slice(0, 6)
+
+    const policialNome =
+      nomePolicial(policial) ||
+      nomeUsuario(policial)
+
+    const registradoPorId =
+      user?.id ||
+      user?.user_id ||
+      user?.usuario_id ||
+      null
+
+    const registradoPorNome =
+      nomeUsuario(user)
+
+    const {
+      error: erroColete
+    } = await supabase.rpc(
+      'sigmo_colete_refletivo_cautelar',
+      {
+        p_colete_refletivo_id:
+          coleteRefletivoId,
+        p_quantidade:
+          quantidade,
+        p_policial_id:
+          policial.id,
+        p_policial_re:
+          policialRe || null,
+        p_policial_nome:
+          policialNome || null,
+        p_fim_turno_servico:
+          fimTurnoServico,
+        p_registrado_por_id:
+          registradoPorId,
+        p_registrado_por_nome:
+          registradoPorNome || null,
+        p_observacoes:
+          observacoes || null
+      }
+    )
+
+    if (erroColete) {
+      throw erroColete
+    }
+  }
+
   return {
     movimentacaoPrincipalId,
     transferenciasMunicaoIds:
@@ -952,6 +1202,7 @@ async function efetivarMateriaisPreparadosMapa({
         : [
             ...patrimoniais,
             ...municoes,
+            ...coletesRefletivos,
             ...viaturas
           ],
     quantidadeItens:

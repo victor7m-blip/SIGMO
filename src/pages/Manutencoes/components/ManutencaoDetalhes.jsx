@@ -152,6 +152,11 @@ if (!manutencao) return null
 
   const ativa = manutencao.status === STATUS_MANUTENCAO.EM_MANUTENCAO
 
+  const moduloNormalizado = normalizarComparacao(manutencao.modulo)
+    .replaceAll('_', ' ')
+
+  const coleteRefletivo = moduloNormalizado === 'COLETE REFLETIVO'
+
   const statusExterno = String(
     historicoExterno?.status || ''
   ).trim().toUpperCase()
@@ -205,6 +210,12 @@ if (!manutencao) return null
   const novidadeRealUsuario =
     novidadeAutomatica ? null : novidadeUsuario
 
+  const descricaoEntradaDuplicadaNoColete =
+    coleteRefletivo &&
+    Boolean(novidadeRealUsuario?.descricao) &&
+    normalizarComparacao(novidadeRealUsuario.descricao) ===
+      normalizarComparacao(manutencao.descricao)
+
   const observacoesSeparadas =
     separarObservacoesManutencao(manutencao.observacoes)
 
@@ -252,6 +263,9 @@ if (!manutencao) return null
               {manutencao.tipo_material || 'Material'}
               {(manutencao.numero_serie || manutencao.patrimonio) && (
                 <> · {manutencao.numero_serie || manutencao.patrimonio}</>
+              )}
+              {coleteRefletivo && manutencao.tamanho && (
+                <> · TAM {manutencao.tamanho}</>
               )}
             </h2>
             {(manutencao.marca || manutencao.modelo || manutencao.calibre) && (
@@ -311,7 +325,7 @@ if (!manutencao) return null
                 marginBottom: '16px'
               }}
             >
-              <h3>Novidade registrada pelo usuário</h3>
+              <h3>{coleteRefletivo ? 'Novidade do Colete Refletivo' : 'Novidade registrada pelo usuário'}</h3>
 
               <p>
                 <strong>
@@ -391,7 +405,7 @@ if (!manutencao) return null
               marginBottom: '16px'
             }}
           >
-            <h3>Providência / entrada em manutenção pelo SVDD</h3>
+            <h3>{coleteRefletivo ? 'Entrada em manutenção' : 'Providência / entrada em manutenção pelo SVDD'}</h3>
 
             <p>
               <strong>
@@ -401,10 +415,12 @@ if (!manutencao) return null
               </strong>
             </p>
 
-            <p style={{ marginTop: '8px' }}>
-              {manutencao.descricao ||
-                'Nenhuma descrição registrada.'}
-            </p>
+            {!descricaoEntradaDuplicadaNoColete && (
+              <p style={{ marginTop: '8px' }}>
+                {manutencao.descricao ||
+                  'Nenhuma descrição registrada.'}
+              </p>
+            )}
 
             <p style={{ marginTop: '8px', fontSize: '13px' }}>
               <strong>Registrado por:</strong>{' '}
@@ -665,6 +681,9 @@ if (!manutencao) return null
               </strong>
             </div>
             <div><span>Quantidade</span><strong>{manutencao.quantidade || 1}</strong></div>
+            {coleteRefletivo && manutencao.tamanho && (
+              <div><span>Tamanho</span><strong>{manutencao.tamanho}</strong></div>
+            )}
             <div><span>Policial</span><strong>{manutencao.policial_nome || 'Não vinculado'}</strong></div>
             <div><span>RE</span><strong>{manutencao.policial_re || 'Não informado'}</strong></div>
             <div><span>Registrada em</span><strong>{dataHora(manutencao.registrada_em || manutencao.created_at)}</strong></div>
@@ -705,11 +724,11 @@ if (!manutencao) return null
 
           {(manutencaoInternaAtiva || podeRegistrarRetornoExterno) && (
             <label className="manutencao-observacoes-finais">
-              <span>Observações finais</span>
+              <span>{coleteRefletivo ? 'Conclusão da manutenção' : 'Observações finais'}</span>
               <textarea
                 rows="4"
                 value={observacoes}
-                placeholder="Informe o serviço executado, condição final ou motivo do cancelamento."
+                placeholder={coleteRefletivo ? 'Informe o que foi feito ou a condição final do colete.' : 'Informe o serviço executado, condição final ou motivo do cancelamento.'}
                 onChange={(event) => setObservacoes(event.target.value.toUpperCase())}
               />
             </label>

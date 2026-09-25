@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { loadSessionToken } from './authService'
 
 import {
   criarOuAtualizarPatrimonio,
@@ -11,6 +12,40 @@ import {
 } from './manutencoesService'
 
 const TABLE = 'sigmo_cops'
+const TABLE_SUPORTES = 'sigmo_cop_suportes'
+
+export const TIPOS_SUPORTE_COP = {
+  MODULAR: 'MODULAR',
+  COMUM: 'COMUM'
+}
+
+function obterTokenSessaoCOP() {
+  const token = loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada.'
+    )
+  }
+
+  return token
+}
+
+function normalizarQuantidadeSuporte(valor) {
+  const quantidade =
+    Number(valor)
+
+  if (
+    !Number.isInteger(quantidade) ||
+    quantidade < 0
+  ) {
+    throw new Error(
+      'A quantidade de suportes deve ser um número inteiro maior ou igual a zero.'
+    )
+  }
+
+  return quantidade
+}
 
 const STATUS_VALIDOS = new Set([
   'RESERVA',
@@ -253,6 +288,216 @@ function aplicarEstadoPatrimonialCOP(
       null
   }
 }
+
+export async function listarSuportesCOP() {
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_cop_suportes_listar',
+    {
+      p_token:
+        obterTokenSessaoCOP()
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return Array.isArray(data)
+    ? data.map((item) => ({
+        ...item,
+        tipo:
+          normalizarMaiusculo(
+            item?.tipo
+          ),
+        quantidade_total:
+          Number(
+            item?.quantidade_total ||
+            0
+          ),
+        quantidade_disponivel:
+          Number(
+            item?.quantidade_disponivel ||
+            0
+          ),
+        quantidade_em_servico:
+          Number(
+            item?.quantidade_em_servico ||
+            0
+          ),
+        ativo:
+          item?.ativo !== false
+      }))
+    : []
+}
+
+
+export async function cadastrarSuportesCOP({
+  modular = 0,
+  comum = 0
+} = {}) {
+  const quantidadeModular =
+    normalizarQuantidadeSuporte(
+      modular
+    )
+
+  const quantidadeComum =
+    normalizarQuantidadeSuporte(
+      comum
+    )
+
+  if (
+    quantidadeModular === 0 &&
+    quantidadeComum === 0
+  ) {
+    throw new Error(
+      'Informe ao menos uma quantidade de suporte para cadastrar.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_cop_suportes_cadastrar',
+    {
+      p_token:
+        obterTokenSessaoCOP(),
+      p_quantidade_modular:
+        quantidadeModular,
+      p_quantidade_comum:
+        quantidadeComum
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+export async function movimentarSuportesCOPParaServico({
+  modular = 0,
+  comum = 0
+} = {}) {
+  const quantidadeModular =
+    normalizarQuantidadeSuporte(
+      modular
+    )
+
+  const quantidadeComum =
+    normalizarQuantidadeSuporte(
+      comum
+    )
+
+  if (
+    quantidadeModular === 0 &&
+    quantidadeComum === 0
+  ) {
+    return {
+      sucesso: true,
+      modular: 0,
+      comum: 0
+    }
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_cop_suportes_pagar_servico',
+    {
+      p_token:
+        obterTokenSessaoCOP(),
+
+      p_quantidade_modular:
+        quantidadeModular,
+
+      p_quantidade_comum:
+        quantidadeComum
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+export async function obterResumoSuportesCOP() {
+  const itens =
+    await listarSuportesCOP()
+
+  const resumo = {
+    modular: {
+      total: 0,
+      disponivel: 0,
+      emServico: 0
+    },
+    comum: {
+      total: 0,
+      disponivel: 0,
+      emServico: 0
+    },
+    total: 0,
+    disponivel: 0,
+    emServico: 0
+  }
+
+  for (const item of itens) {
+    const chave =
+      item.tipo ===
+        TIPOS_SUPORTE_COP.MODULAR
+        ? 'modular'
+        : item.tipo ===
+            TIPOS_SUPORTE_COP.COMUM
+          ? 'comum'
+          : null
+
+    if (!chave) {
+      continue
+    }
+
+    resumo[chave].total +=
+      Number(
+        item.quantidade_total ||
+        0
+      )
+
+    resumo[chave].disponivel +=
+      Number(
+        item.quantidade_disponivel ||
+        0
+      )
+
+    resumo[chave].emServico +=
+      Number(
+        item.quantidade_em_servico ||
+        0
+      )
+  }
+
+  resumo.total =
+    resumo.modular.total +
+    resumo.comum.total
+
+  resumo.disponivel =
+    resumo.modular.disponivel +
+    resumo.comum.disponivel
+
+  resumo.emServico =
+    resumo.modular.emServico +
+    resumo.comum.emServico
+
+  return resumo
+}
+
 
 export async function listarCOPs({
   filtros = {},

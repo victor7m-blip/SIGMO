@@ -56,6 +56,63 @@ function numeroInteiro(valor) {
   )
 }
 
+function obterLocalRealPorSaldos(item = {}) {
+  const p4 =
+    numeroInteiro(item.quantidade_p4)
+
+  const svdd =
+    numeroInteiro(item.quantidade_svdd)
+
+  const emServico =
+    numeroInteiro(item.quantidade_em_servico)
+
+  const manutencao =
+    numeroInteiro(item.quantidade_manutencao)
+
+  const locais = []
+
+  if (p4 > 0) {
+    locais.push(
+      p4 === 1
+        ? 'COFRE DO P4'
+        : `${p4} NO COFRE DO P4`
+    )
+  }
+
+  if (svdd > 0) {
+    locais.push(
+      svdd === 1
+        ? 'COFRE DO SVDD'
+        : `${svdd} NO COFRE DO SVDD`
+    )
+  }
+
+  if (emServico > 0) {
+    locais.push(
+      emServico === 1
+        ? 'MATERIAL EM SERVIÇO'
+        : `${emServico} EM SERVIÇO`
+    )
+  }
+
+  if (manutencao > 0) {
+    locais.push(
+      manutencao === 1
+        ? 'MANUTENÇÃO'
+        : `${manutencao} EM MANUTENÇÃO`
+    )
+  }
+
+  if (locais.length > 0) {
+    return locais.join(' • ')
+  }
+
+  return (
+    texto(item.local_atual) ||
+    null
+  )
+}
+
 function normalizarTonfa(item = {}) {
   const quantidade =
     numeroInteiro(
@@ -143,8 +200,17 @@ const quantidadeManutencao =
       'RESERVA',
 
     local_atual:
-      texto(item.local_atual) ||
-      null,
+      obterLocalRealPorSaldos({
+        ...item,
+        quantidade_p4:
+          quantidadeP4,
+        quantidade_svdd:
+          quantidadeSvdd,
+        quantidade_em_servico:
+          quantidadeEmServico,
+        quantidade_manutencao:
+          quantidadeManutencao
+      }),
 
     observacoes:
       texto(item.observacoes) ||
@@ -260,23 +326,22 @@ function prepararPayloadAtualizacao(
 }
 
 function localPatrimonial(item) {
-  if (item.local_atual) {
-    return item.local_atual
-  }
+  const localPorSaldos =
+    obterLocalRealPorSaldos(item)
 
   if (
-    item.quantidade_em_servico > 0
+    numeroInteiro(item.quantidade_p4) > 0 ||
+    numeroInteiro(item.quantidade_svdd) > 0 ||
+    numeroInteiro(item.quantidade_em_servico) > 0 ||
+    numeroInteiro(item.quantidade_manutencao) > 0
   ) {
-    return 'MATERIAIS EM SERVIÇO'
+    return localPorSaldos
   }
 
-  if (
-    item.quantidade_svdd > 0
-  ) {
-    return 'COFRE DO SVDD'
-  }
-
-  return 'P4'
+  return (
+    texto(item.local_atual) ||
+    'COFRE DO P4'
+  )
 }
 
 function gerarQrCode(tipo) {
@@ -350,32 +415,20 @@ function obterStatusEstoque({
 function obterLocalEstoque({
   quantidadeP4,
   quantidadeSvdd,
-  quantidadeEmServico
+  quantidadeEmServico,
+  quantidadeManutencao = 0
 }) {
-  const locais = []
-
-  if (quantidadeP4 > 0) {
-    locais.push(
-      `${quantidadeP4} no P4`
-    )
-  }
-
-  if (quantidadeSvdd > 0) {
-    locais.push(
-      `${quantidadeSvdd} no Cofre do SVDD`
-    )
-  }
-
-  if (
-    quantidadeEmServico > 0
-  ) {
-    locais.push(
-      `${quantidadeEmServico} em serviço`
-    )
-  }
-
   return (
-    locais.join(' • ') ||
+    obterLocalRealPorSaldos({
+      quantidade_p4:
+        quantidadeP4,
+      quantidade_svdd:
+        quantidadeSvdd,
+      quantidade_em_servico:
+        quantidadeEmServico,
+      quantidade_manutencao:
+        quantidadeManutencao
+    }) ||
     'SEM LOCAL DEFINIDO'
   )
 }
@@ -513,7 +566,12 @@ const manutencao =
         svdd,
 
       quantidadeEmServico:
-        emServico
+        emServico,
+
+      quantidadeManutencao:
+        manutencao === null
+          ? 0
+          : manutencao
     })
 
   const dadosAtualizacao = {

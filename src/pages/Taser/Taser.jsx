@@ -132,6 +132,210 @@ function normalizar(valor) {
     .toUpperCase()
 }
 
+async function enriquecerTasersComPatrimonio(lista = []) {
+  const idsTasers =
+    (lista || [])
+      .map((item) => item?.id)
+      .filter(Boolean)
+
+  if (idsTasers.length === 0) {
+    return []
+  }
+
+  const {
+    data: patrimonios,
+    error
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select(
+      'id, referencia_id, status, local_atual, responsavel_atual_id, responsavel_atual_nome, ativo'
+    )
+    .eq('tipo', 'taser')
+    .in('referencia_id', idsTasers)
+
+  if (error) {
+    throw error
+  }
+
+  const patrimoniosPorReferencia =
+    new Map(
+      (patrimonios || []).map(
+        (patrimonio) => [
+          String(
+            patrimonio.referencia_id
+          ),
+          patrimonio
+        ]
+      )
+    )
+
+  return (lista || []).map((taser) => {
+    const patrimonio =
+      patrimoniosPorReferencia.get(
+        String(taser?.id || '')
+      )
+
+    if (!patrimonio) {
+      return taser
+    }
+
+    return {
+      ...taser,
+
+      status_operacional:
+        patrimonio.status ||
+        taser.status_operacional,
+
+      local_atual:
+        patrimonio.local_atual ||
+        taser.local_atual,
+
+      responsavel_atual_id:
+        patrimonio.responsavel_atual_id ||
+        null,
+
+      responsavel_atual_nome:
+        patrimonio.responsavel_atual_nome ||
+        null,
+
+      patrimonio_central_id:
+        patrimonio.id
+    }
+  })
+}
+
+
+async function listarTaserIdsCautelaSVDD() {
+  const {
+    data: movimentacoes,
+    error: erroMovimentacoes
+  } = await supabase
+    .from('sigmo_movimentacoes')
+    .select('id')
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .ilike('origem_local', '%SVDD%')
+    .order('created_at', {
+      ascending: false
+    })
+    .limit(1000)
+
+  if (erroMovimentacoes) {
+    throw erroMovimentacoes
+  }
+
+  const movimentacaoIds =
+    (movimentacoes || [])
+      .map((item) => item?.id)
+      .filter(Boolean)
+
+  if (movimentacaoIds.length === 0) {
+    return new Set()
+  }
+
+  const {
+    data: itens,
+    error: erroItens
+  } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select('patrimonio_id')
+    .in(
+      'movimentacao_id',
+      movimentacaoIds
+    )
+
+  if (erroItens) {
+    throw erroItens
+  }
+
+  const patrimonioIds = [
+    ...new Set(
+      (itens || [])
+        .map(
+          (item) =>
+            item?.patrimonio_id
+        )
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (patrimonioIds.length === 0) {
+    return new Set()
+  }
+
+  const {
+    data: patrimonios,
+    error: erroPatrimonios
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select('referencia_id')
+    .in('id', patrimonioIds)
+    .eq('tipo', 'taser')
+
+  if (erroPatrimonios) {
+    throw erroPatrimonios
+  }
+
+  return new Set(
+    (patrimonios || [])
+      .map(
+        (item) =>
+          item?.referencia_id
+      )
+      .filter(Boolean)
+      .map(String)
+  )
+}
+
+
+function taserPertenceAoEscopoSVDD(
+  taser,
+  idsCautelaSVDD = new Set()
+) {
+  const status =
+    normalizar(
+      taser?.status_operacional ||
+      taser?.status
+    )
+
+  const local =
+    normalizar(
+      taser?.local_atual
+    )
+
+  if (
+    local.includes('SVDD') ||
+    local.includes('SERVICO DE DIA')
+  ) {
+    return true
+  }
+
+  if (
+    (
+      status.includes('CAUTELA') ||
+      status === 'EM_SERVICO'
+    ) &&
+    idsCautelaSVDD.has(
+      String(taser?.id || '')
+    )
+  ) {
+    return true
+  }
+
+  if (
+    status === 'MANUTENCAO' &&
+    (
+      local.includes('SVDD') ||
+      local.includes('SERVICO DE DIA')
+    )
+  ) {
+    return true
+  }
+
+  return false
+}
+
+
 function resumirTasers(lista = [], manutencoesExternas = []) {
   const idsExternos = new Set(
     (manutencoesExternas || [])
@@ -486,91 +690,60 @@ export default function Taser({ user }) {
           status_operacional: filtros.status_operacional,
           unidade: filtros.unidade
         },
-        pagina,
-        limite: LIMITE,
+        pagina:
+          ehPerfilSVDD
+            ? 1
+            : pagina,
+        limite:
+          ehPerfilSVDD
+            ? LIMITE_RESUMO
+            : LIMITE,
         sortBy,
         sortDirection
       })
 
-      const listaTasers =
-        resultado.data || []
+      const listaEnriquecida =
+        await enriquecerTasersComPatrimonio(
+          resultado.data || []
+        )
 
-      const idsTasers =
-        listaTasers
-          .map((item) => item?.id)
-          .filter(Boolean)
+      if (ehPerfilSVDD) {
+        const idsCautelaSVDD =
+          await listarTaserIdsCautelaSVDD()
 
-      let patrimoniosPorReferencia =
-        new Map()
-
-      if (idsTasers.length > 0) {
-        const {
-          data: patrimonios,
-          error: patrimoniosError
-        } = await supabase
-          .from('sigmo_patrimonios')
-          .select(
-            'id, referencia_id, status, local_atual, responsavel_atual_id, responsavel_atual_nome, ativo'
+        const listaSVDD =
+          listaEnriquecida.filter(
+            (taser) =>
+              taserPertenceAoEscopoSVDD(
+                taser,
+                idsCautelaSVDD
+              )
           )
-          .eq('tipo', 'taser')
-          .in('referencia_id', idsTasers)
 
-        if (patrimoniosError) {
-          throw patrimoniosError
-        }
+        const inicio =
+          (pagina - 1) * LIMITE
 
-        patrimoniosPorReferencia =
-          new Map(
-            (patrimonios || []).map(
-              (patrimonio) => [
-                String(
-                  patrimonio.referencia_id
-                ),
-                patrimonio
-              ]
-            )
+        setTasers(
+          listaSVDD.slice(
+            inicio,
+            inicio + LIMITE
           )
+        )
+
+        setTotal(
+          listaSVDD.length
+        )
+
+        return
       }
 
       setTasers(
-        listaTasers.map((taser) => {
-          const patrimonio =
-            patrimoniosPorReferencia.get(
-              String(taser?.id || '')
-            )
-
-          if (!patrimonio) {
-            return taser
-          }
-
-          return {
-            ...taser,
-
-            // Situação operacional vigente vem da Engine Patrimonial.
-            // Os dados técnicos continuam sendo lidos de sigmo_tasers.
-            status_operacional:
-              patrimonio.status ||
-              taser.status_operacional,
-
-            local_atual:
-              patrimonio.local_atual ||
-              taser.local_atual,
-
-            responsavel_atual_id:
-              patrimonio.responsavel_atual_id ||
-              null,
-
-            responsavel_atual_nome:
-              patrimonio.responsavel_atual_nome ||
-              null,
-
-            patrimonio_central_id:
-              patrimonio.id
-          }
-        })
+        listaEnriquecida
       )
 
-      setTotal(resultado.total || 0)
+      setTotal(
+        resultado.total || 0
+      )
     } catch (error) {
       console.error(error)
 
@@ -585,7 +758,8 @@ export default function Taser({ user }) {
     filtros,
     pagina,
     sortBy,
-    sortDirection
+    sortDirection,
+    ehPerfilSVDD
   ])
 
   const carregarResumo = useCallback(async () => {
@@ -599,7 +773,29 @@ export default function Taser({ user }) {
         sortDirection: 'desc'
       })
 
-      setTodosTasers(resultado.data || [])
+      const listaEnriquecida =
+        await enriquecerTasersComPatrimonio(
+          resultado.data || []
+        )
+
+      if (ehPerfilSVDD) {
+        const idsCautelaSVDD =
+          await listarTaserIdsCautelaSVDD()
+
+        setTodosTasers(
+          listaEnriquecida.filter(
+            (taser) =>
+              taserPertenceAoEscopoSVDD(
+                taser,
+                idsCautelaSVDD
+              )
+          )
+        )
+      } else {
+        setTodosTasers(
+          listaEnriquecida
+        )
+      }
 
       try {
         const externas = await listarManutencoesExternas({
@@ -607,17 +803,28 @@ export default function Taser({ user }) {
           pagina: 1,
           limite: LIMITE_RESUMO
         })
-        setManutencoesExternasResumo(externas?.data || externas?.itens || externas || [])
+        setManutencoesExternasResumo(
+          externas?.data ||
+          externas?.itens ||
+          externas ||
+          []
+        )
       } catch (errorExterna) {
-        console.warn('Não foi possível carregar as manutenções externas dos Tasers:', errorExterna)
+        console.warn(
+          'Não foi possível carregar as manutenções externas dos Tasers:',
+          errorExterna
+        )
         setManutencoesExternasResumo([])
       }
     } catch (error) {
-      console.error('Erro ao carregar resumo dos Tasers:', error)
+      console.error(
+        'Erro ao carregar resumo dos Tasers:',
+        error
+      )
     } finally {
       setLoadingResumo(false)
     }
-  }, [])
+  }, [ehPerfilSVDD])
 
   const carregarSolicitacoesBaixa = useCallback(async () => {
     try {
@@ -1704,7 +1911,11 @@ export default function Taser({ user }) {
           titulo="Total controlado"
           valor={
             ehPerfilSVDD
-              ? resumo.svdd
+              ? (
+                  resumo.svdd +
+                  resumo.cautelas +
+                  resumo.manutencaoSVDD
+                )
               : resumo.total
           }
           detalhe={

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 
 import { STATUS_HT, TIPOS_HT } from '../../constants/hts'
+import { supabase } from '../../services/supabaseClient'
 import { UNIDADES_27_BPMM } from '../../constants/unidades'
 
 import HTForm from './components/HTForm'
@@ -322,6 +323,141 @@ function pertenceAoEscopoSVDD(ht) {
 }
 
 
+async function listarHTsCauteladosSVDDMotorAtual() {
+  const {
+    data: movimentacoes,
+    error: erroMovimentacoes
+  } = await supabase
+    .from('sigmo_movimentacoes')
+    .select('id')
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .ilike('origem_local', '%SVDD%')
+    .order('created_at', {
+      ascending: false
+    })
+    .limit(1000)
+
+  if (erroMovimentacoes) {
+    throw erroMovimentacoes
+  }
+
+  const movimentacaoIds =
+    (movimentacoes || [])
+      .map((item) => item?.id)
+      .filter(Boolean)
+
+  if (movimentacaoIds.length === 0) {
+    return []
+  }
+
+  const {
+    data: itens,
+    error: erroItens
+  } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select('patrimonio_id')
+    .in(
+      'movimentacao_id',
+      movimentacaoIds
+    )
+
+  if (erroItens) {
+    throw erroItens
+  }
+
+  const patrimonioIds = [
+    ...new Set(
+      (itens || [])
+        .map(
+          (item) =>
+            item?.patrimonio_id
+        )
+        .filter(Boolean)
+        .map(String)
+    )
+  ]
+
+  if (patrimonioIds.length === 0) {
+    return []
+  }
+
+  const {
+    data: patrimonios,
+    error: erroPatrimonios
+  } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id, referencia_id')
+    .in('id', patrimonioIds)
+    .eq('tipo', 'ht')
+
+  if (erroPatrimonios) {
+    throw erroPatrimonios
+  }
+
+  return (patrimonios || [])
+    .map(
+      (item) =>
+        item?.referencia_id
+    )
+    .filter(Boolean)
+    .map(String)
+}
+
+
+function obterHTIdMovimentacaoAtiva(movimentacao) {
+  const dados =
+    movimentacao?.dados ||
+    movimentacao?.metadata?.dados_engine ||
+    {}
+
+  return String(
+    dados?.ht_id ||
+    dados?.referencia_id ||
+    movimentacao?.metadata?.patrimonio?.referencia_id ||
+    ''
+  )
+}
+
+
+function cautelaHTOriginadaNoSVDD(movimentacao) {
+  const dados =
+    movimentacao?.dados ||
+    movimentacao?.metadata?.dados_engine ||
+    {}
+
+  const tipo =
+    normalizar(
+      movimentacao?.tipo_movimentacao ||
+      movimentacao?.tipo
+    )
+
+  if (
+    ![
+      'CAUTELA',
+      'CAUTELA_SERVICO'
+    ].includes(tipo)
+  ) {
+    return false
+  }
+
+  const origem =
+    normalizar(
+      dados?.local_origem ||
+      dados?.guardiao_origem?.nome ||
+      dados?.guardiao_origem?.codigo ||
+      movimentacao?.origem_local ||
+      movimentacao?.origem_guardiao_nome ||
+      movimentacao?.origem_guardiao_codigo ||
+      ''
+    )
+
+  return (
+    origem.includes('SVDD') ||
+    origem.includes('SERVICO DE DIA')
+  )
+}
+
+
 function percentual(valor, total) {
   if (!Number(total)) return 0
   return Math.max(0, Math.min(100, (Number(valor || 0) / Number(total)) * 100))
@@ -495,6 +631,7 @@ export default function HT({ user }) {
   const [entregasAtivas, setEntregasAtivas] = useState([])
   const [manutencaoExternaModalAberta, setManutencaoExternaModalAberta] = useState(false)
   const [manutencoesExternasResumo, setManutencoesExternasResumo] = useState([])
+  const [htIdsCautelaMapaSVDD, setHtIdsCautelaMapaSVDD] = useState(new Set())
 
   const [fotosVisualizacao, setFotosVisualizacao] = useState([])
   const [carregandoFotos, setCarregandoFotos] = useState(false)
@@ -532,13 +669,61 @@ export default function HT({ user }) {
     [total]
   )
 
+  const htIdsCautelaSVDDAtiva = useMemo(() => {
+    return new Set(
+      (entregasAtivas || [])
+        .filter(cautelaHTOriginadaNoSVDD)
+        .map(obterHTIdMovimentacaoAtiva)
+        .filter(Boolean)
+    )
+  }, [entregasAtivas])
+
   const htsResumoPorPerfil = useMemo(() => {
     if (ehPerfilSVDD) {
-      return todosHTs.filter((ht) => pertenceAoEscopoSVDD(ht))
+      return todosHTs.filter(
+        (ht) => {
+          if (
+            pertenceAoEscopoSVDD(ht)
+          ) {
+            return true
+          }
+
+          const status =
+            normalizar(
+              ht?.status_operacional ||
+              ht?.status
+            )
+
+          const cautelaAtiva =
+            status === 'EM_SERVICO' ||
+            status.includes('CAUTELA')
+
+          if (!cautelaAtiva) {
+            return false
+          }
+
+          const htId =
+            String(ht?.id || '')
+
+          return (
+            htIdsCautelaSVDDAtiva.has(
+              htId
+            ) ||
+            htIdsCautelaMapaSVDD.has(
+              htId
+            )
+          )
+        }
+      )
     }
 
     return todosHTs
-  }, [todosHTs, ehPerfilSVDD, ehPerfilP4])
+  }, [
+    todosHTs,
+    ehPerfilSVDD,
+    htIdsCautelaSVDDAtiva,
+    htIdsCautelaMapaSVDD
+  ])
 
   const resumo = useMemo(() => resumirHTs(htsResumoPorPerfil, manutencoesExternasResumo), [htsResumoPorPerfil, manutencoesExternasResumo])
 
@@ -626,7 +811,17 @@ export default function HT({ user }) {
 
         return correspondeAoResumo(ht, resumoModal.tipo)
       })
-      .filter((ht) => !ehPerfilSVDD || pertenceAoEscopoSVDD(ht))
+      .filter(
+        (ht) =>
+          !ehPerfilSVDD ||
+          pertenceAoEscopoSVDD(ht) ||
+          htIdsCautelaSVDDAtiva.has(
+            String(ht?.id || '')
+          ) ||
+          htIdsCautelaMapaSVDD.has(
+            String(ht?.id || '')
+          )
+      )
       .filter((ht) => {
         if (!termo) return true
 
@@ -640,7 +835,15 @@ export default function HT({ user }) {
           ht?.status_operacional
         ].some((valor) => normalizar(valor).includes(termo))
       })
-  }, [todosHTs, resumoModal, buscaResumoModal, ehPerfilSVDD, htIdsManutencaoExterna])
+  }, [
+    todosHTs,
+    resumoModal,
+    buscaResumoModal,
+    ehPerfilSVDD,
+    htIdsManutencaoExterna,
+    htIdsCautelaSVDDAtiva,
+    htIdsCautelaMapaSVDD
+  ])
 
   const dadosGrafico = useMemo(() => {
     if (ehPerfilSVDD) {
@@ -848,6 +1051,35 @@ export default function HT({ user }) {
       })
 
       setTodosHTs(resultado.data || [])
+
+      try {
+        const [
+          ativas,
+          idsMapaSVDD
+        ] = await Promise.all([
+          listarEntregasHTAtivas(),
+          listarHTsCauteladosSVDDMotorAtual()
+        ])
+
+        setEntregasAtivas(
+          ativas || []
+        )
+
+        setHtIdsCautelaMapaSVDD(
+          new Set(
+            idsMapaSVDD || []
+          )
+        )
+      } catch (errorCautelas) {
+        console.warn(
+          'Não foi possível carregar as cautelas ativas dos HTs:',
+          errorCautelas
+        )
+        setEntregasAtivas([])
+        setHtIdsCautelaMapaSVDD(
+          new Set()
+        )
+      }
 
       try {
         const externas = await listarManutencoesExternas({

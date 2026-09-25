@@ -113,6 +113,7 @@ export async function listarEstoqueColetesRefletivos() {
           'quantidade_p4',
           'quantidade_svdd',
           'quantidade_em_servico',
+          'quantidade_manutencao',
           'status_operacional',
           'local_atual',
           'observacoes',

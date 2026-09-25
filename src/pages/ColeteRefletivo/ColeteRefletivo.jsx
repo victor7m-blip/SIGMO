@@ -200,6 +200,11 @@ function CardTamanho({
       item?.quantidade_em_servico
     )
 
+  const manutencao =
+    numero(
+      item?.quantidade_manutencao
+    )
+
   return (
     <button
       type="button"
@@ -258,6 +263,10 @@ function CardTamanho({
           {visaoSvdd
             ? `Cautelas ativas: ${emServico}`
             : `Em serviço: ${emServico}`}
+        </span>
+
+        <span>
+          Manutenção: {manutencao}
         </span>
       </div>
     </button>
@@ -1810,13 +1819,16 @@ export default function ColeteRefletivo({
             ),
 
           /*
-           * Estes destinos já entram no padrão visual do módulo
-           * Munições. O estoque atual de Colete Refletivo ainda
-           * não possui colunas/fluxos próprios para eles, portanto
-           * permanecem zerados até a etapa funcional correspondente.
+           * Estes destinos seguem o padrão visual do módulo Munições.
+           * Manutenção já possui controle quantitativo próprio por tamanho.
            */
           cargaPermanente: [],
-          manutencao: [],
+
+          manutencao:
+            porCampo(
+              'quantidade_manutencao'
+            ),
+
           outrasCias: [],
           batalhao: [],
           baixados: [],

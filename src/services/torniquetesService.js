@@ -49,6 +49,37 @@ export async function listarTorniquetes() {
 }
 
 
+export async function cadastrarEstoqueTorniquetes({
+  quantidade
+}) {
+  const quantidadeInicial =
+    normalizarQuantidade(
+      quantidade
+    )
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_torniquetes_cadastrar',
+    {
+      p_token:
+        obterTokenSessao(),
+
+      p_quantidade:
+        quantidadeInicial
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+
 export async function transferirTorniqueteParaSvdd({
   quantidade
 }) {

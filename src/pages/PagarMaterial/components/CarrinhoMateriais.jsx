@@ -1,5 +1,27 @@
 import { useState } from 'react'
 
+function normalizarTexto(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+}
+
+function ehColeteRefletivo(material) {
+  const texto = [
+    material?.descricao,
+    material?.modelo,
+    material?.categoria,
+    material?.tipo_material,
+    material?.tipo_registro
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  return normalizarTexto(texto).includes('COLETE REFLETIVO')
+}
+
 export default function CarrinhoMateriais({
   itens = [],
   onRemover,
@@ -23,14 +45,19 @@ export default function CarrinhoMateriais({
         </div>
       ) : (
         itens.map((material) => {
+          const coleteRefletivo =
+            ehColeteRefletivo(material)
+
           const controlaQuantidade =
             material.controla_quantidade ||
             material.tipo_registro ===
-              'TONFA_QUANTIDADE'
+              'TONFA_QUANTIDADE' ||
+            coleteRefletivo
 
           const recebimentoQuantidade =
             material.tipo_registro ===
-            'TONFA_QUANTIDADE'
+              'TONFA_QUANTIDADE' ||
+            coleteRefletivo
 
           const quantidadeMaxima =
             Number(
@@ -255,18 +282,24 @@ export default function CarrinhoMateriais({
                           <option value="AVARIA">
                             AVARIA
                           </option>
-                          <option value="DEFEITO">
-                            DEFEITO
-                          </option>
-                          <option value="MANUTENCAO_PREVENTIVA">
-                            MANUTENÇÃO PREVENTIVA
-                          </option>
-                          <option value="LIMPEZA">
-                            LIMPEZA NECESSÁRIA
-                          </option>
-                          <option value="EXTRAVIO_ACESSORIO">
-                            EXTRAVIO DE ACESSÓRIO
-                          </option>
+
+                          {!coleteRefletivo && (
+                            <>
+                              <option value="DEFEITO">
+                                DEFEITO
+                              </option>
+                              <option value="MANUTENCAO_PREVENTIVA">
+                                MANUTENÇÃO PREVENTIVA
+                              </option>
+                              <option value="LIMPEZA">
+                                LIMPEZA NECESSÁRIA
+                              </option>
+                              <option value="EXTRAVIO_ACESSORIO">
+                                EXTRAVIO DE ACESSÓRIO
+                              </option>
+                            </>
+                          )}
+
                           <option value="OUTRO">
                             OUTRO
                           </option>
@@ -293,14 +326,19 @@ export default function CarrinhoMateriais({
                             SELECIONE A PROVIDÊNCIA
                           </option>
                           <option value="COFRE">
-                            RETORNAR AO COFRE
+                            {coleteRefletivo
+                              ? 'RETORNAR AO SVDD'
+                              : 'RETORNAR AO COFRE'}
                           </option>
                           <option value="MANUTENCAO">
                             ENVIAR PARA MANUTENÇÃO
                           </option>
-                          <option value="BAIXA">
-                            SOLICITAR BAIXA PATRIMONIAL
-                          </option>
+
+                          {!coleteRefletivo && (
+                            <option value="BAIXA">
+                              SOLICITAR BAIXA PATRIMONIAL
+                            </option>
+                          )}
                         </select>
                       </label>
 
@@ -349,7 +387,11 @@ export default function CarrinhoMateriais({
                               event.target.value
                             )
                           }
-                          placeholder="DESCREVA A AVARIA, DEFEITO OU OUTRA SITUAÇÃO ENCONTRADA"
+                          placeholder={
+                            coleteRefletivo
+                              ? 'DESCREVA A AVARIA OU OUTRA SITUAÇÃO ENCONTRADA'
+                              : 'DESCREVA A AVARIA, DEFEITO OU OUTRA SITUAÇÃO ENCONTRADA'
+                          }
                         />
                       </label>
 

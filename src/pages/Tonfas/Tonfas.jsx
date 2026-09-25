@@ -488,14 +488,14 @@ function GraficoRosca({ resumo }) {
 function GraficoBarras({ resumo }) {
   const categorias = [
   {
-    label: 'Depósito do P4',
+    label: 'Cofre do P4',
     tonfas:
       resumo.distribuicao?.depositoP4?.tonfas || 0,
     cassetetes:
       resumo.distribuicao?.depositoP4?.cassetetes || 0
   },
   {
-    label: 'Carga do SVDD',
+    label: 'Cofre do SVDD',
     tonfas:
       resumo.cofreSVDD?.tonfas || 0,
     cassetetes:
@@ -627,8 +627,8 @@ function PainelGraficosTonfas({ resumo }) {
           valor={tonfas}
           tipo="tonfa"
           itens={[
-            { label: 'Depósito do P4', valor: resumo.distribuicao?.depositoP4?.tonfas || 0, classe: 'p4' },
-            { label: 'Carga do SVDD', valor: resumo.cofreSVDD?.tonfas || 0, classe: 'svdd' },
+            { label: 'Cofre do P4', valor: resumo.distribuicao?.depositoP4?.tonfas || 0, classe: 'p4' },
+            { label: 'Cofre do SVDD', valor: resumo.cofreSVDD?.tonfas || 0, classe: 'svdd' },
             { label: 'Carga permanente', valor: resumo.distribuicao?.cargaPermanente?.tonfas || 0, classe: 'carga' },
             { label: 'Cautelas ativas', valor: resumo.distribuicao?.cautelas?.tonfas || 0, classe: 'cautela' },
             { label: 'Não localizadas', valor: resumo.distribuicaoNaoLocalizada?.tonfas || 0, classe: 'nao-localizada' }
@@ -640,8 +640,8 @@ function PainelGraficosTonfas({ resumo }) {
           valor={cassetetes}
           tipo="cassetete"
           itens={[
-            { label: 'Depósito do P4', valor: resumo.distribuicao?.depositoP4?.cassetetes || 0, classe: 'p4' },
-            { label: 'Carga do SVDD', valor: resumo.cofreSVDD?.cassetetes || 0, classe: 'svdd' },
+            { label: 'Cofre do P4', valor: resumo.distribuicao?.depositoP4?.cassetetes || 0, classe: 'p4' },
+            { label: 'Cofre do SVDD', valor: resumo.cofreSVDD?.cassetetes || 0, classe: 'svdd' },
             { label: 'Carga permanente', valor: resumo.distribuicao?.cargaPermanente?.cassetetes || 0, classe: 'carga' },
             { label: 'Cautelas ativas', valor: resumo.distribuicao?.cautelas?.cassetetes || 0, classe: 'cautela' },
             { label: 'Não localizadas', valor: resumo.distribuicaoNaoLocalizada?.cassetetes || 0, classe: 'nao-localizada' }
@@ -875,7 +875,11 @@ export default function Tonfas({ user }) {
     base.filter(estaEmManutencao)
 
   const itensOutraCia =
-    base.filter(estaEmOutraCia)
+    base.filter(
+      (item) =>
+        estaEmOutraCia(item) ||
+        estaNaFT(item)
+    )
 
   const itensFT =
     base.filter(estaNaFT)
@@ -1464,7 +1468,24 @@ async function finalizarMovimentacao(resultado) {
 
           <div className="tonfa-resumo-grid">
             <CardResumo
-              titulo="Depósito do P4"
+              titulo="Total"
+              valor={resumo.totalGeral}
+              detalhes={[
+                {
+                  titulo: 'Tonfas',
+                  valor: resumo.totalTonfas
+                },
+                {
+                  titulo: 'Cassetetes',
+                  valor: resumo.totalCassetetes
+                }
+              ]}
+              destaque="azul"
+              onClick={limparFiltros}
+            />
+
+            <CardResumo
+              titulo="Cofre do P4"
               detalhes={[
                 {
                   titulo: 'Tonfas',
@@ -1479,31 +1500,35 @@ async function finalizarMovimentacao(resultado) {
             />
 
             <CardResumo
-              titulo="Carga do SVDD"
+              titulo="Cofre do SVDD"
               detalhes={[
                 {
                   titulo: 'Tonfas',
-                  valor: resumo.cofreSVDD.tonfas
+                  valor: resumo.cofreSVDD.noCofreTonfas
                 },
                 {
                   titulo: 'Cassetetes',
-                  valor: resumo.cofreSVDD.cassetetes
+                  valor: resumo.cofreSVDD.noCofreCassetetes
                 }
               ]}
-              detalhesSecundarios={[
-  {
-    titulo: 'Tonfas no cofre',
-    valor:
-      resumo.cofreSVDD.noCofreTonfas
-  },
-  {
-    titulo: 'Cassetetes no cofre',
-    valor:
-      resumo.cofreSVDD.noCofreCassetetes
-  }
-]}
               destaque="verde"
               onClick={() => filtrarPorPesquisa('SVDD')}
+            />
+
+            <CardResumo
+              titulo="Outras Cias"
+              detalhes={[
+                {
+                  titulo: 'Tonfas',
+                  valor: resumo.distribuicao.outraCia.tonfas
+                },
+                {
+                  titulo: 'Cassetetes',
+                  valor: resumo.distribuicao.outraCia.cassetetes
+                }
+              ]}
+              descricao="Inclui Força Tática"
+              onClick={() => filtrarPorPesquisa('CIA')}
             />
 
             <CardResumo
@@ -1535,9 +1560,7 @@ async function finalizarMovimentacao(resultado) {
                 }
               ]}
               destaque="amarelo"
-              onClick={() =>
-  setCautelasModalAberto(true)
-}
+              onClick={() => setCautelasModalAberto(true)}
             />
 
             <CardResumo
@@ -1553,36 +1576,6 @@ async function finalizarMovimentacao(resultado) {
                 }
               ]}
               onClick={() => filtrarPorPesquisa('manutenção')}
-            />
-
-            <CardResumo
-              titulo="Outra companhia"
-              detalhes={[
-                {
-                  titulo: 'Tonfas',
-                  valor: resumo.distribuicao.outraCia.tonfas
-                },
-                {
-                  titulo: 'Cassetetes',
-                  valor: resumo.distribuicao.outraCia.cassetetes
-                }
-              ]}
-              onClick={() => filtrarPorPesquisa('CIA')}
-            />
-
-            <CardResumo
-              titulo="Força Tática"
-              detalhes={[
-                {
-                  titulo: 'Tonfas',
-                  valor: resumo.distribuicao.forcaTatica.tonfas
-                },
-                {
-                  titulo: 'Cassetetes',
-                  valor: resumo.distribuicao.forcaTatica.cassetetes
-                }
-              ]}
-              onClick={() => filtrarPorPesquisa('Força Tática')}
             />
 
             <CardResumo
@@ -1645,9 +1638,9 @@ async function finalizarMovimentacao(resultado) {
 
           <div className="tonfa-movement-groups">
             <GrupoMovimentacao
-              icone="📦"
-              titulo="Distribuir patrimônio"
-              descricao="Transferências e entregas de materiais."
+              icone="↔️"
+              titulo="Movimentação interna"
+              descricao="Transferências entre os cofres e demais destinos patrimoniais."
             >
               <button
                 type="button"
@@ -1657,10 +1650,30 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Transferir</strong>
                 <span>
-                  P4, SVDD, FT, BTL ou outra companhia
+                  Enviar para SVDD, Outras Cias ou Batalhão
                 </span>
               </button>
 
+              <button
+                type="button"
+                onClick={() =>
+                  iniciarMovimentacao(
+                    'Recebimento de devolução do SVDD'
+                  )
+                }
+              >
+                <strong>Receber do SVDD</strong>
+                <span>
+                  Confirmar devolução enviada pelo SVDD ao Cofre do P4
+                </span>
+              </button>
+            </GrupoMovimentacao>
+
+            <GrupoMovimentacao
+              icone="📤"
+              titulo="Entregas e cautelas"
+              descricao="Vínculo permanente ou entrega temporária a policial."
+            >
               <button
                 type="button"
                 onClick={() =>
@@ -1671,7 +1684,7 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Pagar carga</strong>
                 <span>
-                  Vincular permanentemente a um policial
+                  Vincular permanentemente o material a um policial
                 </span>
               </button>
 
@@ -1685,15 +1698,15 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Pagar cautela</strong>
                 <span>
-                  Entrega temporária com previsão de devolução
+                  Entregar temporariamente com previsão de devolução
                 </span>
               </button>
             </GrupoMovimentacao>
 
             <GrupoMovimentacao
               icone="📥"
-              titulo="Receber patrimônio"
-              descricao="Devoluções e retornos patrimoniais."
+              titulo="Entradas e recebimentos"
+              descricao="Devoluções, retornos e recolhimentos ao Cofre do P4."
             >
               <button
                 type="button"
@@ -1705,7 +1718,7 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Receber devolução</strong>
                 <span>
-                  Encerrar carga ou cautela e receber o material
+                  Encerrar carga ou cautela e recolher o material
                 </span>
               </button>
 
@@ -1722,26 +1735,12 @@ async function finalizarMovimentacao(resultado) {
                   Registrar o retorno do material reparado
                 </span>
               </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  iniciarMovimentacao(
-                    'Recebimento de devolução do SVDD'
-                  )
-                }
-              >
-                <strong>Receber do SVDD</strong>
-                <span>
-                  Confirmar devolução enviada pelo SVDD ao P4
-                </span>
-              </button>
             </GrupoMovimentacao>
 
             <GrupoMovimentacao
-              icone="⚙️"
-              titulo="Gestão patrimonial"
-              descricao="Manutenção, regularização e baixa."
+              icone="🛠️"
+              titulo="Condição do material"
+              descricao="Manutenção, regularização e baixa patrimonial."
             >
               <button
                 type="button"
@@ -1751,9 +1750,9 @@ async function finalizarMovimentacao(resultado) {
                   )
                 }
               >
-                <strong>Enviar manutenção</strong>
+                <strong>Enviar para manutenção</strong>
                 <span>
-                  Registrar a saída do material para reparo
+                  Registrar material com defeito, dano ou avaria
                 </span>
               </button>
 
@@ -1767,7 +1766,7 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Regularizar</strong>
                 <span>
-                  Corrigir localização, guardião ou situação
+                  Corrigir localização, guardião ou situação patrimonial
                 </span>
               </button>
 
@@ -1782,7 +1781,7 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Baixar patrimônio</strong>
                 <span>
-                  Registrar baixa patrimonial definitiva
+                  Solicitar baixa patrimonial definitiva
                 </span>
               </button>
             </GrupoMovimentacao>
@@ -1994,23 +1993,9 @@ async function finalizarMovimentacao(resultado) {
 
           <div className="tonfa-movement-groups">
             <GrupoMovimentacao
-              icone="📦"
-              titulo="Pagar patrimônio"
-              descricao="Entregas temporárias realizadas pelo SVDD."
-            >
-              <button
-                type="button"
-                onClick={() => iniciarMovimentacao('Pagamento de cautela')}
-              >
-                <strong>Pagar cautela</strong>
-                <span>Entregar temporariamente a um policial</span>
-              </button>
-            </GrupoMovimentacao>
-
-            <GrupoMovimentacao
-              icone="📥"
-              titulo="Receber patrimônio"
-              descricao="Devoluções e retornos ao cofre."
+              icone="↔️"
+              titulo="Movimentação interna"
+              descricao="Transferências entre o Cofre do P4 e o Cofre do SVDD."
             >
               <button
                 type="button"
@@ -2022,10 +2007,46 @@ async function finalizarMovimentacao(resultado) {
 
               <button
                 type="button"
+                onClick={() => iniciarMovimentacao('Devolução ao P4')}
+              >
+                <strong>Devolver ao P4</strong>
+                <span>Encaminhar saldo disponível ao Cofre do P4</span>
+              </button>
+            </GrupoMovimentacao>
+
+            <GrupoMovimentacao
+              icone="📤"
+              titulo="Cautelas"
+              descricao="Entrega temporária e recebimento de devoluções."
+            >
+              <button
+                type="button"
+                onClick={() => iniciarMovimentacao('Pagamento de cautela')}
+              >
+                <strong>Pagar cautela</strong>
+                <span>Entregar temporariamente a um policial</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => iniciarMovimentacao('Recebimento de cautela')}
               >
                 <strong>Receber devolução</strong>
-                <span>Encerrar cautela e retornar ao cofre</span>
+                <span>Encerrar cautela e retornar ao Cofre do SVDD</span>
+              </button>
+            </GrupoMovimentacao>
+
+            <GrupoMovimentacao
+              icone="🛠️"
+              titulo="Condição do material"
+              descricao="Envio e retorno de materiais em manutenção."
+            >
+              <button
+                type="button"
+                onClick={() => iniciarMovimentacao('Envio para manutenção')}
+              >
+                <strong>Enviar para manutenção</strong>
+                <span>Registrar material com defeito, dano ou avaria</span>
               </button>
 
               <button
@@ -2033,29 +2054,7 @@ async function finalizarMovimentacao(resultado) {
                 onClick={() => iniciarMovimentacao('Retorno da manutenção')}
               >
                 <strong>Receber manutenção</strong>
-                <span>Registrar retorno para o cofre</span>
-              </button>
-            </GrupoMovimentacao>
-
-            <GrupoMovimentacao
-              icone="⚙️"
-              titulo="Gestão operacional"
-              descricao="Manutenção e devolução ao gestor."
-            >
-              <button
-                type="button"
-                onClick={() => iniciarMovimentacao('Envio para manutenção')}
-              >
-                <strong>Enviar manutenção</strong>
-                <span>Registrar saída operacional para reparo</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => iniciarMovimentacao('Devolução ao P4')}
-              >
-                <strong>Devolver ao P4</strong>
-                <span>Transferir saldo disponível ao gestor patrimonial</span>
+                <span>Registrar retorno do material para o Cofre do SVDD</span>
               </button>
             </GrupoMovimentacao>
           </div>

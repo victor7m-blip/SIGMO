@@ -79,6 +79,255 @@ function itemEhTorniquete(item) {
   )
 }
 
+function itemEhColeteRefletivo(item) {
+  return (
+    normalizarTexto(
+      item?.tipo_registro
+    ) ===
+      'COLETE_REFLETIVO_DEVOLUCAO' ||
+    normalizarTexto(
+      item?.tipo_patrimonio
+    ) ===
+      'COLETE_REFLETIVO' ||
+    normalizarTexto(
+      item?.tipo
+    ) ===
+      'COLETE_REFLETIVO' ||
+    normalizarTexto(
+      item?.categoria
+    ) ===
+      'COLETE_REFLETIVO' ||
+    normalizarTexto(
+      item?.modulo
+    ) ===
+      'COLETE_REFLETIVO' ||
+    Boolean(
+      item?.devolucao_colete_refletivo_id
+    )
+  )
+}
+
+
+function itemEhCOP(item) {
+  const tipo =
+    normalizarTexto(
+      item?.tipo_registro ||
+      item?.tipo_patrimonio ||
+      item?.tipo ||
+      item?.categoria ||
+      item?.modulo ||
+      item?.tabela_origem ||
+      ''
+    )
+
+  const descricao =
+    normalizarTexto(
+      item?.descricao ||
+      ''
+    )
+
+  return (
+    tipo === 'COP' ||
+    tipo === 'SIGMO_COPS' ||
+    descricao.startsWith('COP ')
+  )
+}
+
+
+function obterSuportesCOP(item) {
+  if (!itemEhCOP(item)) {
+    return []
+  }
+
+  const modular =
+    Boolean(
+      item?.suporte_modular ||
+      item?.suportes_cop?.modular
+    )
+
+  const comum =
+    Boolean(
+      item?.suporte_comum ||
+      item?.suportes_cop?.comum
+    )
+
+  return [
+    modular
+      ? 'SUPORTE MODULAR'
+      : null,
+    comum
+      ? 'SUPORTE COMUM'
+      : null
+  ].filter(Boolean)
+}
+
+
+async function devolverSuportesCOPRecebidos({
+  modular = 0,
+  comum = 0
+} = {}) {
+  const quantidadeModular =
+    Math.max(
+      0,
+      Number(modular) || 0
+    )
+
+  const quantidadeComum =
+    Math.max(
+      0,
+      Number(comum) || 0
+    )
+
+  if (
+    quantidadeModular === 0 &&
+    quantidadeComum === 0
+  ) {
+    return null
+  }
+
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_cop_suportes_receber_servico',
+    {
+      p_token:
+        token,
+
+      p_quantidade_modular:
+        quantidadeModular,
+
+      p_quantidade_comum:
+        quantidadeComum
+    }
+  )
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+
+async function enriquecerSuportesCOPRecebimento(
+  itens = [],
+  rePolicial = ''
+) {
+  const possuiCOP =
+    (itens || []).some(itemEhCOP)
+
+  if (!possuiCOP) {
+    return itens
+  }
+
+  const reBase =
+    somenteNumeros(
+      rePolicial
+    )
+
+  if (!reBase) {
+    return itens
+  }
+
+  try {
+    const token =
+      loadSessionToken()
+
+    if (!token) {
+      return itens
+    }
+
+    const resultado = []
+
+    for (const item of itens || []) {
+      if (!itemEhCOP(item)) {
+        resultado.push(item)
+        continue
+      }
+
+      const patrimonioId =
+        item?.patrimonio_id ||
+        item?.id ||
+        null
+
+      const referenciaId =
+        item?.referencia_id ||
+        null
+
+      const {
+        data,
+        error
+      } = await supabase.rpc(
+        'sigmo_cop_suporte_localizar_cautela',
+        {
+          p_token:
+            token,
+
+          p_policial_re:
+            reBase,
+
+          p_patrimonio_id:
+            patrimonioId,
+
+          p_referencia_id:
+            referenciaId
+        }
+      )
+
+      if (error) {
+        throw error
+      }
+
+      const registro =
+        Array.isArray(data)
+          ? data[0]
+          : data
+
+      const modular =
+        Boolean(
+          registro?.suporte_modular
+        )
+
+      const comum =
+        Boolean(
+          registro?.suporte_comum
+        )
+
+      resultado.push({
+        ...item,
+        suporte_modular:
+          modular,
+        suporte_comum:
+          comum,
+        suportes_cop: {
+          modular,
+          comum
+        }
+      })
+    }
+
+    return resultado
+  } catch (error) {
+    console.warn(
+      'Não foi possível carregar os suportes vinculados às COPs:',
+      error
+    )
+
+    return itens
+  }
+}
+
+
 function itemEhViatura(item) {
   return (
     normalizarTexto(
@@ -212,6 +461,16 @@ function obterLocalOrigem(item) {
 }
 
 function criarChaveItem(item) {
+  if (
+    item?.tipo_registro ===
+    'COLETE_REFLETIVO_DEVOLUCAO'
+  ) {
+    return String(
+      item?.devolucao_colete_refletivo_id ||
+      item?.id
+    )
+  }
+
   if (
     item?.tipo_registro ===
     'MUNICAO_DEVOLUCAO'
@@ -547,6 +806,38 @@ async function listarDevolucoesMunicaoPendentesSvdd() {
 }
 
 
+async function listarDevolucoesColeteRefletivoPendentesSvdd() {
+  const token =
+    loadSessionToken()
+
+  if (!token) {
+    throw new Error(
+      'Sessão SIGMO inválida ou expirada. Entre novamente no sistema.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_colete_refletivo_listar_devolucoes_pendentes_svdd',
+    {
+      p_token:
+        token
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível consultar as devoluções pendentes de Colete Refletivo.'
+    )
+  }
+
+  return data || []
+}
+
+
 async function listarDevolucoesViaturaPendentesSvdd() {
   const token =
     loadSessionToken()
@@ -751,6 +1042,50 @@ async function receberDevolucaoViaturaSvdd({
     throw new Error(
       error?.message ||
       'Não foi possível confirmar o recebimento da viatura.'
+    )
+  }
+
+  return data
+}
+
+
+async function receberDevolucaoColeteRefletivoSvdd({
+  item,
+  user
+}) {
+  const devolucaoId =
+    item?.devolucao_colete_refletivo_id ||
+    item?.id ||
+    null
+
+  if (!devolucaoId) {
+    throw new Error(
+      'A devolução do Colete Refletivo não possui identificação válida.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'sigmo_colete_refletivo_receber_devolucao_svdd',
+    {
+      p_devolucao_id:
+        devolucaoId,
+
+      p_recebido_por_id:
+        user?.id ||
+        null,
+
+      p_recebido_por_nome:
+        obterNomeUsuario(user)
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível receber a devolução do Colete Refletivo.'
     )
   }
 
@@ -1052,6 +1387,105 @@ function montarItemDevolucaoMunicao(
     solicitado_em:
       devolucao?.solicitado_em ||
       null,
+
+    observacoes:
+      devolucao?.observacoes ||
+      null
+  }
+}
+
+
+function montarItemDevolucaoColeteRefletivo(
+  devolucao
+) {
+  const tamanho =
+    normalizarTexto(
+      devolucao?.tamanho ||
+      ''
+    )
+
+  const quantidade =
+    Math.max(
+      1,
+      Number(
+        devolucao?.quantidade ||
+        1
+      ) || 1
+    )
+
+  return {
+    id:
+      devolucao?.id,
+
+    patrimonio_id:
+      null,
+
+    referencia_id:
+      devolucao?.colete_refletivo_id ||
+      null,
+
+    colete_refletivo_id:
+      devolucao?.colete_refletivo_id ||
+      null,
+
+    devolucao_colete_refletivo_id:
+      devolucao?.id,
+
+    tipo_registro:
+      'COLETE_REFLETIVO_DEVOLUCAO',
+
+    tipo:
+      'COLETE_REFLETIVO',
+
+    categoria:
+      'COLETE REFLETIVO',
+
+    modulo:
+      'COLETE_REFLETIVO',
+
+    patrimonio:
+      `TAMANHO ${tamanho || 'NÃO INFORMADO'}`,
+
+    identificador:
+      `COLETE REFLETIVO ${tamanho}`.trim(),
+
+    descricao:
+      `COLETE REFLETIVO • TAMANHO ${tamanho || 'NÃO INFORMADO'}`,
+
+    local_origem:
+      'CAUTELA INDIVIDUAL',
+
+    local_atual:
+      'CAUTELA INDIVIDUAL',
+
+    destino_devolucao:
+      'COFRE DO SVDD',
+
+    status:
+      'AGUARDANDO RECEBIMENTO',
+
+    quantidade,
+
+    quantidade_receber:
+      quantidade,
+
+    policial_id:
+      devolucao?.policial_id ||
+      null,
+
+    policial_re:
+      devolucao?.policial_re ||
+      null,
+
+    policial_nome:
+      devolucao?.policial_nome ||
+      null,
+
+    solicitado_em:
+      devolucao?.criado_em ||
+      null,
+
+    tamanho,
 
     observacoes:
       devolucao?.observacoes ||
@@ -1379,7 +1813,8 @@ export default function ReceberMaterial({
           const [
             devolucao,
             devolucoesMunicaoTodas,
-            devolucoesViaturaTodas
+            devolucoesViaturaTodas,
+            devolucoesColeteRefletivoTodas
           ] = await Promise.all([
             buscarDevolucaoPendentePolicial({
               policialId,
@@ -1394,6 +1829,11 @@ export default function ReceberMaterial({
             destinoLocal ===
               'COFRE DO SVDD'
               ? listarDevolucoesViaturaPendentesSvdd()
+              : Promise.resolve([]),
+
+            destinoLocal ===
+              'COFRE DO SVDD'
+              ? listarDevolucoesColeteRefletivoPendentesSvdd()
               : Promise.resolve([])
           ])
 
@@ -1423,6 +1863,34 @@ export default function ReceberMaterial({
                   )
                 }
               )
+
+          const devolucoesColeteRefletivo =
+            (devolucoesColeteRefletivoTodas || [])
+              .filter(
+                (item) => {
+                  const mesmoId =
+                    policialId &&
+                    String(
+                      item?.policial_id ||
+                      ''
+                    ) ===
+                    String(
+                      policialId
+                    )
+
+                  const mesmoRe =
+                    somenteNumeros(
+                      item?.policial_re
+                    ) ===
+                    reEntregador
+
+                  return (
+                    mesmoId ||
+                    mesmoRe
+                  )
+                }
+              )
+
 
           const devolucoesViatura =
             (devolucoesViaturaTodas || [])
@@ -1678,6 +2146,17 @@ export default function ReceberMaterial({
           }
 
           for (
+            const devolucaoColeteRefletivo of
+            devolucoesColeteRefletivo
+          ) {
+            lista.push(
+              montarItemDevolucaoColeteRefletivo(
+                devolucaoColeteRefletivo
+              )
+            )
+          }
+
+          for (
             const devolucaoViatura of
             devolucoesViatura
           ) {
@@ -1693,20 +2172,26 @@ export default function ReceberMaterial({
               lista
             )
 
+          const listaComSuportesCOP =
+            await enriquecerSuportesCOPRecebimento(
+              listaSemViaturaDuplicada,
+              reEntregador
+            )
+
           const [
             novidadesPorPatrimonio,
             novidadesPorMunicao
           ] = await Promise.all([
             buscarNovidadesPendentesPatrimonios(
-              listaSemViaturaDuplicada
+              listaComSuportesCOP
             ),
             buscarNovidadesPendentesMunicoes(
-              listaSemViaturaDuplicada
+              listaComSuportesCOP
             )
           ])
 
           const listaComNovidades =
-            listaSemViaturaDuplicada.map(
+            listaComSuportesCOP.map(
               (item) => ({
                 ...item,
 
@@ -2289,11 +2774,13 @@ export default function ReceberMaterial({
         (
           [
             'TONFA_QUANTIDADE',
-            'MUNICAO_DEVOLUCAO'
+            'MUNICAO_DEVOLUCAO',
+            'COLETE_REFLETIVO_DEVOLUCAO'
           ].includes(
             item?.tipo_registro
           ) ||
-          itemEhTorniquete(item)
+          itemEhTorniquete(item) ||
+          itemEhColeteRefletivo(item)
         )
           ? Math.max(
               1,
@@ -2750,6 +3237,11 @@ async function confirmarRecebimento() {
     setErro('')
     setMensagem('')
 
+    const itensColeteRefletivo =
+      itensSelecionados.filter(
+        itemEhColeteRefletivo
+      )
+
     const itensMunicao =
       itensSelecionados.filter(
         (item) =>
@@ -2775,6 +3267,35 @@ async function confirmarRecebimento() {
         (item) =>
           itemEhTorniquete(item)
       )
+
+    const suportesCOPRecebidos =
+      itensSelecionados
+        .filter(itemEhCOP)
+        .reduce(
+          (total, item) => ({
+            modular:
+              total.modular +
+              (
+                item?.suporte_modular ||
+                item?.suportes_cop?.modular
+                  ? 1
+                  : 0
+              ),
+
+            comum:
+              total.comum +
+              (
+                item?.suporte_comum ||
+                item?.suportes_cop?.comum
+                  ? 1
+                  : 0
+              )
+          }),
+          {
+            modular: 0,
+            comum: 0
+          }
+        )
 
     const entregasHTAtivas =
       await listarEntregasHTAtivas()
@@ -2842,6 +3363,7 @@ async function confirmarRecebimento() {
             'MUNICAO_DEVOLUCAO' &&
           !itemEhTorniquete(item) &&
           !itemEhViatura(item) &&
+          !itemEhColeteRefletivo(item) &&
           Boolean(
             localizarMovimentacaoHT(item)
           )
@@ -2863,6 +3385,7 @@ async function confirmarRecebimento() {
             'MUNICAO_DEVOLUCAO' &&
           !itemEhTorniquete(item) &&
           !itemEhViatura(item) &&
+          !itemEhColeteRefletivo(item) &&
           !chavesHT.has(
             criarChaveItem(item)
           )
@@ -3007,6 +3530,135 @@ async function confirmarRecebimento() {
         )
       }
     }
+
+    const resultadosColeteRefletivo = []
+
+    for (
+      const item of
+      itensColeteRefletivo
+    ) {
+      const novidadeItem =
+        prepararNovidadeItem(
+          item
+        )
+
+      const providencia =
+        normalizarTexto(
+          novidadeItem?.providencia ||
+          'COFRE'
+        )
+
+      const recebimento =
+        await receberDevolucaoColeteRefletivoSvdd({
+          item,
+          user
+        })
+
+      let manutencao = null
+
+      if (
+        providencia ===
+        'MANUTENCAO'
+      ) {
+        const referenciaId =
+          item?.colete_refletivo_id ||
+          item?.referencia_id ||
+          null
+
+        if (!referenciaId) {
+          throw new Error(
+            'Não foi possível identificar o estoque do Colete Refletivo para encaminhamento à manutenção.'
+          )
+        }
+
+        manutencao =
+          await registrarManutencao({
+            modulo:
+              MODULOS_MANUTENCAO.COLETE_REFLETIVO,
+
+            tipoMaterial:
+              'COLETE_REFLETIVO',
+
+            referenciaId,
+
+            patrimonioId:
+              null,
+
+            novidadePatrimonialId:
+              novidadeItem?.novidade_id ||
+              null,
+
+            movimentacaoId:
+              item?.devolucao_colete_refletivo_id ||
+              item?.id ||
+              null,
+
+            quantidade:
+              Math.max(
+                1,
+                Math.min(
+                  Number(
+                    novidadeItem?.quantidade_afetada ||
+                    1
+                  ) || 1,
+                  Number(
+                    item?.quantidade_receber ||
+                    item?.quantidade ||
+                    1
+                  ) || 1
+                )
+              ),
+
+            tipoNovidade:
+              novidadeItem?.tipo ||
+              'AVARIA',
+
+            descricao:
+              novidadeItem?.descricao ||
+              'COLETE REFLETIVO ENCAMINHADO PARA MANUTENÇÃO NO RECEBIMENTO PELO SVDD.',
+
+            observacoes:
+              normalizarTexto(
+                [
+                  observacoes,
+                  'ORIGEM: DEVOLUÇÃO DE CAUTELA INDIVIDUAL',
+                  `TAMANHO: ${item?.tamanho || 'NÃO INFORMADO'}`,
+                  `QUANTIDADE RECEBIDA: ${item?.quantidade_receber || item?.quantidade || 1}`,
+                  `QUANTIDADE EM MANUTENÇÃO: ${novidadeItem?.quantidade_afetada || 1}`,
+                  `MOVIMENTAÇÃO DE DEVOLUÇÃO: ${item?.devolucao_colete_refletivo_id || item?.id || 'NÃO INFORMADA'}`
+                ]
+                  .filter(Boolean)
+                  .join(' | ')
+              ),
+
+            origem:
+              'COFRE DO SVDD',
+
+            destino:
+              'MANUTENCAO',
+
+            policial:
+              policialEntregador,
+
+            fotos:
+              novidadeItem?.fotos ||
+              [],
+
+            estoqueJaMovido:
+              false,
+
+            user
+          })
+      }
+
+      resultadosColeteRefletivo.push({
+        item,
+        resultado:
+          recebimento,
+        manutencao
+      })
+    }
+
 
     const resultadosTonfas = []
 
@@ -3321,7 +3973,8 @@ async function confirmarRecebimento() {
             .filter(
               (item) =>
                 !itemEhTorniquete(item) &&
-                !itemEhViatura(item)
+                !itemEhViatura(item) &&
+                !itemEhColeteRefletivo(item)
             )
             .map((item) => item?.devolucao_item_id)
             .filter(Boolean)
@@ -3342,12 +3995,22 @@ async function confirmarRecebimento() {
         if (resultadoDevolucao?.finalizada) {
           setDevolucaoPendente(null)
         }
+
+        if (
+          suportesCOPRecebidos.modular > 0 ||
+          suportesCOPRecebidos.comum > 0
+        ) {
+          await devolverSuportesCOPRecebidos(
+            suportesCOPRecebidos
+          )
+        }
       }
     }
 
     const totalRecebido =
       itensIndividuais.length +
       itensHT.length +
+      itensColeteRefletivo.length +
       itensTonfa.length +
       itensTorniquete.length +
       itensMunicao.length +
@@ -3363,7 +4026,11 @@ async function confirmarRecebimento() {
       total_ht:
         itensHT.length,
 
+      total_coletes_refletivos:
+        itensColeteRefletivo.length,
+
       total_quantitativos:
+        itensColeteRefletivo.length +
         itensTonfa.length +
         itensTorniquete.length,
 
@@ -3379,6 +4046,7 @@ async function confirmarRecebimento() {
       resultados: [
         ...resultadosIndividuais,
         ...resultadosHT,
+        ...resultadosColeteRefletivo,
         ...resultadosTonfas,
         ...resultadosTorniquete,
         ...resultadosMunicoes,
@@ -3603,7 +4271,9 @@ async function confirmarRecebimento() {
                 item?.tipo_registro ===
                   'MUNICAO_DEVOLUCAO' ||
                 item?.tipo_registro ===
-                  'VIATURA_DEVOLUCAO'
+                  'VIATURA_DEVOLUCAO' ||
+                item?.tipo_registro ===
+                  'COLETE_REFLETIVO_DEVOLUCAO'
             )) && (
             <div className="pagar-material-feedback pagar-material-feedback-success">
               DEVOLUÇÃO PENDENTE LOCALIZADA • somente os itens selecionados pelo usuário estão sendo exibidos.
@@ -3776,6 +4446,19 @@ async function confirmarRecebimento() {
                             <td>
   {item.descricao}
 
+  {obterSuportesCOP(item).length > 0 && (
+    <small
+      style={{
+        display: 'block',
+        marginTop: '5px',
+        color: '#0b5cad',
+        fontWeight: 800
+      }}
+    >
+      COM: {obterSuportesCOP(item).join(' • ')}
+    </small>
+  )}
+
   {novidadeVisual && (
     <div
       style={{
@@ -3944,7 +4627,8 @@ async function confirmarRecebimento() {
   {(
     [
       'TONFA_QUANTIDADE',
-      'MUNICAO_DEVOLUCAO'
+      'MUNICAO_DEVOLUCAO',
+      'COLETE_REFLETIVO_DEVOLUCAO'
     ].includes(
       item.tipo_registro
     ) ||
@@ -4106,6 +4790,39 @@ async function confirmarRecebimento() {
                 removerNovidadeItem
               }
             />
+
+            {itensSelecionados
+              .filter(
+                (item) =>
+                  obterSuportesCOP(item)
+                    .length > 0
+              )
+              .map((item) => (
+                <div
+                  key={`suporte-cop-${criarChaveItem(item)}`}
+                  className="pagar-material-feedback pagar-material-feedback-success"
+                  style={{
+                    marginBottom: '12px',
+                    textAlign: 'left'
+                  }}
+                >
+                  <strong>
+                    {item?.patrimonio ||
+                      item?.descricao ||
+                      'COP'}
+                  </strong>
+
+                  <div
+                    style={{
+                      marginTop: '5px',
+                      fontWeight: 800,
+                      color: '#0b5cad'
+                    }}
+                  >
+                    COM: {obterSuportesCOP(item).join(' • ')}
+                  </div>
+                </div>
+              ))}
 
             {itensSelecionados
               .filter(itemEhViatura)

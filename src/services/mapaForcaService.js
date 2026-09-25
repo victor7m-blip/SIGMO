@@ -970,9 +970,16 @@ export async function registrarCautelaMapaForca({
     }
   }
 
+  const possuiResumoItens =
+    Array.isArray(
+      resumoItensEfetivo
+    ) &&
+    resumoItensEfetivo.length > 0
+
   if (
     !movimentacaoPrincipalIdEfetiva &&
-    idsMunicao.length === 0
+    idsMunicao.length === 0 &&
+    !possuiResumoItens
   ) {
     throw new Error(
       'A cautela foi criada, mas não possui identificador para vínculo com o Mapa Força.'
