@@ -1111,9 +1111,23 @@ async function aplicarEntradaManutencaoTorniquete({
 }
 
 
-async function buscarColeteRefletivoSeguroPorId(referenciaId) {
+async function movimentarManutencaoColeteRefletivo({
+  referenciaId,
+  quantidade,
+  acao
+}) {
   const referencia =
     texto(referenciaId)
+
+  const quantidadeValida =
+    inteiroPositivo(
+      quantidade
+    )
+
+  const acaoValida =
+    maiusculo(
+      acao
+    )
 
   if (!referencia) {
     throw new Error(
@@ -1121,37 +1135,47 @@ async function buscarColeteRefletivoSeguroPorId(referenciaId) {
     )
   }
 
+  if (quantidadeValida <= 0) {
+    throw new Error(
+      'A quantidade do Colete Refletivo deve ser maior que zero.'
+    )
+  }
+
+  if (
+    ![
+      'ENVIAR',
+      'RETORNAR',
+      'DESFAZER'
+    ].includes(
+      acaoValida
+    )
+  ) {
+    throw new Error(
+      'Ação de manutenção inválida para Colete Refletivo.'
+    )
+  }
+
   const {
     data,
     error
-  } = await supabase
-    .from('sigmo_coletes_refletivos')
-    .select(
-      [
-        'id',
-        'tamanho',
-        'quantidade_total',
-        'quantidade_p4',
-        'quantidade_svdd',
-        'quantidade_em_servico',
-        'quantidade_manutencao',
-        'status_operacional',
-        'local_atual',
-        'ativo',
-        'atualizado_em'
-      ].join(', ')
-    )
-    .eq('id', referencia)
-    .eq('ativo', true)
-    .single()
+  } = await supabase.rpc(
+    'sigmo_colete_refletivo_movimentar_manutencao',
+    {
+      p_colete_refletivo_id:
+        referencia,
+
+      p_quantidade:
+        quantidadeValida,
+
+      p_acao:
+        acaoValida
+    }
+  )
 
   if (error) {
-    throw error
-  }
-
-  if (!data?.id) {
     throw new Error(
-      'Estoque do Colete Refletivo não localizado.'
+      error?.message ||
+      'Não foi possível movimentar o Colete Refletivo na manutenção.'
     )
   }
 
@@ -1161,101 +1185,21 @@ async function buscarColeteRefletivoSeguroPorId(referenciaId) {
 
 async function aplicarEntradaManutencaoColeteRefletivo({
   referenciaId,
-  quantidade,
-  origem = null
+  quantidade
 }) {
   const quantidadeValida =
     inteiroPositivo(
       quantidade
     )
 
-  if (quantidadeValida <= 0) {
-    throw new Error(
-      'A quantidade de Coletes Refletivos enviada para manutenção deve ser maior que zero.'
-    )
-  }
-
-  const origemNormalizada =
-    maiusculo(origem)
-
-  if (
-    origemNormalizada &&
-    !origemNormalizada.includes('SVDD') &&
-    !origemNormalizada.includes('SERVIÇO DE DIA') &&
-    !origemNormalizada.includes('SERVICO DE DIA')
-  ) {
-    throw new Error(
-      'A manutenção de Colete Refletivo deve sair do estoque do SVDD.'
-    )
-  }
-
-  const atual =
-    await buscarColeteRefletivoSeguroPorId(
-      referenciaId
-    )
-
-  const saldoSvdd =
-    inteiroPositivo(
-      atual?.quantidade_svdd
-    )
-
-  const saldoManutencao =
-    inteiroPositivo(
-      atual?.quantidade_manutencao
-    )
-
-  if (
-    quantidadeValida >
-    saldoSvdd
-  ) {
-    throw new Error(
-      `Existem apenas ${saldoSvdd} Colete(s) Refletivo(s) disponível(is) no SVDD para manutenção.`
-    )
-  }
-
-  const {
-    data: atualizado,
-    error: updateError
-  } = await supabase
-    .from(
-      'sigmo_coletes_refletivos'
-    )
-    .update({
-      quantidade_svdd:
-        saldoSvdd -
+  const atualizado =
+    await movimentarManutencaoColeteRefletivo({
+      referenciaId,
+      quantidade:
         quantidadeValida,
-
-      quantidade_manutencao:
-        saldoManutencao +
-        quantidadeValida,
-
-      atualizado_em:
-        new Date().toISOString()
+      acao:
+        'ENVIAR'
     })
-    .eq(
-      'id',
-      atual.id
-    )
-    .eq(
-      'quantidade_svdd',
-      saldoSvdd
-    )
-    .eq(
-      'quantidade_manutencao',
-      saldoManutencao
-    )
-    .select()
-    .maybeSingle()
-
-  if (updateError) {
-    throw updateError
-  }
-
-  if (!atualizado?.id) {
-    throw new Error(
-      'O estoque do Colete Refletivo foi alterado por outra operação. Atualize a tela e tente novamente.'
-    )
-  }
 
   return {
     colete_refletivo:
@@ -1263,40 +1207,13 @@ async function aplicarEntradaManutencaoColeteRefletivo({
 
     rollback:
       async () => {
-        const {
-          error: rollbackError
-        } = await supabase
-          .from(
-            'sigmo_coletes_refletivos'
-          )
-          .update({
-            quantidade_svdd:
-              saldoSvdd,
-
-            quantidade_manutencao:
-              saldoManutencao,
-
-            atualizado_em:
-              new Date().toISOString()
-          })
-          .eq(
-            'id',
-            atual.id
-          )
-          .eq(
-            'quantidade_svdd',
-            saldoSvdd -
-              quantidadeValida
-          )
-          .eq(
-            'quantidade_manutencao',
-            saldoManutencao +
-              quantidadeValida
-          )
-
-        if (rollbackError) {
-          throw rollbackError
-        }
+        await movimentarManutencaoColeteRefletivo({
+          referenciaId,
+          quantidade:
+            quantidadeValida,
+          acao:
+            'DESFAZER'
+        })
       }
   }
 }
@@ -1305,84 +1222,21 @@ async function aplicarEntradaManutencaoColeteRefletivo({
 async function aplicarRetornoColeteRefletivo(
   manutencao
 ) {
+  const referenciaId =
+    manutencao?.referencia_id
+
   const quantidade =
     inteiroPositivo(
       manutencao?.quantidade
     )
 
-  if (quantidade <= 0) {
-    throw new Error(
-      'A manutenção de Colete Refletivo não possui quantidade válida para retorno.'
-    )
-  }
-
-  const atual =
-    await buscarColeteRefletivoSeguroPorId(
-      manutencao?.referencia_id
-    )
-
-  const saldoSvdd =
-    inteiroPositivo(
-      atual?.quantidade_svdd
-    )
-
-  const saldoManutencao =
-    inteiroPositivo(
-      atual?.quantidade_manutencao
-    )
-
-  if (
-    quantidade >
-    saldoManutencao
-  ) {
-    throw new Error(
-      `Existem apenas ${saldoManutencao} Colete(s) Refletivo(s) registrado(s) em manutenção para este tamanho.`
-    )
-  }
-
-  const {
-    data: atualizado,
-    error: updateError
-  } = await supabase
-    .from(
-      'sigmo_coletes_refletivos'
-    )
-    .update({
-      quantidade_svdd:
-        saldoSvdd +
-        quantidade,
-
-      quantidade_manutencao:
-        saldoManutencao -
-        quantidade,
-
-      atualizado_em:
-        new Date().toISOString()
+  const atualizado =
+    await movimentarManutencaoColeteRefletivo({
+      referenciaId,
+      quantidade,
+      acao:
+        'RETORNAR'
     })
-    .eq(
-      'id',
-      atual.id
-    )
-    .eq(
-      'quantidade_svdd',
-      saldoSvdd
-    )
-    .eq(
-      'quantidade_manutencao',
-      saldoManutencao
-    )
-    .select()
-    .maybeSingle()
-
-  if (updateError) {
-    throw updateError
-  }
-
-  if (!atualizado?.id) {
-    throw new Error(
-      'O estoque do Colete Refletivo foi alterado por outra operação. Atualize a tela e tente novamente.'
-    )
-  }
 
   return {
     colete_refletivo:
@@ -1390,40 +1244,12 @@ async function aplicarRetornoColeteRefletivo(
 
     rollback:
       async () => {
-        const {
-          error: rollbackError
-        } = await supabase
-          .from(
-            'sigmo_coletes_refletivos'
-          )
-          .update({
-            quantidade_svdd:
-              saldoSvdd,
-
-            quantidade_manutencao:
-              saldoManutencao,
-
-            atualizado_em:
-              new Date().toISOString()
-          })
-          .eq(
-            'id',
-            atual.id
-          )
-          .eq(
-            'quantidade_svdd',
-            saldoSvdd +
-              quantidade
-          )
-          .eq(
-            'quantidade_manutencao',
-            saldoManutencao -
-              quantidade
-          )
-
-        if (rollbackError) {
-          throw rollbackError
-        }
+        await movimentarManutencaoColeteRefletivo({
+          referenciaId,
+          quantidade,
+          acao:
+            'ENVIAR'
+        })
       }
   }
 }
@@ -2218,8 +2044,7 @@ export async function registrarManutencao({
           referenciaId:
             referenciaValida,
           quantidade:
-            quantidadeValida,
-          origem
+            quantidadeValida
         })
     }
 

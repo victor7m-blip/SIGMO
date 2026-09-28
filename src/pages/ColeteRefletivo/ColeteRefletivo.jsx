@@ -7,9 +7,14 @@ import {
 
 import {
   cancelarTransferenciaColeteRefletivo,
+  colocarColeteRefletivoEmBaixadosP4,
+  descarregarColeteRefletivoP4,
   devolverColeteRefletivoAoP4,
+  encaminharManutencaoColeteRefletivoAoP4,
   listarEstoqueColetesRefletivos,
+  listarManutencoesPendentesColeteRefletivoP4,
   listarTransferenciasPendentesColetesRefletivos,
+  receberManutencaoColeteRefletivoP4,
   receberTransferenciaColeteRefletivo,
   registrarEntradaColeteRefletivoP4,
   TAMANHOS,
@@ -205,6 +210,11 @@ function CardTamanho({
       item?.quantidade_manutencao
     )
 
+  const baixados =
+    numero(
+      item?.quantidade_baixada
+    )
+
   return (
     <button
       type="button"
@@ -266,8 +276,16 @@ function CardTamanho({
         </span>
 
         <span>
-          Manutenção: {manutencao}
+          {visaoSvdd
+            ? `Danificados: ${manutencao}`
+            : `Danificados no SVDD: ${manutencao}`}
         </span>
+
+        {!visaoSvdd && (
+          <span>
+            Baixados: {baixados}
+          </span>
+        )}
       </div>
     </button>
   )
@@ -1642,6 +1660,1338 @@ function ModalPendencias({
   )
 }
 
+
+function ModalCondicaoMaterial({
+  itens,
+  pendentes,
+  visaoSvdd,
+  onFechar,
+  onEncaminhar
+}) {
+  const [
+    quantidadePorId,
+    setQuantidadePorId
+  ] = useState({})
+
+  const [
+    processandoId,
+    setProcessandoId
+  ] = useState(null)
+
+  const [
+    erro,
+    setErro
+  ] = useState('')
+
+  function reservado(item) {
+    return (pendentes || [])
+      .filter(
+        (mov) =>
+          String(
+            mov?.colete_refletivo_id ||
+            ''
+          ) ===
+          String(
+            item?.id ||
+            ''
+          ) &&
+          mov?.status ===
+            'PENDENTE_RECEBIMENTO'
+      )
+      .reduce(
+        (total, mov) =>
+          total +
+          numero(
+            mov?.quantidade
+          ),
+        0
+      )
+  }
+
+  function disponivel(item) {
+    return Math.max(
+      0,
+      numero(
+        item?.quantidade
+      ) -
+      reservado(item)
+    )
+  }
+
+  async function enviar(item) {
+    const maximo =
+      disponivel(item)
+
+    const quantidade =
+      Number(
+        quantidadePorId[
+          item.id
+        ] ??
+        1
+      )
+
+    if (
+      !Number.isInteger(
+        quantidade
+      ) ||
+      quantidade <= 0
+    ) {
+      setErro(
+        'Informe uma quantidade inteira maior que zero.'
+      )
+      return
+    }
+
+    if (
+      quantidade >
+      maximo
+    ) {
+      setErro(
+        `Quantidade disponível para encaminhamento: ${maximo}.`
+      )
+      return
+    }
+
+    try {
+      setProcessandoId(
+        item.id
+      )
+      setErro('')
+
+      await onEncaminhar?.({
+        item,
+        quantidade
+      })
+
+      setQuantidadePorId(
+        (anterior) => ({
+          ...anterior,
+          [item.id]: 1
+        })
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao encaminhar material danificado ao P4:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível encaminhar o material danificado ao P4.'
+      )
+    } finally {
+      setProcessandoId(
+        null
+      )
+    }
+  }
+
+  return (
+    <div
+      role="presentation"
+      onClick={
+        processandoId
+          ? undefined
+          : onFechar
+      }
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10050,
+        display: 'grid',
+        placeItems: 'center',
+        padding: '24px',
+        background:
+          'rgba(3, 15, 32, .72)'
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Condição do material"
+        onClick={(event) =>
+          event.stopPropagation()
+        }
+        style={{
+          width:
+            'min(760px, 100%)',
+          maxHeight:
+            'min(82vh, 800px)',
+          display: 'grid',
+          gridTemplateRows:
+            'auto minmax(0, 1fr)',
+          borderRadius: '20px',
+          border:
+            '1px solid rgba(30, 92, 153, .28)',
+          background: '#ffffff',
+          boxShadow:
+            '0 28px 70px rgba(0, 0, 0, .30)',
+          overflow: 'hidden'
+        }}
+      >
+        <header
+          style={{
+            display: 'flex',
+            alignItems:
+              'flex-start',
+            justifyContent:
+              'space-between',
+            gap: '16px',
+            padding:
+              '22px 24px',
+            color: '#ffffff',
+            background:
+              'linear-gradient(135deg, #071d39 0%, #0b315a 100%)'
+          }}
+        >
+          <div>
+            <span
+              style={{
+                display:
+                  'block',
+                marginBottom:
+                  '5px',
+                color:
+                  '#8fc8ff',
+                fontSize:
+                  '12px',
+                fontWeight:
+                  900,
+                letterSpacing:
+                  '.1em'
+              }}
+            >
+              CONDIÇÃO DO MATERIAL
+            </span>
+
+            <h2
+              style={{
+                margin: 0,
+                fontSize:
+                  '22px'
+              }}
+            >
+              Coletes danificados
+            </h2>
+
+            <p
+              style={{
+                margin:
+                  '7px 0 0',
+                opacity: .88,
+                lineHeight:
+                  1.45
+              }}
+            >
+              {visaoSvdd
+                ? 'Selecione a quantidade de coletes danificados e encaminhe ao P4 para descarga. O material permanecerá indisponível até o recebimento.'
+                : 'Materiais atualmente registrados em manutenção.'}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="coletes-btn-secondary"
+            onClick={onFechar}
+            disabled={
+              Boolean(
+                processandoId
+              )
+            }
+          >
+            Fechar
+          </button>
+        </header>
+
+        <div
+          style={{
+            overflowY: 'auto',
+            padding:
+              '20px 24px'
+          }}
+        >
+          {erro && (
+            <div
+              style={{
+                marginBottom:
+                  '14px',
+                padding:
+                  '11px 12px',
+                borderRadius:
+                  '10px',
+                border:
+                  '1px solid #efb4b4',
+                background:
+                  '#fff1f1',
+                color:
+                  '#9f1c1c',
+                fontWeight:
+                  750
+              }}
+            >
+              {erro}
+            </div>
+          )}
+
+          {(itens || []).length === 0 ? (
+            <div className="coletes-empty">
+              Nenhum colete refletivo em manutenção.
+            </div>
+          ) : (
+            <div
+              style={{
+                display:
+                  'grid',
+                gap:
+                  '12px'
+              }}
+            >
+              {(itens || []).map(
+                (item) => {
+                  const qtdDisponivel =
+                    disponivel(item)
+
+                  const qtdReservada =
+                    reservado(item)
+
+                  return (
+                    <article
+                      key={
+                        item.id ||
+                        item.tamanho
+                      }
+                      style={{
+                        border:
+                          '1px solid #d8e1ec',
+                        borderRadius:
+                          '14px',
+                        padding:
+                          '15px 16px',
+                        background:
+                          '#f8fafc'
+                      }}
+                    >
+                      <div
+                        style={{
+                          display:
+                            'grid',
+                          gridTemplateColumns:
+                            'minmax(0, 1fr) auto',
+                          alignItems:
+                            'start',
+                          gap:
+                            '16px'
+                        }}
+                      >
+                        <div>
+                          <span
+                            style={{
+                              display:
+                                'block',
+                              color:
+                                '#667085',
+                              fontSize:
+                                '11px',
+                              fontWeight:
+                                850,
+                              letterSpacing:
+                                '.06em'
+                            }}
+                          >
+                            COLETE REFLETIVO
+                          </span>
+
+                          <strong
+                            style={{
+                              display:
+                                'block',
+                              marginTop:
+                                '5px',
+                              color:
+                                '#0b315a',
+                              fontSize:
+                                '17px'
+                            }}
+                          >
+                            Tamanho {item.tamanho}
+                          </strong>
+
+                          <small
+                            style={{
+                              display:
+                                'block',
+                              marginTop:
+                                '5px',
+                              color:
+                                '#667085'
+                            }}
+                          >
+                            Danificados: {numero(item.quantidade)}
+                            {qtdReservada > 0
+                              ? ` • aguardando P4: ${qtdReservada}`
+                              : ''}
+                          </small>
+                        </div>
+
+                        <strong
+                          style={{
+                            color:
+                              '#172033',
+                            fontSize:
+                              '22px'
+                          }}
+                        >
+                          {qtdDisponivel}
+                        </strong>
+                      </div>
+
+                      {visaoSvdd && (
+                        <div
+                          style={{
+                            display:
+                              'grid',
+                            gridTemplateColumns:
+                              '140px minmax(0, 1fr)',
+                            alignItems:
+                              'end',
+                            gap:
+                              '12px',
+                            marginTop:
+                              '14px',
+                            paddingTop:
+                              '14px',
+                            borderTop:
+                              '1px solid #e4e7ec'
+                          }}
+                        >
+                          <label>
+                            <span
+                              style={{
+                                display:
+                                  'block',
+                                marginBottom:
+                                  '6px',
+                                color:
+                                  '#344054',
+                                fontSize:
+                                  '12px',
+                                fontWeight:
+                                  850,
+                                textTransform:
+                                  'uppercase'
+                              }}
+                            >
+                              Quantidade
+                            </span>
+
+                            <input
+                              type="number"
+                              min="1"
+                              max={
+                                qtdDisponivel
+                              }
+                              step="1"
+                              value={
+                                quantidadePorId[
+                                  item.id
+                                ] ??
+                                1
+                              }
+                              onChange={(event) =>
+                                setQuantidadePorId(
+                                  (anterior) => ({
+                                    ...anterior,
+                                    [item.id]:
+                                      event.target.value
+                                  })
+                                )
+                              }
+                              disabled={
+                                Boolean(
+                                  processandoId
+                                ) ||
+                                qtdDisponivel <=
+                                  0
+                              }
+                              style={{
+                                width:
+                                  '100%',
+                                minHeight:
+                                  '42px',
+                                boxSizing:
+                                  'border-box',
+                                border:
+                                  '1px solid #cbd5e1',
+                                borderRadius:
+                                  '10px',
+                                padding:
+                                  '0 12px',
+                                font:
+                                  'inherit',
+                                fontWeight:
+                                  750
+                              }}
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            className="coletes-btn-primary"
+                            onClick={() =>
+                              enviar(
+                                item
+                              )
+                            }
+                            disabled={
+                              Boolean(
+                                processandoId
+                              ) ||
+                              qtdDisponivel <=
+                                0
+                            }
+                          >
+                            {processandoId ===
+                            item.id
+                              ? 'Encaminhando...'
+                              : qtdDisponivel <=
+                                0
+                              ? 'Aguardando recebimento no P4'
+                              : 'Encaminhar ao P4'}
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  )
+                }
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+
+
+function ModalBaixaDescargaP4({
+  modo,
+  estoque,
+  user,
+  onFechar,
+  onConcluido
+}) {
+  const descarga =
+    modo === 'DESCARGA'
+
+  const itensDisponiveis =
+    (estoque || [])
+      .map(
+        (item) => ({
+          ...item,
+          quantidade_disponivel:
+            descarga
+              ? numero(
+                  item?.quantidade_baixada
+                )
+              : numero(
+                  item?.quantidade_p4
+                )
+        })
+      )
+      .filter(
+        (item) =>
+          item.quantidade_disponivel >
+          0
+      )
+
+  const [
+    tamanho,
+    setTamanho
+  ] = useState(
+    itensDisponiveis[0]
+      ?.tamanho ||
+    'P'
+  )
+
+  const [
+    quantidade,
+    setQuantidade
+  ] = useState(1)
+
+  const [
+    observacoes,
+    setObservacoes
+  ] = useState('')
+
+  const [
+    salvando,
+    setSalvando
+  ] = useState(false)
+
+  const [
+    erro,
+    setErro
+  ] = useState('')
+
+  const itemSelecionado =
+    itensDisponiveis.find(
+      (item) =>
+        String(
+          item?.tamanho ||
+          ''
+        ).toUpperCase() ===
+        String(
+          tamanho ||
+          ''
+        ).toUpperCase()
+    ) ||
+    itensDisponiveis[0] ||
+    null
+
+  const disponivel =
+    numero(
+      itemSelecionado
+        ?.quantidade_disponivel
+    )
+
+  async function confirmar() {
+    const qtd =
+      Number(
+        quantidade
+      )
+
+    if (!itemSelecionado?.id) {
+      setErro(
+        descarga
+          ? 'Nenhum material baixado disponível para descarga.'
+          : 'Nenhum Colete Refletivo disponível no COFRE DO P4.'
+      )
+      return
+    }
+
+    if (
+      !Number.isInteger(qtd) ||
+      qtd <= 0
+    ) {
+      setErro(
+        'Informe uma quantidade inteira maior que zero.'
+      )
+      return
+    }
+
+    if (qtd > disponivel) {
+      setErro(
+        `Quantidade disponível: ${disponivel}.`
+      )
+      return
+    }
+
+    try {
+      setSalvando(true)
+      setErro('')
+
+      if (descarga) {
+        await descarregarColeteRefletivoP4({
+          coleteRefletivoId:
+            itemSelecionado.id,
+          quantidade:
+            qtd,
+          user,
+          observacoes
+        })
+      } else {
+        await colocarColeteRefletivoEmBaixadosP4({
+          coleteRefletivoId:
+            itemSelecionado.id,
+          quantidade:
+            qtd,
+          user,
+          observacoes
+        })
+      }
+
+      await onConcluido?.(
+        descarga
+          ? `${qtd} colete(s) refletivo(s) tamanho ${itemSelecionado.tamanho} descarregado(s) definitivamente.`
+          : `${qtd} colete(s) refletivo(s) tamanho ${itemSelecionado.tamanho} colocado(s) em Baixados.`
+      )
+    } catch (error) {
+      console.error(
+        descarga
+          ? 'Erro ao descarregar Colete Refletivo:'
+          : 'Erro ao colocar Colete Refletivo em baixados:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        (
+          descarga
+            ? 'Não foi possível concluir a descarga.'
+            : 'Não foi possível colocar o material em baixados.'
+        )
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div
+      role="presentation"
+      onClick={
+        salvando
+          ? undefined
+          : onFechar
+      }
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10070,
+        display: 'grid',
+        placeItems: 'center',
+        padding: '24px',
+        background:
+          'rgba(3, 15, 32, .72)'
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={
+          descarga
+            ? 'Descarga de Colete Refletivo'
+            : 'Colocar Colete Refletivo em baixados'
+        }
+        onClick={(event) =>
+          event.stopPropagation()
+        }
+        style={{
+          width:
+            'min(560px, 100%)',
+          borderRadius: '20px',
+          border:
+            '1px solid rgba(30, 92, 153, .28)',
+          background: '#ffffff',
+          boxShadow:
+            '0 28px 70px rgba(0, 0, 0, .30)',
+          overflow: 'hidden'
+        }}
+      >
+        <header
+          style={{
+            padding: '22px 24px',
+            color: '#ffffff',
+            background:
+              'linear-gradient(135deg, #071d39 0%, #0b315a 100%)'
+          }}
+        >
+          <span
+            style={{
+              display: 'block',
+              marginBottom: '5px',
+              color: '#8fc8ff',
+              fontSize: '12px',
+              fontWeight: 900,
+              letterSpacing: '.1em'
+            }}
+          >
+            CONDIÇÃO DO MATERIAL
+          </span>
+
+          <h2
+            style={{
+              margin: 0,
+              fontSize: '22px'
+            }}
+          >
+            {descarga
+              ? 'Descarga definitiva'
+              : 'Colocar em baixados'}
+          </h2>
+
+          <p
+            style={{
+              margin: '7px 0 0',
+              opacity: .88,
+              lineHeight: 1.45
+            }}
+          >
+            {descarga
+              ? 'Selecione o material baixado que será retirado definitivamente do controle de estoque.'
+              : 'Selecione um Colete Refletivo do COFRE DO P4 e mova para Baixados.'}
+          </p>
+        </header>
+
+        <div
+          style={{
+            display: 'grid',
+            gap: '16px',
+            padding: '22px 24px'
+          }}
+        >
+          {itensDisponiveis.length ===
+          0 ? (
+            <div className="coletes-empty">
+              {descarga
+                ? 'Nenhum material em Baixados para descarga.'
+                : 'Nenhum Colete Refletivo disponível no COFRE DO P4.'}
+            </div>
+          ) : (
+            <>
+              <label>
+                <span
+                  style={{
+                    display: 'block',
+                    marginBottom: '7px',
+                    color: '#344054',
+                    fontSize: '12px',
+                    fontWeight: 850,
+                    textTransform:
+                      'uppercase'
+                  }}
+                >
+                  Tamanho
+                </span>
+
+                <select
+                  value={
+                    itemSelecionado
+                      ?.tamanho ||
+                    tamanho
+                  }
+                  onChange={(event) => {
+                    setTamanho(
+                      event.target.value
+                    )
+                    setQuantidade(1)
+                    setErro('')
+                  }}
+                  disabled={salvando}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    border:
+                      '1px solid #cbd5e1',
+                    borderRadius: '10px',
+                    padding: '0 12px',
+                    background: '#ffffff',
+                    font: 'inherit',
+                    fontWeight: 750
+                  }}
+                >
+                  {itensDisponiveis.map(
+                    (item) => (
+                      <option
+                        key={item.id}
+                        value={item.tamanho}
+                      >
+                        {item.tamanho}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    'minmax(0, 1fr) minmax(0, 1fr)',
+                  gap: '12px'
+                }}
+              >
+                <label>
+                  <span
+                    style={{
+                      display: 'block',
+                      marginBottom: '7px',
+                      color: '#344054',
+                      fontSize: '12px',
+                      fontWeight: 850,
+                      textTransform:
+                        'uppercase'
+                    }}
+                  >
+                    Quantidade
+                  </span>
+
+                  <input
+                    type="number"
+                    min="1"
+                    max={disponivel}
+                    step="1"
+                    value={quantidade}
+                    onChange={(event) =>
+                      setQuantidade(
+                        event.target.value
+                      )
+                    }
+                    disabled={salvando}
+                    style={{
+                      width: '100%',
+                      minHeight: '44px',
+                      boxSizing:
+                        'border-box',
+                      border:
+                        '1px solid #cbd5e1',
+                      borderRadius:
+                        '10px',
+                      padding: '0 12px',
+                      font: 'inherit',
+                      fontWeight: 750
+                    }}
+                  />
+                </label>
+
+                <div>
+                  <span
+                    style={{
+                      display: 'block',
+                      marginBottom: '7px',
+                      color: '#344054',
+                      fontSize: '12px',
+                      fontWeight: 850,
+                      textTransform:
+                        'uppercase'
+                    }}
+                  >
+                    Disponível
+                  </span>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      minHeight: '44px',
+                      boxSizing:
+                        'border-box',
+                      border:
+                        '1px solid #d8e1ec',
+                      borderRadius:
+                        '10px',
+                      padding: '0 12px',
+                      background:
+                        '#f8fafc',
+                      color: '#0b315a',
+                      fontWeight: 900
+                    }}
+                  >
+                    {disponivel}
+                  </div>
+                </div>
+              </div>
+
+              <label>
+                <span
+                  style={{
+                    display: 'block',
+                    marginBottom: '7px',
+                    color: '#344054',
+                    fontSize: '12px',
+                    fontWeight: 850,
+                    textTransform:
+                      'uppercase'
+                  }}
+                >
+                  Observação
+                </span>
+
+                <textarea
+                  rows={3}
+                  maxLength={500}
+                  value={observacoes}
+                  onChange={(event) =>
+                    setObservacoes(
+                      event.target.value
+                        .toUpperCase()
+                    )
+                  }
+                  disabled={salvando}
+                  placeholder="Opcional"
+                  style={{
+                    width: '100%',
+                    boxSizing:
+                      'border-box',
+                    resize: 'vertical',
+                    border:
+                      '1px solid #cbd5e1',
+                    borderRadius:
+                      '10px',
+                    padding: '11px 12px',
+                    font: 'inherit'
+                  }}
+                />
+              </label>
+            </>
+          )}
+
+          {erro && (
+            <div
+              style={{
+                padding: '11px 12px',
+                borderRadius: '10px',
+                border:
+                  '1px solid #efb4b4',
+                background: '#fff1f1',
+                color: '#9f1c1c',
+                fontWeight: 750
+              }}
+            >
+              {erro}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}
+          >
+            <button
+              type="button"
+              className="coletes-btn-secondary"
+              onClick={onFechar}
+              disabled={salvando}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              className="coletes-btn-primary"
+              onClick={confirmar}
+              disabled={
+                salvando ||
+                itensDisponiveis.length ===
+                  0
+              }
+            >
+              {salvando
+                ? (
+                    descarga
+                      ? 'Descarregando...'
+                      : 'Registrando...'
+                  )
+                : (
+                    descarga
+                      ? 'Confirmar descarga'
+                      : 'Colocar em baixados'
+                  )}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+
+function ModalReceberDanificadosP4({
+  itens,
+  user,
+  onFechar,
+  onConcluido
+}) {
+  const [
+    processandoId,
+    setProcessandoId
+  ] = useState(null)
+
+  const [
+    erro,
+    setErro
+  ] = useState('')
+
+  async function receber(item) {
+    try {
+      setProcessandoId(
+        item.id
+      )
+
+      setErro('')
+
+      await receberManutencaoColeteRefletivoP4({
+        movimentacaoId:
+          item.id,
+        user
+      })
+
+      await onConcluido?.(
+        `${item.quantidade} colete(s) refletivo(s) tamanho ${item.tamanho} recebido(s) no P4 e registrado(s) como baixado(s).`
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao receber material danificado no P4:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível receber o material danificado no P4.'
+      )
+    } finally {
+      setProcessandoId(
+        null
+      )
+    }
+  }
+
+  return (
+    <div
+      role="presentation"
+      onClick={
+        processandoId
+          ? undefined
+          : onFechar
+      }
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10060,
+        display: 'grid',
+        placeItems: 'center',
+        padding: '24px',
+        background:
+          'rgba(3, 15, 32, .72)'
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Receber material danificado do SVDD"
+        onClick={(event) =>
+          event.stopPropagation()
+        }
+        style={{
+          width:
+            'min(720px, 100%)',
+          maxHeight:
+            'min(80vh, 760px)',
+          display: 'grid',
+          gridTemplateRows:
+            'auto minmax(0, 1fr)',
+          borderRadius: '20px',
+          border:
+            '1px solid rgba(30, 92, 153, .28)',
+          background: '#ffffff',
+          boxShadow:
+            '0 28px 70px rgba(0, 0, 0, .30)',
+          overflow: 'hidden'
+        }}
+      >
+        <header
+          style={{
+            display: 'flex',
+            justifyContent:
+              'space-between',
+            gap: '16px',
+            padding: '22px 24px',
+            color: '#ffffff',
+            background:
+              'linear-gradient(135deg, #071d39 0%, #0b315a 100%)'
+          }}
+        >
+          <div>
+            <span
+              style={{
+                display: 'block',
+                marginBottom:
+                  '5px',
+                color: '#8fc8ff',
+                fontSize:
+                  '12px',
+                fontWeight:
+                  900,
+                letterSpacing:
+                  '.1em'
+              }}
+            >
+              ENTRADAS E RECEBIMENTOS
+            </span>
+
+            <h2
+              style={{
+                margin: 0,
+                fontSize:
+                  '22px'
+              }}
+            >
+              Receber material danificado
+            </h2>
+
+            <p
+              style={{
+                margin:
+                  '7px 0 0',
+                opacity: .88,
+                lineHeight:
+                  1.45
+              }}
+            >
+              Confirme o recebimento no P4. O material danificado será registrado diretamente como baixado.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="coletes-btn-secondary"
+            onClick={onFechar}
+            disabled={
+              Boolean(
+                processandoId
+              )
+            }
+          >
+            Fechar
+          </button>
+        </header>
+
+        <div
+          style={{
+            overflowY: 'auto',
+            padding:
+              '20px 24px'
+          }}
+        >
+          {erro && (
+            <div
+              style={{
+                marginBottom:
+                  '14px',
+                padding:
+                  '11px 12px',
+                borderRadius:
+                  '10px',
+                border:
+                  '1px solid #efb4b4',
+                background:
+                  '#fff1f1',
+                color:
+                  '#9f1c1c',
+                fontWeight:
+                  750
+              }}
+            >
+              {erro}
+            </div>
+          )}
+
+          {(itens || []).length === 0 ? (
+            <div className="coletes-empty">
+              Nenhum material danificado aguardando recebimento.
+            </div>
+          ) : (
+            <div
+              style={{
+                display:
+                  'grid',
+                gap: '12px'
+              }}
+            >
+              {(itens || []).map(
+                (item) => (
+                  <article
+                    key={item.id}
+                    style={{
+                      display:
+                        'grid',
+                      gridTemplateColumns:
+                        'minmax(0, 1fr) auto',
+                      alignItems:
+                        'center',
+                      gap:
+                        '16px',
+                      border:
+                        '1px solid #d8e1ec',
+                      borderRadius:
+                        '14px',
+                      padding:
+                        '15px 16px',
+                      background:
+                        '#f8fafc'
+                    }}
+                  >
+                    <div>
+                      <span
+                        style={{
+                          display:
+                            'block',
+                          color:
+                            '#667085',
+                          fontSize:
+                            '11px',
+                          fontWeight:
+                            850,
+                          letterSpacing:
+                            '.06em'
+                        }}
+                      >
+                        SVDD → P4
+                      </span>
+
+                      <strong
+                        style={{
+                          display:
+                            'block',
+                          marginTop:
+                            '5px',
+                          color:
+                            '#0b315a',
+                          fontSize:
+                            '17px'
+                        }}
+                      >
+                        Tamanho {item.tamanho} • {item.quantidade} un.
+                      </strong>
+
+                      <small
+                        style={{
+                          display:
+                            'block',
+                          marginTop:
+                            '5px',
+                          color:
+                            '#667085'
+                        }}
+                      >
+                        Material danificado aguardando recebimento e baixa no P4
+                      </small>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="coletes-btn-primary"
+                      onClick={() =>
+                        receber(
+                          item
+                        )
+                      }
+                      disabled={
+                        Boolean(
+                          processandoId
+                        )
+                      }
+                    >
+                      {processandoId ===
+                      item.id
+                        ? 'Recebendo...'
+                        : 'Receber no P4'}
+                    </button>
+                  </article>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+
 export default function ColeteRefletivo({
   user,
   onVoltar
@@ -1691,6 +3041,26 @@ export default function ColeteRefletivo({
     setModalEntrada
   ] = useState(false)
 
+  const [
+    modalCondicaoMaterial,
+    setModalCondicaoMaterial
+  ] = useState(false)
+
+  const [
+    pendentesManutencaoP4,
+    setPendentesManutencaoP4
+  ] = useState([])
+
+  const [
+    modalReceberDanificadosP4,
+    setModalReceberDanificadosP4
+  ] = useState(false)
+
+  const [
+    modalBaixaDescargaP4,
+    setModalBaixaDescargaP4
+  ] = useState(null)
+
   const carregar =
     useCallback(
       async () => {
@@ -1700,11 +3070,13 @@ export default function ColeteRefletivo({
 
           const [
             dataEstoque,
-            dataPendentes
+            dataPendentes,
+            dataPendentesManutencao
           ] =
             await Promise.all([
               listarEstoqueColetesRefletivos(),
-              listarTransferenciasPendentesColetesRefletivos()
+              listarTransferenciasPendentesColetesRefletivos(),
+              listarManutencoesPendentesColeteRefletivoP4()
             ])
 
           setEstoque(
@@ -1713,6 +3085,10 @@ export default function ColeteRefletivo({
 
           setPendentes(
             dataPendentes || []
+          )
+
+          setPendentesManutencaoP4(
+            dataPendentesManutencao || []
           )
         } catch (error) {
           console.error(
@@ -1760,13 +3136,25 @@ export default function ColeteRefletivo({
                 item?.quantidade_em_servico
               )
 
+            acumulado.danificadosSvdd +=
+              numero(
+                item?.quantidade_manutencao
+              )
+
+            acumulado.baixados +=
+              numero(
+                item?.quantidade_baixada
+              )
+
             return acumulado
           },
           {
             total: 0,
             p4: 0,
             svdd: 0,
-            emServico: 0
+            emServico: 0,
+            danificadosSvdd: 0,
+            baixados: 0
           }
         ),
       [estoque]
@@ -1781,6 +3169,10 @@ export default function ColeteRefletivo({
           return estoque
             .map(
               (item) => ({
+                id:
+                  item?.id ||
+                  null,
+
                 tamanho:
                   String(
                     item?.tamanho ||
@@ -1831,10 +3223,46 @@ export default function ColeteRefletivo({
 
           outrasCias: [],
           batalhao: [],
-          baixados: [],
+
+          baixados:
+            porCampo(
+              'quantidade_baixada'
+            ),
+
           outros: []
         }
       },
+      [estoque]
+    )
+
+  const distribuicaoSvddResumoP4 =
+    useMemo(
+      () =>
+        estoque
+          .map(
+            (item) => ({
+              tamanho:
+                String(
+                  item?.tamanho ||
+                  ''
+                )
+                  .trim()
+                  .toUpperCase(),
+
+              quantidade:
+                numero(
+                  item?.quantidade_svdd
+                ) +
+                numero(
+                  item?.quantidade_manutencao
+                )
+            })
+          )
+          .filter(
+            (item) =>
+              item.tamanho &&
+              item.quantidade > 0
+          ),
       [estoque]
     )
 
@@ -1973,6 +3401,68 @@ export default function ColeteRefletivo({
     await carregar()
   }
 
+  async function concluirBaixaDescargaP4(
+    mensagemConcluida
+  ) {
+    setModalBaixaDescargaP4(
+      null
+    )
+
+    setMensagem(
+      mensagemConcluida
+    )
+
+    await carregar()
+  }
+
+  async function concluirRecebimentoDanificadoP4(
+    mensagemConcluida
+  ) {
+    setModalReceberDanificadosP4(
+      false
+    )
+
+    setMensagem(
+      mensagemConcluida
+    )
+
+    await carregar()
+  }
+
+  async function encaminharManutencaoAoP4({
+    item,
+    quantidade
+  }) {
+    const qtd =
+      Number(quantidade)
+
+    if (
+      !item?.id ||
+      !Number.isInteger(qtd) ||
+      qtd <= 0
+    ) {
+      throw new Error(
+        'Informe uma quantidade válida para encaminhamento.'
+      )
+    }
+
+    await encaminharManutencaoColeteRefletivoAoP4({
+      coleteRefletivoId:
+        item.id,
+      quantidade:
+        qtd,
+      user,
+      observacoes:
+        `ENCAMINHAMENTO DE ${qtd} COLETE(S) REFLETIVO(S) TAMANHO ${item.tamanho} EM MANUTENÇÃO DO SVDD PARA O P4.`
+    })
+
+    setMensagem(
+      `${qtd} colete(s) refletivo(s) tamanho ${item.tamanho} encaminhado(s) ao P4. Aguardando recebimento.`
+    )
+
+    await carregar()
+  }
+
   return (
     <main className="coletes-page">
       <header className="coletes-header">
@@ -2036,13 +3526,29 @@ export default function ColeteRefletivo({
       )}
 
       <section className="municoes-resumo-grid">
-        {visaoP4 && (
-          <CardResumo
-            titulo="TOTAL CONTROLADO"
-            valor={resumo.total}
-            subtitulo="Cofre P4 + Cofre SVDD + cautelas"
-          />
-        )}
+        <CardResumo
+          titulo="TOTAL CONTROLADO"
+          valor={
+            visaoP4
+              ? (
+                  resumo.p4 +
+                  resumo.svdd +
+                  resumo.emServico +
+                  resumo.danificadosSvdd +
+                  resumo.baixados
+                )
+              : (
+                  resumo.svdd +
+                  resumo.emServico +
+                  resumo.danificadosSvdd
+                )
+          }
+          subtitulo={
+            visaoP4
+              ? 'P4 + SVDD + cautelas + danificados + baixados pendentes de descarga'
+              : 'Cofre SVDD + cautelas + danificados'
+          }
+        />
 
         {visaoP4 && (
           <CardDistribuicao
@@ -2057,9 +3563,15 @@ export default function ColeteRefletivo({
         <CardDistribuicao
           titulo="COFRE DO SVDD"
           itens={
-            distribuicaoPorLocal.svdd
+            visaoP4
+              ? distribuicaoSvddResumoP4
+              : distribuicaoPorLocal.svdd
           }
-          subtitulo="Saldo por tamanho"
+          subtitulo={
+            visaoP4
+              ? 'Total sob responsabilidade do SVDD'
+              : 'Saldo por tamanho'
+          }
         />
 
         {visaoP4 && (
@@ -2080,13 +3592,15 @@ export default function ColeteRefletivo({
           subtitulo="Com policiais"
         />
 
-        <CardDistribuicao
-          titulo="MANUTENÇÃO"
-          itens={
-            distribuicaoPorLocal.manutencao
-          }
-          subtitulo="Material indisponível"
-        />
+        {!visaoP4 && (
+          <CardDistribuicao
+            titulo="DANIFICADOS"
+            itens={
+              distribuicaoPorLocal.manutencao
+            }
+            subtitulo="Material indisponível"
+          />
+        )}
 
         {visaoP4 && (
           <CardDistribuicao
@@ -2315,6 +3829,103 @@ export default function ColeteRefletivo({
               </GrupoOperacao>
 
               <GrupoOperacao
+                icone="🛠️"
+                titulo="Condição do material"
+                descricao={
+                  visaoSvdd
+                    ? 'Recolhimento e encaminhamento de coletes danificados ao P4.'
+                    : 'Recebimento e descarga de coletes sem condição de uso.'
+                }
+              >
+                {visaoSvdd ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModalCondicaoMaterial(
+                        true
+                      )
+                    }
+                    disabled={
+                      loading ||
+                      distribuicaoPorLocal
+                        .manutencao
+                        .reduce(
+                          (total, item) =>
+                            total +
+                            numero(
+                              item?.quantidade
+                            ),
+                          0
+                        ) <= 0
+                    }
+                  >
+                    <strong>
+                      Encaminhar danificado ao P4
+                    </strong>
+
+                    <span>
+                      {`${distribuicaoPorLocal.manutencao.reduce(
+                        (total, item) =>
+                          total +
+                          numero(
+                            item?.quantidade
+                          ),
+                        0
+                      )} colete(s) refletivo(s) danificado(s) no SVDD • visualizar por tamanho`}
+                    </span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setModalBaixaDescargaP4(
+                          'BAIXAR'
+                        )
+                      }
+                      disabled={
+                        loading ||
+                        resumo.p4 <= 0
+                      }
+                    >
+                      <strong>
+                        Colocar em baixados
+                      </strong>
+
+                      <span>
+                        {resumo.p4 > 0
+                          ? `${resumo.p4} colete(s) no COFRE DO P4 disponível(is) para seleção`
+                          : 'Nenhum Colete Refletivo disponível no COFRE DO P4'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setModalBaixaDescargaP4(
+                          'DESCARGA'
+                        )
+                      }
+                      disabled={
+                        loading ||
+                        resumo.baixados <= 0
+                      }
+                    >
+                      <strong>
+                        Descarga
+                      </strong>
+
+                      <span>
+                        {resumo.baixados > 0
+                          ? `${resumo.baixados} colete(s) em Baixados aguardando descarga`
+                          : 'Nenhum material em Baixados aguardando descarga'}
+                      </span>
+                    </button>
+                  </>
+                )}
+              </GrupoOperacao>
+
+              <GrupoOperacao
                 icone="📥"
                 titulo="Entradas e recebimentos"
                 descricao="Recebimento de coletes refletivos enviados pelo outro setor."
@@ -2340,6 +3951,32 @@ export default function ColeteRefletivo({
                       : 'Nenhuma entrada pendente'}
                   </span>
                 </button>
+
+                {visaoP4 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModalReceberDanificadosP4(
+                        true
+                      )
+                    }
+                    disabled={
+                      loading ||
+                      pendentesManutencaoP4.length ===
+                        0
+                    }
+                  >
+                    <strong>
+                      Receber material danificado do SVDD
+                    </strong>
+
+                    <span>
+                      {pendentesManutencaoP4.length > 0
+                        ? `${pendentesManutencaoP4.length} encaminhamento(s) aguardando recebimento`
+                        : 'Nenhum material danificado pendente'}
+                    </span>
+                  </button>
+                )}
               </GrupoOperacao>
             </>
           ) : (
@@ -2363,47 +4000,12 @@ export default function ColeteRefletivo({
             </GrupoOperacao>
           )}
 
-          {visaoSvdd && (
+          {visaoP4 && (
             <GrupoOperacao
-            icone="👮"
-            titulo="Cautelas"
-            descricao="Entrega temporária ao policial sem identificação individual do colete."
-          >
-            <button
-              type="button"
-              disabled
-              title="Será integrado ao fluxo Pagar Material."
+              icone="🗂️"
+              titulo="Cadastro patrimonial"
+              descricao="Entrada e ferramentas administrativas do estoque."
             >
-              <strong>
-                Pagar material
-              </strong>
-
-              <span>
-                Selecionar tamanho e quantidade
-              </span>
-            </button>
-
-            <button
-              type="button"
-              disabled
-              title="Será integrado ao fluxo de devolução."
-            >
-              <strong>
-                Receber devolução
-              </strong>
-
-              <span>
-                Retornar quantidade ao estoque
-              </span>
-            </button>
-          </GrupoOperacao>
-          )}
-
-          <GrupoOperacao
-            icone="🗂️"
-            titulo="Controle"
-            descricao="Entrada, baixa, ajustes e histórico do estoque."
-          >
             <button
               type="button"
               onClick={() => {
@@ -2443,7 +4045,8 @@ export default function ColeteRefletivo({
                 Registrar redução ou correção com histórico
               </span>
             </button>
-          </GrupoOperacao>
+            </GrupoOperacao>
+          )}
         </div>
       </section>
 
@@ -2556,6 +4159,64 @@ export default function ColeteRefletivo({
           </table>
         </div>
       </section>
+
+      {modalCondicaoMaterial && (
+        <ModalCondicaoMaterial
+          itens={
+            distribuicaoPorLocal
+              .manutencao
+          }
+          pendentes={
+            pendentesManutencaoP4
+          }
+          visaoSvdd={
+            visaoSvdd
+          }
+          onFechar={() =>
+            setModalCondicaoMaterial(
+              false
+            )
+          }
+          onEncaminhar={
+            encaminharManutencaoAoP4
+          }
+        />
+      )}
+
+      {modalBaixaDescargaP4 && (
+        <ModalBaixaDescargaP4
+          modo={
+            modalBaixaDescargaP4
+          }
+          estoque={estoque}
+          user={user}
+          onFechar={() =>
+            setModalBaixaDescargaP4(
+              null
+            )
+          }
+          onConcluido={
+            concluirBaixaDescargaP4
+          }
+        />
+      )}
+
+      {modalReceberDanificadosP4 && (
+        <ModalReceberDanificadosP4
+          itens={
+            pendentesManutencaoP4
+          }
+          user={user}
+          onFechar={() =>
+            setModalReceberDanificadosP4(
+              false
+            )
+          }
+          onConcluido={
+            concluirRecebimentoDanificadoP4
+          }
+        />
+      )}
 
       {modalEntrada && (
         <ModalEntradaMaterial

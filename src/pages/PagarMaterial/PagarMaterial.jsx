@@ -31,7 +31,7 @@ import ResumoEntrega from './components/ResumoEntrega'
 
 import './PagarMaterial.css'
 
-const ORIGEM_P4 = 'DEPÓSITO DO P4'
+const ORIGEM_P4 = 'COFRE DO P4'
 const ORIGEM_SVDD = 'COFRE DO SVDD'
 
 const TIPO_CAUTELA = 'CAUTELA'
@@ -40,7 +40,7 @@ const TIPO_ENTREGA = 'ENTREGA'
 const TIPO_TRANSFERENCIA_P4 = 'TRANSFERÊNCIA PARA O P4'
 
 const DESTINO_CAUTELA = 'CAUTELA INDIVIDUAL'
-const DESTINO_P4 = 'DEPÓSITO DO P4'
+const DESTINO_P4 = 'COFRE DO P4'
 const DESTINO_SVDD = 'COFRE DO SVDD'
 
 const CHAVE_FIM_TURNO_DATA = 'sigmo_pagar_material_fim_turno_data'

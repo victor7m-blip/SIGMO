@@ -1844,6 +1844,17 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
   const [manutencoesVtr, setManutencoesVtr] = useState([])
   const [carregandoManutencoesVtr, setCarregandoManutencoesVtr] = useState(false)
+
+  const [
+    manutencoesColeteRefletivo,
+    setManutencoesColeteRefletivo
+  ] = useState([])
+
+  const [
+    carregandoManutencoesColeteRefletivo,
+    setCarregandoManutencoesColeteRefletivo
+  ] = useState(false)
+
   const [novidadeVtrAberta, setNovidadeVtrAberta] = useState(null)
   const [documentosVtr, setDocumentosVtr] = useState([])
   const [arquivoVtr, setArquivoVtr] = useState(null)
@@ -1960,9 +1971,209 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     }
   }
 
+  async function carregarManutencoesColeteRefletivo() {
+    if (!perfilVtr) {
+      setManutencoesColeteRefletivo([])
+      return
+    }
+
+    try {
+      setCarregandoManutencoesColeteRefletivo(true)
+
+      const {
+        data: manutencoes,
+        error: manutencoesError
+      } = await supabase
+        .from('sigmo_manutencoes')
+        .select(
+          'id, modulo, tipo_material, referencia_id, movimentacao_id, quantidade, tipo_novidade, descricao, observacoes, origem, destino, policial_id, policial_re, policial_nome, foto_url, foto_caminho, status, registrada_por_nome, registrada_em'
+        )
+        .eq(
+          'modulo',
+          'COLETE_REFLETIVO'
+        )
+        .eq(
+          'status',
+          'EM_MANUTENCAO'
+        )
+        .order(
+          'registrada_em',
+          {
+            ascending: false
+          }
+        )
+
+      if (manutencoesError) {
+        throw manutencoesError
+      }
+
+      const referencias = [
+        ...new Set(
+          (manutencoes || [])
+            .map(
+              (item) =>
+                item?.referencia_id
+            )
+            .filter(Boolean)
+            .map(String)
+        )
+      ]
+
+      let estoquePorId =
+        new Map()
+
+      if (referencias.length > 0) {
+        const {
+          data: estoque,
+          error: estoqueError
+        } = await supabase
+          .from(
+            'sigmo_coletes_refletivos'
+          )
+          .select(
+            'id, tamanho, quantidade_manutencao, ativo'
+          )
+          .in(
+            'id',
+            referencias
+          )
+
+        if (estoqueError) {
+          throw estoqueError
+        }
+
+        estoquePorId =
+          new Map(
+            (estoque || []).map(
+              (item) => [
+                String(item.id),
+                item
+              ]
+            )
+          )
+      }
+
+      /*
+       * O Colete Refletivo é quantitativo. Durante os testes antigos
+       * puderam existir registros de manutenção sem movimentação de estoque.
+       * A Central considera somente os registros mais recentes que cabem
+       * no saldo real quantidade_manutencao de cada tamanho.
+       */
+      const saldoRestante =
+        new Map()
+
+      for (
+        const [id, item] of
+        estoquePorId.entries()
+      ) {
+        saldoRestante.set(
+          id,
+          Math.max(
+            0,
+            Number(
+              item?.quantidade_manutencao ||
+              0
+            ) || 0
+          )
+        )
+      }
+
+      const validas = []
+
+      for (
+        const manutencao of
+        manutencoes || []
+      ) {
+        const referenciaId =
+          String(
+            manutencao?.referencia_id ||
+            ''
+          )
+
+        const estoque =
+          estoquePorId.get(
+            referenciaId
+          )
+
+        if (!estoque?.id) {
+          continue
+        }
+
+        const restante =
+          saldoRestante.get(
+            referenciaId
+          ) || 0
+
+        if (restante <= 0) {
+          continue
+        }
+
+        const quantidadeRegistro =
+          Math.max(
+            1,
+            Number(
+              manutencao?.quantidade ||
+              1
+            ) || 1
+          )
+
+        const quantidadeValida =
+          Math.min(
+            quantidadeRegistro,
+            restante
+          )
+
+        validas.push({
+          ...manutencao,
+
+          quantidade:
+            quantidadeValida,
+
+          tamanho:
+            estoque?.tamanho ||
+            null,
+
+          titulo:
+            `Colete Refletivo — Tamanho ${
+              estoque?.tamanho ||
+              'não informado'
+            }`,
+
+          tipo_movimentacao:
+            'MANUTENÇÃO DE COLETE REFLETIVO'
+        })
+
+        saldoRestante.set(
+          referenciaId,
+          restante -
+            quantidadeValida
+        )
+      }
+
+      setManutencoesColeteRefletivo(
+        validas
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao carregar manutenções de Colete Refletivo:',
+        error
+      )
+
+      setManutencoesColeteRefletivo(
+        []
+      )
+    } finally {
+      setCarregandoManutencoesColeteRefletivo(
+        false
+      )
+    }
+  }
+
+
   useEffect(() => {
     carregarNovidadesVtr()
     carregarManutencoesVtr()
+    carregarManutencoesColeteRefletivo()
   }, [perfilVtr])
 
   const novidadesVtrExibidas = useMemo(() => {
@@ -4676,64 +4887,281 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   }
 
   const indicadoresExibidos = useMemo(() => {
-    const indicadores = dados?.indicadores ?? []
-    const perfil = normalizarOperacional(dados?.perfil || user?.perfil)
+    const indicadores =
+      dados?.indicadores ?? []
 
-    if (perfil !== 'P4') return indicadores
+    const perfil =
+      normalizarOperacional(
+        dados?.perfil ||
+        user?.perfil
+      )
+
+    const novidadesColeteRefletivo =
+      manutencoesColeteRefletivo.map(
+        (item) => ({
+          id:
+            `COLETE-REFLETIVO-MANUTENCAO-${item.id}`,
+
+          manutencao_id:
+            item.id,
+
+          tipo_patrimonio:
+            'COLETE REFLETIVO',
+
+          especie:
+            'COLETE REFLETIVO',
+
+          identificador:
+            item?.tamanho
+              ? `TAMANHO ${item.tamanho}`
+              : 'TAMANHO NÃO INFORMADO',
+
+          titulo:
+            String(
+              item?.tipo_novidade ||
+              'AVARIA'
+            )
+              .replaceAll(
+                '_',
+                ' '
+              ),
+
+          descricao:
+            item?.descricao ||
+            'COLETE REFLETIVO EM MANUTENÇÃO.',
+
+          providencia:
+            'MANUTENÇÃO',
+
+          providencia_sugerida:
+            'MANUTENÇÃO',
+
+          gravidade:
+            'baixa',
+
+          status:
+            'registrada',
+
+          quantidade_afetada:
+            Math.max(
+              1,
+              Number(
+                item?.quantidade ||
+                1
+              ) || 1
+            ),
+
+          registrado_por_nome:
+            item?.registrada_por_nome ||
+            item?.policial_nome ||
+            'SVDD',
+
+          created_at:
+            item?.registrada_em ||
+            item?.created_at ||
+            null,
+
+          updated_at:
+            item?.registrada_em ||
+            item?.created_at ||
+            null,
+
+          local_atual:
+            item?.origem ||
+            'COFRE DO SVDD',
+
+          origem:
+            item?.origem ||
+            'COFRE DO SVDD',
+
+          destino:
+            item?.destino ||
+            'MANUTENCAO',
+
+          foto_url:
+            item?.foto_url ||
+            null,
+
+          fotos:
+            item?.foto_url
+              ? [
+                  {
+                    foto_url:
+                      item.foto_url,
+                    foto_caminho:
+                      item?.foto_caminho ||
+                      null,
+                    principal:
+                      true,
+                    ordem:
+                      1
+                  }
+                ]
+              : []
+        })
+      )
+
+    const indicadoresComColete =
+      indicadores.map(
+        (card) => {
+          if (
+            card?.key !==
+            'novidades'
+          ) {
+            return card
+          }
+
+          const itensOriginais =
+            Array.isArray(
+              card?.itens
+            )
+              ? card.itens
+              : []
+
+          const idsExistentes =
+            new Set(
+              itensOriginais
+                .map(
+                  (item) =>
+                    String(
+                      item
+                        ?.manutencao_id ||
+                      item?.id ||
+                      ''
+                    )
+                )
+                .filter(Boolean)
+            )
+
+          const itensColeteNovos =
+            novidadesColeteRefletivo.filter(
+              (item) =>
+                !idsExistentes.has(
+                  String(
+                    item?.manutencao_id ||
+                    item?.id ||
+                    ''
+                  )
+                )
+            )
+
+          const itens = [
+            ...itensOriginais,
+            ...itensColeteNovos
+          ]
+
+          return {
+            ...card,
+            total:
+              itens.length,
+            itens
+          }
+        }
+      )
+
+    if (
+      perfil !==
+      'P4'
+    ) {
+      return indicadoresComColete
+    }
 
     const resultado = []
 
-    for (const card of indicadores) {
-      if (card?.key !== 'novidades') {
-        resultado.push(card)
+    for (
+      const card of
+      indicadoresComColete
+    ) {
+      if (
+        card?.key !==
+        'novidades'
+      ) {
+        resultado.push(
+          card
+        )
         continue
       }
 
-      const itens = Array.isArray(card?.itens) ? card.itens : []
+      const itens =
+        Array.isArray(
+          card?.itens
+        )
+          ? card.itens
+          : []
 
-      const pertenceAoSvdd = (item) => {
-        const carga = normalizarOperacional(
-          item?.carga_atual ||
-          item?.responsabilidade_atual ||
-          item?.responsavel_setor ||
-          item?.setor_responsavel ||
-          item?.local_atual ||
-          item?.origem ||
-          item?.origem_local ||
-          item?.destino ||
-          item?.destino_local
+      const pertenceAoSvdd =
+        (item) => {
+          const carga =
+            normalizarOperacional(
+              item?.carga_atual ||
+              item?.responsabilidade_atual ||
+              item?.responsavel_setor ||
+              item?.setor_responsavel ||
+              item?.local_atual ||
+              item?.origem ||
+              item?.origem_local ||
+              item?.destino ||
+              item?.destino_local
+            )
+
+          return (
+            carga.includes(
+              'SVDD'
+            ) ||
+            carga.includes(
+              'SERVICO DE DIA'
+            ) ||
+            carga.includes(
+              'COFRE DO SVDD'
+            )
+          )
+        }
+
+      const itensSvdd =
+        itens.filter(
+          pertenceAoSvdd
         )
 
-        return (
-          carga.includes('SVDD') ||
-          carga.includes('SERVICO DE DIA') ||
-          carga.includes('COFRE DO SVDD')
+      const itensP4 =
+        itens.filter(
+          (item) =>
+            !pertenceAoSvdd(
+              item
+            )
         )
-      }
-
-      const itensSvdd = itens.filter(pertenceAoSvdd)
-      const itensP4 = itens.filter((item) => !pertenceAoSvdd(item))
 
       resultado.push(
         {
           ...card,
-          key: 'novidades-p4',
-          titulo: 'Novidades patrimoniais P4',
-          total: itensP4.length,
-          itens: itensP4
+          key:
+            'novidades-p4',
+          titulo:
+            'Novidades patrimoniais P4',
+          total:
+            itensP4.length,
+          itens:
+            itensP4
         },
         {
           ...card,
-          key: 'novidades-svdd',
-          titulo: 'Novidades patrimoniais SVDD',
-          total: itensSvdd.length,
-          itens: itensSvdd
+          key:
+            'novidades-svdd',
+          titulo:
+            'Novidades patrimoniais SVDD',
+          total:
+            itensSvdd.length,
+          itens:
+            itensSvdd
         }
       )
     }
 
     return resultado
-  }, [dados, user])
+  }, [
+    dados,
+    user,
+    manutencoesColeteRefletivo
+  ])
 
   function ehCancelavelDescargaColete(
     item,
@@ -5511,6 +5939,7 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
               </small>
             </button>
           )}
+
 
           {indicadoresExibidos.map((card) => (
             <button

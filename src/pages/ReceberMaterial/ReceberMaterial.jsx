@@ -3996,14 +3996,6 @@ async function confirmarRecebimento() {
           setDevolucaoPendente(null)
         }
 
-        if (
-          suportesCOPRecebidos.modular > 0 ||
-          suportesCOPRecebidos.comum > 0
-        ) {
-          await devolverSuportesCOPRecebidos(
-            suportesCOPRecebidos
-          )
-        }
       }
     }
 

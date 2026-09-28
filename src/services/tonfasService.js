@@ -1326,6 +1326,85 @@ export async function cautelarTonfaParaPolicial({
       tonfaId
     )
 
+  /*
+   * Proteção de idempotência.
+   *
+   * O aceite de um mesmo carrinho não pode gerar mais de uma
+   * cautela quantitativa de Tonfa para a mesma movimentação
+   * principal.
+   *
+   * IMPORTANTE: esta checagem acontece ANTES de alterar os saldos
+   * de sigmo_tonfas. Assim, se a interface repetir a chamada, não
+   * descontamos novamente do SVDD nem criamos outro registro
+   * EM_SERVICO em sigmo_tonfas_movimentacoes.
+   */
+  if (movimentacaoPrincipalId) {
+    let queryCautelaExistente =
+      supabase
+        .from('sigmo_tonfas_movimentacoes')
+        .select('*')
+        .eq(
+          'movimentacao_principal_id',
+          movimentacaoPrincipalId
+        )
+        .eq(
+          'tonfa_id',
+          tonfaId
+        )
+        .eq(
+          'status',
+          'EM_SERVICO'
+        )
+        .gt(
+          'saldo',
+          0
+        )
+        .order(
+          'criado_em',
+          { ascending: true }
+        )
+        .limit(1)
+
+    if (policial?.id) {
+      queryCautelaExistente =
+        queryCautelaExistente.eq(
+          'policial_id',
+          policial.id
+        )
+    }
+
+    const {
+      data: cautelasExistentes,
+      error: cautelaExistenteError
+    } =
+      await queryCautelaExistente
+
+    if (cautelaExistenteError) {
+      throw cautelaExistenteError
+    }
+
+    const cautelaExistente =
+      cautelasExistentes?.[0] ||
+      null
+
+    if (cautelaExistente) {
+      return {
+        tonfa,
+
+        movimentacao: {
+          engine:
+            null,
+
+          tonfa_movimentacao:
+            cautelaExistente,
+
+          reutilizada:
+            true
+        }
+      }
+    }
+  }
+
   if (
     valor >
     tonfa.quantidade_svdd

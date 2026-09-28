@@ -5620,11 +5620,11 @@ export default function Municoes({
         },
         {
           label:
-            'Manutenção P4',
+            'Baixados',
           valor:
             totalManutencaoP4,
           cor:
-            '#ef4444'
+            '#f59e0b'
         },
         {
           label:
@@ -5656,17 +5656,16 @@ export default function Municoes({
           },
           {
             label:
-              'Manutenção',
-            valor:
-              totalManutencaoSvdd,
-            cor:
-              '#ef4444'
-          },
-          {
-            label:
               'Baixados',
             valor:
-              baixados,
+              resumo.reduce(
+                (soma, item) =>
+                  soma +
+                  numero(
+                    item.quantidade_manutencao
+                  ),
+                0
+              ),
             cor:
               '#f59e0b'
           },
@@ -5791,7 +5790,7 @@ export default function Municoes({
 
         baixados:
           montar(
-            'quantidade_baixada'
+            'quantidade_manutencao'
           ),
 
         outros:
@@ -5974,22 +5973,7 @@ export default function Municoes({
           }
           subtitulo="Com policiais"
         />
-
-        <CardDistribuicao
-          titulo="MANUTENÇÃO"
-          itens={
-            visaoP4
-              ? manutencaoP4PorCalibre
-              : manutencaoSvddPorCalibre
-          }
-          subtitulo={
-            visaoP4
-              ? 'Sob responsabilidade do P4'
-              : 'Sob responsabilidade do SVDD'
-          }
-        />
-
-        {visaoP4 && (
+{visaoP4 && (
           <CardDistribuicao
             titulo="OUTRAS CIAS"
             itens={
@@ -6012,9 +5996,9 @@ export default function Municoes({
         <CardDistribuicao
           titulo="BAIXADOS"
           itens={
-            distribuicaoPorLocal.baixados
+            distribuicaoPorLocal.manutencao
           }
-          subtitulo="Baixas registradas"
+          subtitulo="Aguardando encaminhamento / descarga"
         />
 
         {visaoP4 && (

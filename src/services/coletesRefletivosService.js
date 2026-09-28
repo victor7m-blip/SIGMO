@@ -114,6 +114,8 @@ export async function listarEstoqueColetesRefletivos() {
           'quantidade_svdd',
           'quantidade_em_servico',
           'quantidade_manutencao',
+          'quantidade_manutencao_p4',
+          'quantidade_baixada',
           'status_operacional',
           'local_atual',
           'observacoes',
@@ -496,6 +498,320 @@ export async function cancelarTransferenciaColeteRefletivo({
 
   return data
 }
+
+
+export async function listarManutencoesPendentesColeteRefletivoP4() {
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .from(
+        'sigmo_coletes_refletivos_movimentacoes'
+      )
+      .select('*')
+      .eq(
+        'tipo_movimentacao',
+        'MANUTENCAO_SVDD_P4'
+      )
+      .eq(
+        'status',
+        'PENDENTE_RECEBIMENTO'
+      )
+      .order(
+        'criado_em',
+        {
+          ascending: false
+        }
+      )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+
+export async function encaminharManutencaoColeteRefletivoAoP4({
+  coleteRefletivoId,
+  quantidade,
+  user,
+  observacoes = ''
+}) {
+  if (!coleteRefletivoId) {
+    throw new Error(
+      'Colete Refletivo não identificado.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } =
+    await supabase.rpc(
+      'sigmo_colete_refletivo_encaminhar_manutencao_p4',
+      {
+        p_colete_refletivo_id:
+          coleteRefletivoId,
+
+        p_quantidade:
+          normalizarQuantidade(
+            quantidade
+          ),
+
+        p_usuario_id:
+          normalizarUsuarioId(
+            user
+          ),
+
+        p_usuario_nome:
+          normalizarUsuarioNome(
+            user
+          ),
+
+        p_observacoes:
+          String(
+            observacoes ||
+            ''
+          )
+            .trim()
+            .toUpperCase() ||
+          null
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível encaminhar o Colete Refletivo em manutenção ao P4.'
+    )
+  }
+
+  return data
+}
+
+
+export async function receberManutencaoColeteRefletivoP4({
+  movimentacaoId,
+  user
+}) {
+  if (!movimentacaoId) {
+    throw new Error(
+      'Movimentação de manutenção não identificada.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } =
+    await supabase.rpc(
+      'sigmo_colete_refletivo_receber_manutencao_p4',
+      {
+        p_movimentacao_id:
+          movimentacaoId,
+
+        p_usuario_id:
+          normalizarUsuarioId(
+            user
+          ),
+
+        p_usuario_nome:
+          normalizarUsuarioNome(
+            user
+          )
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível receber e baixar o Colete Refletivo danificado no P4.'
+    )
+  }
+
+  return data
+}
+
+
+export async function cancelarEncaminhamentoManutencaoColeteRefletivo({
+  movimentacaoId,
+  user,
+  motivo = ''
+}) {
+  if (!movimentacaoId) {
+    throw new Error(
+      'Movimentação de manutenção não identificada.'
+    )
+  }
+
+  const motivoNormalizado =
+    String(
+      motivo ||
+      ''
+    )
+      .trim()
+      .toUpperCase()
+
+  if (!motivoNormalizado) {
+    throw new Error(
+      'Informe o motivo do cancelamento.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } =
+    await supabase.rpc(
+      'sigmo_colete_refletivo_cancelar_manutencao_p4',
+      {
+        p_movimentacao_id:
+          movimentacaoId,
+
+        p_usuario_id:
+          normalizarUsuarioId(
+            user
+          ),
+
+        p_usuario_nome:
+          normalizarUsuarioNome(
+            user
+          ),
+
+        p_motivo:
+          motivoNormalizado
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível cancelar o encaminhamento da manutenção ao P4.'
+    )
+  }
+
+  return data
+}
+
+export async function colocarColeteRefletivoEmBaixadosP4({
+  coleteRefletivoId,
+  quantidade,
+  user,
+  observacoes = ''
+}) {
+  if (!coleteRefletivoId) {
+    throw new Error(
+      'Colete Refletivo não identificado.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } =
+    await supabase.rpc(
+      'sigmo_colete_refletivo_colocar_baixado_p4',
+      {
+        p_colete_refletivo_id:
+          coleteRefletivoId,
+
+        p_quantidade:
+          normalizarQuantidade(
+            quantidade
+          ),
+
+        p_usuario_id:
+          normalizarUsuarioId(
+            user
+          ),
+
+        p_usuario_nome:
+          normalizarUsuarioNome(
+            user
+          ),
+
+        p_observacoes:
+          String(
+            observacoes ||
+            ''
+          )
+            .trim()
+            .toUpperCase() ||
+          null
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível colocar o Colete Refletivo em baixados.'
+    )
+  }
+
+  return data
+}
+
+
+export async function descarregarColeteRefletivoP4({
+  coleteRefletivoId,
+  quantidade,
+  user,
+  observacoes = ''
+}) {
+  if (!coleteRefletivoId) {
+    throw new Error(
+      'Colete Refletivo não identificado.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } =
+    await supabase.rpc(
+      'sigmo_colete_refletivo_descarga_p4',
+      {
+        p_colete_refletivo_id:
+          coleteRefletivoId,
+
+        p_quantidade:
+          normalizarQuantidade(
+            quantidade
+          ),
+
+        p_usuario_id:
+          normalizarUsuarioId(
+            user
+          ),
+
+        p_usuario_nome:
+          normalizarUsuarioNome(
+            user
+          ),
+
+        p_observacoes:
+          String(
+            observacoes ||
+            ''
+          )
+            .trim()
+            .toUpperCase() ||
+          null
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      error?.message ||
+      'Não foi possível concluir a descarga do Colete Refletivo.'
+    )
+  }
+
+  return data
+}
+
 
 export {
   TAMANHOS

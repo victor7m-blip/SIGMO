@@ -63,22 +63,37 @@ async function listarRecebimentosMunicoesPendentesCentral() {
   const token = loadSessionToken()
 
   if (!token) {
-    throw new Error('Sessão SIGMO inválida ou expirada.')
+    console.warn(
+      'Central Operacional: sessão SIGMO inválida ao consultar recebimentos pendentes de munições.'
+    )
+    return []
   }
 
-  const { data, error } = await supabase.rpc(
-    'sigmo_municoes_listar_transferencias_pendentes',
-    {
-      p_token: token,
-      p_direcao: 'ENTRADA'
+  try {
+    const { data, error } = await supabase.rpc(
+      'sigmo_municoes_listar_transferencias_pendentes',
+      {
+        p_token: token,
+        p_direcao: 'ENTRADA'
+      }
+    )
+
+    if (error) {
+      console.warn(
+        'Central Operacional: não foi possível carregar recebimentos pendentes de munições. A Central continuará com os demais dados.',
+        error
+      )
+      return []
     }
-  )
 
-  if (error) {
-    throw error
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.warn(
+      'Central Operacional: falha isolada ao carregar recebimentos pendentes de munições. A Central continuará com os demais dados.',
+      error
+    )
+    return []
   }
-
-  return Array.isArray(data) ? data : []
 }
 
 
