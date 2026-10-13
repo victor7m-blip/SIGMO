@@ -5,6 +5,7 @@ import PagarMaterialMapaForca from './components/PagarMaterialMapaForca'
 
 import { supabase } from '../../services/supabaseClient'
 import { loadSessionToken } from '../../services/authService'
+import { registerAudit } from '../../services/auditoriaService'
 import { criarMovimentacaoCompleta } from '../../services/movimentacaoEngine'
 import { cautelarMunicaoParaPolicial } from '../../services/municoesMovimentacoesService'
 
@@ -61,6 +62,29 @@ function nomeUsuario(user) {
 function nomePolicial(policial) {
   return [policial?.posto_graduacao, policial?.nome_guerra || policial?.nome]
     .filter(Boolean).join(' ')
+}
+
+
+async function registrarAuditoriaMapaForca({
+  action,
+  description,
+  user,
+  severity = 'Informativo'
+}) {
+  try {
+    await registerAudit({
+      action,
+      description,
+      user,
+      module: 'Mapa Força',
+      severity
+    })
+  } catch (auditError) {
+    console.error(
+      'A operação do Mapa Força foi concluída, mas não foi possível registrar a auditoria:',
+      auditError
+    )
+  }
 }
 
 function modeloTipo(id) {
@@ -2576,6 +2600,16 @@ export default function MapaForca({
         setMapaId(
           idMapaAtual
         )
+
+        await registrarAuditoriaMapaForca({
+          action:
+            'MAPA_FORCA_CRIADO',
+          description:
+            `Criou o Mapa Força ${idMapaAtual}. ` +
+            `Equipe de serviço: ${equipeServico || 'não informada'}. ` +
+            `Período: ${inicio} até ${fim}.`,
+          user
+        })
       }
 
       const funcaoResponsavelVtr =
@@ -2827,8 +2861,24 @@ export default function MapaForca({
     setSalvando(true)
     setMensagemMapa('')
     try {
+      const mapaJaExistia =
+        Boolean(mapaId)
+
       const id = await salvarCabecalhoMapaForca({ mapaId, inicio, fim, user, equipeServico })
       setMapaId(id)
+
+      await registrarAuditoriaMapaForca({
+        action:
+          mapaJaExistia
+            ? 'MAPA_FORCA_ATUALIZADO'
+            : 'MAPA_FORCA_CRIADO',
+        description:
+          `${mapaJaExistia ? 'Atualizou' : 'Criou'} o Mapa Força ${id}. ` +
+          `Equipe de serviço: ${equipeServico || 'não informada'}. ` +
+          `Período: ${inicio} até ${fim}.`,
+        user
+      })
+
       setMensagemMapa('Horário do mapa salvo.')
     } catch (error) {
       setMensagemMapa(error?.message || 'Não foi possível salvar o mapa.')
@@ -3026,6 +3076,35 @@ export default function MapaForca({
                     ?.quantidadeItens ||
                   0
               })
+
+              const itensAuditados =
+                Array.isArray(
+                  preparacao?.resumoItens
+                ) &&
+                preparacao.resumoItens.length > 0
+                  ? preparacao.resumoItens
+                  : (
+                      efetivada?.resumoItens ||
+                      []
+                    )
+
+              const resumoMateriais =
+                resumirCautelaMapa({
+                  resumo_itens:
+                    itensAuditados
+                }).join(', ')
+
+              await registrarAuditoriaMapaForca({
+                action:
+                  'CAUTELA_MAPA_FORCA',
+                description:
+                  `Cautelou ${resumoMateriais || 'material'} para ` +
+                  `${nomePolicial(preparacao.policial) || nomeUsuario(preparacao.policial)} ` +
+                  `(RE ${preparacao.policial?.re || 'não informado'}), ` +
+                  `função ${funcao}, US ${unidadeParaSalvar?.prefixo || 'não informada'}, ` +
+                  `Mapa Força ${resultado.mapaId}.`,
+                user
+              })
             }
 
             delete restantes[
@@ -3088,6 +3167,28 @@ export default function MapaForca({
             unidadeParaSalvar
         })
       }
+
+      await registrarAuditoriaMapaForca({
+        action:
+          editor.unidade.persistido
+            ? 'MAPA_FORCA_US_ATUALIZADA'
+            : 'MAPA_FORCA_US_SALVA',
+        description:
+          `${editor.unidade.persistido ? 'Atualizou' : 'Salvou'} a US ` +
+          `${unidadeParaSalvar?.prefixo || resultado.usId} no Mapa Força ${resultado.mapaId}. ` +
+          `Efetivo: ${
+            Object.values(
+              unidadeParaSalvar?.policiais ||
+              {}
+            ).filter(
+              (policial) =>
+                policial?.id
+            ).length
+          }. ` +
+          `Viatura: ${unidadeParaSalvar?.viatura?.prefixo || 'não informada'}. ` +
+          `Período: ${inicio} até ${fim}.`,
+        user
+      })
 
       await recarregarMapa()
       setEditor(null)

@@ -23,6 +23,8 @@ const ARMAS_TABLE = 'sigmo_armas'
 const TPDS_TABLE = 'sigmo_tpds'
 const PATRIMONIOS_TABLE = 'sigmo_patrimonios'
 const PATRIMONIO_ITENS_TABLE = 'sigmo_patrimonio_itens'
+const MANUTENCOES_TABLE = 'sigmo_manutencoes'
+const EXTRAVIOS_TONFAS_TABLE = 'sigmo_tonfas_extravios'
 
 export const STATUS_TRANSFERENCIA = Object.freeze({
   PENDENTE: 'PENDENTE',
@@ -459,10 +461,14 @@ export async function criarTransferenciaPendente({
     itemId ||
     vinculos.itemPatrimonial.id
 
-  const exigeAprovacaoCmt =
-    categoriaNormalizada === 'TPD' &&
-    origemCodigoNormalizado === 'P4' &&
-    destinoCodigoNormalizado === 'SVDD'
+  /*
+   * REGRA ATUAL:
+   * P4 -> SVDD não exige aprovação do Cmt de Cia.
+   *
+   * A estrutura de aprovação permanece preservada neste serviço
+   * para eventual reutilização futura por outro perfil/fluxo.
+   */
+  const exigeAprovacaoCmt = false
 
   const metadataNormalizada = {
     ...(metadata && typeof metadata === 'object' ? metadata : {}),
@@ -662,15 +668,15 @@ export async function listarTransferenciasPendentes({
   if (error) throw error
 
   return (data ?? []).filter((item) => {
-    const categoriaItem = upper(item?.categoria)
-    const origemItem = upper(item?.origem_codigo)
-    const destinoItem = upper(item?.destino_codigo)
-
-    if (
-      categoriaItem === 'TPD' &&
-      origemItem === 'P4' &&
-      destinoItem === 'SVDD'
-    ) {
+    /*
+     * Só bloqueia o recebimento quando a própria transferência
+     * estiver explicitamente marcada como dependente de aprovação.
+     *
+     * Na regra atual P4 -> SVDD, novas transferências são criadas
+     * com exige_aprovacao_cmt = false e aparecem imediatamente
+     * para recebimento pelo setor de destino.
+     */
+    if (item?.metadata?.exige_aprovacao_cmt === true) {
       return item?.metadata?.cmt_aprovado === true
     }
 
@@ -1037,6 +1043,523 @@ export async function aprovarTransferenciaTPDPeloCmt({
 }
 
 
+
+async function aceitarTransferenciaManutencaoTonfa({
+  transferencia,
+  ator,
+  horaServidor,
+  user
+}) {
+  const manutencaoId =
+    texto(transferencia?.metadata?.manutencao_id)
+
+  if (!manutencaoId) {
+    throw new Error(
+      'A transferência de manutenção não possui vínculo com a manutenção.'
+    )
+  }
+
+  const { data: manutencao, error: manutencaoError } =
+    await supabase
+      .from(MANUTENCOES_TABLE)
+      .select('*')
+      .eq('id', manutencaoId)
+      .maybeSingle()
+
+  if (manutencaoError) throw manutencaoError
+
+  if (!manutencao) {
+    throw new Error(
+      'A manutenção vinculada a esta transferência não foi encontrada.'
+    )
+  }
+
+  if (upper(manutencao.status) !== 'EM_MANUTENCAO') {
+    throw new Error(
+      'Esta manutenção não está mais ativa.'
+    )
+  }
+
+  const destinoAtual = upper(manutencao.destino)
+
+  if (
+    destinoAtual === 'P4' ||
+    destinoAtual.includes('COFRE DO P4') ||
+    destinoAtual.includes('GUARDA DO P4')
+  ) {
+    throw new Error(
+      'Esta manutenção já está sob custódia do P4.'
+    )
+  }
+
+  const observacoesAnteriores =
+    texto(manutencao.observacoes)
+
+  const blocoAceite = [
+    'TRANSFERÊNCIA DE CUSTÓDIA DA MANUTENÇÃO: SVDD -> P4',
+    `RECEBIDO POR: ${upper(ator.nome)}`,
+    ator.re ? `RE: ${ator.re}` : null,
+    `RECEBIDO EM: ${formatarDataHoraServidor(horaServidor)}`
+  ]
+    .filter(Boolean)
+    .join(' | ')
+
+  const observacoesFinais =
+    [observacoesAnteriores, blocoAceite]
+      .filter(Boolean)
+      .join(' | ')
+
+  const { data: manutencaoAtualizada, error: atualizacaoManutencaoError } =
+    await supabase
+      .from(MANUTENCOES_TABLE)
+      .update({
+        destino: 'P4',
+        observacoes: observacoesFinais,
+        atualizado_em: horaServidor
+      })
+      .eq('id', manutencaoId)
+      .eq('status', 'EM_MANUTENCAO')
+      .select('*')
+      .maybeSingle()
+
+  if (atualizacaoManutencaoError) {
+    throw atualizacaoManutencaoError
+  }
+
+  if (!manutencaoAtualizada) {
+    throw new Error(
+      'A manutenção foi alterada por outro usuário. Atualize a tela e tente novamente.'
+    )
+  }
+
+  let movimentacao = null
+
+  try {
+    movimentacao = await registrarMovimentacao({
+      patrimonioId: transferencia.patrimonio_id,
+      tipo: 'TRANSFERENCIA',
+      localDestino: 'MANUTENÇÃO / P4',
+      motivo:
+        transferencia.motivo ||
+        'ENCAMINHAMENTO_P4_MANUTENCAO',
+      observacao: transferencia.observacoes,
+      dados: {
+        transferencia_id: transferencia.id,
+        protocolo_transferencia: transferencia.protocolo,
+        quantidade: transferencia.quantidade,
+        categoria: transferencia.categoria,
+        origem_codigo: transferencia.origem_codigo,
+        origem_nome: transferencia.origem_nome,
+        destino_codigo: transferencia.destino_codigo,
+        destino_nome: transferencia.destino_nome,
+        manutencao_id: manutencaoId,
+        tipo_fluxo: 'MANUTENCAO_SVDD_P4',
+        quantidade_manutencao_preservada: true
+      },
+      user
+    })
+
+    const { data, error } = await supabase
+      .from(TABLE)
+      .update({
+        status: STATUS_TRANSFERENCIA.ACEITA,
+        recebido_por_id: ator.id,
+        recebido_por_re: ator.re,
+        recebido_por_nome: ator.nome,
+        recebido_em: horaServidor,
+        movimentacao_id:
+          movimentacao?.id ||
+          movimentacao?.movimentacao?.id ||
+          null,
+        updated_at: horaServidor,
+        metadata: {
+          ...(transferencia.metadata || {}),
+          aceite_manutencao: true,
+          recebido_em: horaServidor
+        }
+      })
+      .eq('id', transferencia.id)
+      .eq('status', STATUS_TRANSFERENCIA.PENDENTE)
+      .select('*')
+      .maybeSingle()
+
+    if (error) throw error
+
+    if (!data) {
+      throw new Error(
+        'A transferência foi alterada por outro usuário.'
+      )
+    }
+
+    return {
+      transferencia: data,
+      manutencao: manutencaoAtualizada,
+      movimentacao
+    }
+  } catch (error) {
+    await supabase
+      .from(MANUTENCOES_TABLE)
+      .update({
+        destino: manutencao.destino,
+        observacoes: manutencao.observacoes,
+        atualizado_em: manutencao.atualizado_em
+      })
+      .eq('id', manutencao.id)
+
+    throw error
+  }
+}
+
+
+
+async function aceitarTransferenciaExtravioTonfa({
+  transferencia,
+  ator,
+  horaServidor,
+  user
+}) {
+  const extravioId =
+    texto(
+      transferencia?.metadata?.extravio_id
+    )
+
+  if (!extravioId) {
+    throw new Error(
+      'A transferência de extravio não possui vínculo com a ocorrência.'
+    )
+  }
+
+  const {
+    data: extravio,
+    error: extravioError
+  } = await supabase
+    .from(EXTRAVIOS_TONFAS_TABLE)
+    .select('*')
+    .eq('id', extravioId)
+    .maybeSingle()
+
+  if (extravioError) {
+    throw extravioError
+  }
+
+  if (!extravio) {
+    throw new Error(
+      'A ocorrência de extravio vinculada à transferência não foi encontrada.'
+    )
+  }
+
+  if (extravio?.ativo === false) {
+    throw new Error(
+      'Esta ocorrência de extravio já está encerrada.'
+    )
+  }
+
+  if (
+    upper(
+      extravio?.responsavel_setor
+    ) === 'P4'
+  ) {
+    throw new Error(
+      'Este extravio já está sob responsabilidade do P4.'
+    )
+  }
+
+  if (
+    upper(
+      extravio?.responsavel_setor
+    ) !== 'SVDD'
+  ) {
+    throw new Error(
+      'Somente extravios sob responsabilidade do SVDD podem ser avocados pelo P4.'
+    )
+  }
+
+  const estoque =
+    await buscarEstoqueDaTransferencia(
+      transferencia
+    )
+
+  const quantidade =
+    quantidadeInteira(
+      transferencia.quantidade
+    )
+
+  const extraviadaSvdd =
+    Number(
+      estoque?.quantidade_extraviada_svdd ||
+      0
+    )
+
+  const extraviadaP4 =
+    Number(
+      estoque?.quantidade_extraviada_p4 ||
+      0
+    )
+
+  if (
+    extraviadaSvdd <
+    quantidade
+  ) {
+    throw new Error(
+      `Saldo insuficiente de extravio no SVDD. Disponível: ${extraviadaSvdd}; solicitado: ${quantidade}.`
+    )
+  }
+
+  const novoExtravioSvdd =
+    extraviadaSvdd -
+    quantidade
+
+  const novoExtravioP4 =
+    extraviadaP4 +
+    quantidade
+
+  const {
+    data: estoqueAtualizado,
+    error: estoqueError
+  } = await supabase
+    .from(TONFAS_TABLE)
+    .update({
+      quantidade_extraviada_svdd:
+        novoExtravioSvdd,
+
+      quantidade_extraviada_p4:
+        novoExtravioP4
+    })
+    .eq('id', estoque.id)
+    .eq(
+      'quantidade_extraviada_svdd',
+      extraviadaSvdd
+    )
+    .select('*')
+    .maybeSingle()
+
+  if (estoqueError) {
+    throw estoqueError
+  }
+
+  if (!estoqueAtualizado) {
+    throw new Error(
+      'O saldo de extravio foi alterado por outro usuário. Atualize a tela e tente novamente.'
+    )
+  }
+
+  const observacoesAnteriores =
+    texto(
+      extravio?.avocacao_p4_observacoes
+    )
+
+  const blocoAvocacao = [
+    'PROCEDIMENTO DE EXTRAVIO AVOCADO PELO P4',
+    `RECEBIDO POR: ${upper(ator.nome)}`,
+    ator.re
+      ? `RE: ${ator.re}`
+      : null,
+    `AVOCADO EM: ${formatarDataHoraServidor(
+      horaServidor
+    )}`,
+    transferencia?.protocolo
+      ? `TRANSFERÊNCIA: ${transferencia.protocolo}`
+      : null
+  ]
+    .filter(Boolean)
+    .join(' | ')
+
+  const observacoesAvocacao =
+    [
+      observacoesAnteriores,
+      blocoAvocacao,
+      texto(
+        transferencia?.observacoes
+      )
+    ]
+      .filter(Boolean)
+      .join(' | ')
+
+  const {
+    data: extravioAtualizado,
+    error: atualizacaoExtravioError
+  } = await supabase
+    .from(EXTRAVIOS_TONFAS_TABLE)
+    .update({
+      status:
+        'AVOCADO_P4',
+
+      responsavel_setor:
+        'P4',
+
+      avocacao_p4_em:
+        horaServidor,
+
+      avocacao_p4_por_id:
+        ator.id,
+
+      avocacao_p4_por_nome:
+        ator.nome,
+
+      avocacao_p4_documento:
+        texto(
+          transferencia?.metadata
+            ?.documento_avocacao
+        ) ||
+        texto(
+          transferencia?.metadata
+            ?.documento
+        ) ||
+        null,
+
+      avocacao_p4_observacoes:
+        observacoesAvocacao,
+
+      atualizado_em:
+        horaServidor
+    })
+    .eq('id', extravio.id)
+    .eq('ativo', true)
+    .eq(
+      'responsavel_setor',
+      extravio.responsavel_setor
+    )
+    .select('*')
+    .maybeSingle()
+
+  if (atualizacaoExtravioError) {
+    await supabase
+      .from(TONFAS_TABLE)
+      .update({
+        quantidade_extraviada_svdd:
+          extraviadaSvdd,
+
+        quantidade_extraviada_p4:
+          extraviadaP4
+      })
+      .eq('id', estoque.id)
+
+    throw atualizacaoExtravioError
+  }
+
+  if (!extravioAtualizado) {
+    await supabase
+      .from(TONFAS_TABLE)
+      .update({
+        quantidade_extraviada_svdd:
+          extraviadaSvdd,
+
+        quantidade_extraviada_p4:
+          extraviadaP4
+      })
+      .eq('id', estoque.id)
+
+    throw new Error(
+      'A ocorrência de extravio foi alterada por outro usuário. Atualize a tela e tente novamente.'
+    )
+  }
+
+  const {
+    data: transferenciaAtualizada,
+    error: transferenciaError
+  } = await supabase
+    .from(TABLE)
+    .update({
+      status:
+        STATUS_TRANSFERENCIA.ACEITA,
+
+      recebido_por_id:
+        ator.id,
+
+      recebido_por_re:
+        ator.re,
+
+      recebido_por_nome:
+        ator.nome,
+
+      recebido_em:
+        horaServidor,
+
+      updated_at:
+        horaServidor,
+
+      metadata: {
+        ...(transferencia.metadata || {}),
+        aceite_extravio:
+          true,
+        avocacao_p4_em:
+          horaServidor
+      }
+    })
+    .eq('id', transferencia.id)
+    .eq(
+      'status',
+      STATUS_TRANSFERENCIA.PENDENTE
+    )
+    .select('*')
+    .maybeSingle()
+
+  if (transferenciaError || !transferenciaAtualizada) {
+    await supabase
+      .from(EXTRAVIOS_TONFAS_TABLE)
+      .update({
+        status:
+          extravio.status,
+
+        responsavel_setor:
+          extravio.responsavel_setor,
+
+        avocacao_p4_em:
+          extravio.avocacao_p4_em,
+
+        avocacao_p4_por_id:
+          extravio.avocacao_p4_por_id,
+
+        avocacao_p4_por_nome:
+          extravio.avocacao_p4_por_nome,
+
+        avocacao_p4_documento:
+          extravio.avocacao_p4_documento,
+
+        avocacao_p4_observacoes:
+          extravio.avocacao_p4_observacoes,
+
+        atualizado_em:
+          extravio.atualizado_em
+      })
+      .eq('id', extravio.id)
+
+    await supabase
+      .from(TONFAS_TABLE)
+      .update({
+        quantidade_extraviada_svdd:
+          extraviadaSvdd,
+
+        quantidade_extraviada_p4:
+          extraviadaP4
+      })
+      .eq('id', estoque.id)
+
+    if (transferenciaError) {
+      throw transferenciaError
+    }
+
+    throw new Error(
+      'A transferência foi alterada por outro usuário.'
+    )
+  }
+
+  return {
+    transferencia:
+      transferenciaAtualizada,
+
+    estoque:
+      estoqueAtualizado,
+
+    extravio:
+      extravioAtualizado,
+
+    movimentacao:
+      null
+  }
+}
+
+
 export async function aceitarTransferencia({
   transferenciaId,
   user = null
@@ -1052,14 +1575,19 @@ export async function aceitarTransferencia({
   const origemCodigo = upper(transferencia.origem_codigo)
   const destinoCodigo = upper(transferencia.destino_codigo)
 
+  /*
+   * Mantém compatibilidade com transferências antigas ou futuras
+   * que tenham sido explicitamente criadas exigindo aprovação.
+   *
+   * As novas transferências P4 -> SVDD da regra atual não entram
+   * neste bloqueio.
+   */
   if (
-    categoria === 'TPD' &&
-    origemCodigo === 'P4' &&
-    destinoCodigo === 'SVDD' &&
+    transferencia?.metadata?.exige_aprovacao_cmt === true &&
     transferencia?.metadata?.cmt_aprovado !== true
   ) {
     throw new Error(
-      'A transferência deste TPD ainda aguarda aprovação do Comandante de Cia.'
+      'Esta transferência ainda aguarda a aprovação exigida para este fluxo.'
     )
   }
 
@@ -1078,7 +1606,33 @@ export async function aceitarTransferencia({
 
   let resultado
 
-  if (categoria === 'ARMA') {
+  const fluxoManutencaoTonfa =
+    upper(
+      transferencia?.metadata?.tipo_fluxo
+    ) === 'MANUTENCAO_SVDD_P4'
+
+  const fluxoExtravioTonfa =
+    upper(
+      transferencia?.metadata?.tipo_fluxo
+    ) === 'EXTRAVIO_SVDD_P4'
+
+  if (fluxoExtravioTonfa) {
+    resultado =
+      await aceitarTransferenciaExtravioTonfa({
+        transferencia,
+        ator,
+        horaServidor,
+        user
+      })
+  } else if (fluxoManutencaoTonfa) {
+    resultado =
+      await aceitarTransferenciaManutencaoTonfa({
+        transferencia,
+        ator,
+        horaServidor,
+        user
+      })
+  } else if (categoria === 'ARMA') {
     resultado = await aceitarTransferenciaDeArma({
       transferencia,
       ator,
@@ -1216,9 +1770,25 @@ export async function aceitarTransferencia({
   const setorDestino = destinoCodigo === 'P4' ? 'P4' : 'SVDD'
   const setorOrigem = origemCodigo === 'SVDD' ? 'SVDD' : 'P4'
   const mensagem =
-    `O ${setorDestino} confirmou o recebimento de ${material}. ` +
-    `Transferência ${transferencia.protocolo} concluída por ${ator.nome}` +
-    `${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}.`
+    fluxoExtravioTonfa
+      ? (
+          `O P4 assumiu o procedimento de extravio de ${material}. ` +
+          `Não houve movimentação física do material; apenas transferência de responsabilidade patrimonial do SVDD para o P4. ` +
+          `Transferência ${transferencia.protocolo} concluída por ${ator.nome}` +
+          `${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}.`
+        )
+      : fluxoManutencaoTonfa
+        ? (
+          `O P4 confirmou o recebimento de ${material} em manutenção. ` +
+          `A manutenção permanece ativa, agora sob custódia do P4. ` +
+          `Transferência ${transferencia.protocolo} concluída por ${ator.nome}` +
+          `${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}.`
+        )
+      : (
+          `O ${setorDestino} confirmou o recebimento de ${material}. ` +
+          `Transferência ${transferencia.protocolo} concluída por ${ator.nome}` +
+          `${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}.`
+        )
 
   await notificarPerfis([
     {
@@ -1257,8 +1827,16 @@ export async function aceitarTransferencia({
   ])
 
   await auditar({
-    tipo: 'TRANSFERENCIA_PATRIMONIAL_ACEITA',
-    descricao: `Aceitou a transferência ${transferencia.protocolo}: ${material} recebido(s) pelo ${setorDestino}.`,
+    tipo: fluxoExtravioTonfa
+      ? 'TRANSFERENCIA_EXTRAVIO_ACEITA'
+      : fluxoManutencaoTonfa
+        ? 'TRANSFERENCIA_MANUTENCAO_ACEITA'
+        : 'TRANSFERENCIA_PATRIMONIAL_ACEITA',
+    descricao: fluxoExtravioTonfa
+      ? `Aceitou a transferência ${transferencia.protocolo}: procedimento de extravio de ${material} avocado pelo P4, sem movimentação física do material.`
+      : fluxoManutencaoTonfa
+        ? `Aceitou a transferência ${transferencia.protocolo}: ${material} em manutenção recebido(s) pelo P4. A manutenção permaneceu ativa.`
+        : `Aceitou a transferência ${transferencia.protocolo}: ${material} recebido(s) pelo ${setorDestino}.`,
     usuario: user,
     modulo: 'Patrimônio',
     severidade: 'Informativo'

@@ -73,12 +73,16 @@ export default function TonfaReceberP4({
   const [mensagem, setMensagem] = useState('')
 
   const devolucao = modo === 'RECEBER_DEVOLUCAO_P4'
+  const manutencaoP4 = modo === 'RECEBER_MANUTENCAO_P4'
+  const recebimentoNoP4 = devolucao || manutencaoP4
 
-  const destinoCodigo = devolucao ? 'P4' : 'SVDD'
+  const destinoCodigo = recebimentoNoP4 ? 'P4' : 'SVDD'
 
-  const titulo = devolucao
-    ? 'Receber devolução do SVDD'
-    : 'Receber do P4'
+  const titulo = manutencaoP4
+    ? 'Receber manutenção do SVDD'
+    : devolucao
+      ? 'Receber devolução do SVDD'
+      : 'Receber do P4'
 
   async function carregar() {
     try {
@@ -90,9 +94,25 @@ export default function TonfaReceberP4({
   limite: 500
 })
 
-      const pendentes = Array.isArray(resultado)
+      const pendentesBase = Array.isArray(resultado)
         ? resultado
         : []
+
+      const pendentes = pendentesBase.filter((item) => {
+        const tipoFluxo = normalizarTexto(
+          item?.metadata?.tipo_fluxo
+        )
+
+        if (manutencaoP4) {
+          return tipoFluxo === 'MANUTENCAO_SVDD_P4'
+        }
+
+        if (devolucao) {
+          return tipoFluxo !== 'MANUTENCAO_SVDD_P4'
+        }
+
+        return true
+      })
 
       setTransferencias(pendentes)
 
@@ -115,9 +135,13 @@ export default function TonfaReceberP4({
       setTransferencias([])
       setErro(
         error?.message ||
-          devolucao
-          ? 'Não foi possível carregar as devoluções pendentes para o P4.'
-          : 'Não foi possível carregar as transferências pendentes do P4.'
+        (
+          manutencaoP4
+            ? 'Não foi possível carregar as manutenções pendentes para recebimento pelo P4.'
+            : devolucao
+              ? 'Não foi possível carregar as devoluções pendentes para o P4.'
+              : 'Não foi possível carregar as transferências pendentes do P4.'
+        )
       )
     } finally {
       setCarregando(false)
@@ -174,12 +198,16 @@ export default function TonfaReceberP4({
     }
 
     const confirmarAceite = window.confirm(
-  devolucao
-    ? `Confirmar o recebimento desta devolução pelo P4?`
-    : `Confirmar o recebimento de ${selecionado.quantidade} unidade(s) de ${obterDescricaoMaterial(
-        selecionado
-      )} no Cofre do SVDD?`
-)
+      manutencaoP4
+        ? `Confirmar o recebimento de ${selecionado.quantidade} unidade(s) de ${obterDescricaoMaterial(
+            selecionado
+          )} em manutenção pelo P4?\n\nA manutenção permanecerá aberta e a custódia passará ao P4.`
+        : devolucao
+          ? `Confirmar o recebimento desta devolução pelo P4?`
+          : `Confirmar o recebimento de ${selecionado.quantidade} unidade(s) de ${obterDescricaoMaterial(
+              selecionado
+            )} no Cofre do SVDD?`
+    )
 
     if (!confirmarAceite) return
 
@@ -200,19 +228,23 @@ export default function TonfaReceberP4({
       await carregar()
 
       setMensagem(
-  devolucao
-    ? `Transferência ${protocolo} aceita. Material devolvido ao P4.`
-    : `Transferência ${protocolo} aceita. ${quantidade} unidade(s) recebida(s) no Cofre do SVDD.`
-)
+        manutencaoP4
+          ? `Transferência ${protocolo} aceita. ${quantidade} unidade(s) em manutenção recebida(s) pelo P4.`
+          : devolucao
+            ? `Transferência ${protocolo} aceita. Material devolvido ao P4.`
+            : `Transferência ${protocolo} aceita. ${quantidade} unidade(s) recebida(s) no Cofre do SVDD.`
+      )
 
       onConcluido?.({
         ...resultado,
         total: quantidade,
         acao: 'ACEITA',
         mensagem:
-          devolucao
-            ? `Transferência ${protocolo} aceita e material recebido pelo P4.`
-            : `Transferência ${protocolo} aceita e material recebido pelo SVDD.`
+          manutencaoP4
+            ? `Transferência ${protocolo} aceita. Manutenção recebida pelo P4 e mantida aberta.`
+            : devolucao
+              ? `Transferência ${protocolo} aceita e material recebido pelo P4.`
+              : `Transferência ${protocolo} aceita e material recebido pelo SVDD.`
       })
     } catch (error) {
       console.error('Erro ao aceitar transferência:', error)
@@ -262,7 +294,7 @@ export default function TonfaReceberP4({
       await carregar()
 
       setMensagem(
-        devolucao
+        recebimentoNoP4
           ? `Transferência ${protocolo} recusada. O SVDD foi notificado.`
           : `Transferência ${protocolo} recusada. O P4 foi notificado.`
       )
@@ -272,7 +304,7 @@ export default function TonfaReceberP4({
         total: 0,
         acao: 'RECUSADA',
         mensagem:
-          devolucao
+          recebimentoNoP4
             ? `Transferência ${protocolo} recusada pelo P4.`
             : `Transferência ${protocolo} recusada pelo SVDD.`
       })
@@ -295,9 +327,11 @@ export default function TonfaReceberP4({
           <span>SIGMO • MOVIMENTAÇÃO PATRIMONIAL</span>
           <h1>{titulo}</h1>
           <p>
-  {devolucao
-    ? 'Consulte as devoluções enviadas pelo SVDD e aceite ou recuse o retorno ao P4.'
-    : 'Consulte as transferências enviadas pelo P4 e aceite ou recuse o recebimento no Cofre do SVDD.'}
+  {manutencaoP4
+    ? 'Consulte as manutenções encaminhadas pelo SVDD e aceite ou recuse o recebimento pelo P4.'
+    : devolucao
+      ? 'Consulte as devoluções enviadas pelo SVDD e aceite ou recuse o retorno ao P4.'
+      : 'Consulte as transferências enviadas pelo P4 e aceite ou recuse o recebimento no Cofre do SVDD.'}
 </p>
         </div>
 
@@ -342,7 +376,11 @@ export default function TonfaReceberP4({
           <div className="tonfa-p4-card-title">
             <div>
               <span>ETAPA 1</span>
-              <h2>Transferências pendentes</h2>
+              <h2>
+                {manutencaoP4
+                  ? 'Recebimentos de manutenção pendentes'
+                  : 'Transferências pendentes'}
+              </h2>
             </div>
 
             <strong>
@@ -384,9 +422,11 @@ export default function TonfaReceberP4({
                   transferenciasFiltradas.length === 0 && (
                     <tr>
                       <td colSpan={6} className="tonfa-p4-empty">
-                        {devolucao
-                          ? 'Nenhuma devolução pendente para o P4.'
-                          : 'Nenhuma transferência pendente para o SVDD.'}
+                        {manutencaoP4
+                          ? 'Nenhuma manutenção pendente de recebimento pelo P4.'
+                          : devolucao
+                            ? 'Nenhuma devolução pendente para o P4.'
+                            : 'Nenhuma transferência pendente para o SVDD.'}
                       </td>
                     </tr>
                   )}
@@ -446,7 +486,11 @@ export default function TonfaReceberP4({
           <div className="tonfa-p4-card-title">
             <div>
               <span>ETAPA 2</span>
-              <h2>Analisar transferência</h2>
+              <h2>
+                {manutencaoP4
+                  ? 'Analisar manutenção'
+                  : 'Analisar transferência'}
+              </h2>
             </div>
           </div>
 
@@ -494,7 +538,9 @@ export default function TonfaReceberP4({
 
           {selecionado?.observacoes && (
             <label>
-              {devolucao ? 'Observações do SVDD' : 'Observações do P4'}
+              {recebimentoNoP4
+                ? 'Observações do SVDD'
+                : 'Observações do P4'}
               <textarea
                 value={selecionado.observacoes}
                 readOnly
@@ -508,9 +554,11 @@ export default function TonfaReceberP4({
             onClick={aceitar}
             disabled={!selecionado || salvando}
           >
-           {devolucao
-  ? 'Aceitar devolução ao P4'
-  : 'Aceitar e receber no SVDD'}
+           {manutencaoP4
+  ? 'Aceitar manutenção no P4'
+  : devolucao
+    ? 'Aceitar devolução ao P4'
+    : 'Aceitar e receber no SVDD'}
           </button>
 
           <label>

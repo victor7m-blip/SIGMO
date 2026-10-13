@@ -22,11 +22,42 @@ function ehColeteRefletivo(material) {
   return normalizarTexto(texto).includes('COLETE REFLETIVO')
 }
 
+
+function ehTonfaOuCassetete(material) {
+  if (
+    normalizarTexto(
+      material?.tipo_registro
+    ) === 'TONFA_QUANTIDADE'
+  ) {
+    return true
+  }
+
+  const texto = [
+    material?.descricao,
+    material?.categoria,
+    material?.tipo,
+    material?.tipo_material,
+    material?.modulo
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const normalizado =
+    normalizarTexto(texto)
+
+  return (
+    normalizado.includes('TONFA') ||
+    normalizado.includes('CASSETETE')
+  )
+}
+
 export default function CarrinhoMateriais({
   itens = [],
   onRemover,
   onQuantidadeChange,
   onAlternarNovidade,
+  onApontarNovaNovidade,
+  tiposNovaNovidadeTonfaSvdd = null,
   onNovidadeChange,
   onSelecionarFotosNovidade,
   onRemoverFotoNovidade,
@@ -47,6 +78,9 @@ export default function CarrinhoMateriais({
         itens.map((material) => {
           const coleteRefletivo =
             ehColeteRefletivo(material)
+
+          const tonfaOuCassetete =
+            ehTonfaOuCassetete(material)
 
           const controlaQuantidade =
             material.controla_quantidade ||
@@ -97,6 +131,15 @@ export default function CarrinhoMateriais({
           const novidadeAberta =
             Boolean(
               material.novidade_aberta
+            )
+
+          const fluxoTonfaSvddRecebimento =
+            Boolean(
+              tonfaOuCassetete &&
+              Array.isArray(
+                tiposNovaNovidadeTonfaSvdd
+              ) &&
+              tiposNovaNovidadeTonfaSvdd.length > 0
             )
 
           const quantidadeAfetadaMaxima =
@@ -212,9 +255,25 @@ export default function CarrinhoMateriais({
                   </button>
 
                   {novidadeRegistrada && (
-                    <span className="pagar-material-novidade-ok">
-                      ✓ Novidade registrada pelo usuário
-                    </span>
+                    <>
+                      <span className="pagar-material-novidade-ok">
+                        ✓ Novidade registrada pelo usuário
+                      </span>
+
+                      {tonfaOuCassetete && (
+                        <button
+                          type="button"
+                          className="pagar-material-novidade-btn"
+                          onClick={() =>
+                            onApontarNovaNovidade?.(
+                              material.id
+                            )
+                          }
+                        >
+                          Apontar nova novidade pelo SVDD
+                        </button>
+                      )}
+                    </>
                   )}
 
                   {!novidadeRegistrada && novidade && (
@@ -279,30 +338,49 @@ export default function CarrinhoMateriais({
                           <option value="">
                             SELECIONE
                           </option>
-                          <option value="AVARIA">
-                            AVARIA
-                          </option>
 
-                          {!coleteRefletivo && (
+                          {fluxoTonfaSvddRecebimento ? (
+                            tiposNovaNovidadeTonfaSvdd.map(
+                              (opcao) => (
+                                <option
+                                  key={opcao.value}
+                                  value={opcao.value}
+                                >
+                                  {opcao.label}
+                                </option>
+                              )
+                            )
+                          ) : (
                             <>
-                              <option value="DEFEITO">
-                                DEFEITO
+                              <option value="AVARIA">
+                                AVARIA
                               </option>
-                              <option value="MANUTENCAO_PREVENTIVA">
-                                MANUTENÇÃO PREVENTIVA
-                              </option>
-                              <option value="LIMPEZA">
-                                LIMPEZA NECESSÁRIA
-                              </option>
-                              <option value="EXTRAVIO_ACESSORIO">
-                                EXTRAVIO DE ACESSÓRIO
-                              </option>
+
+                              {!coleteRefletivo &&
+                                !tonfaOuCassetete && (
+                                <>
+                                  <option value="DEFEITO">
+                                    DEFEITO
+                                  </option>
+                                  <option value="MANUTENCAO_PREVENTIVA">
+                                    MANUTENÇÃO PREVENTIVA
+                                  </option>
+                                  <option value="LIMPEZA">
+                                    LIMPEZA NECESSÁRIA
+                                  </option>
+                                  <option value="EXTRAVIO_ACESSORIO">
+                                    EXTRAVIO DE ACESSÓRIO
+                                  </option>
+                                </>
+                              )}
+
+                              {!tonfaOuCassetete && (
+                                <option value="OUTRO">
+                                  OUTRO
+                                </option>
+                              )}
                             </>
                           )}
-
-                          <option value="OUTRO">
-                            OUTRO
-                          </option>
                         </select>
                       </label>
 
@@ -313,6 +391,9 @@ export default function CarrinhoMateriais({
                           value={
                             novidade?.providencia ||
                             ''
+                          }
+                          disabled={
+                            fluxoTonfaSvddRecebimento
                           }
                           onChange={(event) =>
                             onNovidadeChange?.(
@@ -325,26 +406,43 @@ export default function CarrinhoMateriais({
                           <option value="">
                             SELECIONE A PROVIDÊNCIA
                           </option>
-                          <option value="COFRE">
-                            {coleteRefletivo
-                              ? 'RETORNAR AO SVDD'
-                              : 'RETORNAR AO COFRE'}
-                          </option>
-                          <option value="MANUTENCAO">
-                            ENVIAR PARA MANUTENÇÃO
-                          </option>
 
-                          {!coleteRefletivo && (
-                            <option value="BAIXA">
-                              SOLICITAR BAIXA PATRIMONIAL
-                            </option>
+                          {fluxoTonfaSvddRecebimento ? (
+                            <>
+                              <option value="MANUTENCAO">
+                                ENVIAR PARA MANUTENÇÃO
+                              </option>
+                              <option value="EXTRAVIO">
+                                REGISTRAR EXTRAVIO
+                              </option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="COFRE">
+                                {coleteRefletivo
+                                  ? 'RETORNAR AO SVDD'
+                                  : 'RETORNAR AO COFRE'}
+                              </option>
+                              <option value="MANUTENCAO">
+                                ENVIAR PARA MANUTENÇÃO
+                              </option>
+
+                              {!coleteRefletivo && (
+                                <option value="BAIXA">
+                                  SOLICITAR BAIXA PATRIMONIAL
+                                </option>
+                              )}
+                            </>
                           )}
                         </select>
                       </label>
 
                       {recebimentoQuantidade && (
                         <label>
-                          Quantidade com novidade
+                          {fluxoTonfaSvddRecebimento &&
+                          novidade?.tipo === 'EXTRAVIO'
+                            ? 'Quantidade extraviada'
+                            : 'Quantidade com novidade'}
 
                           <input
                             type="number"
@@ -388,9 +486,12 @@ export default function CarrinhoMateriais({
                             )
                           }
                           placeholder={
-                            coleteRefletivo
-                              ? 'DESCREVA A AVARIA OU OUTRA SITUAÇÃO ENCONTRADA'
-                              : 'DESCREVA A AVARIA, DEFEITO OU OUTRA SITUAÇÃO ENCONTRADA'
+                            fluxoTonfaSvddRecebimento &&
+                            novidade?.tipo === 'EXTRAVIO'
+                              ? 'DESCREVA AS CIRCUNSTÂNCIAS DO EXTRAVIO'
+                              : coleteRefletivo
+                                ? 'DESCREVA A AVARIA OU OUTRA SITUAÇÃO ENCONTRADA'
+                                : 'DESCREVA A AVARIA, DEFEITO OU OUTRA SITUAÇÃO ENCONTRADA'
                           }
                         />
                       </label>

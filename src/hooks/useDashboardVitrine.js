@@ -406,7 +406,24 @@ function resumoTipo(lista) {
     manutencao: somar(
       lista,
       'quantidade_manutencao'
-    )
+    ),
+    extravioSvdd: somar(
+      lista,
+      'quantidade_extraviada_svdd'
+    ),
+    extravioP4: somar(
+      lista,
+      'quantidade_extraviada_p4'
+    ),
+    extravio:
+      somar(
+        lista,
+        'quantidade_extraviada_svdd'
+      ) +
+      somar(
+        lista,
+        'quantidade_extraviada_p4'
+      )
   }
 }
 
@@ -450,7 +467,16 @@ function resumirTonfas(lista) {
         cassetetesDetalhe.emServico,
       manutencao:
         tonfasDetalhe.manutencao +
-        cassetetesDetalhe.manutencao
+        cassetetesDetalhe.manutencao,
+      extravioSvdd:
+        tonfasDetalhe.extravioSvdd +
+        cassetetesDetalhe.extravioSvdd,
+      extravioP4:
+        tonfasDetalhe.extravioP4 +
+        cassetetesDetalhe.extravioP4,
+      extravio:
+        tonfasDetalhe.extravio +
+        cassetetesDetalhe.extravio
     },
     tonfasDetalhe,
     cassetetesDetalhe
@@ -753,9 +779,19 @@ function ajustarTonfasPorPerfil(
           ) +
           Number(
             detalhe.manutencao || 0
+          ) +
+          Number(
+            detalhe.extravioSvdd || 0
           ),
 
-        p4: 0
+        p4: 0,
+
+        extravio:
+          Number(
+            detalhe.extravioSvdd || 0
+          ),
+
+        extravioP4: 0
       })
 
     const tonfasDetalhe =
@@ -784,7 +820,25 @@ function ajustarTonfasPorPerfil(
           tonfasDetalhe.total,
 
         cassetetes:
-          cassetetesDetalhe.total
+          cassetetesDetalhe.total,
+
+        extravioSvdd:
+          Number(
+            tonfasDetalhe.extravioSvdd || 0
+          ) +
+          Number(
+            cassetetesDetalhe.extravioSvdd || 0
+          ),
+
+        extravioP4: 0,
+
+        extravio:
+          Number(
+            tonfasDetalhe.extravio || 0
+          ) +
+          Number(
+            cassetetesDetalhe.extravio || 0
+          )
       },
 
       tonfasDetalhe,

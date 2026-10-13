@@ -117,48 +117,122 @@ function obterNomeItem(item) {
 
 function obterAutor(item) {
   const dados = objeto(item?.dados)
+  const metadata = objeto(item?.metadata)
 
   return (
-    item?.realizado_por_nome ||
-    item?.usuario_nome ||
-    item?.criado_por_nome ||
-    item?.realizado_por_email ||
-    item?.realizado_por_re ||
-    dados.usuario_nome ||
+    valorHumano(item?.realizado_por_nome) ||
+    valorHumano(item?.solicitante_nome) ||
+    valorHumano(item?.criado_por_nome) ||
+    valorHumano(item?.usuario_nome) ||
+    valorHumano(item?.responsavel_origem_nome) ||
+    valorHumano(metadata?.realizado_por_nome) ||
+    valorHumano(metadata?.solicitante_nome) ||
+    valorHumano(dados?.realizado_por_nome) ||
+    valorHumano(dados?.solicitante_nome) ||
+    valorHumano(dados?.usuario_nome) ||
+    valorHumano(item?.realizado_por_email) ||
+    valorHumano(item?.realizado_por_re) ||
+    valorHumano(item?.solicitante_re) ||
     'SISTEMA'
+  )
+}
+
+function obterOrigem(item) {
+  const dados = objeto(item?.dados)
+  const metadata = objeto(item?.metadata)
+
+  return (
+    valorHumano(item?.local_origem) ||
+    valorHumano(item?.origem_local) ||
+    valorHumano(item?.origem_nome) ||
+    valorHumano(item?.origem_codigo) ||
+    valorHumano(metadata?.local_origem) ||
+    valorHumano(metadata?.origem_local) ||
+    valorHumano(dados?.local_origem) ||
+    valorHumano(dados?.origem_local) ||
+    valorHumano(dados?.origem) ||
+    ''
   )
 }
 
 function obterDestino(item) {
   const dados = objeto(item?.dados)
+  const metadata = objeto(item?.metadata)
 
   return (
-    item?.destino_nome ||
-    item?.local_destino ||
-    item?.companhia_destino ||
-    item?.destino_codigo ||
-    dados.destino_nome ||
-    dados.local_destino ||
-    dados.companhia_destino ||
-    dados.destino_codigo ||
-    'OUTRO LOCAL'
+    valorHumano(item?.destino_nome) ||
+    valorHumano(item?.local_destino) ||
+    valorHumano(item?.destino_local) ||
+    valorHumano(item?.companhia_destino) ||
+    valorHumano(item?.destino_codigo) ||
+    valorHumano(item?.destino_guardiao_nome) ||
+    valorHumano(metadata?.destino_nome) ||
+    valorHumano(metadata?.local_destino) ||
+    valorHumano(metadata?.destino_local) ||
+    valorHumano(dados?.destino_nome) ||
+    valorHumano(dados?.local_destino) ||
+    valorHumano(dados?.destino_local) ||
+    valorHumano(dados?.companhia_destino) ||
+    valorHumano(dados?.destino_codigo) ||
+    ''
   )
 }
 
 function obterRecebedor(item) {
   const dados = objeto(item?.dados)
+  const metadata = objeto(item?.metadata)
 
   return (
     valorHumano(item?.recebedor_nome) ||
+    valorHumano(item?.destino_guardiao_nome) ||
     valorHumano(item?.responsavel_nome) ||
-    valorHumano(dados.recebedor_nome) ||
-    valorHumano(dados.policial_nome) ||
+    valorHumano(item?.policial_nome) ||
+    valorHumano(metadata?.recebedor_nome) ||
+    valorHumano(metadata?.destino_guardiao_nome) ||
+    valorHumano(metadata?.policial_nome) ||
+    valorHumano(dados?.recebedor_nome) ||
+    valorHumano(dados?.destino_guardiao_nome) ||
+    valorHumano(dados?.policial_nome) ||
+    valorHumano(dados?.responsavel_nome) ||
     valorHumano(item?.recebedor_re) ||
     valorHumano(item?.responsavel_re) ||
-    valorHumano(dados.recebedor_re) ||
-    valorHumano(dados.policial_re) ||
+    valorHumano(item?.policial_re) ||
+    valorHumano(metadata?.recebedor_re) ||
+    valorHumano(metadata?.policial_re) ||
+    valorHumano(dados?.recebedor_re) ||
+    valorHumano(dados?.policial_re) ||
     ''
   )
+}
+
+function obterQuantidade(item) {
+  const dados = objeto(item?.dados)
+  const metadata = objeto(item?.metadata)
+
+  const candidatos = [
+    item?.quantidade,
+    item?.quantidade_movimentada,
+    item?.quantidade_recebida,
+    metadata?.quantidade,
+    metadata?.quantidade_movimentada,
+    metadata?.quantidade_recebida,
+    dados?.quantidade,
+    dados?.quantidade_movimentada,
+    dados?.quantidade_recebida
+  ]
+
+  for (const valor of candidatos) {
+    const numero = Number(valor)
+
+    if (
+      Number.isFinite(numero) &&
+      numero > 0
+    ) {
+      return numero
+    }
+  }
+
+  return null
 }
 
 export function gerarDescricaoTimeline(item) {
@@ -246,12 +320,42 @@ export function gerarDescricaoTimeline(item) {
 
 export function normalizarItemTimeline(item) {
   const data = obterData(item) || new Date().toISOString()
+  const autor = obterAutor(item)
+  const recebedor = obterRecebedor(item)
+  const origem = obterOrigem(item)
+  const destino = obterDestino(item)
+  const quantidade = obterQuantidade(item)
 
   return {
     ...item,
     tipo: tipoEvento(item),
     created_at: data,
-    autor: obterAutor(item),
+
+    // Campos semânticos prontos para Dashboard / histórico.
+    autor,
+    movimentou: autor,
+    recebedor_nome:
+      valorHumano(item?.recebedor_nome) ||
+      recebedor,
+    recebeu: recebedor,
+    local_origem:
+      valorHumano(item?.local_origem) ||
+      valorHumano(item?.origem_local) ||
+      origem,
+    origem_local:
+      valorHumano(item?.origem_local) ||
+      valorHumano(item?.local_origem) ||
+      origem,
+    local_destino:
+      valorHumano(item?.local_destino) ||
+      valorHumano(item?.destino_local) ||
+      destino,
+    destino_local:
+      valorHumano(item?.destino_local) ||
+      valorHumano(item?.local_destino) ||
+      destino,
+    quantidade,
+
     titulo: gerarDescricaoTimeline(item),
     item_nome: obterNomeItem(item),
     grupo: obterGrupoTemporal(data),

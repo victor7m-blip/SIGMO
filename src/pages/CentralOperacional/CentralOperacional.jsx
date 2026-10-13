@@ -39,6 +39,28 @@ import {
   listarTransferenciasTaserPendentes
 } from '../../services/tasersTransferenciaService'
 
+async function listarRecebimentosManutencaoTonfasPendentesCentral() {
+  const { data, error } = await supabase
+    .from('sigmo_transferencias_patrimoniais')
+    .select('*')
+    .eq('status', 'PENDENTE')
+    .eq('destino_codigo', 'P4')
+    .order('enviado_em', { ascending: true })
+    .limit(500)
+
+  if (error) {
+    throw error
+  }
+
+  return (Array.isArray(data) ? data : []).filter(
+    (item) =>
+      normalizarSemAcento(
+        item?.metadata?.tipo_fluxo
+      ) === 'MANUTENCAO_SVDD_P4'
+  )
+}
+
+
 async function listarAprovacoesMunicoesPendentesCentral() {
   const token = loadSessionToken()
 
@@ -155,6 +177,228 @@ async function listarAprovacoesTPDPendentesCentral() {
     (item) =>
       item?.metadata?.cmt_aprovado !== true
   )
+}
+
+
+function incluirRecebimentosManutencaoTonfasCentral(
+  dadosOperacionais,
+  transferencias,
+  {
+    visaoP4 = false
+  } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  if (!visaoP4) {
+    return base
+  }
+
+  const alertas =
+    Array.isArray(base.alertas)
+      ? [...base.alertas]
+      : []
+
+  const indiceCard =
+    alertas.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizarSemAcento(
+          item?.titulo || ''
+        )
+
+      return (
+        key === 'recebimentos-pendentes' ||
+        titulo === 'RECEBIMENTOS PENDENTES'
+      )
+    })
+
+  const cardAtual =
+    indiceCard >= 0
+      ? alertas[indiceCard]
+      : {
+          key: 'recebimentos-pendentes',
+          titulo: 'Recebimentos pendentes',
+          tom: 'atencao',
+          total: 0,
+          itens: []
+        }
+
+  const itensBase =
+    (Array.isArray(cardAtual?.itens)
+      ? cardAtual.itens
+      : []
+    ).filter(
+      (item) =>
+        normalizarSemAcento(
+          item?.origem_aprovacao ||
+          item?.tipo_solicitacao ||
+          ''
+        ) !== 'TONFA_MANUTENCAO_RECEBIMENTO'
+    )
+
+  const novosItens =
+    (transferencias || []).map((transferencia) => {
+      const categoria =
+        normalizarSemAcento(
+          transferencia?.categoria
+        ) === 'CASSETETE'
+          ? 'CASSETETE'
+          : 'TONFA'
+
+      const quantidade =
+        Math.max(
+          1,
+          Number(transferencia?.quantidade || 1)
+        )
+
+      return {
+        ...transferencia,
+        id:
+          transferencia?.id ||
+          transferencia?.protocolo,
+        transferencia_id:
+          transferencia?.id ||
+          null,
+        manutencao_id:
+          transferencia?.metadata?.manutencao_id ||
+          null,
+        referencia_id:
+          transferencia?.metadata?.referencia_id ||
+          null,
+        origem_aprovacao:
+          'TONFA_MANUTENCAO_RECEBIMENTO',
+        tipo_solicitacao:
+          'TONFA_MANUTENCAO_RECEBIMENTO',
+        modulo:
+          'TONFAS',
+        categoria,
+        tipo:
+          `${categoria} EM MANUTENÇÃO`,
+        tipo_movimentacao:
+          'TRANSFERENCIA',
+        tipo_patrimonio:
+          categoria,
+        quantidade,
+        quantidade_total:
+          quantidade,
+        origem_codigo:
+          transferencia?.origem_codigo ||
+          'SVDD',
+        origem_nome:
+          transferencia?.origem_nome ||
+          'MANUTENÇÃO / SVDD',
+        destino_codigo:
+          'P4',
+        destino_nome:
+          transferencia?.destino_nome ||
+          'MANUTENÇÃO / P4',
+        status:
+          'AGUARDANDO_RECEBIMENTO',
+        status_movimentacao:
+          'PENDENTE',
+        observacoes:
+          transferencia?.observacoes ||
+          null,
+        criado_por_nome:
+          transferencia?.enviado_por_nome ||
+          null,
+        solicitado_por_nome:
+          transferencia?.enviado_por_nome ||
+          null,
+        created_at:
+          transferencia?.enviado_em ||
+          transferencia?.created_at ||
+          null,
+        solicitada_em:
+          transferencia?.enviado_em ||
+          null
+      }
+    })
+
+  const mapa = new Map()
+
+  for (const item of itensBase) {
+    const id =
+      item?.transferencia_id ||
+      item?.id ||
+      item?.protocolo
+
+    if (id) {
+      mapa.set(
+        `BASE-${String(id)}`,
+        item
+      )
+    }
+  }
+
+  for (const item of novosItens) {
+    const id =
+      item?.transferencia_id ||
+      item?.id ||
+      item?.protocolo
+
+    if (id) {
+      mapa.set(
+        `TONFA-MANUTENCAO-${String(id)}`,
+        item
+      )
+    }
+  }
+
+  const itens =
+    [...mapa.values()]
+      .sort((a, b) => {
+        const dataA =
+          new Date(
+            a?.created_at ||
+            a?.solicitada_em ||
+            0
+          ).getTime()
+
+        const dataB =
+          new Date(
+            b?.created_at ||
+            b?.solicitada_em ||
+            0
+          ).getTime()
+
+        return dataB - dataA
+      })
+
+  const cardNovo = {
+    ...cardAtual,
+    key: 'recebimentos-pendentes',
+    titulo: 'Recebimentos pendentes',
+    total: itens.reduce(
+      (total, item) =>
+        total +
+        Math.max(
+          1,
+          Number(item?.quantidade || 1)
+        ),
+      0
+    ),
+    itens
+  }
+
+  if (indiceCard >= 0) {
+    alertas[indiceCard] = cardNovo
+  } else {
+    alertas.push(cardNovo)
+  }
+
+  return {
+    ...base,
+    alertas
+  }
 }
 
 
@@ -3394,14 +3638,367 @@ function moduloManutencaoDaCategoria(categoria) {
 
 function contarManutencoesDaCategoria(categoria, manutencoes = []) {
   const modulo = moduloManutencaoDaCategoria(categoria)
+  const tipoCategoria = normalizarSemAcento(
+    categoria?.tipo_material ||
+    categoria?.categoria ||
+    categoria?.tipo ||
+    ''
+  )
 
   return (manutencoes || [])
-    .filter((item) => normalizarSemAcento(item?.modulo) === modulo)
+    .filter((item) => {
+      if (normalizarSemAcento(item?.modulo) !== modulo) {
+        return false
+      }
+
+      if (
+        modulo === 'TONFAS' &&
+        ['TONFA', 'CASSETETE'].includes(tipoCategoria)
+      ) {
+        return (
+          normalizarSemAcento(item?.tipo_material) ===
+          tipoCategoria
+        )
+      }
+
+      return true
+    })
     .reduce(
       (total, item) => total + Math.max(1, Number(item?.quantidade || 1)),
       0
     )
 }
+
+
+function custodiaAtualManutencaoTonfa(item) {
+  if (
+    normalizarSemAcento(item?.modulo) !==
+    'TONFAS'
+  ) {
+    return null
+  }
+
+  const destino =
+    normalizarSemAcento(
+      item?.destino ||
+      item?.local_destino ||
+      ''
+    )
+
+  /*
+   * Quando o SVDD encaminha uma Tonfa/Cassetete já em manutenção ao P4,
+   * o serviço mantém a manutenção ativa e grava destino = P4.
+   * Esse destino representa a custódia operacional atual.
+   */
+  if (
+    destino === 'P4' ||
+    destino.includes('COFRE DO P4') ||
+    destino.includes('GUARDA DO P4') ||
+    destino.includes('P4_MANUTENCAO')
+  ) {
+    return 'P4'
+  }
+
+  const origem =
+    normalizarSemAcento(
+      item?.origem_institucional ||
+      item?.origem ||
+      item?.local_origem ||
+      ''
+    )
+
+  if (
+    origem === 'SVDD' ||
+    origem.includes('COFRE DO SVDD') ||
+    origem.includes('SERVICO DE DIA') ||
+    origem.includes('POLICIAL')
+  ) {
+    return 'SVDD'
+  }
+
+  if (
+    origem === 'P4' ||
+    origem.includes('COFRE DO P4') ||
+    origem.includes('GUARDA DO P4') ||
+    origem.includes('DEPOSITO')
+  ) {
+    return 'P4'
+  }
+
+  return null
+}
+
+
+function manutencaoPertenceAoEscopoCentral(
+  item,
+  {
+    visaoP4 = false,
+    visaoSVDD = false
+  } = {}
+) {
+  const modulo =
+    normalizarSemAcento(item?.modulo)
+
+  if (modulo === 'TONFAS') {
+    const custodia =
+      custodiaAtualManutencaoTonfa(item)
+
+    if (visaoP4) {
+      return custodia === 'P4'
+    }
+
+    if (visaoSVDD) {
+      return custodia === 'SVDD'
+    }
+
+    return true
+  }
+
+  const origem =
+    normalizarSemAcento(
+      item?.origem_institucional ||
+      item?.origem ||
+      item?.local_origem ||
+      ''
+    )
+
+  if (visaoP4) {
+    return (
+      origem === 'P4' ||
+      origem.includes('COFRE DO P4') ||
+      origem.includes('GUARDA DO P4') ||
+      origem.includes('DEPOSITO')
+    )
+  }
+
+  if (visaoSVDD) {
+    return (
+      origem === 'SVDD' ||
+      origem.includes('COFRE DO SVDD') ||
+      origem.includes('SERVICO DE DIA')
+    )
+  }
+
+  return true
+}
+
+
+function incluirManutencoesTonfasComoBaixadosCentral(
+  dadosOperacionais,
+  manutencoes = [],
+  {
+    visaoP4 = false,
+    visaoSVDD = false,
+    recebimentosPendentes = []
+  } = {}
+) {
+  const base =
+    dadosOperacionais &&
+    typeof dadosOperacionais === 'object'
+      ? dadosOperacionais
+      : {}
+
+  /*
+   * "Baixados" aqui é somente uma classificação visual da Central.
+   * A manutenção continua EM_MANUTENCAO no banco. A baixa patrimonial
+   * definitiva continua sendo competência do P4.
+   */
+  if (!visaoP4 && !visaoSVDD) {
+    return base
+  }
+
+  const indicadores =
+    Array.isArray(base.indicadores)
+      ? [...base.indicadores]
+      : []
+
+  const indiceBaixados =
+    indicadores.findIndex((item) => {
+      const key =
+        String(item?.key || '')
+          .trim()
+          .toLowerCase()
+
+      const titulo =
+        normalizarSemAcento(
+          item?.titulo ||
+          ''
+        )
+
+      return (
+        key === 'baixados' ||
+        key === 'baixado' ||
+        key.includes('baixad') ||
+        titulo === 'BAIXADOS'
+      )
+    })
+
+  const cardAtual =
+    indiceBaixados >= 0
+      ? indicadores[indiceBaixados]
+      : {
+          key: 'baixados',
+          titulo: 'Baixados',
+          total: 0,
+          itens: []
+        }
+
+  const itensBase =
+    (Array.isArray(cardAtual?.itens)
+      ? cardAtual.itens
+      : []
+    ).filter(
+      (item) =>
+        item?.origem_indicador !==
+        'TONFA_MANUTENCAO_VISUAL'
+    )
+
+  const idsManutencoesAguardandoP4 =
+    new Set(
+      (recebimentosPendentes || [])
+        .map(
+          (item) =>
+            String(
+              item?.metadata?.manutencao_id ||
+              ''
+            )
+        )
+        .filter(Boolean)
+    )
+
+  const manutencoesTonfas =
+    (manutencoes || [])
+      .filter(
+        (item) =>
+          normalizarSemAcento(item?.modulo) ===
+          'TONFAS'
+      )
+      .filter((item) => {
+        const manutencaoId =
+          String(item?.id || '')
+
+        if (
+          visaoP4 &&
+          manutencaoId &&
+          idsManutencoesAguardandoP4.has(
+            manutencaoId
+          )
+        ) {
+          return false
+        }
+
+        return manutencaoPertenceAoEscopoCentral(
+          item,
+          {
+            visaoP4,
+            visaoSVDD
+          }
+        )
+      })
+
+  const itensManutencao =
+    manutencoesTonfas.map((item) => {
+      const tipoMaterial =
+        normalizarSemAcento(
+          item?.tipo_material
+        ) === 'CASSETETE'
+          ? 'CASSETETE'
+          : 'TONFA'
+
+      const quantidade =
+        Math.max(
+          1,
+          Number(item?.quantidade || 1)
+        )
+
+      const custodia =
+        custodiaAtualManutencaoTonfa(item)
+
+      return {
+        ...item,
+        id:
+          `TONFA-MANUTENCAO-BAIXADO-${item?.id || item?.referencia_id || Math.random()}`,
+        manutencao_id:
+          item?.id ||
+          null,
+        referencia_id:
+          item?.referencia_id ||
+          null,
+        origem_indicador:
+          'TONFA_MANUTENCAO_VISUAL',
+        tipo:
+          tipoMaterial,
+        categoria:
+          tipoMaterial,
+        tipo_patrimonio:
+          tipoMaterial,
+        identificador:
+          item?.patrimonio ||
+          item?.numero_serie ||
+          tipoMaterial,
+        descricao:
+          item?.descricao ||
+          `${tipoMaterial} EM MANUTENÇÃO`,
+        quantidade,
+        quantidade_total:
+          quantidade,
+        status:
+          'EM_MANUTENCAO',
+        status_operacional:
+          'EM_MANUTENCAO',
+        local_atual:
+          custodia === 'P4'
+            ? 'MANUTENÇÃO / P4'
+            : 'MANUTENÇÃO / SVDD',
+        responsabilidade_atual:
+          custodia,
+        responsavel_setor:
+          custodia,
+        setor_responsavel:
+          custodia,
+        baixa_visual_central:
+          true
+      }
+    })
+
+  const quantidadeManutencao =
+    itensManutencao.reduce(
+      (total, item) =>
+        total +
+        Math.max(
+          1,
+          Number(item?.quantidade || 1)
+        ),
+      0
+    )
+
+  const totalBase =
+    Number(cardAtual?.total || 0)
+
+  const cardNovo = {
+    ...cardAtual,
+    total:
+      totalBase +
+      quantidadeManutencao,
+    itens: [
+      ...itensBase,
+      ...itensManutencao
+    ]
+  }
+
+  if (indiceBaixados >= 0) {
+    indicadores[indiceBaixados] =
+      cardNovo
+  } else {
+    indicadores.push(cardNovo)
+  }
+
+  return {
+    ...base,
+    indicadores
+  }
+}
+
 
 function contarManutencoesExternasDaCategoria(categoria, itens = []) {
   const modulo = moduloManutencaoDaCategoria(categoria)
@@ -4336,7 +4933,8 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
         recebimentosTorniquetes,
         aprovacoesTPD,
         aprovacoesTaser,
-        recebimentosTaser
+        recebimentosTaser,
+        recebimentosManutencaoTonfas
       ] = await Promise.all([
         carregarDashboardPatrimonial(),
         listarCategoriasOperacionais(),
@@ -4386,39 +4984,61 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
               destinoCodigo: 'SVDD',
               limite: 500
             })
+          : Promise.resolve([]),
+
+        visaoP4
+          ? listarRecebimentosManutencaoTonfasPendentesCentral()
           : Promise.resolve([])
       ])
 
       const manutencoesTodas =
         manutencoesResultado?.data || []
 
+      const idsManutencoesAguardandoRecebimentoP4 =
+        new Set(
+          (recebimentosManutencaoTonfas || [])
+            .map(
+              (item) =>
+                String(
+                  item?.metadata?.manutencao_id ||
+                  ''
+                )
+            )
+            .filter(Boolean)
+        )
+
       const manutencoesEscopo =
         manutencoesTodas.filter((item) => {
-          const origem = normalizarSemAcento(
-            item?.origem_institucional ||
-            item?.origem ||
-            item?.local_origem ||
-            ''
+          const manutencaoId =
+            String(item?.id || '')
+
+          const aguardandoRecebimentoP4 =
+            manutencaoId &&
+            idsManutencoesAguardandoRecebimentoP4.has(
+              manutencaoId
+            )
+
+          if (
+            normalizarSemAcento(item?.modulo) ===
+            'TONFAS' &&
+            aguardandoRecebimentoP4
+          ) {
+            if (visaoP4) {
+              return false
+            }
+
+            if (visaoSVDD) {
+              return true
+            }
+          }
+
+          return manutencaoPertenceAoEscopoCentral(
+            item,
+            {
+              visaoP4,
+              visaoSVDD
+            }
           )
-
-          if (visaoP4) {
-            return (
-              origem === 'P4' ||
-              origem.includes('COFRE DO P4') ||
-              origem.includes('GUARDA DO P4') ||
-              origem.includes('DEPOSITO')
-            )
-          }
-
-          if (visaoSVDD) {
-            return (
-              origem === 'SVDD' ||
-              origem.includes('COFRE DO SVDD') ||
-              origem.includes('SERVICO DE DIA')
-            )
-          }
-
-          return true
         })
 
       const idsManutencoesEscopo = new Set(
@@ -4604,6 +5224,29 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
             }
           )
       }
+
+      if (visaoP4) {
+        dadosOperacionaisComAlertas =
+          incluirRecebimentosManutencaoTonfasCentral(
+            dadosOperacionaisComAlertas,
+            recebimentosManutencaoTonfas,
+            {
+              visaoP4
+            }
+          )
+      }
+
+      dadosOperacionaisComAlertas =
+        incluirManutencoesTonfasComoBaixadosCentral(
+          dadosOperacionaisComAlertas,
+          manutencoesTodas,
+          {
+            visaoP4,
+            visaoSVDD,
+            recebimentosPendentes:
+              recebimentosManutencaoTonfas
+          }
+        )
 
       setDashboard(dadosDashboard)
 

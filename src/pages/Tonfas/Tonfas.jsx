@@ -4,13 +4,27 @@ import { QRCodeCanvas } from 'qrcode.react'
 import { TIPOS_TONFA, STATUS_TONFA } from '../../constants/tonfas'
 import { UNIDADES_27_BPMM } from '../../constants/unidades'
 import {
+  constatarNovidadeTonfa,
   excluirTonfa,
-  listarTonfas
+  listarTonfas,
+  obterResumoBaixasTonfas
 } from '../../services/tonfasService'
 import {
-  criarTransferenciaPendente
+  criarTransferenciaPendente,
+  listarTransferenciasPendentes
 } from '../../services/patrimonioTransferenciaService'
+import {
+  baixarExtravioTonfaP4,
+  baixarManutencaoTonfaP4,
+  regularizarExtravioTonfaP4,
+  regularizarManutencaoTonfaP4,
+  buscarNovidadePatrimonialDaManutencao,
+  listarFotosManutencao,
+  listarManutencoes
+} from '../../services/manutencoesService'
 import { listarFotosTonfa } from '../../services/tonfasFotosService'
+import { supabase } from '../../services/supabaseClient'
+import { registerAudit } from '../../services/auditoriaService'
 import TonfaForm from './components/TonfaForm'
 import TonfaTable from './components/TonfaTable'
 import TonfaTransferenciaModal from './components/TonfaTransferenciaModal'
@@ -114,12 +128,12 @@ function obterQuantidade(item) {
     item?.quantidade_total ??
       item?.quantidade ??
       item?.saldo_total ??
-      1
+      0
   )
 
-  return Number.isFinite(quantidade) && quantidade > 0
+  return Number.isFinite(quantidade) && quantidade >= 0
     ? quantidade
-    : 1
+    : 0
 }
 
 function somarQuantidades(itens) {
@@ -695,6 +709,80 @@ export default function Tonfas({ user }) {
   const [transferenciaModo, setTransferenciaModo] = useState('P4_SVDD')
   const [mensagemSucesso, setMensagemSucesso] = useState('')
   const [movimentacaoAtiva, setMovimentacaoAtiva] = useState(null)
+  const [manutencoesParaP4, setManutencoesParaP4] = useState([])
+  const [modalManutencoesP4Aberto, setModalManutencoesP4Aberto] = useState(false)
+  const [carregandoManutencoesP4, setCarregandoManutencoesP4] = useState(false)
+  const [encaminhandoManutencaoId, setEncaminhandoManutencaoId] = useState(null)
+  const [extraviosSvdd, setExtraviosSvdd] = useState([])
+  const [modalExtraviosAberto, setModalExtraviosAberto] = useState(false)
+  const [carregandoExtravios, setCarregandoExtravios] = useState(false)
+  const [regularizandoExtravioId, setRegularizandoExtravioId] = useState(null)
+  const [modalOutrosP4Aberto, setModalOutrosP4Aberto] = useState(false)
+  const [outrosP4Itens, setOutrosP4Itens] = useState([])
+  const [carregandoOutrosP4, setCarregandoOutrosP4] = useState(false)
+  const [modalBaixaP4Aberto, setModalBaixaP4Aberto] = useState(false)
+  const [manutencoesBaixaP4, setManutencoesBaixaP4] = useState([])
+  const [carregandoBaixaP4, setCarregandoBaixaP4] = useState(false)
+  const [baixandoManutencaoId, setBaixandoManutencaoId] = useState(null)
+  const [
+    modalRegularizacaoP4Aberto,
+    setModalRegularizacaoP4Aberto
+  ] = useState(false)
+  const [
+    ocorrenciasRegularizacaoP4,
+    setOcorrenciasRegularizacaoP4
+  ] = useState([])
+  const [
+    carregandoRegularizacaoP4,
+    setCarregandoRegularizacaoP4
+  ] = useState(false)
+  const [
+    regularizandoP4Id,
+    setRegularizandoP4Id
+  ] = useState(null)
+  const [
+    formRegularizacaoP4,
+    setFormRegularizacaoP4
+  ] = useState({
+    itemId: '',
+    policialRe: '',
+    policialNome: '',
+    documento: '',
+    observacoes: ''
+  })
+  const [
+    modalEnvioManutencaoP4Aberto,
+    setModalEnvioManutencaoP4Aberto
+  ] = useState(false)
+  const [
+    enviandoManutencaoP4Id,
+    setEnviandoManutencaoP4Id
+  ] = useState(null)
+  const [formManutencaoP4, setFormManutencaoP4] = useState({
+    itemId: '',
+    quantidade: '1',
+    tipoNovidade: 'AVARIA',
+    descricao: '',
+    observacoes: ''
+  })
+  const [resumoBaixas, setResumoBaixas] = useState({
+    total: 0,
+    tonfas: 0,
+    cassetetes: 0,
+    porReferencia: {}
+  })
+  const [resumoExtraviosP4Ativos, setResumoExtraviosP4Ativos] = useState({
+    tonfas: 0,
+    cassetetes: 0
+  })
+  const [manutencaoP4Resumo, setManutencaoP4Resumo] = useState({
+    tonfas: 0,
+    cassetetes: 0
+  })
+  const [
+    manutencaoP4PorReferencia,
+    setManutencaoP4PorReferencia
+  ] = useState({})
   const [
   cautelasModalAberto,
   setCautelasModalAberto
@@ -751,18 +839,166 @@ export default function Tonfas({ user }) {
     try {
       setLoadingResumo(true)
 
-      const resultado = await listarTonfas({
-        filtros: {
-          pesquisa: '',
-          tipo: '',
-          status_operacional: '',
-          unidade: ''
-        },
-        pagina: 1,
-        limite: LIMITE_RESUMO
+      const [
+        resultado,
+        respostaManutencoes,
+        respostaBaixas,
+        respostaExtraviosP4
+      ] = await Promise.all([
+        listarTonfas({
+          filtros: {
+            pesquisa: '',
+            tipo: '',
+            status_operacional: '',
+            unidade: ''
+          },
+          pagina: 1,
+          limite: LIMITE_RESUMO
+        }),
+
+        listarManutencoes({
+          status: 'EM_MANUTENCAO',
+          pagina: 1,
+          limite: 5000
+        }),
+
+        obterResumoBaixasTonfas(),
+
+        supabase
+          .from('sigmo_tonfas_extravios')
+          .select('tipo_material, quantidade')
+          .eq('ativo', true)
+          .eq('responsavel_setor', 'P4')
+      ])
+
+      setTonfasResumo(
+        (resultado.data || []).map(
+          prepararTonfaParaExibicao
+        )
+      )
+
+      const resumoP4 = {
+        tonfas: 0,
+        cassetetes: 0
+      }
+
+      const resumoP4PorReferencia = {}
+
+      ;(respostaManutencoes?.data || [])
+        .filter(
+          (item) =>
+            normalizarTexto(item?.modulo) ===
+            'TONFAS'
+        )
+        .filter(
+          (item) =>
+            !manutencaoTonfaPertenceAoSVDD(
+              item
+            )
+        )
+        .forEach((item) => {
+          const quantidade = Math.max(
+            1,
+            Number(item?.quantidade || 1) || 1
+          )
+
+          const referenciaId =
+            String(
+              item?.referencia_id ||
+              ''
+            )
+
+          if (referenciaId) {
+            resumoP4PorReferencia[
+              referenciaId
+            ] =
+              Number(
+                resumoP4PorReferencia[
+                  referenciaId
+                ] || 0
+              ) +
+              quantidade
+          }
+
+          if (
+            normalizarTexto(
+              item?.tipo_material
+            ) === 'CASSETETE'
+          ) {
+            resumoP4.cassetetes +=
+              quantidade
+          } else {
+            resumoP4.tonfas +=
+              quantidade
+          }
+        })
+
+      setManutencaoP4Resumo(
+        resumoP4
+      )
+
+      setManutencaoP4PorReferencia(
+        resumoP4PorReferencia
+      )
+
+      setResumoBaixas({
+        total:
+          Number(
+            respostaBaixas?.total ||
+            0
+          ),
+        tonfas:
+          Number(
+            respostaBaixas?.tonfas ||
+            0
+          ),
+        cassetetes:
+          Number(
+            respostaBaixas?.cassetetes ||
+            0
+          ),
+        porReferencia:
+          respostaBaixas?.porReferencia ||
+          {}
       })
 
-      setTonfasResumo((resultado.data || []).map(prepararTonfaParaExibicao))
+      if (respostaExtraviosP4?.error) {
+        throw respostaExtraviosP4.error
+      }
+
+      const resumoExtraviosAtivos = {
+        tonfas: 0,
+        cassetetes: 0
+      }
+
+      ;(respostaExtraviosP4?.data || []).forEach(
+        (item) => {
+          const quantidade =
+            Math.max(
+              0,
+              Number(
+                item?.quantidade ||
+                0
+              ) || 0
+            )
+
+          if (
+            normalizarTexto(
+              item?.tipo_material
+            ) === 'CASSETETE'
+          ) {
+            resumoExtraviosAtivos.cassetetes +=
+              quantidade
+          } else {
+            resumoExtraviosAtivos.tonfas +=
+              quantidade
+          }
+        }
+      )
+
+      setResumoExtraviosP4Ativos(
+        resumoExtraviosAtivos
+      )
     } catch (error) {
       console.error(
         'Erro ao carregar resumo patrimonial:',
@@ -770,6 +1006,21 @@ export default function Tonfas({ user }) {
       )
 
       setTonfasResumo([])
+      setManutencaoP4Resumo({
+        tonfas: 0,
+        cassetetes: 0
+      })
+      setManutencaoP4PorReferencia({})
+      setResumoBaixas({
+        total: 0,
+        tonfas: 0,
+        cassetetes: 0,
+        porReferencia: {}
+      })
+      setResumoExtraviosP4Ativos({
+        tonfas: 0,
+        cassetetes: 0
+      })
     } finally {
       setLoadingResumo(false)
     }
@@ -816,10 +1067,10 @@ export default function Tonfas({ user }) {
     }
   }
 
-  const totalGeral =
+  const totalOriginal =
     somarQuantidades(base)
 
-  const totalTonfas =
+  const totalTonfasOriginal =
     somarQuantidades(
       base.filter(
         (item) =>
@@ -828,7 +1079,7 @@ export default function Tonfas({ user }) {
       )
     )
 
-  const totalCassetetes =
+  const totalCassetetesOriginal =
     somarQuantidades(
       base.filter(
         (item) =>
@@ -836,6 +1087,30 @@ export default function Tonfas({ user }) {
           'CASSETETE'
       )
     )
+
+  const totalTonfas =
+    Math.max(
+      0,
+      totalTonfasOriginal -
+      Number(
+        resumoBaixas.tonfas ||
+        0
+      )
+    )
+
+  const totalCassetetes =
+    Math.max(
+      0,
+      totalCassetetesOriginal -
+      Number(
+        resumoBaixas.cassetetes ||
+        0
+      )
+    )
+
+  const totalGeral =
+    totalTonfas +
+    totalCassetetes
 
   const depositoP4PorTipo =
     resumirSaldoPorTipo(
@@ -860,6 +1135,18 @@ export default function Tonfas({ user }) {
     base,
     'quantidade_manutencao'
   )
+
+  const extravioSvddPorTipo =
+    resumirSaldoPorTipo(
+      base,
+      'quantidade_extraviada_svdd'
+    )
+
+  const extravioP4PorTipo =
+    resumirSaldoPorTipo(
+      base,
+      'quantidade_extraviada_p4'
+    )
 
   const totalCautelas =
     emServicoPorTipo.tonfas +
@@ -891,19 +1178,47 @@ export default function Tonfas({ user }) {
     base.filter(estaBaixado)
 
   const itensOutros =
-    base.filter(
-      (item) =>
-        !estaNaoLocalizado(item) &&
-        !estaNoP4(item) &&
-        !estaNoSVDD(item) &&
-        !estaEmCarga(item) &&
-        !estaEmCautela(item) &&
-        !estaEmManutencao(item) &&
-        !estaEmOutraCia(item) &&
-        !estaNaFT(item) &&
-        !estaNoBTL(item) &&
-        !estaBaixado(item)
-    )
+    base
+      .filter(
+        (item) =>
+          !estaNaoLocalizado(item) &&
+          !estaNoP4(item) &&
+          !estaNoSVDD(item) &&
+          !estaEmCarga(item) &&
+          !estaEmCautela(item) &&
+          !estaEmManutencao(item) &&
+          !estaEmOutraCia(item) &&
+          !estaNaFT(item) &&
+          !estaNoBTL(item) &&
+          !estaBaixado(item)
+      )
+      .map((item) => {
+        const quantidadeBaixada =
+          Number(
+            resumoBaixas?.porReferencia?.[
+              String(item?.id || '')
+            ] || 0
+          )
+
+        const quantidadeAtiva =
+          Math.max(
+            0,
+            obterQuantidade(item) -
+            quantidadeBaixada
+          )
+
+        return {
+          ...item,
+          quantidade_total:
+            quantidadeAtiva,
+          quantidade:
+            quantidadeAtiva
+        }
+      })
+      .filter(
+        (item) =>
+          obterQuantidade(item) > 0
+      )
 
   return {
     totalGeral,
@@ -916,9 +1231,12 @@ export default function Tonfas({ user }) {
       ),
 
     localizadas:
-      totalGeral -
-      somarQuantidades(
-        itensNaoLocalizados
+      Math.max(
+        0,
+        totalGeral -
+        somarQuantidades(
+          itensNaoLocalizados
+        )
       ),
 
     depositoP4:
@@ -977,8 +1295,9 @@ export default function Tonfas({ user }) {
       ),
 
     baixados:
-      somarQuantidades(
-        itensBaixados
+      Number(
+        resumoBaixas.total ||
+        0
       ),
 
     outros:
@@ -1016,6 +1335,22 @@ export default function Tonfas({ user }) {
     manutencaoPorTipo.cassetetes
 },
 
+      extravioSvdd: {
+        tonfas:
+          extravioSvddPorTipo.tonfas,
+
+        cassetetes:
+          extravioSvddPorTipo.cassetetes
+      },
+
+      extravioP4: {
+        tonfas:
+          extravioP4PorTipo.tonfas,
+
+        cassetetes:
+          extravioP4PorTipo.cassetetes
+      },
+
       outraCia:
         resumirPorTipo(
           itensOutraCia
@@ -1031,10 +1366,19 @@ export default function Tonfas({ user }) {
           itensBTL
         ),
 
-      baixados:
-        resumirPorTipo(
-          itensBaixados
-        ),
+      baixados: {
+        tonfas:
+          Number(
+            resumoBaixas.tonfas ||
+            0
+          ),
+
+        cassetetes:
+          Number(
+            resumoBaixas.cassetetes ||
+            0
+          )
+      },
 
       outros:
         resumirPorTipo(
@@ -1042,7 +1386,10 @@ export default function Tonfas({ user }) {
         )
     }
   }
-}, [tonfasResumo])
+}, [
+  tonfasResumo,
+  resumoBaixas
+])
 
 
   const resumoSVDD = useMemo(() => {
@@ -1050,11 +1397,45 @@ export default function Tonfas({ user }) {
     const cassetetesNoCofre = Number(resumo.cofreSVDD?.noCofreCassetetes || 0)
     const tonfasEmServico = Number(resumo.cofreSVDD?.emServicoTonfas || 0)
     const cassetetesEmServico = Number(resumo.cofreSVDD?.emServicoCassetetes || 0)
-    const tonfasManutencao = Number(resumo.distribuicao?.manutencao?.tonfas || 0)
-    const cassetetesManutencao = Number(resumo.distribuicao?.manutencao?.cassetetes || 0)
+    const tonfasManutencao =
+      Math.max(
+        0,
+        Number(
+          resumo.distribuicao?.manutencao?.tonfas ||
+          0
+        ) -
+        Number(
+          manutencaoP4Resumo.tonfas ||
+          0
+        )
+      )
 
-    const totalTonfas = tonfasNoCofre + tonfasEmServico + tonfasManutencao
-    const totalCassetetes = cassetetesNoCofre + cassetetesEmServico + cassetetesManutencao
+    const cassetetesManutencao =
+      Math.max(
+        0,
+        Number(
+          resumo.distribuicao?.manutencao?.cassetetes ||
+          0
+        ) -
+        Number(
+          manutencaoP4Resumo.cassetetes ||
+          0
+        )
+      )
+    const tonfasExtraviadas = Number(resumo.distribuicao?.extravioSvdd?.tonfas || 0)
+    const cassetetesExtraviados = Number(resumo.distribuicao?.extravioSvdd?.cassetetes || 0)
+
+    const totalTonfas =
+      tonfasNoCofre +
+      tonfasEmServico +
+      tonfasManutencao +
+      tonfasExtraviadas
+
+    const totalCassetetes =
+      cassetetesNoCofre +
+      cassetetesEmServico +
+      cassetetesManutencao +
+      cassetetesExtraviados
 
     return {
       totalGeral: totalTonfas + totalCassetetes,
@@ -1071,9 +1452,137 @@ export default function Tonfas({ user }) {
       manutencao: {
         tonfas: tonfasManutencao,
         cassetetes: cassetetesManutencao
+      },
+      extravio: {
+        tonfas: tonfasExtraviadas,
+        cassetetes: cassetetesExtraviados
       }
     }
-  }, [resumo])
+  }, [
+    resumo,
+    manutencaoP4Resumo
+  ])
+
+  const resumoResponsabilidadeSVDDP4 = useMemo(() => {
+    const tonfasNoCofre =
+      Number(
+        resumo.cofreSVDD?.noCofreTonfas ||
+        0
+      )
+
+    const cassetetesNoCofre =
+      Number(
+        resumo.cofreSVDD?.noCofreCassetetes ||
+        0
+      )
+
+    const tonfasEmServico =
+      Number(
+        resumo.cofreSVDD?.emServicoTonfas ||
+        0
+      )
+
+    const cassetetesEmServico =
+      Number(
+        resumo.cofreSVDD?.emServicoCassetetes ||
+        0
+      )
+
+    /*
+     * quantidade_manutencao é global.
+     * Para a visão do P4, o que ainda não pertence ao P4
+     * continua sob responsabilidade do SVDD.
+     */
+    const tonfasManutencaoSvdd =
+      Math.max(
+        0,
+        Number(
+          resumo.distribuicao?.manutencao?.tonfas ||
+          0
+        ) -
+        Number(
+          manutencaoP4Resumo.tonfas ||
+          0
+        )
+      )
+
+    const cassetetesManutencaoSvdd =
+      Math.max(
+        0,
+        Number(
+          resumo.distribuicao?.manutencao?.cassetetes ||
+          0
+        ) -
+        Number(
+          manutencaoP4Resumo.cassetetes ||
+          0
+        )
+      )
+
+    const tonfasExtraviadasSvdd =
+      Number(
+        resumo.distribuicao?.extravioSvdd?.tonfas ||
+        0
+      )
+
+    const cassetetesExtraviadosSvdd =
+      Number(
+        resumo.distribuicao?.extravioSvdd?.cassetetes ||
+        0
+      )
+
+    return {
+      tonfas:
+        tonfasNoCofre +
+        tonfasEmServico +
+        tonfasManutencaoSvdd +
+        tonfasExtraviadasSvdd,
+
+      cassetetes:
+        cassetetesNoCofre +
+        cassetetesEmServico +
+        cassetetesManutencaoSvdd +
+        cassetetesExtraviadosSvdd,
+
+      manutencao: {
+        tonfas:
+          tonfasManutencaoSvdd,
+
+        cassetetes:
+          cassetetesManutencaoSvdd
+      },
+
+      extravio: {
+        tonfas:
+          tonfasExtraviadasSvdd,
+
+        cassetetes:
+          cassetetesExtraviadosSvdd
+      }
+    }
+  }, [
+    resumo,
+    manutencaoP4Resumo
+  ])
+
+
+  const resumoP4Visual = useMemo(() => ({
+    ...resumo,
+
+    cofreSVDD: {
+      ...(resumo.cofreSVDD || {}),
+
+      tonfas:
+        resumoResponsabilidadeSVDDP4.tonfas,
+
+      cassetetes:
+        resumoResponsabilidadeSVDDP4.cassetetes
+    }
+  }), [
+    resumo,
+    resumoResponsabilidadeSVDDP4
+  ])
+
 
   const tonfasTabela = useMemo(() => {
     if (visaoPerfil !== 'SVDD') return tonfas
@@ -1082,31 +1591,85 @@ export default function Tonfas({ user }) {
       .filter((item) => {
         const quantidadeSVDD = Number(item?.quantidade_svdd || 0)
         const quantidadeEmServico = Number(item?.quantidade_em_servico || 0)
-        const quantidadeManutencao = Number(item?.quantidade_manutencao || 0)
+        const quantidadeManutencaoGlobal =
+          Number(
+            item?.quantidade_manutencao ||
+            0
+          )
+
+        const quantidadeManutencaoP4 =
+          Number(
+            manutencaoP4PorReferencia[
+              String(item?.id || '')
+            ] || 0
+          )
+
+        const quantidadeManutencao =
+          Math.max(
+            0,
+            quantidadeManutencaoGlobal -
+            quantidadeManutencaoP4
+          )
+
+        const quantidadeExtraviadaSvdd =
+          Number(item?.quantidade_extraviada_svdd || 0)
 
         return (
           quantidadeSVDD > 0 ||
           quantidadeEmServico > 0 ||
-          quantidadeManutencao > 0
+          quantidadeManutencao > 0 ||
+          quantidadeExtraviadaSvdd > 0
         )
       })
       .map((item) => {
         const quantidadeSVDD = Number(item?.quantidade_svdd || 0)
         const quantidadeEmServico = Number(item?.quantidade_em_servico || 0)
-        const quantidadeManutencao = Number(item?.quantidade_manutencao || 0)
+        const quantidadeManutencaoGlobal =
+          Number(
+            item?.quantidade_manutencao ||
+            0
+          )
+
+        const quantidadeManutencaoP4 =
+          Number(
+            manutencaoP4PorReferencia[
+              String(item?.id || '')
+            ] || 0
+          )
+
+        const quantidadeManutencao =
+          Math.max(
+            0,
+            quantidadeManutencaoGlobal -
+            quantidadeManutencaoP4
+          )
+
+        const quantidadeExtraviadaSvdd =
+          Number(item?.quantidade_extraviada_svdd || 0)
+
         const quantidadeTotalSVDD =
           quantidadeSVDD +
           quantidadeEmServico +
-          quantidadeManutencao
+          quantidadeManutencao +
+          quantidadeExtraviadaSvdd
 
         return {
           ...item,
-          quantidade_total: quantidadeTotalSVDD,
-          quantidade: quantidadeTotalSVDD,
-          local_atual: 'SVDD'
+          quantidade_manutencao:
+            quantidadeManutencao,
+          quantidade_total:
+            quantidadeTotalSVDD,
+          quantidade:
+            quantidadeTotalSVDD,
+          local_atual:
+            'SVDD'
         }
       })
-  }, [tonfas, visaoPerfil])
+  }, [
+    tonfas,
+    visaoPerfil,
+    manutencaoP4PorReferencia
+  ])
 
   const tonfasDoPolicial = useMemo(() => {
     const policialId = String(
@@ -1205,6 +1768,1888 @@ export default function Tonfas({ user }) {
     setFormAberto(true)
   }
 
+  function manutencaoTonfaPertenceAoSVDD(item) {
+    const modulo = normalizarTexto(item?.modulo)
+
+    if (modulo !== 'TONFAS') {
+      return false
+    }
+
+    const destino = normalizarTexto(
+      item?.destino ||
+      item?.local_destino ||
+      ''
+    )
+
+    if (
+      destino === 'P4' ||
+      destino.includes('COFRE DO P4') ||
+      destino.includes('GUARDA DO P4') ||
+      destino.includes('P4_MANUTENCAO')
+    ) {
+      return false
+    }
+
+    /*
+     * Para Tonfa/Cassetete, a origem gravada na própria manutenção
+     * representa quem detinha a responsabilidade no momento em que
+     * o material entrou em manutenção.
+     *
+     * origem_institucional é um campo derivado pelo service a partir
+     * do histórico patrimonial e pode refletir uma cautela antiga.
+     * Por isso, a origem explícita da manutenção precisa ter
+     * prioridade.
+     */
+    const origemGravada = normalizarTexto(
+      item?.origem ||
+      item?.local_origem ||
+      ''
+    )
+
+    if (
+      origemGravada === 'P4' ||
+      origemGravada.includes('COFRE DO P4') ||
+      origemGravada.includes('GUARDA DO P4') ||
+      origemGravada.includes('DEPOSITO DO P4')
+    ) {
+      return false
+    }
+
+    if (
+      origemGravada === 'SVDD' ||
+      origemGravada.includes('COFRE DO SVDD') ||
+      origemGravada.includes('SERVICO DE DIA') ||
+      origemGravada.includes('POLICIAL')
+    ) {
+      return true
+    }
+
+    const origemInstitucional = normalizarTexto(
+      item?.origem_institucional ||
+      ''
+    )
+
+    return (
+      origemInstitucional === 'SVDD' ||
+      origemInstitucional.includes('COFRE DO SVDD') ||
+      origemInstitucional.includes('SERVICO DE DIA') ||
+      origemInstitucional.includes('POLICIAL')
+    )
+  }
+
+  async function abrirOutrosP4() {
+    if (carregandoOutrosP4) {
+      return
+    }
+
+    try {
+      setCarregandoOutrosP4(true)
+      setErro('')
+      setMensagemSucesso('')
+
+      const itensOutrosDestino =
+        tonfasResumo
+          .filter(
+            (item) =>
+              !estaNaoLocalizado(item) &&
+              !estaNoP4(item) &&
+              !estaNoSVDD(item) &&
+              !estaEmCarga(item) &&
+              !estaEmCautela(item) &&
+              !estaEmManutencao(item) &&
+              !estaEmOutraCia(item) &&
+              !estaNaFT(item) &&
+              !estaNoBTL(item) &&
+              !estaBaixado(item)
+          )
+          .map(
+            (item) => ({
+              id:
+                `OUTRO-${item.id}`,
+              _tipo_outros:
+                'DESTINO',
+              tipo_material:
+                normalizarTexto(item?.tipo) ===
+                'CASSETETE'
+                  ? 'CASSETETE'
+                  : 'TONFA',
+              quantidade:
+                Math.max(
+                  0,
+                  obterQuantidade(item) -
+                  Number(
+                    resumoBaixas?.porReferencia?.[
+                      String(item?.id || '')
+                    ] || 0
+                  )
+                ),
+              destino:
+                item?.local_atual ||
+                item?.unidade ||
+                'OUTRO DESTINO',
+              unidade:
+                item?.unidade ||
+                null,
+              observacoes:
+                item?.observacoes ||
+                null,
+              referencia_id:
+                item?.id ||
+                null
+            })
+          )
+          .filter(
+            (item) =>
+              item.quantidade > 0
+          )
+
+      const {
+        data: extravios,
+        error: extraviosError
+      } = await supabase
+        .from('sigmo_tonfas_extravios')
+        .select(
+          'id, tonfa_id, tipo_material, quantidade, status, responsavel_setor, policial_re, policial_nome, descricao, documento_tipo, documento_numero, documento_data, observacoes, extravio_constatado_em, avocacao_p4_em, avocacao_p4_por_nome, avocacao_p4_documento, avocacao_p4_observacoes, ativo'
+        )
+        .eq('ativo', true)
+        .eq('responsavel_setor', 'P4')
+        .order(
+          'avocacao_p4_em',
+          { ascending: false }
+        )
+
+      if (extraviosError) {
+        throw extraviosError
+      }
+
+      const itensExtravio =
+        (extravios || []).map(
+          (item) => ({
+            ...item,
+            _tipo_outros:
+              'EXTRAVIO'
+          })
+        )
+
+      setOutrosP4Itens([
+        ...itensExtravio,
+        ...itensOutrosDestino
+      ])
+
+      setModalOutrosP4Aberto(true)
+    } catch (error) {
+      console.error(
+        'Erro ao carregar Outros do P4:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível carregar os materiais classificados em Outros.'
+      )
+    } finally {
+      setCarregandoOutrosP4(false)
+    }
+  }
+
+
+  async function abrirExtraviosSvdd() {
+    if (carregandoExtravios) return
+
+    try {
+      setCarregandoExtravios(true)
+      setErro('')
+      setMensagemSucesso('')
+
+      const { data, error } = await supabase
+        .from('sigmo_tonfas_extravios')
+        .select(
+          'id, tonfa_id, tipo_material, quantidade, status, responsavel_setor, policial_re, policial_nome, retirado_em, devolucao_prevista, devolucao_solicitada_em, extravio_constatado_em, registrado_por_nome, descricao, documento_tipo, documento_numero, documento_data, observacoes, avocacao_p4_em, avocacao_p4_por_nome, avocacao_p4_documento, avocacao_p4_observacoes, regularizado_em, regularizado_por_nome, regularizacao_tipo, regularizacao_documento, regularizacao_observacoes, ativo, criado_em, atualizado_em'
+        )
+        .eq('ativo', true)
+        .eq('responsavel_setor', 'SVDD')
+        .order('extravio_constatado_em', { ascending: false })
+
+      if (error) throw error
+
+      setExtraviosSvdd(data || [])
+      setModalExtraviosAberto(true)
+    } catch (error) {
+      console.error(
+        'Erro ao carregar extravios de Tonfa/Cassetete:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível carregar os extravios de Tonfa/Cassetete.'
+      )
+    } finally {
+      setCarregandoExtravios(false)
+    }
+  }
+
+
+  async function regularizarExtravioLocalizado(extravio) {
+    if (
+      !extravio?.id ||
+      !extravio?.tonfa_id ||
+      regularizandoExtravioId
+    ) {
+      return
+    }
+
+    const quantidade = Math.max(
+      1,
+      Number(extravio?.quantidade || 1) || 1
+    )
+
+    const tipo =
+      normalizarTexto(
+        extravio?.tipo_material
+      ) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const confirmou = window.confirm(
+      `Confirmar que ${quantidade} ${tipo.toLowerCase()}(s) extraviado(s) foi(ram) localizado(s) e retornou(aram) fisicamente ao Cofre do SVDD?\n\n` +
+      'O extravio será encerrado e a quantidade voltará para o saldo disponível do SVDD.'
+    )
+
+    if (!confirmou) return
+
+    try {
+      setRegularizandoExtravioId(extravio.id)
+      setErro('')
+      setMensagemSucesso('')
+
+      const { data: estoque, error: erroEstoque } =
+        await supabase
+          .from('sigmo_tonfas')
+          .select(
+            'id, tipo, quantidade_svdd, quantidade_extraviada_svdd, quantidade_extraviada_p4'
+          )
+          .eq('id', extravio.tonfa_id)
+          .single()
+
+      if (erroEstoque) throw erroEstoque
+
+      const extraviadaSvddAtual =
+        Number(estoque?.quantidade_extraviada_svdd || 0)
+      const saldoSvddAtual =
+        Number(estoque?.quantidade_svdd || 0)
+
+      if (extraviadaSvddAtual < quantidade) {
+        throw new Error(
+          `Saldo inconsistente: existem apenas ${extraviadaSvddAtual} unidade(s) extraviada(s) no SVDD.`
+        )
+      }
+
+      const novoSaldoSvdd =
+        saldoSvddAtual + quantidade
+      const novoExtravioSvdd =
+        extraviadaSvddAtual - quantidade
+
+      const { error: erroAtualizarEstoque } =
+        await supabase
+          .from('sigmo_tonfas')
+          .update({
+            quantidade_svdd: novoSaldoSvdd,
+            quantidade_extraviada_svdd: novoExtravioSvdd,
+            atualizado_em: new Date().toISOString()
+          })
+          .eq('id', estoque.id)
+
+      if (erroAtualizarEstoque) {
+        throw erroAtualizarEstoque
+      }
+
+      const nomeUsuario =
+        user?.nome_guerra ||
+        user?.nome ||
+        user?.nome_completo ||
+        user?.email ||
+        'Usuário'
+
+      const agora = new Date().toISOString()
+
+      const { error: erroAtualizarExtravio } =
+        await supabase
+          .from('sigmo_tonfas_extravios')
+          .update({
+            status: 'ENCERRADO',
+            regularizado_em: agora,
+            regularizado_por_id: user?.id || null,
+            regularizado_por_nome: nomeUsuario,
+            regularizacao_tipo: 'LOCALIZACAO',
+            regularizacao_observacoes:
+              'MATERIAL LOCALIZADO E RETORNADO FISICAMENTE AO COFRE DO SVDD.',
+            ativo: false,
+            atualizado_em: agora
+          })
+          .eq('id', extravio.id)
+
+      if (erroAtualizarExtravio) {
+        const { error: erroRollback } =
+          await supabase
+            .from('sigmo_tonfas')
+            .update({
+              quantidade_svdd: saldoSvddAtual,
+              quantidade_extraviada_svdd:
+                extraviadaSvddAtual,
+              atualizado_em:
+                new Date().toISOString()
+            })
+            .eq('id', estoque.id)
+
+        if (erroRollback) {
+          console.error(
+            'Erro ao desfazer a regularização do extravio:',
+            erroRollback
+          )
+        }
+
+        throw erroAtualizarExtravio
+      }
+
+      try {
+        await registerAudit({
+          user,
+          action: 'EXTRAVIO_REGULARIZADO',
+          tableName: 'sigmo_tonfas_extravios',
+          recordId: extravio.id,
+          description:
+            `${nomeUsuario} regularizou extravio de ${tipo.toUpperCase()}, ` +
+            `quantidade ${quantidade}, por LOCALIZAÇÃO. ` +
+            `O material retornou fisicamente ao COFRE DO SVDD. ` +
+            `Policial relacionado: ${extravio?.policial_nome || 'não informado'}` +
+            `${extravio?.policial_re ? `, RE ${extravio.policial_re}` : ''}.`
+        })
+      } catch (auditError) {
+        console.error(
+          'Extravio regularizado, mas não foi possível registrar auditoria:',
+          auditError
+        )
+      }
+
+      setExtraviosSvdd((lista) =>
+        lista.filter(
+          (item) =>
+            String(item?.id) !==
+            String(extravio.id)
+        )
+      )
+
+      await Promise.all([
+        carregar(),
+        carregarResumo()
+      ])
+
+      setMensagemSucesso(
+        `${tipo} localizado(a) e retornado(a) ao Cofre do SVDD. O extravio foi encerrado.`
+      )
+
+      setModalExtraviosAberto(false)
+    } catch (error) {
+      console.error(
+        'Erro ao regularizar extravio localizado:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível regularizar o extravio.'
+      )
+    } finally {
+      setRegularizandoExtravioId(null)
+    }
+  }
+
+
+  async function abrirOcorrenciasParaP4() {
+    if (carregandoManutencoesP4) {
+      return
+    }
+
+    try {
+      setCarregandoManutencoesP4(true)
+      setMensagemSucesso('')
+      setErro('')
+
+      const [
+        resposta,
+        transferenciasPendentesP4,
+        respostaExtravios
+      ] = await Promise.all([
+        listarManutencoes({
+          status: 'EM_MANUTENCAO',
+          pagina: 1,
+          limite: 5000
+        }),
+        listarTransferenciasPendentes({
+          destinoCodigo: 'P4',
+          limite: 500
+        }),
+        supabase
+          .from('sigmo_tonfas_extravios')
+          .select(
+            'id, tonfa_id, tipo_material, quantidade, status, responsavel_setor, policial_re, policial_nome, descricao, documento_tipo, documento_numero, documento_data, observacoes, extravio_constatado_em, ativo'
+          )
+          .eq('ativo', true)
+          .eq('responsavel_setor', 'SVDD')
+          .order(
+            'extravio_constatado_em',
+            { ascending: false }
+          )
+      ])
+
+      if (respostaExtravios?.error) {
+        throw respostaExtravios.error
+      }
+
+      const manutencoesJaEnviadas = new Set(
+        (transferenciasPendentesP4 || [])
+          .filter(
+            (transferencia) =>
+              normalizarTexto(
+                transferencia?.metadata?.tipo_fluxo
+              ) === 'MANUTENCAO_SVDD_P4'
+          )
+          .map(
+            (transferencia) =>
+              String(
+                transferencia?.metadata?.manutencao_id ||
+                ''
+              )
+          )
+          .filter(Boolean)
+      )
+
+      const extraviosJaEnviados = new Set(
+        (transferenciasPendentesP4 || [])
+          .filter(
+            (transferencia) =>
+              normalizarTexto(
+                transferencia?.metadata?.tipo_fluxo
+              ) === 'EXTRAVIO_SVDD_P4'
+          )
+          .map(
+            (transferencia) =>
+              String(
+                transferencia?.metadata?.extravio_id ||
+                ''
+              )
+          )
+          .filter(Boolean)
+      )
+
+      const registrosBase = (resposta?.data || [])
+        .filter(manutencaoTonfaPertenceAoSVDD)
+        .filter(
+          (item) =>
+            !manutencoesJaEnviadas.has(
+              String(item?.id || '')
+            )
+        )
+        .sort((a, b) => {
+          const dataA = new Date(
+            a?.registrada_em ||
+            a?.created_at ||
+            0
+          ).getTime()
+
+          const dataB = new Date(
+            b?.registrada_em ||
+            b?.created_at ||
+            0
+          ).getTime()
+
+          return dataB - dataA
+        })
+
+      const manutencoes = await Promise.all(
+        registrosBase.map(async (item) => {
+          let fotoSelecionada = null
+
+          try {
+            const fotosManutencao =
+              await listarFotosManutencao(item.id)
+
+            fotoSelecionada =
+              (fotosManutencao || []).find(
+                (foto) =>
+                  foto?.principal === true ||
+                  foto?.is_principal === true
+              ) ||
+              (fotosManutencao || [])[0] ||
+              null
+          } catch (error) {
+            console.warn(
+              'Não foi possível carregar foto da manutenção:',
+              error
+            )
+          }
+
+          if (!fotoSelecionada) {
+            try {
+              const resultadoNovidade =
+                await buscarNovidadePatrimonialDaManutencao(item)
+
+              const fotosNovidade =
+                resultadoNovidade?.fotos || []
+
+              fotoSelecionada =
+                fotosNovidade.find(
+                  (foto) =>
+                    foto?.principal === true ||
+                    foto?.is_principal === true
+                ) ||
+                fotosNovidade[0] ||
+                null
+            } catch (error) {
+              console.warn(
+                'Não foi possível carregar foto da novidade vinculada:',
+                error
+              )
+            }
+          }
+
+          if (!fotoSelecionada && item?.referencia_id) {
+            try {
+              const fotosItem =
+                await listarFotosTonfa(item.referencia_id)
+
+              fotoSelecionada =
+                (fotosItem || []).find(
+                  (foto) =>
+                    foto?.principal === true ||
+                    foto?.is_principal === true
+                ) ||
+                (fotosItem || [])[0] ||
+                null
+            } catch (error) {
+              console.warn(
+                'Não foi possível carregar foto cadastral da Tonfa/Cassetete:',
+                error
+              )
+            }
+          }
+
+          return {
+            ...item,
+            _tipo_encaminhamento:
+              'MANUTENCAO',
+            foto_manutencao_url:
+              fotoSelecionada?.foto_url ||
+              fotoSelecionada?.url ||
+              null
+          }
+        })
+      )
+
+      const extravios =
+        (respostaExtravios?.data || [])
+          .filter(
+            (item) =>
+              !extraviosJaEnviados.has(
+                String(item?.id || '')
+              )
+          )
+          .map(
+            (item) => ({
+              ...item,
+              _tipo_encaminhamento:
+                'EXTRAVIO',
+              referencia_id:
+                item?.tonfa_id ||
+                null,
+              tipo_novidade:
+                'EXTRAVIO',
+              origem:
+                'SVDD',
+              destino:
+                'P4'
+            })
+          )
+
+      const registros = [
+        ...manutencoes,
+        ...extravios
+      ]
+
+      if (registros.length === 0) {
+        setMensagemSucesso(
+          'Não há manutenção ou extravio sob responsabilidade do SVDD disponível para encaminhamento ao P4.'
+        )
+        return
+      }
+
+      setManutencoesParaP4(registros)
+      setModalManutencoesP4Aberto(true)
+    } catch (error) {
+      console.error(
+        'Erro ao carregar manutenções de Tonfa/Cassetete:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível carregar as manutenções de Tonfa/Cassetete.'
+      )
+    } finally {
+      setCarregandoManutencoesP4(false)
+    }
+  }
+
+  async function encaminharRegistroExtravioAoP4(extravio) {
+    if (
+      !extravio?.id ||
+      !extravio?.tonfa_id ||
+      encaminhandoManutencaoId
+    ) {
+      return
+    }
+
+    const tipo =
+      normalizarTexto(
+        extravio?.tipo_material
+      ) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          extravio?.quantidade ||
+          1
+        ) || 1
+      )
+
+    const documento =
+      window.prompt(
+        'Informe o documento / referência do procedimento de extravio:'
+      )
+
+    if (documento === null) {
+      return
+    }
+
+    const documentoNormalizado =
+      String(
+        documento || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!documentoNormalizado) {
+      setErro(
+        'Informe o documento / referência do procedimento.'
+      )
+      return
+    }
+
+    const observacoes =
+      window.prompt(
+        'Informe a descrição / observações do encaminhamento ao P4:'
+      )
+
+    if (observacoes === null) {
+      return
+    }
+
+    const observacoesNormalizadas =
+      String(
+        observacoes || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    const confirmou =
+      window.confirm(
+        `Encaminhar o procedimento de extravio de ${quantidade} ${tipo.toLowerCase()}(s) ao P4?\n\n` +
+        `Documento: ${documentoNormalizado}\n\n` +
+        'A responsabilidade permanecerá no SVDD até o P4 aceitar.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setEncaminhandoManutencaoId(
+        extravio.id
+      )
+      setErro('')
+
+      const estoqueRelacionado =
+        tonfasResumo.find(
+          (item) =>
+            String(item?.id || '') ===
+            String(
+              extravio?.tonfa_id ||
+              ''
+            )
+        ) || null
+
+      const transferencia =
+        await criarTransferenciaPendente({
+          tonfaId:
+            extravio.tonfa_id,
+          categoria:
+            normalizarTexto(
+              extravio?.tipo_material
+            ) === 'CASSETETE'
+              ? 'CASSETETE'
+              : 'TONFA',
+          patrimonioId:
+            estoqueRelacionado?.patrimonio_id ||
+            null,
+          itemId:
+            estoqueRelacionado?.item_id ||
+            null,
+          quantidade,
+          origemCodigo:
+            'SVDD',
+          origemNome:
+            'EXTRAVIO / SVDD',
+          destinoCodigo:
+            'P4',
+          destinoNome:
+            'EXTRAVIO / P4',
+          motivo:
+            'ENCAMINHAMENTO_P4_EXTRAVIO',
+          observacoes:
+            observacoesNormalizadas ||
+            'ENCAMINHAMENTO DE PROCEDIMENTO DE EXTRAVIO AO P4.',
+          metadata: {
+            tipo_fluxo:
+              'EXTRAVIO_SVDD_P4',
+            extravio_id:
+              extravio.id,
+            referencia_id:
+              extravio.tonfa_id,
+            documento_avocacao:
+              documentoNormalizado,
+            observacoes_avocacao:
+              observacoesNormalizadas ||
+              null,
+            preservar_quantidade_extravio:
+              true
+          },
+          user
+        })
+
+      setManutencoesParaP4(
+        (lista) =>
+          lista.filter(
+            (item) =>
+              String(
+                item?.id
+              ) !==
+              String(
+                extravio.id
+              )
+          )
+      )
+
+      await Promise.all([
+        carregar(),
+        carregarResumo()
+      ])
+
+      setMensagemSucesso(
+        `${tipo} extraviado(a) encaminhado(a) ao P4 e aguardando aceite.`
+      )
+
+      setModalManutencoesP4Aberto(false)
+
+      return transferencia
+    } catch (error) {
+      console.error(
+        'Erro ao encaminhar extravio ao P4:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível encaminhar o extravio ao P4.'
+      )
+    } finally {
+      setEncaminhandoManutencaoId(
+        null
+      )
+    }
+  }
+
+
+  async function encaminharRegistroManutencaoAoP4(manutencao) {
+    if (
+      manutencao?._tipo_encaminhamento ===
+      'EXTRAVIO'
+    ) {
+      return encaminharRegistroExtravioAoP4(
+        manutencao
+      )
+    }
+
+    if (!manutencao?.id || encaminhandoManutencaoId) {
+      return
+    }
+
+    const tipo =
+      normalizarTexto(manutencao?.tipo_material) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const quantidade = Math.max(
+      1,
+      Number(manutencao?.quantidade || 1)
+    )
+
+    const confirmou = window.confirm(
+      `Encaminhar ${quantidade} ${tipo.toLowerCase()}(s) desta manutenção ao P4?\n\n` +
+      'Será criada uma pendência de recebimento. A custódia continuará no SVDD até o P4 aceitar.'
+    )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setEncaminhandoManutencaoId(manutencao.id)
+      setErro('')
+
+      const estoqueRelacionado =
+        tonfasResumo.find(
+          (item) =>
+            String(item?.id || '') ===
+            String(manutencao?.referencia_id || '')
+        ) || null
+
+      const transferencia =
+        await criarTransferenciaPendente({
+          tonfaId:
+            manutencao?.referencia_id ||
+            estoqueRelacionado?.id,
+          categoria:
+            normalizarTexto(manutencao?.tipo_material) ===
+            'CASSETETE'
+              ? 'CASSETETE'
+              : 'TONFA',
+          patrimonioId:
+            manutencao?.patrimonio_id ||
+            estoqueRelacionado?.patrimonio_id ||
+            null,
+          itemId:
+            estoqueRelacionado?.item_id ||
+            null,
+          quantidade,
+          origemCodigo: 'SVDD',
+          origemNome: 'MANUTENÇÃO / SVDD',
+          destinoCodigo: 'P4',
+          destinoNome: 'MANUTENÇÃO / P4',
+          motivo: 'ENCAMINHAMENTO_P4_MANUTENCAO',
+          observacoes:
+            'ENCAMINHAMENTO AO P4 PELO MÓDULO DE TONFAS/CASSETETES.',
+          metadata: {
+            tipo_fluxo: 'MANUTENCAO_SVDD_P4',
+            manutencao_id: manutencao.id,
+            referencia_id:
+              manutencao?.referencia_id ||
+              estoqueRelacionado?.id ||
+              null,
+            preservar_quantidade_manutencao: true
+          },
+          user
+        })
+
+      setManutencoesParaP4((lista) =>
+        lista.filter(
+          (item) =>
+            String(item?.id) !==
+            String(manutencao.id)
+        )
+      )
+
+      await Promise.all([
+        carregar(),
+        carregarResumo()
+      ])
+
+      setMensagemSucesso(
+        `${tipo} em manutenção enviado(a) ao P4 e aguardando recebimento.`
+      )
+
+      setModalManutencoesP4Aberto(false)
+
+      return transferencia
+    } catch (error) {
+      console.error(
+        'Erro ao encaminhar manutenção ao P4:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível encaminhar a manutenção ao P4.'
+      )
+    } finally {
+      setEncaminhandoManutencaoId(null)
+    }
+  }
+
+
+  async function abrirBaixaPatrimonialP4() {
+    if (
+      visaoPerfil !== 'P4' ||
+      carregandoBaixaP4
+    ) {
+      return
+    }
+
+    try {
+      setCarregandoBaixaP4(true)
+      setErro('')
+      setMensagemSucesso('')
+
+      const [
+        respostaManutencoes,
+        respostaExtravios
+      ] = await Promise.all([
+        listarManutencoes({
+          modulo: 'TONFAS',
+          status: 'EM_MANUTENCAO',
+          pagina: 1,
+          limite: 5000
+        }),
+
+        supabase
+          .from('sigmo_tonfas_extravios')
+          .select(
+            'id, tonfa_id, tipo_material, quantidade, status, responsavel_setor, policial_re, policial_nome, descricao, documento_numero, observacoes, avocacao_p4_documento, avocacao_p4_observacoes, ativo'
+          )
+          .eq('ativo', true)
+          .eq(
+            'responsavel_setor',
+            'P4'
+          )
+      ])
+
+      if (
+        respostaExtravios?.error
+      ) {
+        throw respostaExtravios.error
+      }
+
+      const manutencoes =
+        (respostaManutencoes?.data || [])
+          .filter(
+            (item) =>
+              normalizarTexto(
+                item?.modulo
+              ) === 'TONFAS'
+          )
+          .filter(
+            (item) =>
+              !manutencaoTonfaPertenceAoSVDD(
+                item
+              )
+          )
+          .map(
+            (item) => ({
+              ...item,
+              _tipo_baixa:
+                'MANUTENCAO'
+            })
+          )
+
+      const extravios =
+        (respostaExtravios?.data || [])
+          .map(
+            (item) => ({
+              ...item,
+              _tipo_baixa:
+                'EXTRAVIO',
+              referencia_id:
+                item?.tonfa_id ||
+                null
+            })
+          )
+
+      const registros = [
+        ...manutencoes,
+        ...extravios
+      ]
+
+      if (
+        registros.length === 0
+      ) {
+        setMensagemSucesso(
+          'Não há Tonfas ou Cassetetes em manutenção ou extravio sob responsabilidade do P4 disponíveis para baixa.'
+        )
+        return
+      }
+
+      setManutencoesBaixaP4(
+        registros
+      )
+      setModalBaixaP4Aberto(
+        true
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao carregar materiais disponíveis para baixa:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível carregar os materiais disponíveis para baixa.'
+      )
+    } finally {
+      setCarregandoBaixaP4(
+        false
+      )
+    }
+  }
+
+  async function baixarManutencaoP4(
+    manutencao
+  ) {
+    if (
+      !manutencao?.id ||
+      baixandoManutencaoId
+    ) {
+      return
+    }
+
+    const tipo =
+      normalizarTexto(
+        manutencao?.tipo_material
+      ) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          manutencao?.quantidade ||
+          1
+        ) || 1
+      )
+
+    const motivo =
+      window.prompt(
+        `Informe o motivo da baixa definitiva de ${quantidade} ${tipo.toLowerCase()}(s):`
+      )
+
+    if (
+      motivo === null
+    ) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (
+      !motivoNormalizado
+    ) {
+      setErro(
+        'Informe o motivo da baixa patrimonial.'
+      )
+      return
+    }
+
+    const documento =
+      window.prompt(
+        'Informe o documento / referência da baixa (opcional):'
+      )
+
+    if (
+      documento === null
+    ) {
+      return
+    }
+
+    const observacoes =
+      window.prompt(
+        'Informe observações adicionais da baixa (opcional):'
+      )
+
+    if (
+      observacoes === null
+    ) {
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `CONFIRMAR BAIXA DEFINITIVA?\n\n` +
+        `${tipo}: ${quantidade} unidade(s)\n` +
+        `Motivo: ${motivoNormalizado}\n\n` +
+        'Esta operação retirará definitivamente essa quantidade do saldo em manutenção. O material não retornará ao P4 nem ao SVDD.'
+      )
+
+    if (
+      !confirmou
+    ) {
+      return
+    }
+
+    try {
+      setBaixandoManutencaoId(
+        manutencao.id
+      )
+      setErro('')
+      setMensagemSucesso('')
+
+      await baixarManutencaoTonfaP4({
+        manutencaoId:
+          manutencao.id,
+        motivo:
+          motivoNormalizado,
+        documento:
+          String(
+            documento || ''
+          )
+            .trim()
+            .toUpperCase() ||
+          null,
+        observacoes:
+          String(
+            observacoes || ''
+          )
+            .trim()
+            .toUpperCase() ||
+          null,
+        user
+      })
+
+      const restantes =
+        manutencoesBaixaP4.filter(
+          (item) =>
+            String(
+              item?.id || ''
+            ) !==
+            String(
+              manutencao.id
+            )
+        )
+
+      setManutencoesBaixaP4(
+        restantes
+      )
+
+      await Promise.all([
+        carregar(),
+        carregarResumo()
+      ])
+
+      setMensagemSucesso(
+        `Baixa definitiva registrada: ${quantidade} ${tipo.toLowerCase()}(s) retirado(s) da manutenção.`
+      )
+
+      if (
+        restantes.length === 0
+      ) {
+        setModalBaixaP4Aberto(
+          false
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao realizar baixa patrimonial de Tonfa/Cassetete:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível realizar a baixa patrimonial.'
+      )
+    } finally {
+      setBaixandoManutencaoId(
+        null
+      )
+    }
+  }
+
+
+  async function baixarExtravioP4(
+    extravio
+  ) {
+    if (
+      !extravio?.id ||
+      baixandoManutencaoId
+    ) {
+      return
+    }
+
+    const tipo =
+      normalizarTexto(
+        extravio?.tipo_material
+      ) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          extravio?.quantidade ||
+          1
+        ) || 1
+      )
+
+    const motivo =
+      window.prompt(
+        `Informe o motivo da baixa definitiva do extravio de ${quantidade} ${tipo.toLowerCase()}(s):`
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      setErro(
+        'Informe o motivo da baixa patrimonial.'
+      )
+      return
+    }
+
+    const documento =
+      window.prompt(
+        'Informe o documento / referência da baixa (opcional):',
+        extravio?.avocacao_p4_documento ||
+        extravio?.documento_numero ||
+        ''
+      )
+
+    if (documento === null) {
+      return
+    }
+
+    const observacoes =
+      window.prompt(
+        'Informe observações adicionais da baixa (opcional):',
+        extravio?.avocacao_p4_observacoes ||
+        extravio?.descricao ||
+        ''
+      )
+
+    if (observacoes === null) {
+      return
+    }
+
+    const confirmou =
+      window.confirm(
+        `CONFIRMAR BAIXA DEFINITIVA DO EXTRAVIO?\n\n` +
+        `${tipo}: ${quantidade} unidade(s)\n` +
+        `Motivo: ${motivoNormalizado}\n\n` +
+        'O extravio será encerrado definitivamente e sairá da responsabilidade do P4.'
+      )
+
+    if (!confirmou) {
+      return
+    }
+
+    try {
+      setBaixandoManutencaoId(
+        extravio.id
+      )
+      setErro('')
+      setMensagemSucesso('')
+
+      await baixarExtravioTonfaP4({
+        extravioId:
+          extravio.id,
+        motivo:
+          motivoNormalizado,
+        documento:
+          String(
+            documento || ''
+          )
+            .trim()
+            .toUpperCase() ||
+          null,
+        observacoes:
+          String(
+            observacoes || ''
+          )
+            .trim()
+            .toUpperCase() ||
+          null,
+        user
+      })
+
+      const restantes =
+        manutencoesBaixaP4.filter(
+          (item) =>
+            String(
+              item?.id || ''
+            ) !==
+            String(
+              extravio.id
+            )
+        )
+
+      setManutencoesBaixaP4(
+        restantes
+      )
+
+      await Promise.all([
+        carregar(),
+        carregarResumo()
+      ])
+
+      setMensagemSucesso(
+        `Baixa definitiva do extravio registrada: ${quantidade} ${tipo.toLowerCase()}(s).`
+      )
+
+      if (
+        restantes.length === 0
+      ) {
+        setModalBaixaP4Aberto(
+          false
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao realizar baixa patrimonial do extravio:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível realizar a baixa patrimonial do extravio.'
+      )
+    } finally {
+      setBaixandoManutencaoId(
+        null
+      )
+    }
+  }
+
+
+  async function abrirRegularizacaoPatrimonialP4() {
+    if (
+      visaoPerfil !== 'P4' ||
+      carregandoRegularizacaoP4
+    ) {
+      return
+    }
+
+    try {
+      setCarregandoRegularizacaoP4(true)
+      setErro('')
+      setMensagemSucesso('')
+
+      const [
+        respostaManutencoes,
+        respostaExtravios
+      ] = await Promise.all([
+        listarManutencoes({
+          modulo: 'TONFAS',
+          status: 'EM_MANUTENCAO',
+          pagina: 1,
+          limite: 5000
+        }),
+
+        supabase
+          .from('sigmo_tonfas_extravios')
+          .select(
+            'id, tonfa_id, tipo_material, quantidade, status, responsavel_setor, policial_re, policial_nome, descricao, documento_numero, observacoes, avocacao_p4_documento, avocacao_p4_observacoes, ativo'
+          )
+          .eq('ativo', true)
+          .eq(
+            'responsavel_setor',
+            'P4'
+          )
+      ])
+
+      if (
+        respostaExtravios?.error
+      ) {
+        throw respostaExtravios.error
+      }
+
+      const manutencoes =
+        (respostaManutencoes?.data || [])
+          .filter(
+            (item) =>
+              normalizarTexto(
+                item?.modulo
+              ) === 'TONFAS'
+          )
+          .filter(
+            (item) =>
+              !manutencaoTonfaPertenceAoSVDD(
+                item
+              )
+          )
+          .map(
+            (item) => ({
+              ...item,
+              _tipo_regularizacao:
+                'MANUTENCAO'
+            })
+          )
+
+      const extravios =
+        (respostaExtravios?.data || [])
+          .map(
+            (item) => ({
+              ...item,
+              _tipo_regularizacao:
+                'EXTRAVIO',
+              referencia_id:
+                item?.tonfa_id ||
+                null
+            })
+          )
+
+      const registros = [
+        ...manutencoes,
+        ...extravios
+      ]
+
+      if (
+        registros.length === 0
+      ) {
+        setMensagemSucesso(
+          'Não há Tonfas ou Cassetetes em manutenção ou extravio sob responsabilidade do P4 disponíveis para regularização.'
+        )
+        return
+      }
+
+      setOcorrenciasRegularizacaoP4(
+        registros
+      )
+
+      setFormRegularizacaoP4({
+        itemId: '',
+        policialRe: '',
+        policialNome: '',
+        documento: '',
+        observacoes: ''
+      })
+
+      setModalRegularizacaoP4Aberto(
+        true
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao carregar ocorrências disponíveis para regularização:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível carregar as ocorrências disponíveis para regularização.'
+      )
+    } finally {
+      setCarregandoRegularizacaoP4(
+        false
+      )
+    }
+  }
+
+
+  function selecionarOcorrenciaRegularizacaoP4(
+    item
+  ) {
+    setErro('')
+
+    setFormRegularizacaoP4({
+      itemId:
+        String(
+          item?.id ||
+          ''
+        ),
+      policialRe:
+        item?.policial_re ||
+        '',
+      policialNome:
+        item?.policial_nome ||
+        '',
+      documento:
+        item?.avocacao_p4_documento ||
+        item?.documento_numero ||
+        '',
+      observacoes:
+        ''
+    })
+  }
+
+
+  async function confirmarRegularizacaoP4(
+    item
+  ) {
+    if (
+      !item?.id ||
+      regularizandoP4Id
+    ) {
+      return
+    }
+
+    const ehExtravio =
+      item?._tipo_regularizacao ===
+      'EXTRAVIO'
+
+    const tipo =
+      normalizarTexto(
+        item?.tipo_material
+      ) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const policialRe =
+      String(
+        formRegularizacaoP4.policialRe ||
+        ''
+      )
+        .trim()
+        .toUpperCase()
+
+    const policialNome =
+      String(
+        formRegularizacaoP4.policialNome ||
+        ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (
+      !policialRe &&
+      !policialNome
+    ) {
+      setErro(
+        'Informe o RE ou o nome do policial responsável pela reposição.'
+      )
+      return
+    }
+
+    const documento =
+      String(
+        formRegularizacaoP4.documento ||
+        ''
+      )
+        .trim()
+        .toUpperCase() ||
+      null
+
+    const observacoes =
+      String(
+        formRegularizacaoP4.observacoes ||
+        ''
+      )
+        .trim()
+        .toUpperCase() ||
+      null
+
+    try {
+      setRegularizandoP4Id(
+        item.id
+      )
+      setErro('')
+      setMensagemSucesso('')
+
+      if (ehExtravio) {
+        await regularizarExtravioTonfaP4({
+          extravioId:
+            item.id,
+          policialRe,
+          policialNome,
+          documento,
+          observacoes,
+          user
+        })
+      } else {
+        await regularizarManutencaoTonfaP4({
+          manutencaoId:
+            item.id,
+          policialRe,
+          policialNome,
+          documento,
+          observacoes,
+          user
+        })
+      }
+
+      const restantes =
+        ocorrenciasRegularizacaoP4.filter(
+          (registro) =>
+            String(
+              registro?.id ||
+              ''
+            ) !==
+            String(
+              item.id
+            )
+        )
+
+      setOcorrenciasRegularizacaoP4(
+        restantes
+      )
+
+      setFormRegularizacaoP4({
+        itemId: '',
+        policialRe: '',
+        policialNome: '',
+        documento: '',
+        observacoes: ''
+      })
+
+      await Promise.all([
+        carregar(),
+        carregarResumo()
+      ])
+
+      setMensagemSucesso(
+        `${tipo} regularizado(a) por reposição do responsável e recolhido(a) ao Cofre do P4.`
+      )
+
+      if (
+        restantes.length === 0
+      ) {
+        setModalRegularizacaoP4Aberto(
+          false
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao regularizar Tonfa/Cassetete por reposição:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível registrar a reposição patrimonial.'
+      )
+    } finally {
+      setRegularizandoP4Id(
+        null
+      )
+    }
+  }
+
+
+  function abrirConstatacaoNovidade() {
+    const campoSaldo =
+      visaoPerfil === 'P4'
+        ? 'quantidade_p4'
+        : 'quantidade_svdd'
+
+    const setor =
+      visaoPerfil === 'P4'
+        ? 'P4'
+        : 'SVDD'
+
+    const disponiveis =
+      tonfasResumo.filter(
+        (item) =>
+          Number(
+            item?.[campoSaldo] ||
+            0
+          ) > 0
+      )
+
+    if (
+      disponiveis.length === 0
+    ) {
+      setMensagemSucesso(
+        `Não há Tonfa ou Cassetete disponível no Cofre do ${setor} para constatar novidade.`
+      )
+      return
+    }
+
+    setErro('')
+    setMensagemSucesso('')
+    setFormManutencaoP4({
+      itemId: '',
+      quantidade: '1',
+      tipoNovidade: 'AVARIA',
+      descricao: '',
+      observacoes: ''
+    })
+
+    setModalEnvioManutencaoP4Aberto(
+      true
+    )
+  }
+
+
+  async function constatarNovidadeNoEstoque(
+    item
+  ) {
+    if (
+      !item?.id ||
+      enviandoManutencaoP4Id
+    ) {
+      return
+    }
+
+    const setor =
+      visaoPerfil === 'P4'
+        ? 'P4'
+        : 'SVDD'
+
+    const tipo =
+      normalizarTexto(
+        item?.tipo
+      ) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const saldo =
+      Math.max(
+        0,
+        Number(
+          setor === 'P4'
+            ? item?.quantidade_p4
+            : item?.quantidade_svdd
+        ) || 0
+      )
+
+    const quantidade =
+      Math.trunc(
+        Number(
+          String(
+            formManutencaoP4.quantidade ||
+            ''
+          )
+            .replace(',', '.')
+        )
+      )
+
+    if (
+      !Number.isFinite(
+        quantidade
+      ) ||
+      quantidade <= 0 ||
+      quantidade > saldo
+    ) {
+      setErro(
+        `Informe uma quantidade entre 1 e ${saldo}.`
+      )
+      return
+    }
+
+    const tipoNovidade =
+      normalizarTexto(
+        formManutencaoP4.tipoNovidade
+      )
+
+    if (
+      ![
+        'AVARIA',
+        'EXTRAVIO'
+      ].includes(
+        tipoNovidade
+      )
+    ) {
+      setErro(
+        'Selecione AVARIA ou EXTRAVIO.'
+      )
+      return
+    }
+
+    const descricaoNormalizada =
+      String(
+        formManutencaoP4.descricao ||
+        ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (
+      !descricaoNormalizada
+    ) {
+      setErro(
+        'Informe a descrição da novidade constatada.'
+      )
+      return
+    }
+
+    const observacoesNormalizadas =
+      String(
+        formManutencaoP4.observacoes ||
+        ''
+      )
+        .trim()
+        .toUpperCase()
+
+    try {
+      setEnviandoManutencaoP4Id(
+        item.id
+      )
+      setErro('')
+      setMensagemSucesso('')
+
+      await constatarNovidadeTonfa({
+        tonfaId:
+          item.id,
+        quantidade,
+        setor,
+        tipoNovidade,
+        descricao:
+          descricaoNormalizada,
+        observacoes:
+          observacoesNormalizadas ||
+          null,
+        user
+      })
+
+      await Promise.all([
+        carregar(),
+        carregarResumo()
+      ])
+
+      setMensagemSucesso(
+        `${tipoNovidade} constatado(a): ${quantidade} ${tipo.toLowerCase()}(s) sob responsabilidade do ${setor}.`
+      )
+
+      setFormManutencaoP4({
+        itemId: '',
+        quantidade: '1',
+        tipoNovidade: 'AVARIA',
+        descricao: '',
+        observacoes: ''
+      })
+
+      setModalEnvioManutencaoP4Aberto(
+        false
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao constatar novidade em Tonfa/Cassetete:',
+        error
+      )
+
+      setErro(
+        error?.message ||
+        'Não foi possível registrar a novidade constatada.'
+      )
+    } finally {
+      setEnviandoManutencaoP4Id(
+        null
+      )
+    }
+  }
+
   function iniciarMovimentacao(tipo) {
     setMensagemSucesso('')
 
@@ -1250,17 +3695,54 @@ export default function Tonfas({ user }) {
       return
     }
 
+    if (
+      tipo === 'Recebimento de manutenção do SVDD' &&
+      visaoPerfil === 'P4'
+    ) {
+      setMovimentacaoAtiva('RECEBER_MANUTENCAO_P4')
+      return
+    }
+
+    if (
+      tipo === 'Encaminhamento ao P4' &&
+      visaoPerfil === 'SVDD'
+    ) {
+      abrirOcorrenciasParaP4()
+      return
+    }
+
+    if (
+      tipo === 'Baixa patrimonial' &&
+      visaoPerfil === 'P4'
+    ) {
+      abrirBaixaPatrimonialP4()
+      return
+    }
+
+    if (
+      tipo === 'Constatar novidade' &&
+      (
+        visaoPerfil === 'P4' ||
+        visaoPerfil === 'SVDD'
+      )
+    ) {
+      abrirConstatacaoNovidade()
+      return
+    }
+
+    if (
+      tipo === 'Regularização patrimonial' &&
+      visaoPerfil === 'P4'
+    ) {
+      abrirRegularizacaoPatrimonialP4()
+      return
+    }
+
     const operacoesPendentes = {
       'Recebimento de manutenção':
         'O fluxo específico de retorno da manutenção ainda não possui formulário no projeto.',
       'Retorno da manutenção':
         'O fluxo específico de retorno da manutenção ainda não possui formulário no projeto.',
-      'Envio para manutenção':
-        'O envio para manutenção ainda não possui formulário no projeto.',
-      'Regularização patrimonial':
-        'A regularização patrimonial ainda não possui formulário no projeto.',
-      'Baixa patrimonial':
-        'A baixa patrimonial ainda não possui formulário no projeto.',
       
     }
 
@@ -1271,6 +3753,7 @@ export default function Tonfas({ user }) {
   }
 
  async function confirmarTransferencia({
+  modo,
   tonfaId,
   categoria,
   patrimonioId,
@@ -1397,7 +3880,7 @@ async function finalizarMovimentacao(resultado) {
   <CardResumo
     titulo="Carga total"
     valor={resumo.totalGeral}
-    descricao="Tonfas e cassetetes registrados"
+    descricao="Tonfas e cassetetes ativos"
     destaque="azul"
     onClick={limparFiltros}
   />
@@ -1405,7 +3888,7 @@ async function finalizarMovimentacao(resultado) {
   <CardResumo
     titulo="Tonfas"
     valor={resumo.totalTonfas}
-    descricao="Quantidade total de tonfas"
+    descricao="Quantidade ativa de tonfas"
     destaque="verde"
     onClick={() => {
       setFiltros((prev) => ({
@@ -1422,7 +3905,7 @@ async function finalizarMovimentacao(resultado) {
   <CardResumo
     titulo="Cassetetes"
     valor={resumo.totalCassetetes}
-    descricao="Quantidade total de cassetetes"
+    descricao="Quantidade ativa de cassetetes"
     destaque="amarelo"
     onClick={() => {
       setFiltros((prev) => ({
@@ -1480,6 +3963,7 @@ async function finalizarMovimentacao(resultado) {
                   valor: resumo.totalCassetetes
                 }
               ]}
+              descricao="Total ativo; baixas definitivas são exibidas separadamente"
               destaque="azul"
               onClick={limparFiltros}
             />
@@ -1500,17 +3984,20 @@ async function finalizarMovimentacao(resultado) {
             />
 
             <CardResumo
-              titulo="Cofre do SVDD"
+              titulo="SVDD"
               detalhes={[
                 {
                   titulo: 'Tonfas',
-                  valor: resumo.cofreSVDD.noCofreTonfas
+                  valor:
+                    resumoResponsabilidadeSVDDP4.tonfas
                 },
                 {
                   titulo: 'Cassetetes',
-                  valor: resumo.cofreSVDD.noCofreCassetetes
+                  valor:
+                    resumoResponsabilidadeSVDDP4.cassetetes
                 }
               ]}
+              descricao="Inclui cofre, em serviço, manutenção e extravio sob responsabilidade do SVDD"
               destaque="verde"
               onClick={() => filtrarPorPesquisa('SVDD')}
             />
@@ -1568,11 +4055,13 @@ async function finalizarMovimentacao(resultado) {
               detalhes={[
                 {
                   titulo: 'Tonfas',
-                  valor: resumo.distribuicao.manutencao.tonfas
+                  valor:
+                    manutencaoP4Resumo.tonfas
                 },
                 {
                   titulo: 'Cassetetes',
-                  valor: resumo.distribuicao.manutencao.cassetetes
+                  valor:
+                    manutencaoP4Resumo.cassetetes
                 }
               ]}
               onClick={() => filtrarPorPesquisa('manutenção')}
@@ -1594,7 +4083,7 @@ async function finalizarMovimentacao(resultado) {
             />
 
             <CardResumo
-              titulo="Baixados"
+              titulo="Descarregados"
               detalhes={[
                 {
                   titulo: 'Tonfas',
@@ -1614,19 +4103,36 @@ async function finalizarMovimentacao(resultado) {
               detalhes={[
                 {
                   titulo: 'Tonfas',
-                  valor: resumo.distribuicao.outros.tonfas
+                  valor:
+                    Number(
+                      resumo.distribuicao.outros.tonfas ||
+                      0
+                    ) +
+                    Number(
+                      resumoExtraviosP4Ativos.tonfas ||
+                      0
+                    )
                 },
                 {
                   titulo: 'Cassetetes',
-                  valor: resumo.distribuicao.outros.cassetetes
+                  valor:
+                    Number(
+                      resumo.distribuicao.outros.cassetetes ||
+                      0
+                    ) +
+                    Number(
+                      resumoExtraviosP4Ativos.cassetetes ||
+                      0
+                    )
                 }
               ]}
-              onClick={limparFiltros}
+              descricao="Inclui outras unidades/destinos e somente extravios ativos sob responsabilidade do P4"
+              onClick={abrirOutrosP4}
             />
           </div>
         </section>
 
-        <PainelGraficosTonfas resumo={resumo} />
+        <PainelGraficosTonfas resumo={resumoP4Visual} />
 
         <section className="tonfa-dashboard-section tonfa-movements-section">
           <div className="tonfa-section-title">
@@ -1726,13 +4232,13 @@ async function finalizarMovimentacao(resultado) {
                 type="button"
                 onClick={() =>
                   iniciarMovimentacao(
-                    'Recebimento de manutenção'
+                    'Recebimento de manutenção do SVDD'
                   )
                 }
               >
-                <strong>Receber manutenção</strong>
+                <strong>Receber manutenção do SVDD</strong>
                 <span>
-                  Registrar o retorno do material reparado
+                  Analisar e aceitar manutenção encaminhada pelo SVDD
                 </span>
               </button>
             </GrupoMovimentacao>
@@ -1746,13 +4252,13 @@ async function finalizarMovimentacao(resultado) {
                 type="button"
                 onClick={() =>
                   iniciarMovimentacao(
-                    'Envio para manutenção'
+                    'Constatar novidade'
                   )
                 }
               >
-                <strong>Enviar para manutenção</strong>
+                <strong>Constatar novidade</strong>
                 <span>
-                  Registrar material com defeito, dano ou avaria
+                  Registrar AVARIA ou EXTRAVIO constatado no Cofre do P4
                 </span>
               </button>
 
@@ -1766,7 +4272,7 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Regularizar</strong>
                 <span>
-                  Corrigir localização, guardião ou situação patrimonial
+                  Registrar reposição física feita pelo policial responsável
                 </span>
               </button>
 
@@ -1781,7 +4287,7 @@ async function finalizarMovimentacao(resultado) {
               >
                 <strong>Baixar patrimônio</strong>
                 <span>
-                  Solicitar baixa patrimonial definitiva
+                  Baixar definitivamente material em manutenção sob responsabilidade do P4
                 </span>
               </button>
             </GrupoMovimentacao>
@@ -1877,7 +4383,7 @@ async function finalizarMovimentacao(resultado) {
             <CardResumo
               titulo="Tonfas"
               valor={resumoSVDD.totalTonfas}
-              descricao="Tonfas no cofre, em serviço ou manutenção"
+              descricao="Tonfas no cofre, em serviço, manutenção ou extravio"
               destaque="verde"
               onClick={() => {
                 setFiltros((prev) => ({
@@ -1893,7 +4399,7 @@ async function finalizarMovimentacao(resultado) {
             <CardResumo
               titulo="Cassetetes"
               valor={resumoSVDD.totalCassetetes}
-              descricao="Cassetetes no cofre, em serviço ou manutenção"
+              descricao="Cassetetes no cofre, em serviço, manutenção ou extravio"
               destaque="amarelo"
               onClick={() => {
                 setFiltros((prev) => ({
@@ -1980,6 +4486,22 @@ async function finalizarMovimentacao(resultado) {
               destaque="vermelho"
               onClick={() => filtrarPorPesquisa('manutenção')}
             />
+
+            <CardResumo
+              titulo="Extravio"
+              detalhes={[
+                {
+                  titulo: 'Tonfas',
+                  valor: resumoSVDD.extravio.tonfas
+                },
+                {
+                  titulo: 'Cassetetes',
+                  valor: resumoSVDD.extravio.cassetetes
+                }
+              ]}
+              destaque="vermelho"
+              onClick={abrirExtraviosSvdd}
+            />
           </div>
         </section>
 
@@ -2039,14 +4561,34 @@ async function finalizarMovimentacao(resultado) {
             <GrupoMovimentacao
               icone="🛠️"
               titulo="Condição do material"
-              descricao="Envio e retorno de materiais em manutenção."
+              descricao="Constatação de novidade, regularização e encaminhamento ao P4."
             >
               <button
                 type="button"
-                onClick={() => iniciarMovimentacao('Envio para manutenção')}
+                onClick={() =>
+                  iniciarMovimentacao(
+                    'Constatar novidade'
+                  )
+                }
               >
-                <strong>Enviar para manutenção</strong>
-                <span>Registrar material com defeito, dano ou avaria</span>
+                <strong>Constatar novidade</strong>
+                <span>
+                  Registrar AVARIA ou EXTRAVIO constatado no Cofre do SVDD
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  iniciarMovimentacao(
+                    'Encaminhamento ao P4'
+                  )
+                }
+              >
+                <strong>Encaminhar ao P4</strong>
+                <span>
+                  Enviar manutenção ou procedimento de extravio para análise do P4
+                </span>
               </button>
 
               <button
@@ -2132,7 +4674,8 @@ async function finalizarMovimentacao(resultado) {
 
   if (
   movimentacaoAtiva === 'RECEBER_P4' ||
-  movimentacaoAtiva === 'RECEBER_DEVOLUCAO_P4'
+  movimentacaoAtiva === 'RECEBER_DEVOLUCAO_P4' ||
+  movimentacaoAtiva === 'RECEBER_MANUTENCAO_P4'
 ) {
   return (
     <TonfaReceberP4
@@ -2413,6 +4956,1614 @@ async function finalizarMovimentacao(resultado) {
             onView={abrirVisualizacao}
           />
         </section>
+      )}
+
+      {modalManutencoesP4Aberto && (
+        <div
+          className="tonfa-modal-backdrop"
+          onMouseDown={() => {
+            if (!encaminhandoManutencaoId) {
+              setModalManutencoesP4Aberto(false)
+            }
+          }}
+        >
+          <section
+            className="tonfa-modal tonfa-manutencao-p4-modal"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="tonfa-manutencao-p4-header">
+              <div>
+                <span className="tonfa-manutencao-p4-eyebrow">
+                  OCORRÊNCIAS / SVDD
+                </span>
+
+                <h2>Encaminhar ao P4</h2>
+
+                <p>
+                  Selecione a manutenção ou o procedimento de extravio
+                  que será encaminhado para avaliação do P4.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="tonfa-manutencao-p4-fechar"
+                aria-label="Fechar"
+                disabled={Boolean(encaminhandoManutencaoId)}
+                onClick={() =>
+                  setModalManutencoesP4Aberto(false)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="tonfa-manutencao-p4-info">
+              <strong>
+                {manutencoesParaP4.length}
+              </strong>
+              <span>
+                ocorrência(s) disponível(is) para encaminhamento
+              </span>
+            </div>
+
+            <div className="tonfa-manutencao-p4-lista">
+              {manutencoesParaP4.map((item) => {
+                const ehExtravio =
+                  item?._tipo_encaminhamento ===
+                  'EXTRAVIO'
+
+                const tipo =
+                  normalizarTexto(item?.tipo_material) === 'CASSETETE'
+                    ? 'Cassetete'
+                    : 'Tonfa'
+
+                const quantidade = Math.max(
+                  1,
+                  Number(item?.quantidade || 1)
+                )
+
+                const enviando =
+                  String(encaminhandoManutencaoId || '') ===
+                  String(item?.id || '')
+
+                const origem =
+                  item?.policial_nome
+                    ? `${item.policial_nome}${
+                        item?.policial_re
+                          ? ` — RE ${item.policial_re}`
+                          : ''
+                      }`
+                    : (
+                        item?.origem ||
+                        item?.origem_institucional ||
+                        'SVDD'
+                      )
+
+                const descricao =
+                  item?.descricao ||
+                  item?.tipo_novidade ||
+                  'Manutenção sem descrição.'
+
+                return (
+                  <article
+                    key={item.id}
+                    className="tonfa-manutencao-p4-card"
+                  >
+                    <div className="tonfa-manutencao-p4-foto">
+                      {item?.foto_manutencao_url ? (
+                        <img
+                          src={item.foto_manutencao_url}
+                          alt={`${tipo} em manutenção`}
+                        />
+                      ) : (
+                        <div className="tonfa-manutencao-p4-sem-foto">
+                          <span>🛠️</span>
+                          <small>Sem foto</small>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="tonfa-manutencao-p4-conteudo">
+                      <div className="tonfa-manutencao-p4-topo">
+                        <div>
+                          <span className="tonfa-manutencao-p4-tipo">
+                            {tipo}
+                          </span>
+
+                          <h3>
+                            {ehExtravio
+                              ? `${tipo} extraviado`
+                              : `${tipo} em manutenção`}
+                          </h3>
+                        </div>
+
+                        <span className="tonfa-manutencao-p4-status">
+                          {ehExtravio
+                            ? 'EXTRAVIO'
+                            : 'EM MANUTENÇÃO'}
+                        </span>
+                      </div>
+
+                      <div className="tonfa-manutencao-p4-dados">
+                        <div>
+                          <span>Quantidade</span>
+                          <strong>{quantidade}</strong>
+                        </div>
+
+                        <div>
+                          <span>Origem</span>
+                          <strong>{origem}</strong>
+                        </div>
+
+                        <div>
+                          <span>Destino</span>
+                          <strong>P4</strong>
+                        </div>
+
+                        <div>
+                          <span>Referência</span>
+                          <strong>
+                            {item?.referencia_id
+                              ? String(item.referencia_id).slice(0, 8)
+                              : '—'}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="tonfa-manutencao-p4-descricao">
+                        <span>Ocorrência / observação</span>
+                        <p>{descricao}</p>
+                      </div>
+
+                      <div className="tonfa-manutencao-p4-acoes">
+                        <button
+                          type="button"
+                          className="tonfa-manutencao-p4-enviar"
+                          disabled={Boolean(encaminhandoManutencaoId)}
+                          onClick={() =>
+                            encaminharRegistroManutencaoAoP4(item)
+                          }
+                        >
+                          {enviando
+                            ? 'Encaminhando...'
+                            : ehExtravio
+                              ? 'Encaminhar extravio ao P4'
+                              : 'Enviar manutenção ao P4'}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
+
+
+      {modalRegularizacaoP4Aberto && (
+        <div
+          className="tonfa-modal-backdrop"
+          onMouseDown={() => {
+            if (!regularizandoP4Id) {
+              setModalRegularizacaoP4Aberto(false)
+            }
+          }}
+        >
+          <section
+            className="tonfa-modal tonfa-manutencao-p4-modal"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="tonfa-manutencao-p4-header">
+              <div>
+                <span className="tonfa-manutencao-p4-eyebrow">
+                  REGULARIZAÇÃO / P4
+                </span>
+
+                <h2>
+                  Reposição pelo responsável
+                </h2>
+
+                <p>
+                  Selecione uma manutenção ou extravio e registre a reposição física feita pelo policial responsável.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="tonfa-manutencao-p4-fechar"
+                aria-label="Fechar"
+                disabled={Boolean(
+                  regularizandoP4Id
+                )}
+                onClick={() =>
+                  setModalRegularizacaoP4Aberto(
+                    false
+                  )
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="tonfa-manutencao-p4-info">
+              <strong>
+                {ocorrenciasRegularizacaoP4.reduce(
+                  (total, item) =>
+                    total +
+                    Math.max(
+                      1,
+                      Number(
+                        item?.quantidade ||
+                        1
+                      ) || 1
+                    ),
+                  0
+                )}
+              </strong>
+
+              <span>
+                unidade(s) disponível(is) para regularização por reposição
+              </span>
+            </div>
+
+            <div className="tonfa-manutencao-p4-lista">
+              {ocorrenciasRegularizacaoP4.map(
+                (item) => {
+                  const ehExtravio =
+                    item?._tipo_regularizacao ===
+                    'EXTRAVIO'
+
+                  const tipo =
+                    normalizarTexto(
+                      item?.tipo_material
+                    ) === 'CASSETETE'
+                      ? 'Cassetete'
+                      : 'Tonfa'
+
+                  const quantidade =
+                    Math.max(
+                      1,
+                      Number(
+                        item?.quantidade ||
+                        1
+                      ) || 1
+                    )
+
+                  const selecionado =
+                    String(
+                      formRegularizacaoP4.itemId ||
+                      ''
+                    ) ===
+                    String(
+                      item?.id ||
+                      ''
+                    )
+
+                  const processando =
+                    String(
+                      regularizandoP4Id ||
+                      ''
+                    ) ===
+                    String(
+                      item?.id ||
+                      ''
+                    )
+
+                  return (
+                    <article
+                      key={item.id}
+                      className="tonfa-manutencao-p4-card"
+                    >
+                      <div className="tonfa-manutencao-p4-conteudo">
+                        <div className="tonfa-manutencao-p4-topo">
+                          <div>
+                            <span className="tonfa-manutencao-p4-tipo">
+                              {tipo}
+                            </span>
+
+                            <h3>
+                              {ehExtravio
+                                ? `${tipo} extraviado`
+                                : `${tipo} em manutenção`}
+                            </h3>
+                          </div>
+
+                          <span className="tonfa-manutencao-p4-status">
+                            {ehExtravio
+                              ? 'EXTRAVIO • P4'
+                              : 'MANUTENÇÃO • P4'}
+                          </span>
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-dados">
+                          <div>
+                            <span>Quantidade</span>
+                            <strong>
+                              {quantidade}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Policial relacionado</span>
+                            <strong>
+                              {item?.policial_nome ||
+                                'Não informado'}
+                              {item?.policial_re
+                                ? ` — RE ${item.policial_re}`
+                                : ''}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Origem</span>
+                            <strong>
+                              {ehExtravio
+                                ? 'EXTRAVIO / P4'
+                                : (
+                                    item?.origem ||
+                                    item?.local_origem ||
+                                    item?.origem_institucional ||
+                                    'P4'
+                                  )}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Situação</span>
+                            <strong>
+                              {ehExtravio
+                                ? String(
+                                    item?.status ||
+                                    'AVOCADO_P4'
+                                  ).replaceAll(
+                                    '_',
+                                    ' '
+                                  )
+                                : 'EM MANUTENÇÃO'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-descricao">
+                          <span>
+                            Motivo / ocorrência
+                          </span>
+                          <p>
+                            {item?.descricao ||
+                              item?.tipo_novidade ||
+                              item?.avocacao_p4_observacoes ||
+                              item?.observacoes ||
+                              'Não informado.'}
+                          </p>
+                        </div>
+
+                        {!selecionado ? (
+                          <div className="tonfa-manutencao-p4-acoes">
+                            <button
+                              type="button"
+                              className="tonfa-manutencao-p4-enviar"
+                              disabled={Boolean(
+                                regularizandoP4Id
+                              )}
+                              onClick={() =>
+                                selecionarOcorrenciaRegularizacaoP4(
+                                  item
+                                )
+                              }
+                            >
+                              Regularizar por reposição
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              display: 'grid',
+                              gap: 12,
+                              marginTop: 14,
+                              paddingTop: 14,
+                              borderTop: '1px solid #dbe3ee'
+                            }}
+                          >
+                            <label
+                              style={{
+                                display: 'grid',
+                                gap: 6
+                              }}
+                            >
+                              <span>
+                                RE do policial responsável
+                              </span>
+
+                              <input
+                                type="text"
+                                value={
+                                  formRegularizacaoP4.policialRe
+                                }
+                                onChange={(event) =>
+                                  setFormRegularizacaoP4(
+                                    (atual) => ({
+                                      ...atual,
+                                      policialRe:
+                                        event.target.value
+                                    })
+                                  )
+                                }
+                                placeholder="RE"
+                              />
+                            </label>
+
+                            <label
+                              style={{
+                                display: 'grid',
+                                gap: 6
+                              }}
+                            >
+                              <span>
+                                Nome do policial responsável
+                              </span>
+
+                              <input
+                                type="text"
+                                value={
+                                  formRegularizacaoP4.policialNome
+                                }
+                                onChange={(event) =>
+                                  setFormRegularizacaoP4(
+                                    (atual) => ({
+                                      ...atual,
+                                      policialNome:
+                                        event.target.value
+                                    })
+                                  )
+                                }
+                                placeholder="Nome / nome de guerra"
+                              />
+                            </label>
+
+                            <label
+                              style={{
+                                display: 'grid',
+                                gap: 6
+                              }}
+                            >
+                              <span>
+                                Documento / referência
+                              </span>
+
+                              <input
+                                type="text"
+                                value={
+                                  formRegularizacaoP4.documento
+                                }
+                                onChange={(event) =>
+                                  setFormRegularizacaoP4(
+                                    (atual) => ({
+                                      ...atual,
+                                      documento:
+                                        event.target.value
+                                    })
+                                  )
+                                }
+                                placeholder="Opcional"
+                              />
+                            </label>
+
+                            <label
+                              style={{
+                                display: 'grid',
+                                gap: 6
+                              }}
+                            >
+                              <span>
+                                Observações
+                              </span>
+
+                              <textarea
+                                rows="3"
+                                value={
+                                  formRegularizacaoP4.observacoes
+                                }
+                                onChange={(event) =>
+                                  setFormRegularizacaoP4(
+                                    (atual) => ({
+                                      ...atual,
+                                      observacoes:
+                                        event.target.value
+                                    })
+                                  )
+                                }
+                                placeholder="Opcional"
+                              />
+                            </label>
+
+                            <div className="tonfa-manutencao-p4-acoes">
+                              <button
+                                type="button"
+                                className="tonfa-manutencao-p4-enviar"
+                                disabled={Boolean(
+                                  regularizandoP4Id
+                                )}
+                                onClick={() =>
+                                  confirmarRegularizacaoP4(
+                                    item
+                                  )
+                                }
+                              >
+                                {processando
+                                  ? 'Regularizando...'
+                                  : `Confirmar reposição de ${quantidade} unidade(s)`}
+                              </button>
+
+                              <button
+                                type="button"
+                                className="tonfa-btn-secondary"
+                                disabled={Boolean(
+                                  regularizandoP4Id
+                                )}
+                                onClick={() =>
+                                  setFormRegularizacaoP4({
+                                    itemId: '',
+                                    policialRe: '',
+                                    policialNome: '',
+                                    documento: '',
+                                    observacoes: ''
+                                  })
+                                }
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  )
+                }
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {modalEnvioManutencaoP4Aberto && (
+        <div
+          className="tonfa-modal-backdrop"
+          onMouseDown={() => {
+            if (!enviandoManutencaoP4Id) {
+              setModalEnvioManutencaoP4Aberto(false)
+            }
+          }}
+        >
+          <section
+            className="tonfa-modal tonfa-manutencao-p4-modal"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="tonfa-manutencao-p4-header">
+              <div>
+                <span className="tonfa-manutencao-p4-eyebrow">
+                  NOVIDADE PATRIMONIAL / {visaoPerfil}
+                </span>
+
+                <h2>
+                  Constatar novidade
+                </h2>
+
+                <p>
+                  Selecione o material disponível no cofre e informe se foi constatada AVARIA ou EXTRAVIO.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="tonfa-manutencao-p4-fechar"
+                aria-label="Fechar"
+                disabled={Boolean(
+                  enviandoManutencaoP4Id
+                )}
+                onClick={() =>
+                  setModalEnvioManutencaoP4Aberto(
+                    false
+                  )
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="tonfa-manutencao-p4-info">
+              <strong>
+                {tonfasResumo.reduce(
+                  (total, item) =>
+                    total +
+                    Math.max(
+                      0,
+                      Number(
+                        visaoPerfil === 'P4'
+                          ? item?.quantidade_p4
+                          : item?.quantidade_svdd
+                      ) || 0
+                    ),
+                  0
+                )}
+              </strong>
+
+              <span>
+                unidade(s) disponível(is) no Cofre do {visaoPerfil}
+              </span>
+            </div>
+
+            <div className="tonfa-manutencao-p4-lista">
+              {tonfasResumo
+                .filter(
+                  (item) =>
+                    Number(
+                      visaoPerfil === 'P4'
+                        ? item?.quantidade_p4
+                        : item?.quantidade_svdd
+                    ) > 0
+                )
+                .map(
+                  (item) => {
+                    const tipo =
+                      normalizarTexto(
+                        item?.tipo
+                      ) === 'CASSETETE'
+                        ? 'Cassetete'
+                        : 'Tonfa'
+
+                    const saldo =
+                      Number(
+                        visaoPerfil === 'P4'
+                          ? item?.quantidade_p4
+                          : item?.quantidade_svdd
+                      )
+
+                    const processando =
+                      String(
+                        enviandoManutencaoP4Id ||
+                        ''
+                      ) ===
+                      String(
+                        item?.id ||
+                        ''
+                      )
+
+                    return (
+                      <article
+                        key={item.id}
+                        className="tonfa-manutencao-p4-card"
+                      >
+                        <div className="tonfa-manutencao-p4-conteudo">
+                          <div className="tonfa-manutencao-p4-topo">
+                            <div>
+                              <span className="tonfa-manutencao-p4-tipo">
+                                {tipo}
+                              </span>
+
+                              <h3>
+                                {tipo} no Cofre do {visaoPerfil}
+                              </h3>
+                            </div>
+
+                            <span className="tonfa-manutencao-p4-status">
+                              DISPONÍVEL
+                            </span>
+                          </div>
+
+                          <div className="tonfa-manutencao-p4-dados">
+                            <div>
+                              <span>
+                                Disponível
+                              </span>
+
+                              <strong>
+                                {saldo}
+                              </strong>
+                            </div>
+
+                            <div>
+                              <span>
+                                Origem
+                              </span>
+
+                              <strong>
+                                COFRE DO {visaoPerfil}
+                              </strong>
+                            </div>
+                          </div>
+
+                          {String(
+                            formManutencaoP4.itemId ||
+                            ''
+                          ) !==
+                          String(
+                            item?.id ||
+                            ''
+                          ) ? (
+                            <div className="tonfa-manutencao-p4-acoes">
+                              <button
+                                type="button"
+                                className="tonfa-manutencao-p4-enviar"
+                                disabled={Boolean(
+                                  enviandoManutencaoP4Id
+                                )}
+                                onClick={() => {
+                                  setErro('')
+                                  setFormManutencaoP4({
+                                    itemId:
+                                      item.id,
+                                    quantidade:
+                                      '1',
+                                    tipoNovidade:
+                                      'AVARIA',
+                                    descricao:
+                                      '',
+                                    observacoes:
+                                      ''
+                                  })
+                                }}
+                              >
+                                Constatar novidade
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gap: 12,
+                                marginTop: 14,
+                                paddingTop: 14,
+                                borderTop: '1px solid #dbe3ee'
+                              }}
+                            >
+                              <label
+                                style={{
+                                  display: 'grid',
+                                  gap: 6
+                                }}
+                              >
+                                <span>
+                                  Quantidade
+                                </span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={saldo}
+                                  value={
+                                    formManutencaoP4.quantidade
+                                  }
+                                  onChange={(event) =>
+                                    setFormManutencaoP4(
+                                      (atual) => ({
+                                        ...atual,
+                                        quantidade:
+                                          event.target.value
+                                      })
+                                    )
+                                  }
+                                />
+                              </label>
+
+                              <label
+                                style={{
+                                  display: 'grid',
+                                  gap: 6
+                                }}
+                              >
+                                <span>
+                                  Tipo da novidade
+                                </span>
+
+                                <select
+                                  value={
+                                    formManutencaoP4.tipoNovidade
+                                  }
+                                  onChange={(event) =>
+                                    setFormManutencaoP4(
+                                      (atual) => ({
+                                        ...atual,
+                                        tipoNovidade:
+                                          event.target.value
+                                      })
+                                    )
+                                  }
+                                >
+                                  <option value="AVARIA">
+                                    AVARIA
+                                  </option>
+                                  <option value="EXTRAVIO">
+                                    EXTRAVIO
+                                  </option>
+                                </select>
+                              </label>
+
+                              <label
+                                style={{
+                                  display: 'grid',
+                                  gap: 6
+                                }}
+                              >
+                                <span>
+                                  Descrição da novidade
+                                </span>
+                                <textarea
+                                  rows="3"
+                                  value={
+                                    formManutencaoP4.descricao
+                                  }
+                                  onChange={(event) =>
+                                    setFormManutencaoP4(
+                                      (atual) => ({
+                                        ...atual,
+                                        descricao:
+                                          event.target.value
+                                      })
+                                    )
+                                  }
+                                  placeholder="Descreva o motivo da manutenção"
+                                />
+                              </label>
+
+                              <label
+                                style={{
+                                  display: 'grid',
+                                  gap: 6
+                                }}
+                              >
+                                <span>
+                                  Observações
+                                </span>
+                                <textarea
+                                  rows="2"
+                                  value={
+                                    formManutencaoP4.observacoes
+                                  }
+                                  onChange={(event) =>
+                                    setFormManutencaoP4(
+                                      (atual) => ({
+                                        ...atual,
+                                        observacoes:
+                                          event.target.value
+                                      })
+                                    )
+                                  }
+                                  placeholder="Opcional"
+                                />
+                              </label>
+
+                              <div className="tonfa-manutencao-p4-acoes">
+                                <button
+                                  type="button"
+                                  className="tonfa-manutencao-p4-enviar"
+                                  disabled={Boolean(
+                                    enviandoManutencaoP4Id
+                                  )}
+                                  onClick={() =>
+                                    constatarNovidadeNoEstoque(
+                                      item
+                                    )
+                                  }
+                                >
+                                  {processando
+                                    ? 'Registrando...'
+                                    : 'Confirmar novidade'}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="tonfa-btn-secondary"
+                                  disabled={Boolean(
+                                    enviandoManutencaoP4Id
+                                  )}
+                                  onClick={() =>
+                                    setFormManutencaoP4({
+                                      itemId: '',
+                                      quantidade: '1',
+                                      tipoNovidade: 'AVARIA',
+                                      descricao: '',
+                                      observacoes: ''
+                                    })
+                                  }
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    )
+                  }
+                )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {modalBaixaP4Aberto && (
+        <div
+          className="tonfa-modal-backdrop"
+          onMouseDown={() => {
+            if (!baixandoManutencaoId) {
+              setModalBaixaP4Aberto(false)
+            }
+          }}
+        >
+          <section
+            className="tonfa-modal tonfa-manutencao-p4-modal"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="tonfa-manutencao-p4-header">
+              <div>
+                <span className="tonfa-manutencao-p4-eyebrow">
+                  BAIXA PATRIMONIAL / P4
+                </span>
+
+                <h2>
+                  Baixar patrimônio definitivamente
+                </h2>
+
+                <p>
+                  Selecione a manutenção ou o extravio sob responsabilidade do P4 que terá baixa patrimonial definitiva.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="tonfa-manutencao-p4-fechar"
+                aria-label="Fechar"
+                disabled={Boolean(
+                  baixandoManutencaoId
+                )}
+                onClick={() =>
+                  setModalBaixaP4Aberto(
+                    false
+                  )
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="tonfa-manutencao-p4-info">
+              <strong>
+                {manutencoesBaixaP4.reduce(
+                  (total, item) =>
+                    total +
+                    Math.max(
+                      1,
+                      Number(
+                        item?.quantidade ||
+                        1
+                      ) || 1
+                    ),
+                  0
+                )}
+              </strong>
+
+              <span>
+                unidade(s) disponíveis para baixa definitiva
+              </span>
+            </div>
+
+            <div className="tonfa-manutencao-p4-lista">
+              {manutencoesBaixaP4.map(
+                (item) => {
+                  const ehExtravio =
+                    item?._tipo_baixa ===
+                    'EXTRAVIO'
+
+                  const tipo =
+                    normalizarTexto(
+                      item?.tipo_material
+                    ) === 'CASSETETE'
+                      ? 'Cassetete'
+                      : 'Tonfa'
+
+                  const quantidade =
+                    Math.max(
+                      1,
+                      Number(
+                        item?.quantidade ||
+                        1
+                      ) || 1
+                    )
+
+                  const processando =
+                    String(
+                      baixandoManutencaoId ||
+                      ''
+                    ) ===
+                    String(
+                      item?.id ||
+                      ''
+                    )
+
+                  return (
+                    <article
+                      key={item.id}
+                      className="tonfa-manutencao-p4-card"
+                    >
+                      <div className="tonfa-manutencao-p4-conteudo">
+                        <div className="tonfa-manutencao-p4-topo">
+                          <div>
+                            <span className="tonfa-manutencao-p4-tipo">
+                              {tipo}
+                            </span>
+
+                            <h3>
+                              {ehExtravio
+                                ? `${tipo} extraviado`
+                                : `${tipo} em manutenção`}
+                            </h3>
+                          </div>
+
+                          <span className="tonfa-manutencao-p4-status">
+                            {ehExtravio
+                              ? 'EXTRAVIO • P4'
+                              : 'EM MANUTENÇÃO • P4'}
+                          </span>
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-dados">
+                          <div>
+                            <span>Quantidade</span>
+                            <strong>{quantidade}</strong>
+                          </div>
+
+                          <div>
+                            <span>Origem</span>
+                            <strong>
+                              {item?.origem ||
+                                item?.local_origem ||
+                                item?.origem_institucional ||
+                                'P4'}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Responsabilidade atual</span>
+                            <strong>P4</strong>
+                          </div>
+
+                          <div>
+                            <span>Manutenção</span>
+                            <strong>
+                              {String(
+                                item?.id ||
+                                ''
+                              ).slice(
+                                0,
+                                8
+                              ) || '—'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        {!ehExtravio && (
+                          <>
+                            <div className="tonfa-manutencao-p4-descricao">
+                              <span>Tipo da ocorrência</span>
+                              <p>
+                                {item?.tipo_novidade ||
+                                  item?.tipo_ocorrencia ||
+                                  'MANUTENÇÃO'}
+                              </p>
+                            </div>
+
+                            <div className="tonfa-manutencao-p4-descricao">
+                              <span>Motivo / defeito / avaria</span>
+                              <p>
+                                {item?.descricao ||
+                                  item?.motivo ||
+                                  'Não informado.'}
+                              </p>
+                            </div>
+
+                            <div className="tonfa-manutencao-p4-descricao">
+                              <span>Observações</span>
+                              <p>
+                                {item?.observacoes ||
+                                  'Sem observações.'}
+                              </p>
+                            </div>
+
+                            <div className="tonfa-manutencao-p4-descricao">
+                              <span>Registrado em</span>
+                              <p>
+                                {item?.registrada_em ||
+                                item?.created_at
+                                  ? new Date(
+                                      item?.registrada_em ||
+                                      item?.created_at
+                                    ).toLocaleString(
+                                      'pt-BR'
+                                    )
+                                  : 'Não informado.'}
+                              </p>
+                            </div>
+                          </>
+                        )}
+
+                        {ehExtravio && (
+                          <div className="tonfa-manutencao-p4-descricao">
+                            <span>Descrição / observações do extravio</span>
+                            <p>
+                              {item?.avocacao_p4_observacoes ||
+                                item?.descricao ||
+                                item?.observacoes ||
+                                'Sem descrição.'}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="tonfa-manutencao-p4-acoes">
+                          <button
+                            type="button"
+                            className="tonfa-action-danger"
+                            disabled={Boolean(
+                              baixandoManutencaoId
+                            )}
+                            onClick={() =>
+                              ehExtravio
+                                ? baixarExtravioP4(
+                                    item
+                                  )
+                                : baixarManutencaoP4(
+                                    item
+                                  )
+                            }
+                          >
+                            {processando
+                              ? 'Baixando...'
+                              : ehExtravio
+                                ? 'Baixar extravio definitivamente'
+                                : 'Baixar manutenção definitivamente'}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                }
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {modalOutrosP4Aberto && (
+        <div
+          className="tonfa-modal-backdrop"
+          onMouseDown={() => {
+            if (!carregandoOutrosP4) {
+              setModalOutrosP4Aberto(false)
+            }
+          }}
+        >
+          <section
+            className="tonfa-modal tonfa-manutencao-p4-modal"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="tonfa-manutencao-p4-header">
+              <div>
+                <span className="tonfa-manutencao-p4-eyebrow">
+                  OUTROS / P4
+                </span>
+
+                <h2>Outros destinos e extravios</h2>
+
+                <p>
+                  Materiais fora dos grupos principais, incluindo outras unidades/destinos e extravios sob responsabilidade do P4.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="tonfa-manutencao-p4-fechar"
+                aria-label="Fechar"
+                onClick={() =>
+                  setModalOutrosP4Aberto(false)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="tonfa-manutencao-p4-info">
+              <strong>
+                {outrosP4Itens.reduce(
+                  (total, item) =>
+                    total +
+                    Math.max(
+                      0,
+                      Number(item?.quantidade || 0) || 0
+                    ),
+                  0
+                )}
+              </strong>
+
+              <span>
+                unidade(s) classificada(s) em Outros
+              </span>
+            </div>
+
+            <div className="tonfa-manutencao-p4-lista">
+              {outrosP4Itens.length === 0 ? (
+                <div className="tonfa-alert-success tonfa-page-success">
+                  <div>
+                    <strong>Nenhum material em Outros.</strong>
+                    <span>
+                      Não há outras unidades/destinos nem extravios sob responsabilidade do P4.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                outrosP4Itens.map((item) => {
+                  const ehExtravio =
+                    item?._tipo_outros ===
+                    'EXTRAVIO'
+
+                  const tipo =
+                    normalizarTexto(
+                      item?.tipo_material
+                    ) === 'CASSETETE'
+                      ? 'Cassetete'
+                      : 'Tonfa'
+
+                  const quantidade =
+                    Math.max(
+                      1,
+                      Number(
+                        item?.quantidade ||
+                        1
+                      ) || 1
+                    )
+
+                  return (
+                    <article
+                      key={item.id}
+                      className="tonfa-manutencao-p4-card"
+                    >
+                      <div className="tonfa-manutencao-p4-conteudo">
+                        <div className="tonfa-manutencao-p4-topo">
+                          <div>
+                            <span className="tonfa-manutencao-p4-tipo">
+                              {tipo}
+                            </span>
+
+                            <h3>
+                              {ehExtravio
+                                ? `${tipo} extraviado`
+                                : `${tipo} em outro destino`}
+                            </h3>
+                          </div>
+
+                          <span className="tonfa-manutencao-p4-status">
+                            {ehExtravio
+                              ? String(
+                                  item?.status ||
+                                  'AVOCADO_P4'
+                                ).replaceAll(
+                                  '_',
+                                  ' '
+                                )
+                              : 'OUTRO DESTINO'}
+                          </span>
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-dados">
+                          <div>
+                            <span>Quantidade</span>
+                            <strong>
+                              {quantidade}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>
+                              {ehExtravio
+                                ? 'Responsabilidade'
+                                : 'Destino / localização'}
+                            </span>
+                            <strong>
+                              {ehExtravio
+                                ? item?.responsavel_setor ||
+                                  'P4'
+                                : item?.destino ||
+                                  'Não informado'}
+                            </strong>
+                          </div>
+
+                          {ehExtravio && (
+                            <>
+                              <div>
+                                <span>Policial</span>
+                                <strong>
+                                  {item?.policial_nome ||
+                                    'Não informado'}
+                                  {item?.policial_re
+                                    ? ` — RE ${item.policial_re}`
+                                    : ''}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Documento</span>
+                                <strong>
+                                  {item?.avocacao_p4_documento ||
+                                    item?.documento_numero ||
+                                    'Não informado'}
+                                </strong>
+                              </div>
+                            </>
+                          )}
+
+                          {!ehExtravio &&
+                            item?.unidade && (
+                              <div>
+                                <span>Unidade</span>
+                                <strong>
+                                  {item.unidade}
+                                </strong>
+                              </div>
+                            )}
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-descricao">
+                          <span>
+                            {ehExtravio
+                              ? 'Descrição / observações'
+                              : 'Observações'}
+                          </span>
+
+                          <p>
+                            {ehExtravio
+                              ? item?.avocacao_p4_observacoes ||
+                                item?.descricao ||
+                                item?.observacoes ||
+                                'Sem observações.'
+                              : item?.observacoes ||
+                                'Sem observações.'}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {modalExtraviosAberto && (
+        <div
+          className="tonfa-modal-backdrop"
+          onMouseDown={() => {
+            if (!carregandoExtravios) {
+              setModalExtraviosAberto(false)
+            }
+          }}
+        >
+          <section
+            className="tonfa-modal tonfa-manutencao-p4-modal"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="tonfa-manutencao-p4-header">
+              <div>
+                <span className="tonfa-manutencao-p4-eyebrow">
+                  EXTRAVIO / SVDD
+                </span>
+                <h2>Materiais extraviados</h2>
+                <p>
+                  Tonfas e Cassetetes extraviados sob responsabilidade do SVDD.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="tonfa-manutencao-p4-fechar"
+                aria-label="Fechar"
+                onClick={() =>
+                  setModalExtraviosAberto(false)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="tonfa-manutencao-p4-info">
+              <strong>
+                {extraviosSvdd.reduce(
+                  (total, item) =>
+                    total +
+                    Math.max(
+                      1,
+                      Number(item?.quantidade || 1) || 1
+                    ),
+                  0
+                )}
+              </strong>
+              <span>
+                unidade(s) extraviada(s) sob responsabilidade do SVDD
+              </span>
+            </div>
+
+            <div className="tonfa-manutencao-p4-lista">
+              {extraviosSvdd.length === 0 ? (
+                <div className="tonfa-alert-success tonfa-page-success">
+                  <div>
+                    <strong>Nenhum extravio ativo.</strong>
+                    <span>
+                      Não há Tonfas ou Cassetetes extraviados sob responsabilidade do SVDD.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                extraviosSvdd.map((item) => {
+                  const tipo =
+                    normalizarTexto(item?.tipo_material) === 'CASSETETE'
+                      ? 'Cassetete'
+                      : 'Tonfa'
+
+                  const quantidade =
+                    Math.max(
+                      1,
+                      Number(item?.quantidade || 1) || 1
+                    )
+
+                  const status =
+                    String(
+                      item?.status ||
+                      'EM_APURACAO'
+                    ).replaceAll('_', ' ')
+
+                  const formatarDataExtravio = (valor) => {
+                    if (!valor) return 'Não informada'
+                    const data = new Date(valor)
+                    return Number.isNaN(data.getTime())
+                      ? 'Não informada'
+                      : data.toLocaleString('pt-BR')
+                  }
+
+                  const documento =
+                    [
+                      item?.documento_tipo,
+                      item?.documento_numero,
+                      item?.documento_data
+                    ]
+                      .filter(Boolean)
+                      .join(' • ') ||
+                    'Não informado'
+
+                  return (
+                    <article
+                      key={item.id}
+                      className="tonfa-manutencao-p4-card"
+                    >
+                      <div className="tonfa-manutencao-p4-conteudo">
+                        <div className="tonfa-manutencao-p4-topo">
+                          <div>
+                            <span className="tonfa-manutencao-p4-tipo">
+                              {tipo}
+                            </span>
+                            <h3>{tipo} extraviado</h3>
+                          </div>
+
+                          <span className="tonfa-manutencao-p4-status">
+                            {status}
+                          </span>
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-dados">
+                          <div>
+                            <span>Quantidade</span>
+                            <strong>{quantidade}</strong>
+                          </div>
+
+                          <div>
+                            <span>Policial</span>
+                            <strong>
+                              {item?.policial_nome || 'Não informado'}
+                              {item?.policial_re
+                                ? ` — RE ${item.policial_re}`
+                                : ''}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Cautela / retirada</span>
+                            <strong>
+                              {formatarDataExtravio(item?.retirado_em)}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Constatado em</span>
+                            <strong>
+                              {formatarDataExtravio(
+                                item?.extravio_constatado_em
+                              )}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Responsabilidade</span>
+                            <strong>
+                              {item?.responsavel_setor || 'SVDD'}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>Registrado por</span>
+                            <strong>
+                              {item?.registrado_por_nome ||
+                                'Não informado'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-descricao">
+                          <span>Descrição / circunstâncias</span>
+                          <p>
+                            {item?.descricao ||
+                              'Sem descrição.'}
+                          </p>
+                        </div>
+
+                        <div className="tonfa-manutencao-p4-descricao">
+                          <span>Documento</span>
+                          <p>{documento}</p>
+                        </div>
+
+                        {item?.observacoes && (
+                          <div className="tonfa-manutencao-p4-descricao">
+                            <span>Observações</span>
+                            <p>{item.observacoes}</p>
+                          </div>
+                        )}
+
+                        <div className="tonfa-manutencao-p4-acoes">
+                          <button
+                            type="button"
+                            className="tonfa-manutencao-p4-enviar"
+                            disabled={Boolean(
+                              regularizandoExtravioId
+                            )}
+                            onClick={() =>
+                              regularizarExtravioLocalizado(item)
+                            }
+                          >
+                            {String(
+                              regularizandoExtravioId || ''
+                            ) === String(item?.id || '')
+                              ? 'Regularizando...'
+                              : 'Material localizado • retornar ao SVDD'}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })
+              )}
+            </div>
+          </section>
+        </div>
       )}
 
       <TonfaTransferenciaModal

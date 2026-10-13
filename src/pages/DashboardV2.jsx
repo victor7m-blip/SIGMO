@@ -1281,6 +1281,26 @@ function PainelDashboard({
   ] = useState([])
 
   const [
+    movimentacoesHojeDetalhes,
+    setMovimentacoesHojeDetalhes
+  ] = useState([])
+
+  const [
+    modalMovimentacoesHojeAberto,
+    setModalMovimentacoesHojeAberto
+  ] = useState(false)
+
+  const [
+    carregandoMovimentacoesHoje,
+    setCarregandoMovimentacoesHoje
+  ] = useState(false)
+
+  const [
+    erroMovimentacoesHoje,
+    setErroMovimentacoesHoje
+  ] = useState('')
+
+  const [
     modalEmServicoAberto,
     setModalEmServicoAberto
   ] = useState(false)
@@ -1503,6 +1523,441 @@ function PainelDashboard({
     setModalTurnosEstendidosAberto(true)
   }
 
+  function textoMovimentacao(valor) {
+    return String(valor ?? '').trim()
+  }
+
+  function normalizarMovimentacao(valor) {
+    return textoMovimentacao(valor)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+  }
+
+  function nomeMaterialMovimentacao(item, patrimonio = null) {
+    const tipo =
+      textoMovimentacao(
+        item?.tipo_patrimonio ||
+        patrimonio?.tipo
+      )
+
+    const descricao =
+      textoMovimentacao(
+        item?.descricao ||
+        patrimonio?.descricao
+      )
+
+    const base =
+      `${tipo} ${descricao}`
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+
+    if (base.includes('CASSETETE')) {
+      return 'CASSETETE'
+    }
+
+    if (base.includes('TONFA')) {
+      return 'TONFA'
+    }
+
+    return (
+      descricao ||
+      tipo ||
+      'MATERIAL'
+    )
+  }
+
+  function rotulosPessoasMovimentacao(item) {
+    const tipo =
+      normalizarMovimentacao(
+        item?.tipo_movimentacao
+      )
+
+    if (tipo === 'CAUTELA') {
+      return {
+        origem: 'Quem pagou',
+        destino: 'Quem pegou'
+      }
+    }
+
+    if (tipo === 'DEVOLUCAO') {
+      return {
+        origem: 'Quem devolveu',
+        destino: 'Quem recebeu'
+      }
+    }
+
+    if (tipo === 'TRANSFERENCIA') {
+      return {
+        origem: 'Quem transferiu',
+        destino: 'Quem recebeu'
+      }
+    }
+
+    return {
+      origem: 'Quem movimentou',
+      destino: 'Quem recebeu'
+    }
+  }
+
+  async function abrirMovimentacoesHoje() {
+    try {
+      setCarregandoMovimentacoesHoje(true)
+      setErroMovimentacoesHoje('')
+
+      const inicio = new Date()
+      inicio.setHours(0, 0, 0, 0)
+
+      const {
+        data: movimentacoesDoDia,
+        error: movimentacoesError
+      } = await supabase
+        .from('sigmo_patrimonio_movimentacoes')
+        .select('*')
+        .gte(
+          'created_at',
+          inicio.toISOString()
+        )
+        .order(
+          'created_at',
+          { ascending: false }
+        )
+
+      if (movimentacoesError) {
+        throw movimentacoesError
+      }
+
+      const lista =
+        Array.isArray(movimentacoesDoDia)
+          ? movimentacoesDoDia
+          : []
+
+      const patrimonioIds = [
+        ...new Set(
+          lista
+            .map(
+              (item) =>
+                item?.patrimonio_id
+            )
+            .filter(Boolean)
+        )
+      ]
+
+      const itemIds = [
+        ...new Set(
+          lista
+            .map(
+              (item) =>
+                item?.item_id
+            )
+            .filter(Boolean)
+        )
+      ]
+
+      const [
+        patrimoniosResultado,
+        itensResultado
+      ] = await Promise.allSettled([
+        patrimonioIds.length > 0
+          ? supabase
+              .from('sigmo_patrimonios')
+              .select(
+                'id, tipo, descricao, referencia_id, numero_patrimonio, numero_serie, dados'
+              )
+              .in(
+                'id',
+                patrimonioIds
+              )
+          : Promise.resolve({
+              data: [],
+              error: null
+            }),
+
+        itemIds.length > 0
+          ? supabase
+              .from('sigmo_patrimonio_itens')
+              .select(
+                'id, categoria, codigo, nome, descricao, modelo'
+              )
+              .in(
+                'id',
+                itemIds
+              )
+          : Promise.resolve({
+              data: [],
+              error: null
+            })
+      ])
+
+      const patrimonios =
+        patrimoniosResultado.status ===
+          'fulfilled' &&
+        !patrimoniosResultado.value.error
+          ? (
+              patrimoniosResultado
+                .value.data || []
+            )
+          : []
+
+      const itensCatalogo =
+        itensResultado.status ===
+          'fulfilled' &&
+        !itensResultado.value.error
+          ? (
+              itensResultado
+                .value.data || []
+            )
+          : []
+
+      const patrimonioPorId =
+        new Map(
+          patrimonios.map(
+            (item) => [
+              String(item.id),
+              item
+            ]
+          )
+        )
+
+      const itemPorId =
+        new Map(
+          itensCatalogo.map(
+            (item) => [
+              String(item.id),
+              item
+            ]
+          )
+        )
+
+      const consolidadas =
+        lista.map(
+          (movimentacao) => {
+            const dados =
+              movimentacao?.dados &&
+              typeof movimentacao.dados ===
+                'object'
+                ? movimentacao.dados
+                : {}
+
+            const metadata =
+              movimentacao?.metadata &&
+              typeof movimentacao.metadata ===
+                'object'
+                ? movimentacao.metadata
+                : {}
+
+            const dadosEngine =
+              metadata?.dados_engine &&
+              typeof metadata.dados_engine ===
+                'object'
+                ? metadata.dados_engine
+                : {}
+
+            const patrimonio =
+              patrimonioPorId.get(
+                String(
+                  movimentacao
+                    ?.patrimonio_id ||
+                  ''
+                )
+              ) || null
+
+            const itemCatalogo =
+              itemPorId.get(
+                String(
+                  movimentacao?.item_id ||
+                  ''
+                )
+              ) || null
+
+            const textoMaterial =
+              [
+                dados?.categoria,
+                dados?.tipo_material,
+                dados?.modulo,
+                dadosEngine?.categoria,
+                dadosEngine?.tipo_material,
+                dadosEngine?.modulo,
+                itemCatalogo?.categoria,
+                itemCatalogo?.nome,
+                itemCatalogo?.descricao,
+                patrimonio?.tipo,
+                patrimonio?.descricao
+              ]
+                .filter(Boolean)
+                .join(' ')
+                .normalize('NFD')
+                .replace(
+                  /[\u0300-\u036f]/g,
+                  ''
+                )
+                .toUpperCase()
+
+            let material =
+              itemCatalogo?.nome ||
+              itemCatalogo?.categoria ||
+              patrimonio?.descricao ||
+              patrimonio?.tipo ||
+              dados?.categoria ||
+              dados?.tipo_material ||
+              dadosEngine?.categoria ||
+              dadosEngine?.tipo_material ||
+              'MATERIAL'
+
+            if (
+              textoMaterial.includes(
+                'CASSETETE'
+              )
+            ) {
+              material = 'CASSETETE'
+            } else if (
+              textoMaterial.includes(
+                'TONFA'
+              )
+            ) {
+              material = 'TONFA'
+            }
+
+            const quantidadeCandidatos = [
+              movimentacao?.quantidade,
+              dados?.quantidade,
+              dados?.quantidade_movimentada,
+              dados?.quantidade_recebida,
+              dadosEngine?.quantidade,
+              dadosEngine?.quantidade_movimentada,
+              dadosEngine?.quantidade_recebida,
+              metadata?.quantidade
+            ]
+
+            let quantidade = 1
+
+            for (
+              const valor of
+              quantidadeCandidatos
+            ) {
+              const numeroValor =
+                Number(valor)
+
+              if (
+                Number.isFinite(
+                  numeroValor
+                ) &&
+                numeroValor > 0
+              ) {
+                quantidade =
+                  numeroValor
+                break
+              }
+            }
+
+            const quemMovimentou =
+              movimentacao
+                ?.criado_por_nome ||
+              movimentacao
+                ?.executado_por_nome ||
+              movimentacao
+                ?.solicitante_nome ||
+              dados
+                ?.realizado_por_nome ||
+              dadosEngine
+                ?.realizado_por_nome ||
+              metadata
+                ?.realizado_por?.nome ||
+              'NÃO IDENTIFICADO'
+
+            const quemRecebeu =
+              movimentacao
+                ?.aceito_por_nome ||
+              movimentacao
+                ?.recebido_por_nome ||
+              movimentacao
+                ?.destino_guardiao_nome ||
+              dados
+                ?.recebedor_nome ||
+              dados
+                ?.policial_nome ||
+              dadosEngine
+                ?.recebedor_nome ||
+              dadosEngine
+                ?.policial_nome ||
+              metadata
+                ?.recebedor_nome ||
+              'NÃO IDENTIFICADO'
+
+            return {
+              ...movimentacao,
+              tipo_movimentacao:
+                movimentacao
+                  ?.tipo_movimentacao ||
+                dados
+                  ?.tipo_movimentacao ||
+                dadosEngine
+                  ?.tipo_movimentacao ||
+                'MOVIMENTACAO',
+              status:
+                movimentacao
+                  ?.status_movimentacao ||
+                movimentacao?.status ||
+                'REGISTRADA',
+              material,
+              quantidade,
+              quem_pagou_movimentou:
+                quemMovimentou,
+              quem_recebeu:
+                quemRecebeu,
+              origem_local:
+                movimentacao
+                  ?.local_origem ||
+                movimentacao
+                  ?.origem_local_nome ||
+                dados?.origem_nome ||
+                dadosEngine
+                  ?.origem_nome ||
+                '',
+              destino_local:
+                movimentacao
+                  ?.local_destino ||
+                movimentacao
+                  ?.destino_local_nome ||
+                movimentacao
+                  ?.destino_guardiao_nome ||
+                dados?.destino_nome ||
+                dadosEngine
+                  ?.destino_nome ||
+                ''
+            }
+          }
+        )
+
+      setMovimentacoesHojeDetalhes(
+        consolidadas
+      )
+
+      setModalMovimentacoesHojeAberto(
+        true
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao carregar movimentações de hoje:',
+        error
+      )
+
+      setMovimentacoesHojeDetalhes([])
+      setErroMovimentacoesHoje(
+        error?.message ||
+        'Não foi possível carregar as movimentações de hoje.'
+      )
+      setModalMovimentacoesHojeAberto(
+        true
+      )
+    } finally {
+      setCarregandoMovimentacoesHoje(
+        false
+      )
+    }
+  }
+
   async function abrirMateriaisEmServico() {
     try {
       setCarregandoEmServico(true)
@@ -1648,7 +2103,8 @@ function PainelDashboard({
         Number(vitrine.patrimonios?.manutencao || 0) +
         Number(vitrine.tonfas.svdd || 0) +
         Number(vitrine.tonfas.emServico || 0) +
-        Number(vitrine.tonfas.manutencao || 0)
+        Number(vitrine.tonfas.manutencao || 0) +
+        Number(vitrine.tonfas.extravio || 0)
       : Number(vitrine.armas.total || 0) +
         Number(vitrine.tonfas.total || 0) +
         Number(vitrine.individuais?.total || 0)
@@ -1671,6 +2127,9 @@ function PainelDashboard({
   const manutencaoIntegrada =
     Number(vitrine.patrimonios?.manutencao || 0) +
     Number(vitrine.tonfas.manutencao || 0)
+
+  const extravioIntegrado =
+    Number(vitrine.tonfas?.extravio || 0)
 
   const armasGrafico = [
     ...(!visaoSVDD
@@ -1754,6 +2213,13 @@ function PainelDashboard({
         vitrine.tonfasDetalhe
           ?.manutencao || 0,
       tone: 'red'
+    },
+    {
+      label: 'Extravio',
+      value:
+        vitrine.tonfasDetalhe
+          ?.extravio || 0,
+      tone: 'orange'
     }
   ]
 
@@ -1787,6 +2253,13 @@ function PainelDashboard({
         vitrine.cassetetesDetalhe
           ?.manutencao || 0,
       tone: 'red'
+    },
+    {
+      label: 'Extravio',
+      value:
+        vitrine.cassetetesDetalhe
+          ?.extravio || 0,
+      tone: 'orange'
     }
   ]
 
@@ -3024,16 +3497,18 @@ function PainelDashboard({
               </strong>
 
               <div className="sigmo-command-four-values">
-                <small>
-                  P4
-                  <b>
-                    {numero(
-                      vitrine
-                        .tonfasDetalhe
-                        ?.p4
-                    )}
-                  </b>
-                </small>
+                {!visaoSVDD && (
+                  <small>
+                    P4
+                    <b>
+                      {numero(
+                        vitrine
+                          .tonfasDetalhe
+                          ?.p4
+                      )}
+                    </b>
+                  </small>
+                )}
                 <small>
                   SVDD
                   <b>
@@ -3077,16 +3552,18 @@ function PainelDashboard({
               </strong>
 
               <div className="sigmo-command-four-values">
-                <small>
-                  P4
-                  <b>
-                    {numero(
-                      vitrine
-                        .cassetetesDetalhe
-                        ?.p4
-                    )}
-                  </b>
-                </small>
+                {!visaoSVDD && (
+                  <small>
+                    P4
+                    <b>
+                      {numero(
+                        vitrine
+                          .cassetetesDetalhe
+                          ?.p4
+                      )}
+                    </b>
+                  </small>
+                )}
                 <small>
                   SVDD
                   <b>
@@ -3429,6 +3906,57 @@ function PainelDashboard({
               </span>
             </div>
 
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() =>
+                onNavegar(
+                  'central-operacional'
+                )
+              }
+              onKeyDown={(event) => {
+                if (
+                  event.key === 'Enter' ||
+                  event.key === ' '
+                ) {
+                  event.preventDefault()
+                  onNavegar(
+                    'central-operacional'
+                  )
+                }
+              }}
+              style={{
+                cursor: 'pointer',
+                border:
+                  extravioIntegrado > 0
+                    ? '1px solid rgba(248,113,113,.42)'
+                    : undefined,
+                borderRadius: '10px',
+                background:
+                  extravioIntegrado > 0
+                    ? 'rgba(127,29,29,.16)'
+                    : undefined
+              }}
+              title="Abrir extravios na Central Operacional"
+            >
+              <DashboardIcon tone="red">
+                !
+              </DashboardIcon>
+              <span>
+                <strong>
+                  {numero(
+                    extravioIntegrado
+                  )}{' '}
+                  material(is) extraviado(s)
+                </strong>
+                <small>
+                  {extravioIntegrado > 0
+                    ? 'Exigem acompanhamento patrimonial'
+                    : 'Nenhum extravio ativo'}
+                </small>
+              </span>
+            </div>
+
             <div>
               <DashboardIcon tone="yellow">
                 ◷
@@ -3448,7 +3976,25 @@ function PainelDashboard({
               </span>
             </div>
 
-            <div>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={abrirMovimentacoesHoje}
+              onKeyDown={(event) => {
+                if (
+                  event.key === 'Enter' ||
+                  event.key === ' '
+                ) {
+                  event.preventDefault()
+                  abrirMovimentacoesHoje()
+                }
+              }}
+              style={{
+                cursor: 'pointer',
+                borderRadius: '10px'
+              }}
+              title="Ver movimentações registradas hoje"
+            >
               <DashboardIcon tone="blue">
                 ↔
               </DashboardIcon>
@@ -3461,8 +4007,7 @@ function PainelDashboard({
                   movimentações hoje
                 </strong>
                 <small>
-                  Atividade patrimonial
-                  registrada
+                  Clique para ver quem movimentou e quem recebeu
                 </small>
               </span>
             </div>
@@ -3612,6 +4157,341 @@ function PainelDashboard({
           </div>
         </article>
       </section>
+
+      {modalMovimentacoesHojeAberto && (
+        <div
+          className="sigmo-command-service-modal-backdrop"
+          onClick={() =>
+            setModalMovimentacoesHojeAberto(false)
+          }
+        >
+          <section
+            className="sigmo-command-service-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            style={{
+              width:
+                'min(940px, calc(100vw - 32px))'
+            }}
+          >
+            <header>
+              <div>
+                <span>MOVIMENTAÇÕES DE HOJE</span>
+                <h2>
+                  Histórico operacional do dia
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setModalMovimentacoesHojeAberto(false)
+                }
+              >
+                Fechar
+              </button>
+            </header>
+
+            <div
+              className="sigmo-command-service-modal-body"
+              style={{
+                maxHeight: '72vh',
+                overflowY: 'auto',
+                display: 'grid',
+                gap: '12px'
+              }}
+            >
+              {carregandoMovimentacoesHoje ? (
+                <p>Carregando movimentações...</p>
+              ) : erroMovimentacoesHoje ? (
+                <p>{erroMovimentacoesHoje}</p>
+              ) : movimentacoesHojeDetalhes.length === 0 ? (
+                <p>
+                  Nenhuma movimentação operacional registrada hoje.
+                </p>
+              ) : (
+                movimentacoesHojeDetalhes.map(
+                  (item, index) => {
+                    const tipo =
+                      normalizarMovimentacao(
+                        item?.tipo_movimentacao
+                      )
+
+                    const rotulos =
+                      rotulosPessoasMovimentacao(
+                        item
+                      )
+
+                    const materiais = [
+                      {
+                        nome:
+                          item?.material ||
+                          'MATERIAL NÃO IDENTIFICADO',
+                        quantidade:
+                          Number(
+                            item?.quantidade ||
+                            1
+                          ) || 1
+                      }
+                    ]
+
+                    return (
+                      <article
+                        key={
+                          item?.id ||
+                          `mov-hoje-${index}`
+                        }
+                        style={{
+                          display: 'grid',
+                          gap: '13px',
+                          padding: '16px',
+                          border:
+                            '1px solid rgba(148,163,184,.20)',
+                          borderRadius: '14px',
+                          background:
+                            'rgba(8,31,59,.34)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent:
+                              'space-between',
+                            gap: '12px',
+                            flexWrap: 'wrap'
+                          }}
+                        >
+                          <div>
+                            <strong
+                              style={{
+                                display: 'block',
+                                fontSize: '16px'
+                              }}
+                            >
+                              {tipoMovimentacao(
+                                tipo
+                              )}
+                            </strong>
+
+                            <span
+                              style={{
+                                opacity: .76
+                              }}
+                            >
+                              {dataHora(
+                                item?.created_at
+                              )}
+                            </span>
+                          </div>
+
+                          <em
+                            className={`sigmo-command-badge sigmo-command-badge-${classeTipo(
+                              tipo
+                            )}`}
+                          >
+                            {String(
+                              item?.status ||
+                              'REGISTRADA'
+                            )
+                              .replaceAll(
+                                '_',
+                                ' '
+                              )
+                              .toUpperCase()}
+                          </em>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              'minmax(0, 1fr) auto',
+                            gap: '10px 18px',
+                            alignItems: 'center',
+                            padding:
+                              '11px 12px',
+                            borderRadius: '10px',
+                            background:
+                              'rgba(255,255,255,.045)'
+                          }}
+                        >
+                          <div>
+                            <small
+                              style={{
+                                display: 'block',
+                                opacity: .65,
+                                marginBottom: '4px'
+                              }}
+                            >
+                              Material
+                            </small>
+
+                            {materiais.length > 0 ? (
+                              materiais.map(
+                                (
+                                  material,
+                                  materialIndex
+                                ) => (
+                                  <strong
+                                    key={
+                                      `${material.nome}-${materialIndex}`
+                                    }
+                                    style={{
+                                      display: 'block'
+                                    }}
+                                  >
+                                    {material.nome}
+                                  </strong>
+                                )
+                              )
+                            ) : (
+                              <strong>
+                                MATERIAL NÃO IDENTIFICADO
+                              </strong>
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              textAlign: 'right'
+                            }}
+                          >
+                            <small
+                              style={{
+                                display: 'block',
+                                opacity: .65,
+                                marginBottom: '4px'
+                              }}
+                            >
+                              Quantidade
+                            </small>
+
+                            {materiais.length > 0 ? (
+                              materiais.map(
+                                (
+                                  material,
+                                  materialIndex
+                                ) => (
+                                  <strong
+                                    key={
+                                      `qtd-${material.nome}-${materialIndex}`
+                                    }
+                                    style={{
+                                      display: 'block'
+                                    }}
+                                  >
+                                    {material.quantidade}{' '}
+                                    un.
+                                  </strong>
+                                )
+                              )
+                            ) : (
+                              <strong>—</strong>
+                            )}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              'repeat(2, minmax(0, 1fr))',
+                            gap: '10px'
+                          }}
+                        >
+                          <div>
+                            <small
+                              style={{
+                                display: 'block',
+                                opacity: .65
+                              }}
+                            >
+                              {tipo === 'CAUTELA'
+                                ? 'Quem pagou'
+                                : rotulos.origem}
+                            </small>
+                            <strong
+                              style={{
+                                display: 'block',
+                                marginTop: '4px'
+                              }}
+                            >
+                              {item?.quem_pagou_movimentou ||
+                                'NÃO IDENTIFICADO'}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <small
+                              style={{
+                                display: 'block',
+                                opacity: .65
+                              }}
+                            >
+                              Quem recebeu
+                            </small>
+                            <strong
+                              style={{
+                                display: 'block',
+                                marginTop: '4px'
+                              }}
+                            >
+                              {item?.quem_recebeu ||
+                                'NÃO IDENTIFICADO'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              'repeat(2, minmax(0, 1fr))',
+                            gap: '10px',
+                            paddingTop: '4px'
+                          }}
+                        >
+                          <div>
+                            <small
+                              style={{
+                                display: 'block',
+                                opacity: .65
+                              }}
+                            >
+                              Origem
+                            </small>
+                            <span>
+                              {item?.origem_local ||
+                                'NÃO INFORMADA'}
+                            </span>
+                          </div>
+
+                          <div>
+                            <small
+                              style={{
+                                display: 'block',
+                                opacity: .65
+                              }}
+                            >
+                              Destino
+                            </small>
+                            <span>
+                              {item?.destino_local ||
+                                'NÃO INFORMADO'}
+                            </span>
+                          </div>
+                        </div>
+                      </article>
+                    )
+                  }
+                )
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {novidadeSelecionada && (
         <div

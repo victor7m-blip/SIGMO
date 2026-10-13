@@ -100,11 +100,15 @@ export default function ManutencaoDetalhes({
   onConcluir,
   onCancelar,
   onEncaminharP4,
+  onCancelarEnvioP4,
+  transferenciaPendenteP4 = null,
   onEnviarManutencaoExterna,
   user,
   salvando
 }) {
   const [observacoes, setObservacoes] = useState('')
+  const [documentoEncaminhamento, setDocumentoEncaminhamento] = useState('')
+  const [encaminhamentoAberto, setEncaminhamentoAberto] = useState(false)
   const [fotos, setFotos] = useState([])
   const [novidadeUsuario, setNovidadeUsuario] = useState(null)
   const [fotosUsuario, setFotosUsuario] = useState([])
@@ -112,6 +116,9 @@ export default function ManutencaoDetalhes({
   const [historicoExterno, setHistoricoExterno] = useState(null)
 
   useEffect(() => {
+    setDocumentoEncaminhamento('')
+    setEncaminhamentoAberto(false)
+
     async function carregarHistorico() {
       if (!manutencao?.id) {
         setFotos([])
@@ -184,11 +191,28 @@ if (!manutencao) return null
     ''
   ).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase()
 
+  const moduloEhTonfas =
+    moduloNormalizado === 'TONFAS'
+
   const podeEncaminharP4 =
     manutencaoInternaAtiva &&
-    manutencao.modulo === 'HT' &&
+    (
+      manutencao.modulo === 'HT' ||
+      moduloEhTonfas
+    ) &&
     (perfilUsuario.includes('SVDD') || perfilUsuario.includes('SERVICO DE DIA')) &&
     (origemInstitucional.includes('SVDD') || origemInstitucional.includes('SERVICO DE DIA'))
+
+  const envioP4Pendente =
+    Boolean(transferenciaPendenteP4?.id)
+
+  const podeAbrirEncaminhamentoP4 =
+    podeEncaminharP4 &&
+    !envioP4Pendente
+
+  const podeCancelarEnvioP4 =
+    envioP4Pendente &&
+    typeof onCancelarEnvioP4 === 'function'
 
   const podeEnviarManutencaoExterna =
     manutencaoInternaAtiva &&
@@ -670,6 +694,62 @@ if (!manutencao) return null
             </section>
           )}
 
+          {envioP4Pendente && (
+            <section
+              className="manutencao-detalhe-texto"
+              style={{
+                border: '1px solid #93c5fd',
+                borderRadius: '12px',
+                padding: '14px',
+                background: '#eff6ff',
+                marginBottom: '16px'
+              }}
+            >
+              <h3>Encaminhado ao P4</h3>
+
+              <p style={{ marginTop: '8px' }}>
+                <strong>Aguardando recebimento pelo P4</strong>
+              </p>
+
+              <p style={{ marginTop: '8px', fontSize: '13px' }}>
+                <strong>Enviado por:</strong>{' '}
+                {transferenciaPendenteP4?.enviado_por_nome ||
+                  transferenciaPendenteP4?.criado_por_nome ||
+                  'Não informado'}
+                {' · '}
+                {dataHora(
+                  transferenciaPendenteP4?.enviado_em ||
+                  transferenciaPendenteP4?.created_at
+                )}
+              </p>
+
+              {transferenciaPendenteP4?.protocolo && (
+                <p style={{ marginTop: '6px' }}>
+                  <strong>Protocolo:</strong>{' '}
+                  {transferenciaPendenteP4.protocolo}
+                </p>
+              )}
+
+              {(transferenciaPendenteP4?.metadata?.documento ||
+                transferenciaPendenteP4?.documento) && (
+                <p style={{ marginTop: '6px' }}>
+                  <strong>Documento / referência:</strong>{' '}
+                  {transferenciaPendenteP4?.metadata?.documento ||
+                    transferenciaPendenteP4?.documento}
+                </p>
+              )}
+
+              {(transferenciaPendenteP4?.metadata?.observacao_encaminhamento ||
+                transferenciaPendenteP4?.observacoes) && (
+                <p style={{ marginTop: '6px' }}>
+                  <strong>Observações:</strong>{' '}
+                  {transferenciaPendenteP4?.metadata?.observacao_encaminhamento ||
+                    transferenciaPendenteP4?.observacoes}
+                </p>
+              )}
+            </section>
+          )}
+
           <section className="manutencao-detalhe-grade">
             <div><span>Módulo</span><strong>{manutencao.modulo || 'OUTROS'}</strong></div>
             <div>
@@ -722,7 +802,96 @@ if (!manutencao) return null
             </section>
           )}
 
-          {(manutencaoInternaAtiva || podeRegistrarRetornoExterno) && (
+          {encaminhamentoAberto && !envioP4Pendente && (
+            <section
+              className="manutencao-detalhe-texto"
+              style={{
+                border: '1px solid #bfdbfe',
+                borderRadius: '12px',
+                padding: '14px',
+                background: '#f8fbff',
+                marginBottom: '16px'
+              }}
+            >
+              <h3>Encaminhamento ao P4</h3>
+
+              <label
+                className="manutencao-observacoes-finais"
+                style={{ marginTop: '12px' }}
+              >
+                <span>Documento / referência</span>
+                <input
+                  type="text"
+                  value={documentoEncaminhamento}
+                  placeholder="Ex.: Ofício nº 123/2026, OS nº 45, protocolo etc."
+                  onChange={(event) =>
+                    setDocumentoEncaminhamento(
+                      event.target.value.toUpperCase()
+                    )
+                  }
+                />
+              </label>
+
+              <label
+                className="manutencao-observacoes-finais"
+                style={{ marginTop: '12px' }}
+              >
+                <span>Observações do encaminhamento</span>
+                <textarea
+                  rows="4"
+                  value={observacoes}
+                  placeholder="Informe motivo, providência adotada, condição do material e demais detalhes do encaminhamento."
+                  onChange={(event) =>
+                    setObservacoes(
+                      event.target.value.toUpperCase()
+                    )
+                  }
+                />
+              </label>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  justifyContent: 'flex-end',
+                  marginTop: '14px',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <button
+                  type="button"
+                  className="manutencoes-btn-secundario"
+                  disabled={salvando}
+                  onClick={() =>
+                    setEncaminhamentoAberto(false)
+                  }
+                >
+                  Voltar
+                </button>
+
+                <button
+                  type="button"
+                  className="manutencoes-btn-primario"
+                  disabled={salvando}
+                  onClick={() =>
+                    onEncaminharP4?.(
+                      observacoes,
+                      {
+                        documento:
+                          documentoEncaminhamento
+                      }
+                    )
+                  }
+                >
+                  {salvando
+                    ? 'Encaminhando...'
+                    : 'Confirmar envio ao P4'}
+                </button>
+              </div>
+            </section>
+          )}
+
+          {(manutencaoInternaAtiva || podeRegistrarRetornoExterno) && !encaminhamentoAberto && (
             <label className="manutencao-observacoes-finais">
               <span>{coleteRefletivo ? 'Conclusão da manutenção' : 'Observações finais'}</span>
               <textarea
@@ -751,6 +920,21 @@ if (!manutencao) return null
               >
                 {salvando ? 'Registrando retorno...' : 'Registrar retorno da manutenção externa'}
               </button>
+            ) : envioP4Pendente ? (
+              <button
+                type="button"
+                className="manutencoes-btn-perigo"
+                disabled={salvando || !podeCancelarEnvioP4}
+                onClick={() =>
+                  onCancelarEnvioP4?.(
+                    transferenciaPendenteP4
+                  )
+                }
+              >
+                {salvando
+                  ? 'Cancelando envio...'
+                  : 'Cancelar envio ao P4'}
+              </button>
             ) : (
               <>
                 <button
@@ -762,14 +946,16 @@ if (!manutencao) return null
                   Cancelar manutenção
                 </button>
 
-                {podeEncaminharP4 && (
+                {podeAbrirEncaminhamentoP4 && (
                   <button
                     type="button"
                     className="manutencoes-btn-secundario"
                     disabled={salvando}
-                    onClick={() => onEncaminharP4?.(observacoes)}
+                    onClick={() =>
+                      setEncaminhamentoAberto(true)
+                    }
                   >
-                    {salvando ? 'Encaminhando...' : 'Encaminhar ao P4'}
+                    Encaminhar ao P4
                   </button>
                 )}
 

@@ -39,6 +39,7 @@ import {
 } from '../../services/viaturasRivService'
 
 import { supabase } from '../../services/supabaseClient'
+import { registerAudit } from '../../services/auditoriaService'
 
 import './CautelasUsuario.css'
 import './CautelasUsuarioNovidades.css'
@@ -50,6 +51,66 @@ function obterPolicialIdColeteRefletivo(user) {
     user?.id ||
     null
   )
+}
+
+
+async function registrarAuditoriaNovidadeRecebimento({
+  item,
+  novidade,
+  user,
+  movimentacaoId
+}) {
+  if (!novidade) {
+    return
+  }
+
+  const quantidade =
+    Math.max(
+      1,
+      Number(
+        novidade?.quantidade_afetada ||
+        1
+      ) || 1
+    )
+
+  const tipoMaterial =
+    String(
+      item?.tipo_patrimonio ||
+      item?.tipo ||
+      item?.categoria ||
+      item?.modulo ||
+      'MATERIAL'
+    )
+      .trim()
+      .toUpperCase()
+
+  const identificacao =
+    obterIdentificacao(item)
+
+  try {
+    await registerAudit({
+      action:
+        'NOVIDADE_PATRIMONIAL',
+      description:
+        `${user?.nome_guerra || user?.nome || user?.nome_completo || 'Usuário'} ` +
+        `registrou novidade no recebimento de cautela: ` +
+        `${tipoMaterial}, quantidade afetada ${quantidade}. ` +
+        `Tipo: ${novidade?.tipo || 'NÃO INFORMADO'}. ` +
+        `Descrição: ${novidade?.descricao || 'NÃO INFORMADA'}. ` +
+        `Identificação: ${identificacao}. ` +
+        `Movimentação: ${movimentacaoId}.`,
+      user,
+      module:
+        'Patrimônio',
+      severity:
+        'Informativo'
+    })
+  } catch (auditError) {
+    console.error(
+      'Novidade registrada no recebimento, mas não foi possível registrar auditoria:',
+      auditError
+    )
+  }
 }
 
 
@@ -649,6 +710,156 @@ function itemEhQuantitativo(item) {
   )
 }
 
+
+function itemEhTonfaOuCassetete(item) {
+  const observacao = lerObservacao(item)
+
+  return (
+    ['tonfa', 'cassetete'].includes(
+      normalizar(item?.tipo_patrimonio)
+    ) ||
+    ['tonfa', 'cassetete'].includes(
+      normalizar(item?.tipo)
+    ) ||
+    normalizar(observacao?.tipo_registro) ===
+      'tonfa_quantidade'
+  )
+}
+
+
+function obterGrupoCondicaoQuantitativa(item) {
+  const observacao = lerObservacao(item)
+
+  return String(
+    item?.grupo_condicao ||
+    item?.condicao_quantitativa ||
+    observacao?.grupo_condicao ||
+    observacao?.condicao_quantitativa ||
+    ''
+  )
+    .trim()
+    .toUpperCase()
+}
+
+
+function expandirGruposTonfaCassetete(lista = []) {
+  const resultado = []
+
+  for (const item of lista || []) {
+    if (!itemEhTonfaOuCassetete(item)) {
+      resultado.push(item)
+      continue
+    }
+
+    const quantidadeTotal =
+      Math.max(
+        0,
+        Number(
+          item?.saldo ??
+          item?.quantidade ??
+          0
+        ) || 0
+      )
+
+    const quantidadeComNovidade =
+      Math.min(
+        quantidadeTotal,
+        Math.max(
+          0,
+          Number(
+            item?.quantidade_com_novidade ||
+            0
+          ) || 0
+        )
+      )
+
+    const quantidadeSemNovidade =
+      Math.max(
+        0,
+        Number(
+          item?.quantidade_sem_novidade ??
+          (
+            quantidadeTotal -
+            quantidadeComNovidade
+          )
+        ) || 0
+      )
+
+    const baseId =
+      item?.movimentacao_tonfa_id ||
+      item?.id ||
+      item?.patrimonio_id ||
+      item?.referencia_id ||
+      'TONFA'
+
+    if (quantidadeComNovidade > 0) {
+      resultado.push({
+        ...item,
+        id:
+          `${baseId}:COM_NOVIDADE`,
+        quantidade:
+          quantidadeComNovidade,
+        saldo:
+          quantidadeComNovidade,
+        grupo_condicao:
+          'COM_NOVIDADE',
+        condicao_quantitativa:
+          'COM_NOVIDADE'
+      })
+    }
+
+    if (quantidadeSemNovidade > 0) {
+      resultado.push({
+        ...item,
+        id:
+          `${baseId}:SEM_NOVIDADE`,
+        quantidade:
+          quantidadeSemNovidade,
+        saldo:
+          quantidadeSemNovidade,
+        grupo_condicao:
+          'SEM_NOVIDADE',
+        condicao_quantitativa:
+          'SEM_NOVIDADE',
+        novidade_patrimonial_id:
+          null,
+        novidade_recebimento:
+          null
+      })
+    }
+
+    if (
+      quantidadeComNovidade <= 0 &&
+      quantidadeSemNovidade <= 0 &&
+      quantidadeTotal > 0
+    ) {
+      resultado.push(item)
+    }
+  }
+
+  return resultado
+}
+
+
+function rotuloGrupoCondicaoQuantitativa(item) {
+  if (!itemEhTonfaOuCassetete(item)) {
+    return ''
+  }
+
+  const grupo =
+    obterGrupoCondicaoQuantitativa(item)
+
+  if (grupo === 'COM_NOVIDADE') {
+    return 'COM NOVIDADE'
+  }
+
+  if (grupo === 'SEM_NOVIDADE') {
+    return 'SEM NOVIDADE'
+  }
+
+  return ''
+}
+
 function quantidadeEnviada(item) {
   const quantidade = Number(item?.quantidade || 1)
 
@@ -691,13 +902,23 @@ function chaveItemEstavel(item) {
   }
 
   if (itemEhQuantitativo(item)) {
-    return String(
-      item?.movimentacao_tonfa_id ||
-      observacao?.movimentacao_tonfa_id ||
-      item?.id ||
-      item?.patrimonio_id ||
-      ''
-    )
+    const grupoCondicao =
+      itemEhTonfaOuCassetete(item)
+        ? obterGrupoCondicaoQuantitativa(item)
+        : ''
+
+    return [
+      String(
+        item?.movimentacao_tonfa_id ||
+        observacao?.movimentacao_tonfa_id ||
+        item?.id ||
+        item?.patrimonio_id ||
+        ''
+      ),
+      grupoCondicao
+    ]
+      .filter(Boolean)
+      .join(':')
   }
 
   return String(
@@ -1178,8 +1399,13 @@ export default function CautelasUsuario({
           montarColeteRefletivoParaDevolucao
         )
 
+      const materiaisAtivosSeparados =
+        expandirGruposTonfaCassetete(
+          ativos || []
+        )
+
       setMateriais([
-        ...(ativos || []),
+        ...materiaisAtivosSeparados,
         ...coletesRefletivosEmServico
       ])
       setDevolucoes(devolucoesPendentes || [])
@@ -1319,8 +1545,22 @@ export default function CautelasUsuario({
           null
 
         if (movimentacaoTonfaId) {
+          const grupoCondicao =
+            String(
+              observacao?.grupo_condicao ||
+              observacao?.condicao_quantitativa ||
+              ''
+            )
+              .trim()
+              .toUpperCase()
+
           chaves.add(
-            `Q:${String(movimentacaoTonfaId)}`
+            [
+              `Q:${String(movimentacaoTonfaId)}`,
+              grupoCondicao
+            ]
+              .filter(Boolean)
+              .join(':')
           )
           continue
         }
@@ -1355,7 +1595,15 @@ export default function CautelasUsuario({
         null
 
       if (movimentacaoTonfaId) {
-        return `Q:${String(movimentacaoTonfaId)}`
+        const grupoCondicao =
+          obterGrupoCondicaoQuantitativa(item)
+
+        return [
+          `Q:${String(movimentacaoTonfaId)}`,
+          grupoCondicao
+        ]
+          .filter(Boolean)
+          .join(':')
       }
     }
 
@@ -2348,6 +2596,39 @@ function alterarQuilometragemDevolucao(chave, valor) {
           user
         })
 
+      for (const itemRecebido of itensRecebimento) {
+        if (!itemRecebido?.novidade) {
+          continue
+        }
+
+        const itemOriginal =
+          (movimentacao?.itens || [])
+            .find(
+              (item) =>
+                String(
+                  item?.id ||
+                  item?.patrimonio_id ||
+                  ''
+                ) ===
+                String(
+                  itemRecebido?.itemId ||
+                  itemRecebido?.patrimonioId ||
+                  ''
+                )
+            ) ||
+          itemRecebido
+
+        await registrarAuditoriaNovidadeRecebimento({
+          item:
+            itemOriginal,
+          novidade:
+            itemRecebido.novidade,
+          user,
+          movimentacaoId:
+            movimentacao.id
+        })
+      }
+
       const resultadosViaturas = []
       const falhasViaturas = []
 
@@ -2959,6 +3240,24 @@ function alterarQuilometragemDevolucao(chave, valor) {
            * junto com o item até o service. Antes ela ficava apenas no
            * estado visual e era perdida ao clicar em "Enviar devolução".
            */
+          grupo_condicao:
+            itemEhTonfaOuCassetete(item)
+              ? obterGrupoCondicaoQuantitativa(item)
+              : item?.grupo_condicao,
+
+          condicao_quantitativa:
+            itemEhTonfaOuCassetete(item)
+              ? obterGrupoCondicaoQuantitativa(item)
+              : item?.condicao_quantitativa,
+
+          novidade_recebimento:
+            item?.novidade_recebimento ||
+            null,
+
+          novidade_patrimonial_id:
+            item?.novidade_patrimonial_id ||
+            null,
+
           novidade:
             novidadeParaEnvio(
               chave,
@@ -3245,6 +3544,30 @@ function alterarQuilometragemDevolucao(chave, valor) {
             <strong>{obterDescricao(item)}</strong>
             <span>{obterIdentificacao(item)}</span>
 
+            {rotuloGrupoCondicaoQuantitativa(item) && (
+              <small
+                style={{
+                  display: 'block',
+                  marginTop: '5px',
+                  fontWeight: 800,
+                  color:
+                    obterGrupoCondicaoQuantitativa(item) ===
+                    'COM_NOVIDADE'
+                      ? '#b54708'
+                      : '#027a48'
+                }}
+              >
+                {rotuloGrupoCondicaoQuantitativa(item)}
+                {obterGrupoCondicaoQuantitativa(item) ===
+                  'COM_NOVIDADE' &&
+                  item?.novidade_recebimento?.tipo
+                  ? ` • ${String(
+                      item.novidade_recebimento.tipo
+                    ).toUpperCase()}`
+                  : ''}
+              </small>
+            )}
+
             {bloqueado && (
               <small>
                 DEVOLUÇÃO JÁ ENCAMINHADA
@@ -3319,6 +3642,22 @@ function alterarQuilometragemDevolucao(chave, valor) {
             <span>
               {obterDescricao(item)}
 
+              {rotuloGrupoCondicaoQuantitativa(item) && (
+                <strong
+                  style={{
+                    marginLeft: '8px',
+                    fontSize: '.78rem',
+                    color:
+                      obterGrupoCondicaoQuantitativa(item) ===
+                      'COM_NOVIDADE'
+                        ? '#b54708'
+                        : '#027a48'
+                  }}
+                >
+                  • {rotuloGrupoCondicaoQuantitativa(item)}
+                </strong>
+              )}
+
               {itemEhViatura(item) && (
                 <label
                   style={{
@@ -3370,6 +3709,54 @@ function alterarQuilometragemDevolucao(chave, valor) {
                   ? `CAUTELA VENCIDA • ${formatarData(obterPrazoTurno(item))}`
                   : `TÉRMINO DO TURNO • ${formatarData(obterPrazoTurno(item))}`}
               </small>
+            )}
+
+            {itemEhTonfaOuCassetete(item) &&
+              obterGrupoCondicaoQuantitativa(item) ===
+                'COM_NOVIDADE' &&
+              item?.novidade_recebimento && (
+                <div
+                  style={{
+                    marginTop: '10px',
+                    padding: '10px 12px',
+                    border: '1px solid #fedf89',
+                    borderRadius: '10px',
+                    background: '#fffaeb'
+                  }}
+                >
+                  <small
+                    style={{
+                      display: 'block',
+                      fontWeight: 800,
+                      color: '#b54708'
+                    }}
+                  >
+                    NOVIDADE REGISTRADA PELO USUÁRIO
+                  </small>
+
+                  <strong
+                    style={{
+                      display: 'block',
+                      marginTop: '4px'
+                    }}
+                  >
+                    {String(
+                      item.novidade_recebimento?.tipo ||
+                      'NOVIDADE'
+                    ).toUpperCase()}
+                  </strong>
+
+                  {item.novidade_recebimento?.descricao && (
+                    <span
+                      style={{
+                        display: 'block',
+                        marginTop: '4px'
+                      }}
+                    >
+                      {item.novidade_recebimento.descricao}
+                    </span>
+                  )}
+                </div>
             )}
 
             {quantitativo && (
@@ -4681,21 +5068,26 @@ function alterarQuilometragemDevolucao(chave, valor) {
                                         <option value="AVARIA">
                                           AVARIA
                                         </option>
-                                        <option value="DEFEITO">
-                                          DEFEITO
-                                        </option>
-                                        <option value="MANUTENCAO_PREVENTIVA">
-                                          MANUTENÇÃO PREVENTIVA
-                                        </option>
-                                        <option value="LIMPEZA">
-                                          LIMPEZA NECESSÁRIA
-                                        </option>
-                                        <option value="EXTRAVIO_ACESSORIO">
-                                          EXTRAVIO DE ACESSÓRIO
-                                        </option>
-                                        <option value="OUTRO">
-                                          OUTRO
-                                        </option>
+
+                                        {!itemEhTonfaOuCassetete(item) && (
+                                          <>
+                                            <option value="DEFEITO">
+                                              DEFEITO
+                                            </option>
+                                            <option value="MANUTENCAO_PREVENTIVA">
+                                              MANUTENÇÃO PREVENTIVA
+                                            </option>
+                                            <option value="LIMPEZA">
+                                              LIMPEZA NECESSÁRIA
+                                            </option>
+                                            <option value="EXTRAVIO_ACESSORIO">
+                                              EXTRAVIO DE ACESSÓRIO
+                                            </option>
+                                            <option value="OUTRO">
+                                              OUTRO
+                                            </option>
+                                          </>
+                                        )}
                                       </select>
 
                                       {obterNovidadeRecebimento(chave)?.tipo && (

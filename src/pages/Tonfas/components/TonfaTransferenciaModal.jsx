@@ -63,37 +63,57 @@ const saldoSvdd =
 const devolucao =
   modo === 'SVDD_P4'
 
+const manutencaoSvddP4 =
+  modo === 'MANUTENCAO_SVDD_P4'
+
+const saldoManutencao =
+  numeroInteiro(
+    estoqueSelecionado?.quantidade_manutencao
+  )
+
 const saldoDisponivel =
-  devolucao
-    ? saldoSvdd
-    : saldoP4
+  manutencaoSvddP4
+    ? saldoManutencao
+    : devolucao
+      ? saldoSvdd
+      : saldoP4
 
 const origemNome =
-  devolucao
-    ? 'COFRE DO SVDD'
-    : 'GUARDA DO P4'
+  manutencaoSvddP4
+    ? 'MANUTENÇÃO / SVDD'
+    : devolucao
+      ? 'COFRE DO SVDD'
+      : 'GUARDA DO P4'
 
 const destinoNome =
-  devolucao
-    ? 'GUARDA DO P4'
-    : 'COFRE DO SVDD'
+  manutencaoSvddP4
+    ? 'P4'
+    : devolucao
+      ? 'GUARDA DO P4'
+      : 'COFRE DO SVDD'
 
 const origemCodigo =
-  devolucao
-    ? 'SVDD'
-    : 'P4'
+  manutencaoSvddP4
+    ? 'SVDD_MANUTENCAO'
+    : devolucao
+      ? 'SVDD'
+      : 'P4'
 
 const destinoCodigo =
-  devolucao
-    ? 'P4'
-    : 'SVDD'
+  manutencaoSvddP4
+    ? 'P4_MANUTENCAO'
+    : devolucao
+      ? 'P4'
+      : 'SVDD'
 
   useEffect(() => {
     if (!aberto) return
 
-    const campoSaldo = devolucao
-      ? 'quantidade_svdd'
-      : 'quantidade_p4'
+    const campoSaldo = manutencaoSvddP4
+      ? 'quantidade_manutencao'
+      : devolucao
+        ? 'quantidade_svdd'
+        : 'quantidade_p4'
 
     const primeiroComSaldo =
       estoquesAtivos.find(
@@ -104,11 +124,14 @@ const destinoCodigo =
 
     setForm({
       ...FORM_INICIAL,
-      tipo: normalizarTipo(primeiroComSaldo?.tipo) || 'TONFA'
+      tipo: normalizarTipo(primeiroComSaldo?.tipo) || 'TONFA',
+      motivo: manutencaoSvddP4
+        ? 'ENCAMINHAMENTO_P4_MANUTENCAO'
+        : FORM_INICIAL.motivo
     })
     setErro('')
     setSaving(false)
-  }, [aberto, devolucao, estoquesAtivos])
+  }, [aberto, devolucao, manutencaoSvddP4, estoquesAtivos])
 
   if (!aberto) return null
 
@@ -201,12 +224,18 @@ observacoes:
           <div>
             <span>Movimentação patrimonial</span>
             <h2 id="tonfa-transfer-title">
-              {devolucao ? 'Devolver patrimônio' : 'Transferir patrimônio'}
+              {manutencaoSvddP4
+                ? 'Enviar manutenção ao P4'
+                : devolucao
+                  ? 'Devolver patrimônio'
+                  : 'Transferir patrimônio'}
             </h2>
             <p>
-              {devolucao
-                ? 'Movimente materiais do Cofre do SVDD para a Guarda do P4.'
-                : 'Movimente materiais da Guarda do P4 para o Cofre do SVDD.'}
+              {manutencaoSvddP4
+                ? 'Encaminhe ao P4 materiais que já estão em manutenção, sem alterar o saldo em manutenção.'
+                : devolucao
+                  ? 'Movimente materiais do Cofre do SVDD para a Guarda do P4.'
+                  : 'Movimente materiais da Guarda do P4 para o Cofre do SVDD.'}
             </p>
           </div>
 
@@ -279,9 +308,17 @@ observacoes:
             <label>
               <span>Motivo *</span>
               <select name="motivo" value={form.motivo} onChange={handleChange} disabled={saving} required>
-                <option value="DISTRIBUICAO_OPERACIONAL">Distribuição operacional</option>
-                <option value="RECOMPOSICAO_ESTOQUE">Recomposição de estoque</option>
-                <option value="NECESSIDADE_SERVICO">Necessidade de serviço</option>
+                {manutencaoSvddP4 ? (
+                  <option value="ENCAMINHAMENTO_P4_MANUTENCAO">
+                    Encaminhamento ao P4 — material em manutenção
+                  </option>
+                ) : (
+                  <>
+                    <option value="DISTRIBUICAO_OPERACIONAL">Distribuição operacional</option>
+                    <option value="RECOMPOSICAO_ESTOQUE">Recomposição de estoque</option>
+                    <option value="NECESSIDADE_SERVICO">Necessidade de serviço</option>
+                  </>
+                )}
               </select>
             </label>
 
@@ -312,9 +349,11 @@ observacoes:
               disabled={saving || saldoDisponivel <= 0}
             >
               {
-  devolucao
-    ? 'Confirmar devolução'
-    : 'Confirmar transferência'
+  manutencaoSvddP4
+    ? 'Enviar manutenção ao P4'
+    : devolucao
+      ? 'Confirmar devolução'
+      : 'Confirmar transferência'
 }
             </button>
           </footer>

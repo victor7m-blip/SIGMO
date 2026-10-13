@@ -7,6 +7,10 @@ import {
 } from '../../services/manutencoesService'
 import { encaminharManutencaoAoP4 } from '../../services/manutencaoEncaminhamentoService'
 import {
+  cancelarTransferencia,
+  listarTransferenciasPendentes
+} from '../../services/patrimonioTransferenciaService'
+import {
   listarManutencoesExternas,
   retornarManutencaoExterna
 } from '../../services/manutencoesExternasService'
@@ -110,6 +114,7 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
   const [areaManutencao, setAreaManutencao] = useState('MATERIAIS')
   const [manutencoes, setManutencoes] = useState([])
   const [manutencoesExternas, setManutencoesExternas] = useState([])
+  const [transferenciasPendentesP4, setTransferenciasPendentesP4] = useState([])
   const [filtros, setFiltros] = useState(FILTROS_INICIAIS)
   const [selecionada, setSelecionada] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -123,7 +128,11 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
     setErro('')
 
     try {
-      const [resposta, respostaExternas] = await Promise.all([
+      const [
+        resposta,
+        respostaExternas,
+        respostaTransferenciasP4
+      ] = await Promise.all([
         listarManutencoes({
           modulo: filtros.modulo || null,
           status: filtros.status || null,
@@ -140,10 +149,29 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
             errorExterna
           )
           return []
+        }),
+        listarTransferenciasPendentes({
+          destinoCodigo: 'P4',
+          limite: 500
+        }).catch((errorTransferencia) => {
+          console.warn(
+            'Não foi possível carregar os encaminhamentos pendentes ao P4:',
+            errorTransferencia
+          )
+          return []
         })
       ])
 
       setManutencoes(resposta.data || [])
+      setTransferenciasPendentesP4(
+        (respostaTransferenciasP4 || []).filter(
+          (item) =>
+            normalizarTexto(
+              item?.metadata?.tipo_fluxo
+            ) === 'MANUTENCAO_SVDD_P4' &&
+            Boolean(item?.metadata?.manutencao_id)
+        )
+      )
       setManutencoesExternas(
         respostaExternas?.data ||
         respostaExternas?.itens ||
@@ -199,6 +227,24 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
 
     return mapa
   }, [manutencoesExternas])
+
+  const transferenciasPendentesP4PorManutencao = useMemo(() => {
+    const mapa = new Map()
+
+    for (const transferencia of transferenciasPendentesP4 || []) {
+      const manutencaoId =
+        transferencia?.metadata?.manutencao_id
+
+      if (!manutencaoId) continue
+
+      mapa.set(
+        String(manutencaoId),
+        transferencia
+      )
+    }
+
+    return mapa
+  }, [transferenciasPendentesP4])
 
   const listaFiltrada = useMemo(() => {
     const setorUsuario = obterSetorDoUsuario(user)
@@ -286,7 +332,7 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
     if (
       externaAtiva &&
       !window.confirm(
-        'Confirma o retorno deste HT da manutenção externa? O retorno será registrado no histórico e o HT voltará ao Cofre do P4.'
+        'Confirma o retorno deste material da manutenção externa? O retorno será registrado no histórico e o material voltará ao Cofre do P4.'
       )
     ) {
       return
@@ -313,7 +359,7 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
       setSelecionada(atualizada)
       setMensagem(
         externaAtiva
-          ? 'Retorno da manutenção externa registrado. HT devolvido ao Cofre do P4.'
+          ? 'Retorno da manutenção externa registrado. Material devolvido ao Cofre do P4.'
           : 'Manutenção concluída com sucesso.'
       )
       await carregar()
@@ -336,26 +382,75 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
     setSelecionada(null)
   }
 
-  async function encaminharAoP4(observacao) {
+  async function encaminharAoP4(
+    observacao,
+    contexto = {}
+  ) {
     if (!selecionada) return
-
-    if (!window.confirm('Confirma o encaminhamento deste HT em manutenção ao P4? A manutenção permanecerá aberta.')) return
 
     setSalvando(true)
     setErro('')
 
     try {
-      await encaminharManutencaoAoP4({
-        manutencao: selecionada,
-        user,
-        observacao
-      })
+      const resultado =
+        await encaminharManutencaoAoP4({
+          manutencao: selecionada,
+          user,
+          observacao,
+          documento:
+            contexto?.documento || ''
+        })
 
-      setMensagem('Encaminhamento ao P4 criado. O HT permanece em manutenção até o recebimento pelo P4.')
-      setSelecionada(null)
+      setMensagem(
+        `Encaminhamento ao P4 criado${
+          resultado?.protocolo
+            ? ` (${resultado.protocolo})`
+            : ''
+        }. O material permanece em manutenção no SVDD até o recebimento pelo P4.`
+      )
+
       await carregar()
     } catch (error) {
-      setErro(error?.message || 'Não foi possível encaminhar a manutenção ao P4.')
+      setErro(
+        error?.message ||
+        'Não foi possível encaminhar a manutenção ao P4.'
+      )
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function cancelarEnvioAoP4(transferencia) {
+    if (!transferencia?.id || salvando) return
+
+    const confirmou =
+      window.confirm(
+        'Confirma o cancelamento deste envio ao P4?\n\nA manutenção continuará ativa sob responsabilidade do SVDD.'
+      )
+
+    if (!confirmou) return
+
+    setSalvando(true)
+    setErro('')
+
+    try {
+      await cancelarTransferencia({
+        transferenciaId: transferencia.id,
+        motivoCancelamento:
+          'CANCELAMENTO DO ENCAMINHAMENTO DE MANUTENÇÃO AO P4 PELO SVDD.',
+        user
+      })
+
+      setMensagem(
+        'Envio ao P4 cancelado. A manutenção continua ativa sob responsabilidade do SVDD.'
+      )
+
+      await carregar()
+    } catch (error) {
+      setErro(
+        error?.message ||
+        'Não foi possível cancelar o envio ao P4.'
+      )
     } finally {
       setSalvando(false)
     }
@@ -481,6 +576,16 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
         onConcluir={finalizar}
         onCancelar={cancelar}
         onEncaminharP4={encaminharAoP4}
+        onCancelarEnvioP4={cancelarEnvioAoP4}
+        transferenciaPendenteP4={
+          selecionada?.id
+            ? (
+                transferenciasPendentesP4PorManutencao.get(
+                  String(selecionada.id)
+                ) || null
+              )
+            : null
+        }
         onEnviarManutencaoExterna={abrirManutencaoExterna}
         user={user}
         salvando={salvando}

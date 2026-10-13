@@ -3,6 +3,7 @@ import { loadSessionToken } from './authService'
 import { criarOuAtualizarPatrimonio } from './patrimoniosService'
 import { listarTorniquetes } from './torniquetesService'
 import { criarNotificacaoParaPerfil } from './notificacoesService'
+import { registerAudit } from './auditoriaService'
 
 const TABLE = 'sigmo_manutencoes'
 const BUCKET = 'manutencoes-fotos'
@@ -1606,6 +1607,24 @@ async function registrarNovidadePatrimonialManutencaoDireta({
     return null
   }
 
+  try {
+    await registerAudit({
+      action: 'NOVIDADE_PATRIMONIAL',
+      description:
+        `${tipoPatrimonio} teve novidade registrada: ${titulo}. ` +
+        `Patrimônio: ${patrimonioId}. ` +
+        `Descrição: ${descricaoOficial}.`,
+      user,
+      module: 'Patrimônio',
+      severity: 'Informativo'
+    })
+  } catch (auditError) {
+    console.error(
+      'Novidade patrimonial criada, mas não foi possível registrar auditoria:',
+      auditError
+    )
+  }
+
   const fotosValidas = (Array.isArray(fotos) ? fotos : [])
     .filter((item) => item?.foto_url)
 
@@ -1941,6 +1960,26 @@ export async function registrarManutencao({
 
     manutencaoCriada = data
 
+    try {
+      await registerAudit({
+        action: 'MANUTENCAO_ABERTA',
+        description:
+          `${tipoValido} entrou em manutenção. ` +
+          `Quantidade: ${quantidadeValida}. ` +
+          `Origem: ${maiusculo(origem) || 'NÃO INFORMADA'}. ` +
+          `Destino: ${maiusculo(destino) || 'MANUTENCAO'}. ` +
+          `Manutenção: ${data.id}.`,
+        user,
+        module: 'Manutenções',
+        severity: 'Informativo'
+      })
+    } catch (auditError) {
+      console.error(
+        'Manutenção criada, mas não foi possível registrar auditoria:',
+        auditError
+      )
+    }
+
     if (todasFotosEntrada.length > 0) {
       const existePrincipal = todasFotosEntrada.some(
         (item) => Boolean(item.principal)
@@ -2091,6 +2130,188 @@ export async function registrarManutencao({
     throw error
   }
 }
+
+export async function transferirManutencaoTonfaSvddParaP4({
+  referenciaId,
+  quantidade,
+  observacoes = null,
+  user = null
+}) {
+  const referenciaValida = texto(referenciaId)
+  const quantidadeValida = inteiroPositivo(quantidade)
+
+  if (!referenciaValida) {
+    throw new Error(
+      'A referência da Tonfa ou Cassetete não foi informada.'
+    )
+  }
+
+  if (quantidadeValida <= 0) {
+    throw new Error(
+      'A quantidade da manutenção deve ser maior que zero.'
+    )
+  }
+
+  /*
+   * Usa listarManutencoes() em vez de ler sigmo_manutencoes diretamente.
+   * Essa função já resolve a origem institucional pela cautela que estava
+   * vigente quando a manutenção foi aberta. Isso é importante para
+   * Tonfa/Cassetete vindos de devolução: o campo `origem` pode guardar o
+   * policial/fluxo de recebimento, mesmo quando a custódia institucional
+   * correta da manutenção é o SVDD.
+   */
+  const respostaManutencoes =
+    await listarManutencoes({
+      modulo: MODULOS_MANUTENCAO.TONFAS,
+      status: STATUS_MANUTENCAO.EM_MANUTENCAO,
+      referenciaId: referenciaValida,
+      pagina: 1,
+      limite: 200
+    })
+
+  const manutencoesAbertas =
+    respostaManutencoes?.data || []
+
+  const manutencoesDoSvdd =
+    manutencoesAbertas.filter((item) => {
+      const origemInstitucional =
+        maiusculo(
+          item?.origem_institucional ||
+          item?.origem_institucional_local ||
+          item?.origem ||
+          ''
+        )
+
+      const destino =
+        maiusculo(
+          item?.destino ||
+          item?.local_destino ||
+          ''
+        )
+
+      const pertenceAoSvdd =
+        origemInstitucional === 'SVDD' ||
+        origemInstitucional.includes('COFRE DO SVDD') ||
+        origemInstitucional.includes('SERVIÇO DE DIA') ||
+        origemInstitucional.includes('SERVICO DE DIA')
+
+      const jaEstaNoP4 =
+        destino === 'P4' ||
+        destino.includes('COFRE DO P4') ||
+        destino.includes('GUARDA DO P4') ||
+        destino.includes('P4_MANUTENCAO')
+
+      return pertenceAoSvdd && !jaEstaNoP4
+    })
+
+  const saldoDisponivel =
+    manutencoesDoSvdd.reduce(
+      (total, item) =>
+        total + inteiroPositivo(item?.quantidade),
+      0
+    )
+
+  if (quantidadeValida > saldoDisponivel) {
+    throw new Error(
+      `Existem apenas ${saldoDisponivel} unidade(s) em manutenção sob responsabilidade do SVDD.`
+    )
+  }
+
+  const agora = new Date().toISOString()
+  const alteracoes = []
+  let restante = quantidadeValida
+
+  try {
+    for (const manutencao of manutencoesDoSvdd) {
+      if (restante <= 0) break
+
+      const quantidadeManutencao =
+        inteiroPositivo(manutencao?.quantidade)
+
+      if (quantidadeManutencao <= 0) continue
+
+      if (restante < quantidadeManutencao) {
+        throw new Error(
+          'A transferência parcial de uma mesma manutenção ainda não é suportada. Selecione uma quantidade compatível com os registros de manutenção existentes.'
+        )
+      }
+
+      const observacoesFinais =
+        [
+          texto(manutencao?.observacoes),
+          'TRANSFERÊNCIA DE CUSTÓDIA DA MANUTENÇÃO: SVDD -> P4',
+          texto(observacoes)
+            ? `OBSERVAÇÕES DA TRANSFERÊNCIA: ${maiusculo(observacoes)}`
+            : null,
+          `TRANSFERIDO POR: ${maiusculo(obterUsuarioNome(user))}`,
+          `TRANSFERIDO EM: ${agora}`
+        ]
+          .filter(Boolean)
+          .join(' | ')
+
+      const { error: updateError } = await supabase
+        .from(TABLE)
+        .update({
+          destino: 'P4',
+          observacoes: observacoesFinais,
+          atualizado_em: agora
+        })
+        .eq('id', manutencao.id)
+        .eq('status', STATUS_MANUTENCAO.EM_MANUTENCAO)
+        .select()
+        .single()
+
+      if (updateError) {
+        throw updateError
+      }
+
+      alteracoes.push({
+        id: manutencao.id,
+        destino: manutencao.destino,
+        observacoes: manutencao.observacoes,
+        atualizado_em: manutencao.atualizado_em
+      })
+
+      restante -= quantidadeManutencao
+    }
+
+    if (restante > 0) {
+      throw new Error(
+        'Não foi possível transferir toda a quantidade de manutenção informada.'
+      )
+    }
+
+    return {
+      referencia_id: referenciaValida,
+      quantidade: quantidadeValida,
+      origem: 'SVDD',
+      destino: 'P4',
+      status: STATUS_MANUTENCAO.EM_MANUTENCAO,
+      manutencoes_transferidas: alteracoes.map((item) => item.id)
+    }
+  } catch (error) {
+    for (const item of [...alteracoes].reverse()) {
+      const { error: rollbackError } = await supabase
+        .from(TABLE)
+        .update({
+          destino: item.destino,
+          observacoes: item.observacoes,
+          atualizado_em: item.atualizado_em
+        })
+        .eq('id', item.id)
+
+      if (rollbackError) {
+        console.error(
+          'Erro ao desfazer transferência da manutenção de Tonfa/Cassetete:',
+          rollbackError
+        )
+      }
+    }
+
+    throw error
+  }
+}
+
 
 export async function listarManutencoes({
   modulo = null,
@@ -3026,7 +3247,13 @@ async function aplicarRetornoTonfa(manutencao, user) {
   }
 
   const origem = maiusculo(manutencao.origem)
-  const retornarAoP4 = origem === 'P4'
+  const destino = maiusculo(manutencao.destino)
+
+  const retornarAoP4 =
+    destino === 'P4' ||
+    destino.includes('COFRE DO P4') ||
+    destino.includes('GUARDA DO P4') ||
+    origem === 'P4'
 
   const quantidadeP4 =
     inteiroPositivo(tonfa.quantidade_p4) +
@@ -3877,6 +4104,34 @@ export async function concluirManutencao({
 
     await concluirNovidadePatrimonialDaManutencao(atual, user)
 
+    try {
+      await registerAudit({
+        action: 'MANUTENCAO_CONCLUIDA',
+        description:
+          `${atual.tipo_material || atual.modulo} teve a manutenção concluída. ` +
+          `Quantidade: ${atual.quantidade || 1}. ` +
+          `Manutenção: ${atual.id}.` +
+          (
+            texto(servicoExecutado)
+              ? ` Serviço executado: ${maiusculo(servicoExecutado)}.`
+              : ''
+          ) +
+          (
+            texto(observacoes)
+              ? ` Observações: ${maiusculo(observacoes)}.`
+              : ''
+          ),
+        user,
+        module: 'Manutenções',
+        severity: 'Informativo'
+      })
+    } catch (auditError) {
+      console.error(
+        'Manutenção concluída, mas não foi possível registrar auditoria:',
+        auditError
+      )
+    }
+
     return normalizarManutencao(data)
   } catch (error) {
     try {
@@ -3887,6 +4142,1868 @@ export async function concluirManutencao({
     throw error
   }
 }
+
+
+export async function regularizarManutencaoTonfaP4({
+  manutencaoId,
+  policialRe = null,
+  policialNome = null,
+  documento = null,
+  observacoes = null,
+  user = null
+}) {
+  if (!manutencaoId) {
+    throw new Error('Manutenção não informada.')
+  }
+
+  const perfil =
+    maiusculo(
+      user?.perfil ||
+      user?.role ||
+      user?.tipo_usuario ||
+      user?.usuario?.perfil ||
+      ''
+    )
+
+  if (
+    perfil !== 'ADMINISTRADOR' &&
+    !perfil.includes('P4')
+  ) {
+    throw new Error(
+      'Somente o P4 pode registrar a reposição patrimonial de Tonfa ou Cassetete em manutenção.'
+    )
+  }
+
+  const manutencao =
+    await buscarManutencao(
+      manutencaoId
+    )
+
+  if (
+    manutencao.status !==
+    STATUS_MANUTENCAO.EM_MANUTENCAO
+  ) {
+    throw new Error(
+      'Esta manutenção não está mais ativa.'
+    )
+  }
+
+  if (
+    manutencao.modulo !==
+    MODULOS_MANUTENCAO.TONFAS
+  ) {
+    throw new Error(
+      'Esta regularização é exclusiva para Tonfas e Cassetetes.'
+    )
+  }
+
+  const destino =
+    maiusculo(
+      manutencao?.destino ||
+      ''
+    )
+
+  const origem =
+    maiusculo(
+      manutencao?.origem ||
+      ''
+    )
+
+  const pertenceAoP4 =
+    destino === 'P4' ||
+    destino.includes('COFRE DO P4') ||
+    destino.includes('GUARDA DO P4') ||
+    destino.includes('P4_MANUTENCAO') ||
+    origem === 'P4' ||
+    origem.includes('COFRE DO P4') ||
+    origem.includes('GUARDA DO P4') ||
+    origem.includes('DEPOSITO DO P4')
+
+  if (!pertenceAoP4) {
+    throw new Error(
+      'A manutenção ainda não está sob responsabilidade do P4.'
+    )
+  }
+
+  const reResponsavel =
+    texto(
+      policialRe ||
+      manutencao?.policial_re
+    )
+
+  const nomeResponsavel =
+    texto(
+      policialNome ||
+      manutencao?.policial_nome
+    )
+
+  if (
+    !reResponsavel &&
+    !nomeResponsavel
+  ) {
+    throw new Error(
+      'Informe o policial responsável pela reposição.'
+    )
+  }
+
+  const quantidade =
+    inteiroPositivo(
+      manutencao?.quantidade,
+      1
+    )
+
+  const {
+    data: estoque,
+    error: estoqueError
+  } = await supabase
+    .from('sigmo_tonfas')
+    .select('*')
+    .eq(
+      'id',
+      manutencao.referencia_id
+    )
+    .single()
+
+  if (estoqueError) {
+    throw estoqueError
+  }
+
+  const emManutencao =
+    inteiroPositivo(
+      estoque?.quantidade_manutencao
+    )
+
+  if (
+    quantidade >
+    emManutencao
+  ) {
+    throw new Error(
+      `A manutenção possui ${quantidade} unidade(s), mas o estoque registra apenas ${emManutencao} em manutenção.`
+    )
+  }
+
+  const quantidadeP4Atual =
+    inteiroPositivo(
+      estoque?.quantidade_p4
+    )
+
+  const quantidadeP4 =
+    quantidadeP4Atual +
+    quantidade
+
+  const quantidadeSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_svdd
+    )
+
+  const quantidadeEmServico =
+    inteiroPositivo(
+      estoque?.quantidade_em_servico
+    )
+
+  const quantidadeManutencao =
+    emManutencao -
+    quantidade
+
+  const quantidadeExtraviadaSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_svdd
+    )
+
+  const quantidadeExtraviadaP4 =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_p4
+    )
+
+  const locais = []
+
+  if (quantidadeP4 > 0) {
+    locais.push(
+      `${quantidadeP4} no P4`
+    )
+  }
+
+  if (quantidadeSvdd > 0) {
+    locais.push(
+      `${quantidadeSvdd} no Cofre do SVDD`
+    )
+  }
+
+  if (quantidadeEmServico > 0) {
+    locais.push(
+      `${quantidadeEmServico} em serviço`
+    )
+  }
+
+  if (quantidadeManutencao > 0) {
+    locais.push(
+      `${quantidadeManutencao} em manutenção`
+    )
+  }
+
+  if (quantidadeExtraviadaSvdd > 0) {
+    locais.push(
+      `${quantidadeExtraviadaSvdd} extraviado(s) • SVDD`
+    )
+  }
+
+  if (quantidadeExtraviadaP4 > 0) {
+    locais.push(
+      `${quantidadeExtraviadaP4} extraviado(s) • P4`
+    )
+  }
+
+  const statusOperacional =
+    quantidadeEmServico > 0 ||
+    quantidadeSvdd > 0
+      ? 'CARGA'
+      : quantidadeP4 > 0
+        ? 'RESERVA'
+        : quantidadeManutencao > 0
+          ? 'MANUTENCAO'
+          : (
+              quantidadeExtraviadaSvdd > 0 ||
+              quantidadeExtraviadaP4 > 0
+            )
+            ? 'RECOLHIDO'
+            : 'RECOLHIDO'
+
+  const agora =
+    new Date().toISOString()
+
+  const usuarioId =
+    obterUsuarioId(user)
+
+  const usuarioNome =
+    obterUsuarioNome(user)
+
+  const payloadEstoqueAnterior = {
+    quantidade_p4:
+      estoque.quantidade_p4,
+    quantidade_manutencao:
+      estoque.quantidade_manutencao,
+    quantidade_disponivel:
+      estoque.quantidade_disponivel,
+    status_operacional:
+      estoque.status_operacional,
+    local_atual:
+      estoque.local_atual
+  }
+
+  const observacoesRegularizacao = [
+    texto(manutencao?.observacoes),
+    'REGULARIZAÇÃO PATRIMONIAL POR REPOSIÇÃO',
+    `QUANTIDADE REPOSTA: ${quantidade}`,
+    reResponsavel
+      ? `POLICIAL RESPONSÁVEL RE: ${maiusculo(reResponsavel)}`
+      : null,
+    nomeResponsavel
+      ? `POLICIAL RESPONSÁVEL: ${maiusculo(nomeResponsavel)}`
+      : null,
+    texto(documento)
+      ? `DOCUMENTO: ${maiusculo(documento)}`
+      : null,
+    texto(observacoes)
+      ? `OBSERVAÇÕES: ${maiusculo(observacoes)}`
+      : null,
+    `REGULARIZADO POR: ${maiusculo(usuarioNome)}`,
+    `REGULARIZADO EM: ${agora}`
+  ]
+    .filter(Boolean)
+    .join(' | ')
+
+  try {
+    const {
+      data: estoqueAtualizado,
+      error: updateEstoqueError
+    } = await supabase
+      .from('sigmo_tonfas')
+      .update({
+        quantidade_p4:
+          quantidadeP4,
+        quantidade_manutencao:
+          quantidadeManutencao,
+        quantidade_disponivel:
+          quantidadeP4,
+        status_operacional:
+          statusOperacional,
+        local_atual:
+          locais.join(' • ') ||
+          'SEM LOCAL OPERACIONAL',
+        atualizado_em:
+          agora
+      })
+      .eq('id', estoque.id)
+      .eq(
+        'quantidade_p4',
+        quantidadeP4Atual
+      )
+      .eq(
+        'quantidade_manutencao',
+        emManutencao
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (updateEstoqueError) {
+      throw updateEstoqueError
+    }
+
+    if (!estoqueAtualizado?.id) {
+      throw new Error(
+        'O saldo foi alterado por outra operação. Atualize a tela e tente novamente.'
+      )
+    }
+
+    const {
+      data: manutencaoAtualizada,
+      error: manutencaoError
+    } = await supabase
+      .from(TABLE)
+      .update({
+        status:
+          STATUS_MANUTENCAO.CONCLUIDA,
+        observacoes:
+          observacoesRegularizacao,
+        concluida_em:
+          agora,
+        concluida_por_id:
+          usuarioId,
+        concluida_por_nome:
+          usuarioNome,
+        atualizado_em:
+          agora
+      })
+      .eq(
+        'id',
+        manutencao.id
+      )
+      .eq(
+        'status',
+        STATUS_MANUTENCAO.EM_MANUTENCAO
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (manutencaoError) {
+      throw manutencaoError
+    }
+
+    if (!manutencaoAtualizada?.id) {
+      throw new Error(
+        'A manutenção foi alterada por outro usuário. Atualize a tela e tente novamente.'
+      )
+    }
+
+    try {
+      await registerAudit({
+        action:
+          'REPOSICAO_PATRIMONIAL_TONFA',
+        description:
+          `${maiusculo(manutencao?.tipo_material) || 'TONFA'} foi regularizado por reposição do responsável. ` +
+          `Quantidade: ${quantidade}. ` +
+          `Manutenção: ${manutencao.id}.` +
+          (
+            reResponsavel
+              ? ` RE: ${maiusculo(reResponsavel)}.`
+              : ''
+          ) +
+          (
+            nomeResponsavel
+              ? ` Responsável: ${maiusculo(nomeResponsavel)}.`
+              : ''
+          ) +
+          (
+            texto(documento)
+              ? ` Documento: ${maiusculo(documento)}.`
+              : ''
+          ),
+        user,
+        module:
+          'Tonfas e Cassetetes',
+        severity:
+          'Informativo'
+      })
+    } catch (auditError) {
+      console.error(
+        'Reposição concluída, mas não foi possível registrar auditoria:',
+        auditError
+      )
+    }
+
+    return {
+      manutencao:
+        normalizarManutencao(
+          manutencaoAtualizada
+        ),
+      estoque:
+        estoqueAtualizado,
+      quantidade,
+      policial_re:
+        reResponsavel || null,
+      policial_nome:
+        nomeResponsavel || null
+    }
+  } catch (error) {
+    const {
+      error: rollbackEstoqueError
+    } = await supabase
+      .from('sigmo_tonfas')
+      .update(
+        payloadEstoqueAnterior
+      )
+      .eq('id', estoque.id)
+
+    if (
+      rollbackEstoqueError
+    ) {
+      console.error(
+        'Erro ao desfazer saldo após falha na reposição:',
+        rollbackEstoqueError
+      )
+    }
+
+    throw error
+  }
+}
+
+
+export async function regularizarExtravioTonfaP4({
+  extravioId,
+  policialRe = null,
+  policialNome = null,
+  documento = null,
+  observacoes = null,
+  user = null
+}) {
+  if (!extravioId) {
+    throw new Error('Extravio não informado.')
+  }
+
+  const perfil =
+    maiusculo(
+      user?.perfil ||
+      user?.role ||
+      user?.tipo_usuario ||
+      user?.usuario?.perfil ||
+      ''
+    )
+
+  if (
+    perfil !== 'ADMINISTRADOR' &&
+    !perfil.includes('P4')
+  ) {
+    throw new Error(
+      'Somente o P4 pode registrar a reposição patrimonial de Tonfa ou Cassetete extraviado.'
+    )
+  }
+
+  const {
+    data: extravio,
+    error: extravioError
+  } = await supabase
+    .from('sigmo_tonfas_extravios')
+    .select('*')
+    .eq('id', extravioId)
+    .single()
+
+  if (extravioError) {
+    throw extravioError
+  }
+
+  if (!extravio?.ativo) {
+    throw new Error(
+      'Este extravio já está encerrado.'
+    )
+  }
+
+  if (
+    maiusculo(
+      extravio?.responsavel_setor
+    ) !== 'P4'
+  ) {
+    throw new Error(
+      'O extravio ainda não está sob responsabilidade do P4.'
+    )
+  }
+
+  const reResponsavel =
+    texto(
+      policialRe ||
+      extravio?.policial_re
+    )
+
+  const nomeResponsavel =
+    texto(
+      policialNome ||
+      extravio?.policial_nome
+    )
+
+  if (
+    !reResponsavel &&
+    !nomeResponsavel
+  ) {
+    throw new Error(
+      'Informe o policial responsável pela reposição.'
+    )
+  }
+
+  const quantidade =
+    inteiroPositivo(
+      extravio?.quantidade,
+      1
+    )
+
+  const {
+    data: estoque,
+    error: estoqueError
+  } = await supabase
+    .from('sigmo_tonfas')
+    .select('*')
+    .eq(
+      'id',
+      extravio.tonfa_id
+    )
+    .single()
+
+  if (estoqueError) {
+    throw estoqueError
+  }
+
+  const extraviadaP4 =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_p4
+    )
+
+  if (
+    quantidade >
+    extraviadaP4
+  ) {
+    throw new Error(
+      `O extravio possui ${quantidade} unidade(s), mas o estoque registra apenas ${extraviadaP4} sob responsabilidade do P4.`
+    )
+  }
+
+  const quantidadeP4Atual =
+    inteiroPositivo(
+      estoque?.quantidade_p4
+    )
+
+  const quantidadeP4 =
+    quantidadeP4Atual +
+    quantidade
+
+  const novaExtraviadaP4 =
+    extraviadaP4 -
+    quantidade
+
+  const quantidadeSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_svdd
+    )
+
+  const quantidadeEmServico =
+    inteiroPositivo(
+      estoque?.quantidade_em_servico
+    )
+
+  const quantidadeManutencao =
+    inteiroPositivo(
+      estoque?.quantidade_manutencao
+    )
+
+  const quantidadeExtraviadaSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_svdd
+    )
+
+  const locais = []
+
+  if (quantidadeP4 > 0) {
+    locais.push(
+      `${quantidadeP4} no P4`
+    )
+  }
+
+  if (quantidadeSvdd > 0) {
+    locais.push(
+      `${quantidadeSvdd} no Cofre do SVDD`
+    )
+  }
+
+  if (quantidadeEmServico > 0) {
+    locais.push(
+      `${quantidadeEmServico} em serviço`
+    )
+  }
+
+  if (quantidadeManutencao > 0) {
+    locais.push(
+      `${quantidadeManutencao} em manutenção`
+    )
+  }
+
+  if (
+    quantidadeExtraviadaSvdd > 0
+  ) {
+    locais.push(
+      `${quantidadeExtraviadaSvdd} extraviado(s) • SVDD`
+    )
+  }
+
+  if (novaExtraviadaP4 > 0) {
+    locais.push(
+      `${novaExtraviadaP4} extraviado(s) • P4`
+    )
+  }
+
+  const statusOperacional =
+    quantidadeEmServico > 0 ||
+    quantidadeSvdd > 0
+      ? 'CARGA'
+      : quantidadeP4 > 0
+        ? 'RESERVA'
+        : quantidadeManutencao > 0
+          ? 'MANUTENCAO'
+          : (
+              quantidadeExtraviadaSvdd > 0 ||
+              novaExtraviadaP4 > 0
+            )
+            ? 'RECOLHIDO'
+            : 'RECOLHIDO'
+
+  const agora =
+    new Date().toISOString()
+
+  const usuarioId =
+    obterUsuarioId(user)
+
+  const usuarioNome =
+    obterUsuarioNome(user)
+
+  const payloadEstoqueAnterior = {
+    quantidade_p4:
+      estoque.quantidade_p4,
+    quantidade_extraviada_p4:
+      estoque.quantidade_extraviada_p4,
+    quantidade_disponivel:
+      estoque.quantidade_disponivel,
+    status_operacional:
+      estoque.status_operacional,
+    local_atual:
+      estoque.local_atual
+  }
+
+  const payloadExtravioAnterior = {
+    status:
+      extravio.status,
+    ativo:
+      extravio.ativo,
+    regularizado_em:
+      extravio.regularizado_em,
+    regularizado_por_id:
+      extravio.regularizado_por_id,
+    regularizado_por_nome:
+      extravio.regularizado_por_nome,
+    regularizacao_tipo:
+      extravio.regularizacao_tipo,
+    regularizacao_documento:
+      extravio.regularizacao_documento,
+    regularizacao_observacoes:
+      extravio.regularizacao_observacoes,
+    atualizado_em:
+      extravio.atualizado_em
+  }
+
+  try {
+    const {
+      data: estoqueAtualizado,
+      error: updateEstoqueError
+    } = await supabase
+      .from('sigmo_tonfas')
+      .update({
+        quantidade_p4:
+          quantidadeP4,
+        quantidade_extraviada_p4:
+          novaExtraviadaP4,
+        quantidade_disponivel:
+          quantidadeP4,
+        status_operacional:
+          statusOperacional,
+        local_atual:
+          locais.join(' • ') ||
+          'SEM LOCAL OPERACIONAL',
+        atualizado_em:
+          agora
+      })
+      .eq('id', estoque.id)
+      .eq(
+        'quantidade_p4',
+        quantidadeP4Atual
+      )
+      .eq(
+        'quantidade_extraviada_p4',
+        extraviadaP4
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (updateEstoqueError) {
+      throw updateEstoqueError
+    }
+
+    if (!estoqueAtualizado?.id) {
+      throw new Error(
+        'O saldo do extravio foi alterado por outra operação. Atualize a tela e tente novamente.'
+      )
+    }
+
+    const {
+      data: extravioAtualizado,
+      error: extravioUpdateError
+    } = await supabase
+      .from('sigmo_tonfas_extravios')
+      .update({
+        status:
+          'REGULARIZADO_REPOSICAO',
+        ativo:
+          false,
+        regularizado_em:
+          agora,
+        regularizado_por_id:
+          usuarioId,
+        regularizado_por_nome:
+          usuarioNome,
+        regularizacao_tipo:
+          'REPOSICAO',
+        regularizacao_documento:
+          texto(documento)
+            ? maiusculo(documento)
+            : null,
+        regularizacao_observacoes:
+          [
+            'REGULARIZAÇÃO PATRIMONIAL POR REPOSIÇÃO',
+            `QUANTIDADE REPOSTA: ${quantidade}`,
+            reResponsavel
+              ? `POLICIAL RESPONSÁVEL RE: ${maiusculo(reResponsavel)}`
+              : null,
+            nomeResponsavel
+              ? `POLICIAL RESPONSÁVEL: ${maiusculo(nomeResponsavel)}`
+              : null,
+            texto(observacoes)
+              ? `OBSERVAÇÕES: ${maiusculo(observacoes)}`
+              : null,
+            `REGULARIZADO POR: ${maiusculo(usuarioNome)}`
+          ]
+            .filter(Boolean)
+            .join(' | '),
+        atualizado_em:
+          agora
+      })
+      .eq('id', extravio.id)
+      .eq('ativo', true)
+      .eq(
+        'responsavel_setor',
+        'P4'
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (extravioUpdateError) {
+      throw extravioUpdateError
+    }
+
+    if (!extravioAtualizado?.id) {
+      throw new Error(
+        'O extravio foi alterado por outro usuário. Atualize a tela e tente novamente.'
+      )
+    }
+
+    try {
+      await registerAudit({
+        action:
+          'REPOSICAO_PATRIMONIAL_EXTRAVIO_TONFA',
+        description:
+          `${maiusculo(extravio?.tipo_material) || 'TONFA'} extraviado foi regularizado por reposição do responsável. ` +
+          `Quantidade: ${quantidade}. ` +
+          `Extravio: ${extravio.id}.` +
+          (
+            reResponsavel
+              ? ` RE: ${maiusculo(reResponsavel)}.`
+              : ''
+          ) +
+          (
+            nomeResponsavel
+              ? ` Responsável: ${maiusculo(nomeResponsavel)}.`
+              : ''
+          ) +
+          (
+            texto(documento)
+              ? ` Documento: ${maiusculo(documento)}.`
+              : ''
+          ),
+        user,
+        module:
+          'Tonfas e Cassetetes',
+        severity:
+          'Informativo'
+      })
+    } catch (auditError) {
+      console.error(
+        'Reposição do extravio concluída, mas não foi possível registrar auditoria:',
+        auditError
+      )
+    }
+
+    return {
+      extravio:
+        extravioAtualizado,
+      estoque:
+        estoqueAtualizado,
+      quantidade,
+      policial_re:
+        reResponsavel || null,
+      policial_nome:
+        nomeResponsavel || null
+    }
+  } catch (error) {
+    const {
+      error: rollbackExtravioError
+    } = await supabase
+      .from(
+        'sigmo_tonfas_extravios'
+      )
+      .update(
+        payloadExtravioAnterior
+      )
+      .eq('id', extravio.id)
+
+    if (
+      rollbackExtravioError
+    ) {
+      console.error(
+        'Erro ao desfazer atualização do extravio após falha na reposição:',
+        rollbackExtravioError
+      )
+    }
+
+    const {
+      error: rollbackEstoqueError
+    } = await supabase
+      .from('sigmo_tonfas')
+      .update(
+        payloadEstoqueAnterior
+      )
+      .eq('id', estoque.id)
+
+    if (
+      rollbackEstoqueError
+    ) {
+      console.error(
+        'Erro ao desfazer saldo após falha na reposição do extravio:',
+        rollbackEstoqueError
+      )
+    }
+
+    throw error
+  }
+}
+
+
+export async function baixarManutencaoTonfaP4({
+  manutencaoId,
+  motivo,
+  documento = null,
+  observacoes = null,
+  user = null
+}) {
+  if (!manutencaoId) {
+    throw new Error('Manutenção não informada.')
+  }
+
+  const perfil =
+    maiusculo(
+      user?.perfil ||
+      user?.role ||
+      user?.tipo_usuario ||
+      user?.usuario?.perfil ||
+      ''
+    )
+
+  if (
+    perfil !== 'ADMINISTRADOR' &&
+    !perfil.includes('P4')
+  ) {
+    throw new Error(
+      'Somente o P4 pode realizar a baixa definitiva de Tonfa ou Cassetete em manutenção.'
+    )
+  }
+
+  if (!texto(motivo)) {
+    throw new Error(
+      'Informe o motivo da baixa patrimonial.'
+    )
+  }
+
+  const manutencao =
+    await buscarManutencao(
+      manutencaoId
+    )
+
+  if (
+    manutencao.status !==
+    STATUS_MANUTENCAO.EM_MANUTENCAO
+  ) {
+    throw new Error(
+      'Esta manutenção não está mais ativa.'
+    )
+  }
+
+  if (
+    manutencao.modulo !==
+    MODULOS_MANUTENCAO.TONFAS
+  ) {
+    throw new Error(
+      'Esta operação de baixa é exclusiva para Tonfas e Cassetetes.'
+    )
+  }
+
+  const destino =
+    maiusculo(
+      manutencao?.destino ||
+      ''
+    )
+
+  const origem =
+    maiusculo(
+      manutencao?.origem ||
+      ''
+    )
+
+  const pertenceAoP4 =
+    destino === 'P4' ||
+    destino.includes('COFRE DO P4') ||
+    destino.includes('GUARDA DO P4') ||
+    destino.includes('P4_MANUTENCAO') ||
+    origem === 'P4' ||
+    origem.includes('COFRE DO P4') ||
+    origem.includes('GUARDA DO P4') ||
+    origem.includes('DEPOSITO DO P4')
+
+  if (!pertenceAoP4) {
+    throw new Error(
+      'A manutenção ainda não está sob responsabilidade do P4.'
+    )
+  }
+
+  const quantidade =
+    inteiroPositivo(
+      manutencao?.quantidade,
+      1
+    )
+
+  const {
+    data: estoque,
+    error: estoqueError
+  } = await supabase
+    .from('sigmo_tonfas')
+    .select('*')
+    .eq(
+      'id',
+      manutencao.referencia_id
+    )
+    .single()
+
+  if (estoqueError) {
+    throw estoqueError
+  }
+
+  const emManutencao =
+    inteiroPositivo(
+      estoque?.quantidade_manutencao
+    )
+
+  if (
+    quantidade >
+    emManutencao
+  ) {
+    throw new Error(
+      `A manutenção possui ${quantidade} unidade(s), mas o estoque registra apenas ${emManutencao} em manutenção.`
+    )
+  }
+
+  const quantidadeP4 =
+    inteiroPositivo(
+      estoque?.quantidade_p4
+    )
+
+  const quantidadeSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_svdd
+    )
+
+  const quantidadeEmServico =
+    inteiroPositivo(
+      estoque?.quantidade_em_servico
+    )
+
+  const quantidadeExtraviadaSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_svdd
+    )
+
+  const quantidadeExtraviadaP4 =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_p4
+    )
+
+  const novaQuantidadeManutencao =
+    emManutencao -
+    quantidade
+
+  const locais = []
+
+  if (quantidadeP4 > 0) {
+    locais.push(
+      `${quantidadeP4} no P4`
+    )
+  }
+
+  if (quantidadeSvdd > 0) {
+    locais.push(
+      `${quantidadeSvdd} no Cofre do SVDD`
+    )
+  }
+
+  if (quantidadeEmServico > 0) {
+    locais.push(
+      `${quantidadeEmServico} em serviço`
+    )
+  }
+
+  if (
+    novaQuantidadeManutencao > 0
+  ) {
+    locais.push(
+      `${novaQuantidadeManutencao} em manutenção`
+    )
+  }
+
+  if (
+    quantidadeExtraviadaSvdd > 0
+  ) {
+    locais.push(
+      `${quantidadeExtraviadaSvdd} extraviado(s) • SVDD`
+    )
+  }
+
+  if (
+    quantidadeExtraviadaP4 > 0
+  ) {
+    locais.push(
+      `${quantidadeExtraviadaP4} extraviado(s) • P4`
+    )
+  }
+
+  const statusOperacional =
+    quantidadeEmServico > 0 ||
+    quantidadeSvdd > 0
+      ? 'CARGA'
+      : quantidadeP4 > 0
+        ? 'RESERVA'
+        : novaQuantidadeManutencao > 0
+          ? 'MANUTENCAO'
+          : (
+              quantidadeExtraviadaSvdd > 0 ||
+              quantidadeExtraviadaP4 > 0
+            )
+            ? 'RECOLHIDO'
+            : 'RECOLHIDO'
+
+  const agora =
+    new Date().toISOString()
+
+  const usuarioId =
+    obterUsuarioId(user)
+
+  const usuarioNome =
+    obterUsuarioNome(user)
+
+  const payloadEstoqueAnterior = {
+    quantidade_manutencao:
+      estoque.quantidade_manutencao,
+    quantidade_disponivel:
+      estoque.quantidade_disponivel,
+    status_operacional:
+      estoque.status_operacional,
+    local_atual:
+      estoque.local_atual
+  }
+
+  const observacoesBaixa = [
+    'BAIXA PATRIMONIAL DEFINITIVA',
+    `MANUTENÇÃO: ${manutencao.id}`,
+    `QUANTIDADE: ${quantidade}`,
+    `MOTIVO: ${maiusculo(motivo)}`,
+    texto(documento)
+      ? `DOCUMENTO: ${maiusculo(documento)}`
+      : null,
+    texto(observacoes)
+      ? `OBSERVAÇÕES: ${maiusculo(observacoes)}`
+      : null
+  ]
+    .filter(Boolean)
+    .join(' | ')
+
+  const baixasCriadas = []
+
+  try {
+    const {
+      data: estoqueAtualizado,
+      error: updateEstoqueError
+    } = await supabase
+      .from('sigmo_tonfas')
+      .update({
+        quantidade_manutencao:
+          novaQuantidadeManutencao,
+        quantidade_disponivel:
+          quantidadeP4,
+        status_operacional:
+          statusOperacional,
+        local_atual:
+          locais.join(' • ') ||
+          'SEM LOCAL OPERACIONAL',
+        atualizado_em:
+          agora
+      })
+      .eq('id', estoque.id)
+      .eq(
+        'quantidade_manutencao',
+        emManutencao
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (updateEstoqueError) {
+      throw updateEstoqueError
+    }
+
+    if (!estoqueAtualizado?.id) {
+      throw new Error(
+        'O saldo de manutenção foi alterado por outra operação. Atualize a tela e tente novamente.'
+      )
+    }
+
+    /*
+     * sigmo_patrimonio_baixas é individualizado e não possui campo
+     * quantitativo. Para preservar a contagem histórica exata, cada
+     * unidade baixada gera um registro próprio, todos vinculados à
+     * mesma manutenção nas observações.
+     */
+    for (
+      let indice = 0;
+      indice < quantidade;
+      indice += 1
+    ) {
+      const {
+        data: baixa,
+        error: baixaError
+      } = await supabase
+        .from(
+          'sigmo_patrimonio_baixas'
+        )
+        .insert({
+          modulo:
+            'TONFAS',
+          referencia_id:
+            estoque.id,
+          patrimonio:
+            maiusculo(
+              manutencao?.tipo_material
+            ) ||
+            maiusculo(
+              estoque?.tipo
+            ) ||
+            'TONFA',
+          numero_serie:
+            null,
+          status:
+            'APROVADA',
+          motivo:
+            maiusculo(motivo),
+          observacoes:
+            `${observacoesBaixa} | UNIDADE ${indice + 1} DE ${quantidade}`,
+          status_anterior:
+            'MANUTENCAO',
+          local_anterior:
+            'MANUTENCAO / P4',
+          solicitada_por_id:
+            usuarioId,
+          solicitada_por_nome:
+            usuarioNome,
+          solicitada_em:
+            agora,
+          decidida_em:
+            agora,
+          decidida_por_id:
+            usuarioId,
+          decidida_por_nome:
+            usuarioNome,
+          decisao_observacoes:
+            'BAIXA DEFINITIVA REALIZADA DIRETAMENTE PELO P4.',
+          created_at:
+            agora,
+          updated_at:
+            agora
+        })
+        .select('*')
+        .single()
+
+      if (baixaError) {
+        throw baixaError
+      }
+
+      baixasCriadas.push(
+        baixa
+      )
+    }
+
+    const observacoesManutencao =
+      [
+        texto(
+          manutencao?.observacoes
+        ),
+        observacoesBaixa,
+        `BAIXA REALIZADA POR: ${maiusculo(usuarioNome)}`,
+        `BAIXA REALIZADA EM: ${agora}`
+      ]
+        .filter(Boolean)
+        .join(' | ')
+
+    const {
+      data: manutencaoAtualizada,
+      error: manutencaoError
+    } = await supabase
+      .from(TABLE)
+      .update({
+        status:
+          STATUS_MANUTENCAO.CONCLUIDA,
+        observacoes:
+          observacoesManutencao,
+        concluida_em:
+          agora,
+        concluida_por_id:
+          usuarioId,
+        concluida_por_nome:
+          usuarioNome,
+        atualizado_em:
+          agora
+      })
+      .eq(
+        'id',
+        manutencao.id
+      )
+      .eq(
+        'status',
+        STATUS_MANUTENCAO.EM_MANUTENCAO
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (manutencaoError) {
+      throw manutencaoError
+    }
+
+    if (!manutencaoAtualizada?.id) {
+      throw new Error(
+        'A manutenção foi alterada por outro usuário. Atualize a tela e tente novamente.'
+      )
+    }
+
+    try {
+      await registerAudit({
+        action:
+          'BAIXA_PATRIMONIAL_TONFA',
+        description:
+          `${maiusculo(manutencao?.tipo_material) || 'TONFA'} teve baixa patrimonial definitiva realizada pelo P4. ` +
+          `Quantidade: ${quantidade}. ` +
+          `Manutenção: ${manutencao.id}. ` +
+          `Motivo: ${maiusculo(motivo)}.` +
+          (
+            texto(documento)
+              ? ` Documento: ${maiusculo(documento)}.`
+              : ''
+          ) +
+          (
+            texto(observacoes)
+              ? ` Observações: ${maiusculo(observacoes)}.`
+              : ''
+          ),
+        user,
+        module:
+          'Tonfas e Cassetetes',
+        severity:
+          'Atenção'
+      })
+    } catch (auditError) {
+      console.error(
+        'Baixa concluída, mas não foi possível registrar auditoria:',
+        auditError
+      )
+    }
+
+    return {
+      manutencao:
+        normalizarManutencao(
+          manutencaoAtualizada
+        ),
+      estoque:
+        estoqueAtualizado,
+      baixas:
+        baixasCriadas,
+      quantidade
+    }
+  } catch (error) {
+    if (
+      baixasCriadas.length > 0
+    ) {
+      const idsBaixas =
+        baixasCriadas
+          .map(
+            (item) =>
+              item?.id
+          )
+          .filter(Boolean)
+
+      if (
+        idsBaixas.length > 0
+      ) {
+        const {
+          error: rollbackBaixasError
+        } = await supabase
+          .from(
+            'sigmo_patrimonio_baixas'
+          )
+          .delete()
+          .in(
+            'id',
+            idsBaixas
+          )
+
+        if (
+          rollbackBaixasError
+        ) {
+          console.error(
+            'Erro ao desfazer registros de baixa:',
+            rollbackBaixasError
+          )
+        }
+      }
+    }
+
+    const {
+      error: rollbackEstoqueError
+    } = await supabase
+      .from('sigmo_tonfas')
+      .update(
+        payloadEstoqueAnterior
+      )
+      .eq('id', estoque.id)
+
+    if (
+      rollbackEstoqueError
+    ) {
+      console.error(
+        'Erro ao desfazer saldo após falha na baixa:',
+        rollbackEstoqueError
+      )
+    }
+
+    throw error
+  }
+}
+
+
+export async function baixarExtravioTonfaP4({
+  extravioId,
+  motivo,
+  documento = null,
+  observacoes = null,
+  user = null
+}) {
+  if (!extravioId) {
+    throw new Error('Extravio não informado.')
+  }
+
+  const perfil =
+    maiusculo(
+      user?.perfil ||
+      user?.role ||
+      user?.tipo_usuario ||
+      user?.usuario?.perfil ||
+      ''
+    )
+
+  if (
+    perfil !== 'ADMINISTRADOR' &&
+    !perfil.includes('P4')
+  ) {
+    throw new Error(
+      'Somente o P4 pode realizar a baixa definitiva de Tonfa ou Cassetete extraviado.'
+    )
+  }
+
+  if (!texto(motivo)) {
+    throw new Error(
+      'Informe o motivo da baixa patrimonial.'
+    )
+  }
+
+  const {
+    data: extravio,
+    error: extravioError
+  } = await supabase
+    .from('sigmo_tonfas_extravios')
+    .select('*')
+    .eq('id', extravioId)
+    .single()
+
+  if (extravioError) {
+    throw extravioError
+  }
+
+  if (!extravio?.ativo) {
+    throw new Error(
+      'Este extravio já está encerrado.'
+    )
+  }
+
+  if (
+    maiusculo(
+      extravio?.responsavel_setor
+    ) !== 'P4'
+  ) {
+    throw new Error(
+      'O extravio ainda não está sob responsabilidade do P4.'
+    )
+  }
+
+  const quantidade =
+    inteiroPositivo(
+      extravio?.quantidade,
+      1
+    )
+
+  const {
+    data: estoque,
+    error: estoqueError
+  } = await supabase
+    .from('sigmo_tonfas')
+    .select('*')
+    .eq(
+      'id',
+      extravio.tonfa_id
+    )
+    .single()
+
+  if (estoqueError) {
+    throw estoqueError
+  }
+
+  const extraviadaP4 =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_p4
+    )
+
+  if (
+    quantidade >
+    extraviadaP4
+  ) {
+    throw new Error(
+      `O extravio possui ${quantidade} unidade(s), mas o estoque registra apenas ${extraviadaP4} sob responsabilidade do P4.`
+    )
+  }
+
+  const novaExtraviadaP4 =
+    extraviadaP4 -
+    quantidade
+
+  const quantidadeP4 =
+    inteiroPositivo(
+      estoque?.quantidade_p4
+    )
+
+  const quantidadeSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_svdd
+    )
+
+  const quantidadeEmServico =
+    inteiroPositivo(
+      estoque?.quantidade_em_servico
+    )
+
+  const quantidadeManutencao =
+    inteiroPositivo(
+      estoque?.quantidade_manutencao
+    )
+
+  const quantidadeExtraviadaSvdd =
+    inteiroPositivo(
+      estoque?.quantidade_extraviada_svdd
+    )
+
+  const locais = []
+
+  if (quantidadeP4 > 0) {
+    locais.push(
+      `${quantidadeP4} no P4`
+    )
+  }
+
+  if (quantidadeSvdd > 0) {
+    locais.push(
+      `${quantidadeSvdd} no Cofre do SVDD`
+    )
+  }
+
+  if (quantidadeEmServico > 0) {
+    locais.push(
+      `${quantidadeEmServico} em serviço`
+    )
+  }
+
+  if (quantidadeManutencao > 0) {
+    locais.push(
+      `${quantidadeManutencao} em manutenção`
+    )
+  }
+
+  if (
+    quantidadeExtraviadaSvdd > 0
+  ) {
+    locais.push(
+      `${quantidadeExtraviadaSvdd} extraviado(s) • SVDD`
+    )
+  }
+
+  if (novaExtraviadaP4 > 0) {
+    locais.push(
+      `${novaExtraviadaP4} extraviado(s) • P4`
+    )
+  }
+
+  const statusOperacional =
+    quantidadeEmServico > 0 ||
+    quantidadeSvdd > 0
+      ? 'CARGA'
+      : quantidadeP4 > 0
+        ? 'RESERVA'
+        : quantidadeManutencao > 0
+          ? 'MANUTENCAO'
+          : (
+              quantidadeExtraviadaSvdd > 0 ||
+              novaExtraviadaP4 > 0
+            )
+            ? 'RECOLHIDO'
+            : 'RECOLHIDO'
+
+  const agora =
+    new Date().toISOString()
+
+  const usuarioId =
+    obterUsuarioId(user)
+
+  const usuarioNome =
+    obterUsuarioNome(user)
+
+  const payloadEstoqueAnterior = {
+    quantidade_extraviada_p4:
+      estoque.quantidade_extraviada_p4,
+    quantidade_disponivel:
+      estoque.quantidade_disponivel,
+    status_operacional:
+      estoque.status_operacional,
+    local_atual:
+      estoque.local_atual
+  }
+
+  const payloadExtravioAnterior = {
+    status:
+      extravio.status,
+    ativo:
+      extravio.ativo,
+    regularizado_em:
+      extravio.regularizado_em,
+    regularizado_por_id:
+      extravio.regularizado_por_id,
+    regularizado_por_nome:
+      extravio.regularizado_por_nome,
+    regularizacao_tipo:
+      extravio.regularizacao_tipo,
+    regularizacao_documento:
+      extravio.regularizacao_documento,
+    regularizacao_observacoes:
+      extravio.regularizacao_observacoes,
+    atualizado_em:
+      extravio.atualizado_em
+  }
+
+  const observacoesBaixa = [
+    'BAIXA PATRIMONIAL DEFINITIVA DE EXTRAVIO',
+    `EXTRAVIO: ${extravio.id}`,
+    `QUANTIDADE: ${quantidade}`,
+    `MOTIVO: ${maiusculo(motivo)}`,
+    texto(documento)
+      ? `DOCUMENTO: ${maiusculo(documento)}`
+      : null,
+    texto(observacoes)
+      ? `OBSERVAÇÕES: ${maiusculo(observacoes)}`
+      : null
+  ]
+    .filter(Boolean)
+    .join(' | ')
+
+  const baixasCriadas = []
+
+  try {
+    const {
+      data: estoqueAtualizado,
+      error: updateEstoqueError
+    } = await supabase
+      .from('sigmo_tonfas')
+      .update({
+        quantidade_extraviada_p4:
+          novaExtraviadaP4,
+        quantidade_disponivel:
+          quantidadeP4,
+        status_operacional:
+          statusOperacional,
+        local_atual:
+          locais.join(' • ') ||
+          'SEM LOCAL OPERACIONAL',
+        atualizado_em:
+          agora
+      })
+      .eq('id', estoque.id)
+      .eq(
+        'quantidade_extraviada_p4',
+        extraviadaP4
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (updateEstoqueError) {
+      throw updateEstoqueError
+    }
+
+    if (!estoqueAtualizado?.id) {
+      throw new Error(
+        'O saldo de extravio foi alterado por outra operação. Atualize a tela e tente novamente.'
+      )
+    }
+
+    for (
+      let indice = 0;
+      indice < quantidade;
+      indice += 1
+    ) {
+      const {
+        data: baixa,
+        error: baixaError
+      } = await supabase
+        .from('sigmo_patrimonio_baixas')
+        .insert({
+          modulo:
+            'TONFAS',
+          referencia_id:
+            estoque.id,
+          patrimonio:
+            maiusculo(
+              extravio?.tipo_material
+            ) ||
+            maiusculo(
+              estoque?.tipo
+            ) ||
+            'TONFA',
+          numero_serie:
+            null,
+          status:
+            'APROVADA',
+          motivo:
+            maiusculo(motivo),
+          observacoes:
+            `${observacoesBaixa} | UNIDADE ${indice + 1} DE ${quantidade}`,
+          status_anterior:
+            'EXTRAVIO',
+          local_anterior:
+            'EXTRAVIO / P4',
+          solicitada_por_id:
+            usuarioId,
+          solicitada_por_nome:
+            usuarioNome,
+          solicitada_em:
+            agora,
+          decidida_em:
+            agora,
+          decidida_por_id:
+            usuarioId,
+          decidida_por_nome:
+            usuarioNome,
+          decisao_observacoes:
+            'BAIXA DEFINITIVA DE EXTRAVIO REALIZADA DIRETAMENTE PELO P4.',
+          created_at:
+            agora,
+          updated_at:
+            agora
+        })
+        .select('*')
+        .single()
+
+      if (baixaError) {
+        throw baixaError
+      }
+
+      baixasCriadas.push(
+        baixa
+      )
+    }
+
+    const {
+      data: extravioAtualizado,
+      error: extravioUpdateError
+    } = await supabase
+      .from('sigmo_tonfas_extravios')
+      .update({
+        status:
+          'ENCERRADO',
+        ativo:
+          false,
+        regularizado_em:
+          agora,
+        regularizado_por_id:
+          usuarioId,
+        regularizado_por_nome:
+          usuarioNome,
+        regularizacao_tipo:
+          'BAIXA',
+        regularizacao_documento:
+          texto(documento)
+            ? maiusculo(documento)
+            : null,
+        regularizacao_observacoes:
+          [
+            observacoesBaixa,
+            `BAIXA REALIZADA POR: ${maiusculo(usuarioNome)}`
+          ]
+            .filter(Boolean)
+            .join(' | '),
+        atualizado_em:
+          agora
+      })
+      .eq('id', extravio.id)
+      .eq('ativo', true)
+      .eq(
+        'responsavel_setor',
+        'P4'
+      )
+      .select('*')
+      .maybeSingle()
+
+    if (extravioUpdateError) {
+      throw extravioUpdateError
+    }
+
+    if (!extravioAtualizado?.id) {
+      throw new Error(
+        'O extravio foi alterado por outro usuário. Atualize a tela e tente novamente.'
+      )
+    }
+
+    try {
+      await registerAudit({
+        action:
+          'BAIXA_PATRIMONIAL_EXTRAVIO_TONFA',
+        description:
+          `${maiusculo(extravio?.tipo_material) || 'TONFA'} extraviado teve baixa patrimonial definitiva realizada pelo P4. ` +
+          `Quantidade: ${quantidade}. ` +
+          `Extravio: ${extravio.id}. ` +
+          `Motivo: ${maiusculo(motivo)}.` +
+          (
+            texto(documento)
+              ? ` Documento: ${maiusculo(documento)}.`
+              : ''
+          ) +
+          (
+            texto(observacoes)
+              ? ` Observações: ${maiusculo(observacoes)}.`
+              : ''
+          ),
+        user,
+        module:
+          'Tonfas e Cassetetes',
+        severity:
+          'Atenção'
+      })
+    } catch (auditError) {
+      console.error(
+        'Baixa do extravio concluída, mas não foi possível registrar auditoria:',
+        auditError
+      )
+    }
+
+    return {
+      extravio:
+        extravioAtualizado,
+      estoque:
+        estoqueAtualizado,
+      baixas:
+        baixasCriadas,
+      quantidade
+    }
+  } catch (error) {
+    if (
+      baixasCriadas.length > 0
+    ) {
+      const idsBaixas =
+        baixasCriadas
+          .map(
+            (item) =>
+              item?.id
+          )
+          .filter(Boolean)
+
+      if (
+        idsBaixas.length > 0
+      ) {
+        await supabase
+          .from('sigmo_patrimonio_baixas')
+          .delete()
+          .in(
+            'id',
+            idsBaixas
+          )
+      }
+    }
+
+    await supabase
+      .from('sigmo_tonfas_extravios')
+      .update(
+        payloadExtravioAnterior
+      )
+      .eq('id', extravio.id)
+
+    await supabase
+      .from('sigmo_tonfas')
+      .update(
+        payloadEstoqueAnterior
+      )
+      .eq('id', estoque.id)
+
+    throw error
+  }
+}
+
 
 export async function cancelarManutencao({
   manutencaoId,
@@ -3932,6 +6049,29 @@ export async function cancelarManutencao({
       .single()
 
     if (error) throw error
+
+    try {
+      await registerAudit({
+        action: 'MANUTENCAO_CANCELADA',
+        description:
+          `${atual.tipo_material || atual.modulo} teve a manutenção cancelada. ` +
+          `Quantidade: ${atual.quantidade || 1}. ` +
+          `Manutenção: ${atual.id}.` +
+          (
+            texto(motivo)
+              ? ` Motivo: ${maiusculo(motivo)}.`
+              : ''
+          ),
+        user,
+        module: 'Manutenções',
+        severity: 'Atenção'
+      })
+    } catch (auditError) {
+      console.error(
+        'Manutenção cancelada, mas não foi possível registrar auditoria:',
+        auditError
+      )
+    }
 
     return normalizarManutencao(data)
   } catch (error) {

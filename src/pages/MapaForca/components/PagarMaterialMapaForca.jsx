@@ -238,6 +238,40 @@ function ehCassetete(item) {
   )
 }
 
+
+/*
+ * Tonfa e Cassetete possuem um registro central em sigmo_patrimonios
+ * usado apenas como ponte patrimonial para a cautela.
+ *
+ * Esse registro NÃO representa uma unidade disponível e não pode
+ * aparecer junto com o estoque quantitativo de sigmo_tonfas, pois
+ * causaria dupla contagem no seletor do Mapa Força.
+ */
+function ehPatrimonioCentralTonfaCassetete(item) {
+  const descricao =
+    normalizarTexto(
+      item?.descricao
+    )
+
+  /*
+   * Tonfa e Cassetete possuem registros centrais em sigmo_patrimonios
+   * usados apenas como ponte patrimonial para a cautela.
+   *
+   * Esses registros aparecem como:
+   *   TONFA - SIGMO-TONFA
+   *   TONFA - SIGMO-CASSETETE
+   *
+   * Eles não representam unidades disponíveis. Os itens quantitativos
+   * reais possuem controla_quantidade=true e/ou tonfa_id, então são
+   * preservados normalmente.
+   */
+  return (
+    descricao.startsWith('TONFA - SIGMO-') &&
+    item?.controla_quantidade !== true &&
+    !item?.tonfa_id
+  )
+}
+
 function ehTorniquete(item) {
   const campos = [
     item?.modulo,
@@ -540,9 +574,16 @@ async function listarMateriaisDisponiveisMapa() {
   }
 
   const base =
-    Array.isArray(listaBase)
-      ? listaBase
-      : []
+    (
+      Array.isArray(listaBase)
+        ? listaBase
+        : []
+    ).filter(
+      (material) =>
+        !ehPatrimonioCentralTonfaCassetete(
+          material
+        )
+    )
 
   const chavesExistentes =
     new Set(

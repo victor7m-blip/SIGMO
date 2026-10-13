@@ -23,7 +23,8 @@ import {
 import {
   aceitarTransferencia,
   aprovarTransferenciaTPDPeloCmt,
-  recusarTransferencia
+  recusarTransferencia,
+  cancelarTransferencia
 } from '../../../services/patrimonioTransferenciaService'
 
 import {
@@ -221,6 +222,96 @@ function ehRecebimentoP4(item, secao) {
 
 function ehTransferencia(secao) {
   return secao?.key === 'transferencias'
+}
+
+
+function itemEhTransferenciaTonfaSvddP4(
+  item
+) {
+  const metadata =
+    item?.metadata &&
+    typeof item.metadata === 'object'
+      ? item.metadata
+      : {}
+
+  const categoria =
+    normalizarOperacional(
+      item?.categoria ||
+      item?.modulo ||
+      metadata?.categoria ||
+      ''
+    )
+
+  const origem =
+    normalizarOperacional(
+      item?.origem_codigo ||
+      item?.origem_nome ||
+      item?.origem_local ||
+      ''
+    )
+
+  const destino =
+    normalizarOperacional(
+      item?.destino_codigo ||
+      item?.destino_nome ||
+      item?.destino_local ||
+      ''
+    )
+
+  const tipoFluxo =
+    normalizarOperacional(
+      metadata?.tipo_fluxo ||
+      ''
+    )
+
+  const status =
+    normalizarOperacional(
+      item?.status ||
+      item?.status_movimentacao ||
+      ''
+    ).replace(/ /g, '_')
+
+  const categoriaCompativel =
+    categoria === 'TONFA' ||
+    categoria === 'CASSETETE'
+
+  const fluxoEspecial =
+    tipoFluxo ===
+      'MANUTENCAO_SVDD_P4' ||
+    tipoFluxo ===
+      'EXTRAVIO_SVDD_P4'
+
+  const origemSvdd =
+    origem === 'SVDD' ||
+    origem.includes('SVDD') ||
+    origem.includes(
+      'SERVICO DE DIA'
+    )
+
+  const destinoP4 =
+    destino === 'P4' ||
+    destino.includes('P4')
+
+  const pendente =
+    status === 'PENDENTE' ||
+    status ===
+      'AGUARDANDO_RECEBIMENTO'
+
+  return (
+    categoriaCompativel &&
+    fluxoEspecial &&
+    origemSvdd &&
+    destinoP4 &&
+    pendente
+  )
+}
+
+
+function tipoFluxoTonfaSvddP4(item) {
+  return normalizarOperacional(
+    item?.metadata?.tipo_fluxo ||
+    ''
+  )
 }
 
 function ehTransferenciaHTEngine(item, secao) {
@@ -851,10 +942,29 @@ function textoSituacaoNovidade(
 }
 
 function ehIndicadorPatrimonio(secao) {
-  return ['nao-localizados', 'baixados'].includes(secao?.key)
+  return ['nao-localizados', 'extraviados', 'baixados'].includes(secao?.key)
+}
+
+function ehExtravioPatrimonial(secao) {
+  return secao?.key === 'extraviados'
 }
 
 function tituloItem(item, secao) {
+  if (ehExtravioPatrimonial(secao)) {
+    const tipo =
+      item?.tipo_material ||
+      item?.tipo ||
+      'MATERIAL'
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(item?.quantidade || 1) || 1
+      )
+
+    return `${tipo} — ${quantidade} un. extraviada(s)`
+  }
+
   if (itemEhTransferenciaTaser(item)) {
     const dados =
       item?.dados ||
@@ -1178,6 +1288,28 @@ function obterFotosDescargaMunicao(item) {
 
 
 function detalheItem(item, secao) {
+  if (ehExtravioPatrimonial(secao)) {
+    return [
+      item?.policial_nome
+        ? `POLICIAL: ${item.policial_nome}${
+            item?.policial_re
+              ? ` • RE ${item.policial_re}`
+              : ''
+          }`
+        : '',
+      item?.responsavel_setor
+        ? `RESPONSABILIDADE: ${item.responsavel_setor}`
+        : '',
+      item?.status
+        ? `STATUS: ${String(item.status).replaceAll('_', ' ')}`
+        : '',
+      item?.documento_numero
+        ? `DOCUMENTO: ${item.documento_numero}`
+        : '',
+      item?.descricao
+    ].map(texto).filter(Boolean).join(' • ')
+  }
+
   if (itemEhTransferenciaTaser(item)) {
     const dados =
       item?.dados ||
@@ -1844,6 +1976,8 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   const [carregandoNovidadesVtr, setCarregandoNovidadesVtr] = useState(false)
   const [manutencoesVtr, setManutencoesVtr] = useState([])
   const [carregandoManutencoesVtr, setCarregandoManutencoesVtr] = useState(false)
+  const [extraviosPatrimoniais, setExtraviosPatrimoniais] = useState([])
+  const [carregandoExtravios, setCarregandoExtravios] = useState(false)
 
   const [
     manutencoesColeteRefletivo,
@@ -1970,6 +2104,83 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
       setCarregandoManutencoesVtr(false)
     }
   }
+
+  async function carregarExtraviosPatrimoniais() {
+    try {
+      setCarregandoExtravios(true)
+
+      const {
+        data,
+        error
+      } = await supabase
+        .from('sigmo_tonfas_extravios')
+        .select(
+          'id, tonfa_id, tipo_material, quantidade, status, responsavel_setor, policial_id, policial_re, policial_nome, movimentacao_cautela_id, movimentacao_devolucao_id, movimentacao_item_id, retirado_em, devolucao_prevista, devolucao_solicitada_em, extravio_constatado_em, registrado_por_id, registrado_por_nome, descricao, documento_tipo, documento_numero, documento_data, observacoes, avocacao_p4_em, avocacao_p4_por_nome, avocacao_p4_documento, avocacao_p4_observacoes, regularizado_em, regularizado_por_nome, regularizacao_tipo, regularizacao_documento, regularizacao_observacoes, ativo, criado_em, atualizado_em'
+        )
+        .eq('ativo', true)
+        .order(
+          'extravio_constatado_em',
+          {
+            ascending: false
+          }
+        )
+
+      if (error) {
+        throw error
+      }
+
+      setExtraviosPatrimoniais(
+        (data || []).map(
+          (item) => ({
+            ...item,
+
+            tipo:
+              item?.tipo_material ||
+              'MATERIAL',
+
+            identificador:
+              item?.tipo_material ||
+              'MATERIAL',
+
+            status_operacional:
+              item?.status ||
+              'EM_APURACAO',
+
+            local_atual:
+              item?.responsavel_setor
+                ? `EXTRAVIO / ${item.responsavel_setor}`
+                : 'EXTRAVIO',
+
+            responsavel_atual_nome:
+              item?.policial_nome ||
+              item?.registrado_por_nome ||
+              item?.responsavel_setor ||
+              'Não informado',
+
+            created_at:
+              item?.extravio_constatado_em ||
+              item?.criado_em ||
+              null,
+
+            updated_at:
+              item?.atualizado_em ||
+              item?.extravio_constatado_em ||
+              null
+          })
+        )
+      )
+    } catch (error) {
+      console.error(
+        'Erro ao carregar extravios patrimoniais:',
+        error
+      )
+
+      setExtraviosPatrimoniais([])
+    } finally {
+      setCarregandoExtravios(false)
+    }
+  }
+
 
   async function carregarManutencoesColeteRefletivo() {
     if (!perfilVtr) {
@@ -2174,6 +2385,7 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
     carregarNovidadesVtr()
     carregarManutencoesVtr()
     carregarManutencoesColeteRefletivo()
+    carregarExtraviosPatrimoniais()
   }, [perfilVtr])
 
   const novidadesVtrExibidas = useMemo(() => {
@@ -5001,9 +5213,39 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
         })
       )
 
+    const totalExtravios =
+      extraviosPatrimoniais.reduce(
+        (total, item) =>
+          total +
+          Math.max(
+            1,
+            Number(item?.quantidade || 1) || 1
+          ),
+        0
+      )
+
     const indicadoresComColete =
       indicadores.map(
         (card) => {
+          if (
+            card?.key ===
+            'nao-localizados'
+          ) {
+            return {
+              ...card,
+              key:
+                'extraviados',
+              titulo:
+                'Extraviados',
+              total:
+                totalExtravios,
+              itens:
+                extraviosPatrimoniais,
+              carregando:
+                carregandoExtravios
+            }
+          }
+
           if (
             card?.key !==
             'novidades'
@@ -5160,7 +5402,9 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   }, [
     dados,
     user,
-    manutencoesColeteRefletivo
+    manutencoesColeteRefletivo,
+    extraviosPatrimoniais,
+    carregandoExtravios
   ])
 
   function ehCancelavelDescargaColete(
@@ -5794,6 +6038,253 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   }
 
 
+  async function receberTransferenciaTonfaSvddNoP4(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      recebendoId ||
+      cancelandoId
+    ) {
+      return
+    }
+
+    const fluxo =
+      tipoFluxoTonfaSvddP4(
+        item
+      )
+
+    const quantidade =
+      Math.max(
+        1,
+        Number(
+          item?.quantidade ||
+          1
+        ) || 1
+      )
+
+    const material =
+      normalizarOperacional(
+        item?.categoria
+      ) === 'CASSETETE'
+        ? 'Cassetete'
+        : 'Tonfa'
+
+    const mensagem =
+      fluxo === 'EXTRAVIO_SVDD_P4'
+        ? (
+            `Assumir o procedimento de extravio de ${quantidade} ${material.toLowerCase()}(s)?\n\n` +
+            'A responsabilidade administrativa passará do SVDD para o P4. Não haverá movimentação física do material.'
+          )
+        : (
+            `Confirmar o recebimento de ${quantidade} ${material.toLowerCase()}(s) em manutenção no P4?\n\n` +
+            'A manutenção permanecerá ativa e passará a ficar sob responsabilidade do P4.'
+          )
+
+    if (
+      !window.confirm(
+        mensagem
+      )
+    ) {
+      return
+    }
+
+    try {
+      setRecebendoId(
+        transferenciaId
+      )
+
+      await aceitarTransferencia({
+        transferenciaId,
+        user
+      })
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || [])
+              .filter(
+                (registro) =>
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    transferenciaId
+                  )
+              )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao receber transferência de Tonfa/Cassetete no P4:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível concluir o recebimento no P4.'
+      )
+    } finally {
+      setRecebendoId(
+        null
+      )
+    }
+  }
+
+
+  async function cancelarTransferenciaTonfaSvddP4(
+    item
+  ) {
+    const transferenciaId =
+      item?.transferencia_id ||
+      item?.id
+
+    if (
+      !transferenciaId ||
+      cancelandoId ||
+      recebendoId
+    ) {
+      return
+    }
+
+    const fluxo =
+      tipoFluxoTonfaSvddP4(
+        item
+      )
+
+    const descricao =
+      fluxo ===
+        'EXTRAVIO_SVDD_P4'
+        ? 'encaminhamento do procedimento de extravio ao P4'
+        : 'encaminhamento da manutenção ao P4'
+
+    const motivo =
+      window.prompt(
+        `Informe o motivo para cancelar o ${descricao}:`
+      )
+
+    if (motivo === null) {
+      return
+    }
+
+    const motivoNormalizado =
+      String(
+        motivo || ''
+      )
+        .trim()
+        .toUpperCase()
+
+    if (!motivoNormalizado) {
+      window.alert(
+        'Informe o motivo do cancelamento.'
+      )
+      return
+    }
+
+    if (
+      !window.confirm(
+        `Cancelar este ${descricao}?\n\n` +
+        'A responsabilidade continuará no SVDD e o registro permanecerá no histórico como CANCELADO.'
+      )
+    ) {
+      return
+    }
+
+    try {
+      setCancelandoId(
+        transferenciaId
+      )
+
+      await cancelarTransferencia({
+        transferenciaId,
+        motivoCancelamento:
+          motivoNormalizado,
+        user
+      })
+
+      setRegistroAberto(null)
+
+      setSelecionado(
+        (atual) => {
+          if (!atual) {
+            return atual
+          }
+
+          const itensRestantes =
+            (atual.itens || [])
+              .filter(
+                (registro) =>
+                  String(
+                    registro?.transferencia_id ||
+                    registro?.id ||
+                    ''
+                  ) !==
+                  String(
+                    transferenciaId
+                  )
+              )
+
+          return {
+            ...atual,
+            total:
+              itensRestantes.length,
+            itens:
+              itensRestantes
+          }
+        }
+      )
+
+      if (
+        typeof onAtualizar ===
+        'function'
+      ) {
+        await onAtualizar()
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao cancelar transferência de Tonfa/Cassetete:',
+        error
+      )
+
+      window.alert(
+        error?.message ||
+        'Não foi possível cancelar a transferência.'
+      )
+    } finally {
+      setCancelandoId(
+        null
+      )
+    }
+  }
+
+
   async function receberNoP4(item) {
     if (!item?.id || recebendoId) return
 
@@ -5951,8 +6442,18 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
               <div className="central-card-topo">
                 <span>{card.titulo}</span>
               </div>
-              <strong>{card.total}</strong>
-              <small>{card.total > 0 ? 'Ver detalhes' : 'Sem registros'}</small>
+              <strong>
+                {card?.carregando
+                  ? '…'
+                  : card.total}
+              </strong>
+              <small>
+                {card?.carregando
+                  ? 'Atualizando...'
+                  : card.total > 0
+                    ? 'Ver detalhes'
+                    : 'Sem registros'}
+              </small>
             </button>
           ))}
         </div>
@@ -6351,7 +6852,130 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
 
                       {registroAberto === (item?.id || index) && (
                         <div className="central-registro-detalhes">
-                          {ehIndicadorPatrimonio(selecionado) ? (
+                          {ehExtravioPatrimonial(selecionado) ? (
+                            <>
+                              <div>
+                                <span>Material</span>
+                                <strong>{item?.tipo_material || item?.tipo || 'Não informado'}</strong>
+                              </div>
+
+                              <div>
+                                <span>Quantidade extraviada</span>
+                                <strong>{Math.max(1, Number(item?.quantidade || 1) || 1)}</strong>
+                              </div>
+
+                              <div>
+                                <span>Status do procedimento</span>
+                                <strong>{String(item?.status || 'EM_APURACAO').replaceAll('_', ' ')}</strong>
+                              </div>
+
+                              <div>
+                                <span>Responsabilidade atual</span>
+                                <strong>{item?.responsavel_setor || 'SVDD'}</strong>
+                              </div>
+
+                              <div>
+                                <span>Policial</span>
+                                <strong>
+                                  {item?.policial_nome || 'Não informado'}
+                                  {item?.policial_re
+                                    ? ` • RE ${item.policial_re}`
+                                    : ''}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span>Retirada / cautela</span>
+                                <strong>{formatarData(item?.retirado_em) || 'Não informada'}</strong>
+                              </div>
+
+                              <div>
+                                <span>Devolução solicitada</span>
+                                <strong>{formatarData(item?.devolucao_solicitada_em) || 'Não informada'}</strong>
+                              </div>
+
+                              <div>
+                                <span>Extravio constatado</span>
+                                <strong>{formatarData(item?.extravio_constatado_em || item?.criado_em) || 'Não informado'}</strong>
+                              </div>
+
+                              <div>
+                                <span>Registrado por</span>
+                                <strong>{item?.registrado_por_nome || 'Não informado'}</strong>
+                              </div>
+
+                              <div>
+                                <span>Documento</span>
+                                <strong>
+                                  {[
+                                    item?.documento_tipo,
+                                    item?.documento_numero,
+                                    item?.documento_data
+                                  ].filter(Boolean).join(' • ') || 'Não informado'}
+                                </strong>
+                              </div>
+
+                              <div style={{ gridColumn: '1 / -1' }}>
+                                <span>Descrição / circunstâncias</span>
+                                <strong>{item?.descricao || 'Sem descrição.'}</strong>
+                              </div>
+
+                              {item?.observacoes && (
+                                <div style={{ gridColumn: '1 / -1' }}>
+                                  <span>Observações</span>
+                                  <strong>{item.observacoes}</strong>
+                                </div>
+                              )}
+
+                              {item?.avocacao_p4_em && (
+                                <>
+                                  <div>
+                                    <span>Avocado pelo P4 em</span>
+                                    <strong>{formatarData(item.avocacao_p4_em)}</strong>
+                                  </div>
+
+                                  <div>
+                                    <span>Avocado por</span>
+                                    <strong>{item?.avocacao_p4_por_nome || 'Não informado'}</strong>
+                                  </div>
+
+                                  <div style={{ gridColumn: '1 / -1' }}>
+                                    <span>Providência / avocação</span>
+                                    <strong>
+                                      {[
+                                        item?.avocacao_p4_documento,
+                                        item?.avocacao_p4_observacoes
+                                      ].filter(Boolean).join(' • ') || 'Procedimento avocado pelo P4.'}
+                                    </strong>
+                                  </div>
+                                </>
+                              )}
+
+                              {item?.regularizado_em && (
+                                <>
+                                  <div>
+                                    <span>Regularizado em</span>
+                                    <strong>{formatarData(item.regularizado_em)}</strong>
+                                  </div>
+
+                                  <div>
+                                    <span>Providência final</span>
+                                    <strong>{String(item?.regularizacao_tipo || 'REGULARIZADO').replaceAll('_', ' ')}</strong>
+                                  </div>
+
+                                  <div style={{ gridColumn: '1 / -1' }}>
+                                    <span>Regularização</span>
+                                    <strong>
+                                      {[
+                                        item?.regularizacao_documento,
+                                        item?.regularizacao_observacoes
+                                      ].filter(Boolean).join(' • ') || 'Sem observações adicionais.'}
+                                    </strong>
+                                  </div>
+                                </>
+                              )}
+                            </>
+                          ) : ehIndicadorPatrimonio(selecionado) ? (
                             <>
                               <div><span>Tipo</span><strong>{item?.tipo || 'Não informado'}</strong></div>
                               <div><span>Status</span><strong>{item?.status_operacional || item?.status || 'Não informado'}</strong></div>
@@ -7262,7 +7886,95 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                           </button>
                         )}
 
-                      {ehRecebimentoP4(item, selecionado) && (
+                      {itemEhTransferenciaTonfaSvddP4(
+                        item
+                      ) &&
+                        ehP4(
+                          user
+                        ) && (
+                          <button
+                            type="button"
+                            className="central-button central-button-primary"
+                            disabled={
+                              Boolean(
+                                recebendoId
+                              ) ||
+                              Boolean(
+                                cancelandoId
+                              )
+                            }
+                            onClick={() =>
+                              receberTransferenciaTonfaSvddNoP4(
+                                item
+                              )
+                            }
+                          >
+                            {String(
+                              recebendoId ||
+                              ''
+                            ) ===
+                            String(
+                              item?.transferencia_id ||
+                              item?.id ||
+                              ''
+                            )
+                              ? 'Recebendo...'
+                              : tipoFluxoTonfaSvddP4(
+                                  item
+                                ) ===
+                                'EXTRAVIO_SVDD_P4'
+                                ? 'Assumir procedimento'
+                                : 'Receber no P4'}
+                          </button>
+                        )}
+
+                      {itemEhTransferenciaTonfaSvddP4(
+                        item
+                      ) &&
+                        ehEncarregado(
+                          user
+                        ) && (
+                          <button
+                            type="button"
+                            className="central-detalhe-button"
+                            disabled={
+                              Boolean(
+                                cancelandoId
+                              ) ||
+                              Boolean(
+                                recebendoId
+                              )
+                            }
+                            onClick={() =>
+                              cancelarTransferenciaTonfaSvddP4(
+                                item
+                              )
+                            }
+                            style={{
+                              borderColor:
+                                '#dc2626',
+                              color:
+                                '#dc2626',
+                              fontWeight:
+                                800
+                            }}
+                          >
+                            {String(
+                              cancelandoId ||
+                              ''
+                            ) ===
+                            String(
+                              item?.transferencia_id ||
+                              item?.id ||
+                              ''
+                            )
+                              ? 'Cancelando...'
+                              : 'Cancelar transferência'}
+                          </button>
+                        )}
+
+                      {ehRecebimentoP4(item, selecionado) &&
+                        !itemEhTransferenciaTonfaSvddP4(item) && (
                         <button
                           type="button"
                           className="central-button central-button-primary"

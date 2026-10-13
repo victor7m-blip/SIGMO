@@ -59,6 +59,39 @@ function normalizarTexto(valor) {
     .toUpperCase()
 }
 
+
+function lerObservacaoMovimentacao(valor) {
+  if (!valor) {
+    return {}
+  }
+
+  if (typeof valor === 'object') {
+    return valor
+  }
+
+  try {
+    return JSON.parse(valor)
+  } catch {
+    return {}
+  }
+}
+
+
+function obterGrupoCondicaoTonfa(item) {
+  const observacao =
+    lerObservacaoMovimentacao(
+      item?.observacao
+    )
+
+  return normalizarTexto(
+    item?.grupo_condicao ||
+    item?.condicao_quantitativa ||
+    observacao?.grupo_condicao ||
+    observacao?.condicao_quantitativa ||
+    ''
+  )
+}
+
 function itemEhTorniquete(item) {
   return (
     normalizarTexto(
@@ -360,6 +393,30 @@ function somenteNumeros(valor) {
     .slice(0, 6)
 }
 
+
+function obterQuantidadeAfetadaNovidadeExistente(novidade) {
+  const descricao =
+    String(
+      novidade?.descricao ||
+      ''
+    )
+
+  const encontrada =
+    descricao.match(
+      /QUANTIDADE AFETADA:\s*(\d+)/i
+    )
+
+  return Math.max(
+    1,
+    Number(
+      novidade?.quantidade_afetada ||
+      novidade?.metadata?.quantidade_afetada ||
+      encontrada?.[1] ||
+      1
+    ) || 1
+  )
+}
+
 function obterNomePolicial(policial) {
   return (
     policial?.nome_guerra ||
@@ -486,8 +543,14 @@ function criarChaveItem(item) {
     'TONFA_QUANTIDADE'
   ) {
     return String(
-      item?.movimentacao_tonfa_id ||
-      item?.id
+      item?.devolucao_item_id ||
+      [
+        item?.movimentacao_tonfa_id ||
+        item?.id,
+        obterGrupoCondicaoTonfa(item)
+      ]
+        .filter(Boolean)
+        .join(':')
     )
   }
 
@@ -574,6 +637,33 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
     return new Map()
   }
 
+  /*
+   * TONFA/CASSETETE usam patrimônio central compartilhado. Quando uma
+   * novidade quantitativa já gerou manutenção, ela não pode reaparecer
+   * automaticamente na devolução da unidade restante.
+   *
+   * Para registros novos usamos novidade_patrimonial_id. Para registros
+   * antigos, onde esse campo pode estar nulo, usamos a descrição da
+   * novidade e a data da manutenção como compatibilidade histórica.
+   */
+  const patrimoniosQuantitativos = new Set(
+    (itens || [])
+      .filter(
+        (item) =>
+          item?.tipo_registro ===
+          'TONFA_QUANTIDADE'
+      )
+      .map(
+        (item) =>
+          String(
+            item?.patrimonio_id ||
+            item?.id ||
+            ''
+          )
+      )
+      .filter(Boolean)
+  )
+
   const { data: novidades, error } = await supabase
     .from('sigmo_patrimonio_novidades')
     .select('*')
@@ -583,6 +673,137 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
   if (error) {
     console.warn('Não foi possível carregar as novidades patrimoniais pendentes:', error)
     return new Map()
+  }
+
+  let manutencoesQuantitativas = []
+
+  if (patrimoniosQuantitativos.size > 0) {
+    const {
+      data: manutencoesData,
+      error: manutencoesError
+    } = await supabase
+      .from('sigmo_manutencoes')
+      .select(
+        'id, patrimonio_id, novidade_patrimonial_id, descricao, observacoes, criado_em, registrada_em, status'
+      )
+      .in(
+        'patrimonio_id',
+        [...patrimoniosQuantitativos]
+      )
+
+    if (manutencoesError) {
+      console.warn(
+        'Não foi possível verificar as manutenções já vinculadas às novidades quantitativas:',
+        manutencoesError
+      )
+    } else {
+      manutencoesQuantitativas =
+        manutencoesData || []
+    }
+  }
+
+  function novidadeQuantitativaJaConsumida(
+    novidade
+  ) {
+    const patrimonioId =
+      String(
+        novidade?.patrimonio_id ||
+        ''
+      )
+
+    if (
+      !patrimonioId ||
+      !patrimoniosQuantitativos.has(
+        patrimonioId
+      )
+    ) {
+      return false
+    }
+
+    const novidadeId =
+      String(
+        novidade?.id ||
+        ''
+      )
+
+    const descricaoNovidade =
+      normalizarTexto(
+        novidade?.descricao ||
+        ''
+      )
+
+    const criadoNovidade =
+      new Date(
+        novidade?.created_at ||
+        novidade?.registrada_em ||
+        0
+      ).getTime()
+
+    return manutencoesQuantitativas.some(
+      (manutencao) => {
+        if (
+          String(
+            manutencao?.patrimonio_id ||
+            ''
+          ) !== patrimonioId
+        ) {
+          return false
+        }
+
+        if (
+          novidadeId &&
+          String(
+            manutencao?.novidade_patrimonial_id ||
+            ''
+          ) === novidadeId
+        ) {
+          return true
+        }
+
+        if (!descricaoNovidade) {
+          return false
+        }
+
+        const textoManutencao =
+          normalizarTexto(
+            [
+              manutencao?.descricao,
+              manutencao?.observacoes
+            ]
+              .filter(Boolean)
+              .join(' | ')
+          )
+
+        if (
+          !textoManutencao.includes(
+            descricaoNovidade
+          )
+        ) {
+          return false
+        }
+
+        const criadoManutencao =
+          new Date(
+            manutencao?.criado_em ||
+            manutencao?.registrada_em ||
+            0
+          ).getTime()
+
+        return (
+          !Number.isFinite(
+            criadoNovidade
+          ) ||
+          criadoNovidade <= 0 ||
+          (
+            Number.isFinite(
+              criadoManutencao
+            ) &&
+            criadoManutencao >=
+              criadoNovidade
+          )
+        )
+      }
+    )
   }
 
   const ids = (novidades || [])
@@ -639,6 +860,14 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
       continue
     }
 
+    if (
+      novidadeQuantitativaJaConsumida(
+        novidade
+      )
+    ) {
+      continue
+    }
+
     const atual = porPatrimonio.get(chave)
 
     if (atual) {
@@ -653,6 +882,98 @@ async function buscarNovidadesPendentesPatrimonios(itens = []) {
 
   return porPatrimonio
 }
+
+
+async function buscarNovidadesPatrimoniaisPorIds(
+  ids = []
+) {
+  const novidadeIds = [
+    ...new Set(
+      (ids || [])
+        .filter(ehUuidValido)
+        .map(String)
+    )
+  ]
+
+  if (novidadeIds.length === 0) {
+    return new Map()
+  }
+
+  const {
+    data: novidades,
+    error
+  } = await supabase
+    .from('sigmo_patrimonio_novidades')
+    .select('*')
+    .in('id', novidadeIds)
+
+  if (error) {
+    console.warn(
+      'Não foi possível carregar as novidades patrimoniais vinculadas à devolução:',
+      error
+    )
+    return new Map()
+  }
+
+  const {
+    data: fotos,
+    error: fotosError
+  } = await supabase
+    .from('sigmo_patrimonio_novidades_fotos')
+    .select('*')
+    .in('novidade_id', novidadeIds)
+    .order('principal', { ascending: false })
+    .order('ordem', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (fotosError) {
+    console.warn(
+      'Não foi possível carregar as fotos das novidades vinculadas à devolução:',
+      fotosError
+    )
+  }
+
+  const fotosPorNovidade = new Map()
+
+  for (const foto of fotos || []) {
+    const chave =
+      String(
+        foto?.novidade_id ||
+        ''
+      )
+
+    if (!chave) {
+      continue
+    }
+
+    if (!fotosPorNovidade.has(chave)) {
+      fotosPorNovidade.set(
+        chave,
+        []
+      )
+    }
+
+    fotosPorNovidade
+      .get(chave)
+      .push(foto)
+  }
+
+  return new Map(
+    (novidades || []).map(
+      (novidade) => [
+        String(novidade.id),
+        {
+          ...novidade,
+          fotos:
+            fotosPorNovidade.get(
+              String(novidade.id)
+            ) || []
+        }
+      ]
+    )
+  )
+}
+
 
 async function buscarNovidadesPendentesMunicoes(itens = []) {
   const municaoIds = [
@@ -1943,9 +2264,6 @@ export default function ReceberMaterial({
                 ? devolucao.itens
                 : []
 
-            const tonfasUsadas =
-              new Set()
-
             for (
               const itemMov of
               itensPendentes
@@ -1974,6 +2292,44 @@ export default function ReceberMaterial({
                   patrimonio?.referencia_id ||
                   null
 
+                const observacaoMovimentacao =
+                  lerObservacaoMovimentacao(
+                    itemMov?.observacao
+                  )
+
+                const grupoCondicao =
+                  normalizarTexto(
+                    observacaoMovimentacao
+                      ?.grupo_condicao ||
+                    observacaoMovimentacao
+                      ?.condicao_quantitativa ||
+                    ''
+                  )
+
+                const novidadeRecebimento =
+                  grupoCondicao ===
+                    'COM_NOVIDADE'
+                    ? (
+                        observacaoMovimentacao
+                          ?.novidade_recebimento ||
+                        null
+                      )
+                    : null
+
+                const novidadePatrimonialId =
+                  grupoCondicao ===
+                    'COM_NOVIDADE'
+                    ? (
+                        observacaoMovimentacao
+                          ?.novidade_patrimonial_id ||
+                        novidadeRecebimento
+                          ?.novidade_id ||
+                        novidadeRecebimento
+                          ?.id ||
+                        null
+                      )
+                    : null
+
                 const candidato =
                   quantitativos.find(
                     (item) =>
@@ -1982,35 +2338,92 @@ export default function ReceberMaterial({
                         item?.referencia_id ||
                         ''
                       ) ===
-                        String(
-                          tonfaId ||
-                          ''
-                        ) &&
-                      !tonfasUsadas.has(
-                        String(
-                          item?.movimentacao_tonfa_id ||
-                          item?.id
-                        )
+                      String(
+                        tonfaId ||
+                        ''
                       )
                   )
 
+                /*
+                 * Uma mesma cautela quantitativa pode gerar dois itens de
+                 * DEVOLUÇÃO para o mesmo estoque:
+                 *
+                 * - COM_NOVIDADE
+                 * - SEM_NOVIDADE
+                 *
+                 * Por isso não deduplicamos mais pelo movimentacao_tonfa_id.
+                 * A identidade deste registro passa a ser o item específico
+                 * da DEVOLUÇÃO.
+                 */
                 if (candidato) {
-                  tonfasUsadas.add(
-                    String(
-                      candidato?.movimentacao_tonfa_id ||
-                      candidato?.id
+                  const quantidadeDevolucao =
+                    Math.max(
+                      1,
+                      Number(
+                        itemMov?.quantidade ||
+                        1
+                      ) || 1
                     )
-                  )
 
                   lista.push({
                     ...candidato,
 
+                    id:
+                      `TONFA-DEVOLUCAO-${itemMov.id}`,
+
+                    patrimonio_id:
+                      patrimonioId,
+
+                    referencia_id:
+                      patrimonio?.referencia_id ||
+                      candidato?.referencia_id ||
+                      candidato?.tonfa_id ||
+                      null,
+
+                    grupo_condicao:
+                      grupoCondicao ||
+                      null,
+
+                    condicao_quantitativa:
+                      grupoCondicao ||
+                      null,
+
+                    novidade_patrimonial_id:
+                      novidadePatrimonialId,
+
+                    novidade_recebimento:
+                      novidadeRecebimento,
+
                     /*
-                     * A cautela quantitativa continua EM SERVIÇO
-                     * no banco até o recebimento físico.
-                     * Nesta tela, porém, o item já está numa
-                     * devolução pendente e deve refletir essa etapa.
+                     * Marcador preliminar. Depois enriquecemos a ocorrência
+                     * pelo ID oficial para trazer descrição/status/fotos.
                      */
+                    novidade_pendente:
+                      novidadePatrimonialId
+                        ? {
+                            id:
+                              novidadePatrimonialId,
+                            titulo:
+                              novidadeRecebimento
+                                ?.tipo ||
+                              'NOVIDADE',
+                            descricao:
+                              novidadeRecebimento
+                                ?.descricao ||
+                              '',
+                            quantidade_afetada:
+                              Math.max(
+                                1,
+                                Number(
+                                  novidadeRecebimento
+                                    ?.quantidade_afetada ||
+                                  quantidadeDevolucao
+                                ) || 1
+                              ),
+                            fotos: []
+                          }
+                        : null,
+
                     local_origem:
                       'CAUTELA INDIVIDUAL',
 
@@ -2029,20 +2442,10 @@ export default function ReceberMaterial({
                       'EM SERVIÇO',
 
                     quantidade:
-                      Math.min(
-                        Number(
-                          candidato?.quantidade ||
-                          1
-                        ),
+                      quantidadeDevolucao,
 
-                        Math.max(
-                          1,
-                          Number(
-                            itemMov?.quantidade ||
-                            1
-                          )
-                        )
-                      ),
+                    quantidade_receber:
+                      quantidadeDevolucao,
 
                     devolucao_movimentacao_id:
                       devolucao.id,
@@ -2178,53 +2581,121 @@ export default function ReceberMaterial({
               reEntregador
             )
 
+          const novidadeIdsTonfa =
+            listaComSuportesCOP
+              .filter(
+                (item) =>
+                  item?.tipo_registro ===
+                  'TONFA_QUANTIDADE' &&
+                  obterGrupoCondicaoTonfa(item) ===
+                    'COM_NOVIDADE'
+              )
+              .map(
+                (item) =>
+                  item?.novidade_patrimonial_id ||
+                  item?.novidade_recebimento
+                    ?.novidade_id ||
+                  item?.novidade_recebimento
+                    ?.id ||
+                  null
+              )
+              .filter(Boolean)
+
           const [
             novidadesPorPatrimonio,
-            novidadesPorMunicao
+            novidadesPorMunicao,
+            novidadesTonfaPorId
           ] = await Promise.all([
             buscarNovidadesPendentesPatrimonios(
-              listaComSuportesCOP
+              listaComSuportesCOP.filter(
+                (item) =>
+                  item?.tipo_registro !==
+                  'TONFA_QUANTIDADE'
+              )
             ),
             buscarNovidadesPendentesMunicoes(
               listaComSuportesCOP
+            ),
+            buscarNovidadesPatrimoniaisPorIds(
+              novidadeIdsTonfa
             )
           ])
 
           const listaComNovidades =
             listaComSuportesCOP.map(
-              (item) => ({
-                ...item,
-
-                novidade_pendente:
-                  (
-                    item?.tipo_registro ===
-                      'MUNICAO_DEVOLUCAO' ||
-                    itemEhTorniquete(item) ||
-                    itemEhViatura(item)
-                  )
-                    ? null
-                    : novidadesPorPatrimonio.get(
-                        String(
-                          item?.patrimonio_id ||
-                          item?.id ||
-                          ''
-                        )
-                      ) ||
-                      null,
-
-                aviso_novidade:
+              (item) => {
+                const ehTonfaQuantitativa =
                   item?.tipo_registro ===
-                  'MUNICAO_DEVOLUCAO'
-                    ? novidadesPorMunicao.get(
-                        String(
-                          item?.municao_id ||
-                          item?.referencia_id ||
-                          ''
-                        )
-                      ) ||
-                      null
+                  'TONFA_QUANTIDADE'
+
+                const grupoCondicao =
+                  ehTonfaQuantitativa
+                    ? obterGrupoCondicaoTonfa(
+                        item
+                      )
+                    : ''
+
+                const novidadeTonfaId =
+                  item
+                    ?.novidade_patrimonial_id ||
+                  item?.novidade_recebimento
+                    ?.novidade_id ||
+                  item?.novidade_recebimento
+                    ?.id ||
+                  null
+
+                const novidadeTonfa =
+                  ehTonfaQuantitativa &&
+                  grupoCondicao ===
+                    'COM_NOVIDADE'
+                    ? (
+                        novidadesTonfaPorId.get(
+                          String(
+                            novidadeTonfaId ||
+                            ''
+                          )
+                        ) ||
+                        item?.novidade_pendente ||
+                        null
+                      )
                     : null
-              })
+
+                return {
+                  ...item,
+
+                  novidade_pendente:
+                    ehTonfaQuantitativa
+                      ? novidadeTonfa
+                      : (
+                          item?.tipo_registro ===
+                            'MUNICAO_DEVOLUCAO' ||
+                          itemEhTorniquete(item) ||
+                          itemEhViatura(item)
+                        )
+                        ? null
+                        : novidadesPorPatrimonio.get(
+                            String(
+                              item?.patrimonio_id ||
+                              item?.id ||
+                              ''
+                            )
+                          ) ||
+                          null,
+
+                  aviso_novidade:
+                    item?.tipo_registro ===
+                    'MUNICAO_DEVOLUCAO'
+                      ? novidadesPorMunicao.get(
+                          String(
+                            item?.municao_id ||
+                            item?.referencia_id ||
+                            ''
+                          )
+                        ) ||
+                        null
+                      : null
+                }
+              }
             )
 
           setDevolucaoPendente(
@@ -2396,7 +2867,11 @@ export default function ReceberMaterial({
                       novidadePendente.descricao || ''
                     ),
                   providencia:
-                    '',
+                    normalizarTexto(
+                      item?.novidade_recebimento?.providencia ||
+                      novidadePendente?.providencia ||
+                      ''
+                    ),
                   quantidade_afetada:
                     Math.max(
                       1,
@@ -2445,7 +2920,12 @@ export default function ReceberMaterial({
               : {
                   tipo: '',
                   descricao: '',
-                  providencia: '',
+                  providencia:
+                normalizarTexto(
+                  item?.novidade_recebimento?.providencia ||
+                  novidadePendente?.providencia ||
+                  ''
+                ),
                   quantidade_afetada: 1,
                   fotos: [],
                   previews: []
@@ -2466,6 +2946,81 @@ export default function ReceberMaterial({
 
     setErro('')
     setMensagem('')
+  }
+
+  function apontarNovaNovidadeItem(
+    itemId
+  ) {
+    atualizarItemSelecionado(
+      itemId,
+      (item) => {
+        const novidadeUsuario =
+          item?.novidade_pendente ||
+          item?.aviso_novidade ||
+          null
+
+        const quantidadeUsuario =
+          novidadeUsuario?.id
+            ? obterQuantidadeAfetadaNovidadeExistente(
+                novidadeUsuario
+              )
+            : 0
+
+        return {
+          ...item,
+
+          novidade_aberta:
+            true,
+
+          novidade: {
+            tipo:
+              '',
+
+            descricao:
+              '',
+
+            providencia:
+              '',
+
+            quantidade_afetada:
+              1,
+
+            fotos:
+              [],
+
+            previews:
+              [],
+
+            nova_novidade_svdd:
+              true,
+
+            novidade_usuario_id:
+              novidadeUsuario?.id ||
+              null,
+
+            quantidade_afetada_usuario:
+              quantidadeUsuario,
+
+            titulo_usuario:
+              normalizarTexto(
+                novidadeUsuario?.titulo ||
+                ''
+              ),
+
+            descricao_usuario:
+              normalizarTexto(
+                novidadeUsuario?.descricao ||
+                ''
+              )
+          }
+        }
+      }
+    )
+
+    setErro('')
+    setMensagem(
+      'Informe a nova novidade constatada pelo SVDD. A quantidade será somada à novidade já registrada pelo usuário.'
+    )
   }
 
   function alterarNovidadeItem(
@@ -2494,6 +3049,30 @@ export default function ReceberMaterial({
         ) {
           novoValor =
             normalizarTexto(valor)
+        }
+
+        const ehTonfaQuantitativa =
+          item?.tipo_registro ===
+          'TONFA_QUANTIDADE'
+
+        const ehNovaNovidadeSvdd =
+          item?.novidade?.nova_novidade_svdd ===
+          true
+
+        let providenciaAutomatica =
+          novidadeAtual?.providencia ||
+          ''
+
+        if (
+          campo === 'tipo' &&
+          ehTonfaQuantitativa
+        ) {
+          providenciaAutomatica =
+            novoValor === 'EXTRAVIO'
+              ? 'EXTRAVIO'
+              : novoValor === 'AVARIA'
+                ? 'MANUTENCAO'
+                : ''
         }
 
         if (campo === 'descricao') {
@@ -2530,7 +3109,16 @@ export default function ReceberMaterial({
 
           novidade: {
             ...novidadeAtual,
-            [campo]: novoValor
+            [campo]: novoValor,
+            ...(
+              campo === 'tipo' &&
+              ehTonfaQuantitativa
+                ? {
+                    providencia:
+                      providenciaAutomatica
+                  }
+                : {}
+            )
           }
         }
       }
@@ -2742,14 +3330,99 @@ export default function ReceberMaterial({
       return null
     }
 
+    const quantidadeMaxima =
+      Math.max(
+        1,
+        Number(
+          item.quantidade_receber ||
+          item.quantidade ||
+          1
+        ) || 1
+      )
+
+    const novidadeUsuario =
+      item?.novidade_pendente ||
+      item?.aviso_novidade ||
+      null
+
+    const ehNovaNovidadeSvdd =
+      novidade?.nova_novidade_svdd === true &&
+      Boolean(
+        novidadeUsuario?.id
+      )
+
+    const quantidadeUsuario =
+      ehNovaNovidadeSvdd
+        ? obterQuantidadeAfetadaNovidadeExistente(
+            novidadeUsuario
+          )
+        : 0
+
+    const quantidadeNovaSvdd =
+      Math.max(
+        1,
+        Number(
+          novidade.quantidade_afetada ||
+          1
+        ) || 1
+      )
+
+    const quantidadeAfetadaFinal =
+      ehNovaNovidadeSvdd
+        ? Math.min(
+            quantidadeMaxima,
+            quantidadeUsuario +
+              quantidadeNovaSvdd
+          )
+        : Math.min(
+            quantidadeMaxima,
+            quantidadeNovaSvdd
+          )
+
+    const descricaoFinal =
+      ehNovaNovidadeSvdd
+        ? [
+            `NOVIDADE DO USUÁRIO: ${normalizarTexto(
+              novidadeUsuario?.titulo ||
+              'NOVIDADE'
+            )} - ${normalizarTexto(
+              novidadeUsuario?.descricao ||
+              'SEM DESCRIÇÃO'
+            )}`,
+            `NOVA NOVIDADE CONSTATADA PELO SVDD: ${normalizarTexto(
+              novidade.tipo ||
+              'AVARIA'
+            )} - ${normalizarTexto(
+              novidade.descricao
+            )}`,
+            `QUANTIDADE AFETADA PELO USUÁRIO: ${quantidadeUsuario}`,
+            `QUANTIDADE ADICIONAL CONSTATADA PELO SVDD: ${quantidadeNovaSvdd}`,
+            `QUANTIDADE AFETADA TOTAL: ${quantidadeAfetadaFinal}`
+          ]
+            .filter(Boolean)
+            .join(' | ')
+        : normalizarTexto(
+            novidade.descricao
+          )
+
     return {
       novidade_id:
-        novidade.novidade_id ||
-        novidade.id ||
-        null,
+        ehNovaNovidadeSvdd
+          ? (
+              novidadeUsuario?.id ||
+              novidade.novidade_id ||
+              novidade.id ||
+              null
+            )
+          : (
+              novidade.novidade_id ||
+              novidade.id ||
+              null
+            ),
 
       existente:
         Boolean(
+          ehNovaNovidadeSvdd ||
           novidade.existente ||
           novidade.novidade_id
         ),
@@ -2760,9 +3433,7 @@ export default function ReceberMaterial({
         ),
 
       descricao:
-        normalizarTexto(
-          novidade.descricao
-        ),
+        descricaoFinal,
 
       providencia:
         normalizarTexto(
@@ -2784,17 +3455,7 @@ export default function ReceberMaterial({
         )
           ? Math.max(
               1,
-              Math.min(
-                Number(
-                  novidade.quantidade_afetada ||
-                  1
-                ),
-                Number(
-                  item.quantidade_receber ||
-                  item.quantidade ||
-                  1
-                )
-              )
+              quantidadeAfetadaFinal
             )
           : 1,
 
@@ -2817,6 +3478,24 @@ export default function ReceberMaterial({
 
       foto:
         novidade.fotos?.[0] ||
+        null,
+
+      movimentacao_devolucao_id:
+        item?.devolucao_movimentacao_id ||
+        null,
+
+      movimentacao_item_id:
+        item?.devolucao_item_id ||
+        null,
+
+      devolucao_solicitada_em:
+        item?.solicitado_em ||
+        null,
+
+      documento_numero:
+        normalizarTexto(
+          documento
+        ) ||
         null
     }
   }
@@ -3024,7 +3703,11 @@ function alterarQuantidade(id, valor) {
                       novidadePendente.descricao || ''
                     ),
                   providencia:
-                    '',
+                    normalizarTexto(
+                      item?.novidade_recebimento?.providencia ||
+                      novidadePendente?.providencia ||
+                      ''
+                    ),
                   quantidade_afetada:
                     Math.max(
                       1,
@@ -3184,6 +3867,17 @@ async function confirmarRecebimento() {
     if (!novidade.descricao) {
       setErro(
         `Descreva a novidade de ${obterIdentificador(item)}.`
+      )
+      return
+    }
+
+    if (
+      novidade.tipo === 'EXTRAVIO' &&
+      item?.tipo_registro !==
+        'TONFA_QUANTIDADE'
+    ) {
+      setErro(
+        'EXTRAVIO só pode ser apontado pelo SVDD no recebimento de Tonfa/Cassetete.'
       )
       return
     }
@@ -4451,6 +5145,34 @@ async function confirmarRecebimento() {
     </small>
   )}
 
+  {item?.tipo_registro ===
+    'TONFA_QUANTIDADE' &&
+    obterGrupoCondicaoTonfa(item) && (
+      <small
+        style={{
+          display: 'block',
+          marginTop: '5px',
+          fontWeight: 800,
+          color:
+            obterGrupoCondicaoTonfa(item) ===
+            'COM_NOVIDADE'
+              ? '#b54708'
+              : '#027a48'
+        }}
+      >
+        {obterGrupoCondicaoTonfa(item) ===
+          'COM_NOVIDADE'
+          ? `COM NOVIDADE${
+              novidadeVisual?.titulo
+                ? ` • ${normalizarTexto(
+                    novidadeVisual.titulo
+                  )}`
+                : ''
+            }`
+          : 'SEM NOVIDADE'}
+      </small>
+  )}
+
   {novidadeVisual && (
     <div
       style={{
@@ -4769,6 +5491,19 @@ async function confirmarRecebimento() {
               onAlternarNovidade={
                 alternarNovidadeItem
               }
+              onApontarNovaNovidade={
+                apontarNovaNovidadeItem
+              }
+              tiposNovaNovidadeTonfaSvdd={[
+                {
+                  value: 'AVARIA',
+                  label: 'AVARIA'
+                },
+                {
+                  value: 'EXTRAVIO',
+                  label: 'EXTRAVIO'
+                }
+              ]}
               onNovidadeChange={
                 alterarNovidadeItem
               }

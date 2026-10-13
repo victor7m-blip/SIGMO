@@ -32,8 +32,14 @@ import {
   MODULOS_MANUTENCAO
 } from './manutencoesService'
 
+import {
+  registerAudit
+} from './auditoriaService'
+
 const TABLE = 'sigmo_tonfas'
 const PATRIMONIOS_TABLE = 'sigmo_patrimonios'
+const EXTRAVIOS_TABLE = 'sigmo_tonfas_extravios'
+const BAIXAS_TABLE = 'sigmo_patrimonio_baixas'
 
 function texto(valor) {
   return String(valor ?? '').trim()
@@ -69,6 +75,12 @@ function obterLocalRealPorSaldos(item = {}) {
   const manutencao =
     numeroInteiro(item.quantidade_manutencao)
 
+  const extraviadaSvdd =
+    numeroInteiro(item.quantidade_extraviada_svdd)
+
+  const extraviadaP4 =
+    numeroInteiro(item.quantidade_extraviada_p4)
+
   const locais = []
 
   if (p4 > 0) {
@@ -103,6 +115,22 @@ function obterLocalRealPorSaldos(item = {}) {
     )
   }
 
+  if (extraviadaSvdd > 0) {
+    locais.push(
+      extraviadaSvdd === 1
+        ? 'EXTRAVIADO • SVDD'
+        : `${extraviadaSvdd} EXTRAVIADOS • SVDD`
+    )
+  }
+
+  if (extraviadaP4 > 0) {
+    locais.push(
+      extraviadaP4 === 1
+        ? 'EXTRAVIADO • P4'
+        : `${extraviadaP4} EXTRAVIADOS • P4`
+    )
+  }
+
   if (locais.length > 0) {
     return locais.join(' • ')
   }
@@ -134,6 +162,16 @@ const quantidadeManutencao =
     item.quantidade_manutencao
   )
 
+  const quantidadeExtraviadaSvdd =
+    numeroInteiro(
+      item.quantidade_extraviada_svdd
+    )
+
+  const quantidadeExtraviadaP4 =
+    numeroInteiro(
+      item.quantidade_extraviada_p4
+    )
+
   let quantidadeP4 =
     numeroInteiro(
       item.quantidade_p4
@@ -159,6 +197,8 @@ const quantidadeManutencao =
     quantidadeSvdd === 0 &&
     quantidadeEmServico === 0 &&
      quantidadeManutencao === 0 &&
+    quantidadeExtraviadaSvdd === 0 &&
+    quantidadeExtraviadaP4 === 0 &&
     quantidadeDisponivel > 0
   ) {
     quantidadeP4 =
@@ -182,6 +222,12 @@ const quantidadeManutencao =
      
     quantidade_manutencao:
     quantidadeManutencao,
+
+    quantidade_extraviada_svdd:
+      quantidadeExtraviadaSvdd,
+
+    quantidade_extraviada_p4:
+      quantidadeExtraviadaP4,
 
     quantidade_p4:
       quantidadeP4,
@@ -209,7 +255,11 @@ const quantidadeManutencao =
         quantidade_em_servico:
           quantidadeEmServico,
         quantidade_manutencao:
-          quantidadeManutencao
+          quantidadeManutencao,
+        quantidade_extraviada_svdd:
+          quantidadeExtraviadaSvdd,
+        quantidade_extraviada_p4:
+          quantidadeExtraviadaP4
       }),
 
     observacoes:
@@ -257,6 +307,12 @@ function prepararPayloadCadastro(
 
     quantidade_manutencao:
      0,
+
+    quantidade_extraviada_svdd:
+      0,
+
+    quantidade_extraviada_p4:
+      0,
 
     quantidade_p4:
       item.quantidade,
@@ -333,7 +389,9 @@ function localPatrimonial(item) {
     numeroInteiro(item.quantidade_p4) > 0 ||
     numeroInteiro(item.quantidade_svdd) > 0 ||
     numeroInteiro(item.quantidade_em_servico) > 0 ||
-    numeroInteiro(item.quantidade_manutencao) > 0
+    numeroInteiro(item.quantidade_manutencao) > 0 ||
+    numeroInteiro(item.quantidade_extraviada_svdd) > 0 ||
+    numeroInteiro(item.quantidade_extraviada_p4) > 0
   ) {
     return localPorSaldos
   }
@@ -382,6 +440,12 @@ function obterTotalSobGuarda(
     ) +
     numeroInteiro(
       tonfa.quantidade_manutencao
+    ) +
+    numeroInteiro(
+      tonfa.quantidade_extraviada_svdd
+    ) +
+    numeroInteiro(
+      tonfa.quantidade_extraviada_p4
     )
   )
 }
@@ -389,7 +453,10 @@ function obterTotalSobGuarda(
 function obterStatusEstoque({
   quantidadeP4,
   quantidadeSvdd,
-  quantidadeEmServico
+  quantidadeEmServico,
+  quantidadeManutencao = 0,
+  quantidadeExtraviadaSvdd = 0,
+  quantidadeExtraviadaP4 = 0
 }) {
   if (
     quantidadeEmServico > 0
@@ -409,6 +476,14 @@ function obterStatusEstoque({
     return STATUS_PATRIMONIAL.RESERVA
   }
 
+  if (
+    quantidadeManutencao > 0 ||
+    quantidadeExtraviadaSvdd > 0 ||
+    quantidadeExtraviadaP4 > 0
+  ) {
+    return STATUS_PATRIMONIAL.CARGA
+  }
+
   return STATUS_PATRIMONIAL.RECOLHIDO
 }
 
@@ -416,7 +491,9 @@ function obterLocalEstoque({
   quantidadeP4,
   quantidadeSvdd,
   quantidadeEmServico,
-  quantidadeManutencao = 0
+  quantidadeManutencao = 0,
+  quantidadeExtraviadaSvdd = 0,
+  quantidadeExtraviadaP4 = 0
 }) {
   return (
     obterLocalRealPorSaldos({
@@ -427,7 +504,11 @@ function obterLocalEstoque({
       quantidade_em_servico:
         quantidadeEmServico,
       quantidade_manutencao:
-        quantidadeManutencao
+        quantidadeManutencao,
+      quantidade_extraviada_svdd:
+        quantidadeExtraviadaSvdd,
+      quantidade_extraviada_p4:
+        quantidadeExtraviadaP4
     }) ||
     'SEM LOCAL DEFINIDO'
   )
@@ -518,7 +599,9 @@ async function atualizarSaldosTonfa({
   quantidadeP4,
   quantidadeSvdd,
   quantidadeEmServico,
-  quantidadeManutencao
+  quantidadeManutencao,
+  quantidadeExtraviadaSvdd,
+  quantidadeExtraviadaP4
 }) {
   const p4 =
     numeroInteiro(
@@ -542,6 +625,20 @@ const manutencao =
         quantidadeManutencao
       )
 
+  const extraviadaSvdd =
+    quantidadeExtraviadaSvdd === undefined
+      ? null
+      : numeroInteiro(
+          quantidadeExtraviadaSvdd
+        )
+
+  const extraviadaP4 =
+    quantidadeExtraviadaP4 === undefined
+      ? null
+      : numeroInteiro(
+          quantidadeExtraviadaP4
+        )
+
   const quantidadeDisponivel =
     p4
 
@@ -554,7 +651,13 @@ const manutencao =
         svdd,
 
       quantidadeEmServico:
-        emServico
+        emServico,
+      quantidadeManutencao:
+        manutencao === null ? 0 : manutencao,
+      quantidadeExtraviadaSvdd:
+        extraviadaSvdd === null ? 0 : extraviadaSvdd,
+      quantidadeExtraviadaP4:
+        extraviadaP4 === null ? 0 : extraviadaP4
     })
 
   const localAtual =
@@ -571,7 +674,15 @@ const manutencao =
       quantidadeManutencao:
         manutencao === null
           ? 0
-          : manutencao
+          : manutencao,
+      quantidadeExtraviadaSvdd:
+        extraviadaSvdd === null
+          ? 0
+          : extraviadaSvdd,
+      quantidadeExtraviadaP4:
+        extraviadaP4 === null
+          ? 0
+          : extraviadaP4
     })
 
   const dadosAtualizacao = {
@@ -597,6 +708,16 @@ const manutencao =
 if (manutencao !== null) {
   dadosAtualizacao.quantidade_manutencao =
     manutencao
+}
+
+if (extraviadaSvdd !== null) {
+  dadosAtualizacao.quantidade_extraviada_svdd =
+    extraviadaSvdd
+}
+
+if (extraviadaP4 !== null) {
+  dadosAtualizacao.quantidade_extraviada_p4 =
+    extraviadaP4
 }
 
 const {
@@ -1079,7 +1200,9 @@ export async function atualizarTonfa(
   const foraDoP4 =
   atual.quantidade_svdd +
   atual.quantidade_em_servico +
-  atual.quantidade_manutencao
+  atual.quantidade_manutencao +
+  atual.quantidade_extraviada_svdd +
+  atual.quantidade_extraviada_p4
 
   if (
     dados.quantidade <
@@ -1108,6 +1231,12 @@ export async function atualizarTonfa(
 
   dados.quantidade_manutencao =
    atual.quantidade_manutencao
+
+  dados.quantidade_extraviada_svdd =
+    atual.quantidade_extraviada_svdd
+
+  dados.quantidade_extraviada_p4 =
+    atual.quantidade_extraviada_p4
 
   dados.status_operacional =
     obterStatusEstoque({
@@ -1183,7 +1312,9 @@ export async function excluirTonfa(
   const foraDoP4 =
   atual.quantidade_svdd +
   atual.quantidade_em_servico +
-  atual.quantidade_manutencao
+  atual.quantidade_manutencao +
+  atual.quantidade_extraviada_svdd +
+  atual.quantidade_extraviada_p4
 
   if (foraDoP4 > 0) {
     throw new Error(
@@ -1710,6 +1841,560 @@ export async function enviarTonfaParaManutencao({
   }
 }
 
+
+export async function constatarNovidadeTonfa({
+  tonfaId,
+  quantidade = 1,
+  setor = 'SVDD',
+  tipoNovidade,
+  descricao = null,
+  observacoes = null,
+  documentoTipo = null,
+  documentoNumero = null,
+  documentoData = null,
+  policial = null,
+  foto = null,
+  fotos = [],
+  user = null
+}) {
+  if (!tonfaId) {
+    throw new Error(
+      'Tonfa/Cassetete não informado.'
+    )
+  }
+
+  const quantidadeAfetada =
+    validarQuantidade(
+      quantidade
+    )
+
+  const setorNormalizado =
+    maiusculo(setor)
+
+  if (
+    !['P4', 'SVDD'].includes(
+      setorNormalizado
+    )
+  ) {
+    throw new Error(
+      'O setor da constatação deve ser P4 ou SVDD.'
+    )
+  }
+
+  const novidadeNormalizada =
+    maiusculo(
+      tipoNovidade
+    )
+
+  if (
+    !['AVARIA', 'EXTRAVIO'].includes(
+      novidadeNormalizada
+    )
+  ) {
+    throw new Error(
+      'Selecione AVARIA ou EXTRAVIO.'
+    )
+  }
+
+  const descricaoNormalizada =
+    texto(descricao)
+
+  if (!descricaoNormalizada) {
+    throw new Error(
+      'Informe a descrição da novidade constatada.'
+    )
+  }
+
+  /*
+   * AVARIA usa o mesmo motor de manutenção já validado.
+   * A responsabilidade permanece no setor que constatou
+   * a novidade (P4 ou SVDD).
+   */
+  if (
+    novidadeNormalizada ===
+    'AVARIA'
+  ) {
+    const resultado =
+      await enviarTonfaParaManutencao({
+        tonfaId,
+        quantidade:
+          quantidadeAfetada,
+        origem:
+          setorNormalizado,
+        tipoNovidade:
+          'AVARIA',
+        descricao:
+          descricaoNormalizada,
+        observacoes:
+          texto(observacoes) ||
+          null,
+        foto,
+        fotos:
+          Array.isArray(fotos)
+            ? fotos
+            : [],
+        user
+      })
+
+    try {
+      await registerAudit({
+        user,
+        action:
+          'NOVIDADE_PATRIMONIAL',
+        tableName:
+          TABLE,
+        recordId:
+          tonfaId,
+        description:
+          `${setorNormalizado} constatou AVARIA em ${resultado?.tonfa?.tipo || 'TONFA/CASSETETE'}, ` +
+          `quantidade ${quantidadeAfetada}. ` +
+          `Descrição: ${descricaoNormalizada}.`
+      })
+    } catch (auditError) {
+      console.error(
+        'Avaria registrada, mas não foi possível registrar auditoria da constatação:',
+        auditError
+      )
+    }
+
+    return {
+      ...resultado,
+      tipo_novidade:
+        'AVARIA',
+      setor:
+        setorNormalizado
+    }
+  }
+
+  /*
+   * EXTRAVIO constatado diretamente no estoque do setor:
+   *
+   * - retira fisicamente do cofre do setor;
+   * - mantém a responsabilidade no próprio setor;
+   * - soma em quantidade_extraviada_p4 ou
+   *   quantidade_extraviada_svdd;
+   * - cria ocorrência em sigmo_tonfas_extravios.
+   */
+  const tonfa =
+    await buscarTonfaPorId(
+      tonfaId
+    )
+
+  const saldoSetor =
+    setorNormalizado === 'P4'
+      ? numeroInteiro(
+          tonfa.quantidade_p4
+        )
+      : numeroInteiro(
+          tonfa.quantidade_svdd
+        )
+
+  if (
+    quantidadeAfetada >
+    saldoSetor
+  ) {
+    throw new Error(
+      `${setorNormalizado === 'P4' ? 'O P4' : 'O Serviço de Dia'} possui apenas ${saldoSetor} unidade(s) disponível(is) no cofre.`
+    )
+  }
+
+  const saldoAnterior = {
+    quantidade_p4:
+      numeroInteiro(
+        tonfa.quantidade_p4
+      ),
+    quantidade_svdd:
+      numeroInteiro(
+        tonfa.quantidade_svdd
+      ),
+    quantidade_em_servico:
+      numeroInteiro(
+        tonfa.quantidade_em_servico
+      ),
+    quantidade_manutencao:
+      numeroInteiro(
+        tonfa.quantidade_manutencao
+      ),
+    quantidade_extraviada_svdd:
+      numeroInteiro(
+        tonfa.quantidade_extraviada_svdd
+      ),
+    quantidade_extraviada_p4:
+      numeroInteiro(
+        tonfa.quantidade_extraviada_p4
+      )
+  }
+
+  let tonfaAtualizada = null
+  let extravioRegistrado = null
+
+  const registradoPorNome =
+    texto(
+      user?.nome ||
+      user?.nome_guerra ||
+      user?.nome_completo ||
+      user?.email ||
+      'USUÁRIO SIGMO'
+    ) || null
+
+  try {
+    tonfaAtualizada =
+      await atualizarSaldosTonfa({
+        id:
+          tonfa.id,
+
+        quantidadeP4:
+          setorNormalizado === 'P4'
+            ? saldoAnterior.quantidade_p4 -
+              quantidadeAfetada
+            : saldoAnterior.quantidade_p4,
+
+        quantidadeSvdd:
+          setorNormalizado === 'SVDD'
+            ? saldoAnterior.quantidade_svdd -
+              quantidadeAfetada
+            : saldoAnterior.quantidade_svdd,
+
+        quantidadeEmServico:
+          saldoAnterior.quantidade_em_servico,
+
+        quantidadeManutencao:
+          saldoAnterior.quantidade_manutencao,
+
+        quantidadeExtraviadaSvdd:
+          setorNormalizado === 'SVDD'
+            ? saldoAnterior.quantidade_extraviada_svdd +
+              quantidadeAfetada
+            : saldoAnterior.quantidade_extraviada_svdd,
+
+        quantidadeExtraviadaP4:
+          setorNormalizado === 'P4'
+            ? saldoAnterior.quantidade_extraviada_p4 +
+              quantidadeAfetada
+            : saldoAnterior.quantidade_extraviada_p4
+      })
+
+    await sincronizarPatrimonioTonfa(
+      tonfaAtualizada,
+      user
+    )
+
+    const agora =
+      new Date().toISOString()
+
+    const {
+      data,
+      error
+    } = await supabase
+      .from(EXTRAVIOS_TABLE)
+      .insert({
+        tonfa_id:
+          tonfa.id,
+
+        tipo_material:
+          tonfa.tipo,
+
+        quantidade:
+          quantidadeAfetada,
+
+        status:
+          'EM_APURACAO',
+
+        responsavel_setor:
+          setorNormalizado,
+
+        policial_id:
+          policial?.id ||
+          null,
+
+        policial_re:
+          texto(
+            policial?.re
+          ) || null,
+
+        policial_nome:
+          texto(
+            policial?.nome_guerra ||
+            policial?.nome ||
+            policial?.nome_completo
+          ) || null,
+
+        extravio_constatado_em:
+          agora,
+
+        registrado_por_id:
+          user?.id ||
+          null,
+
+        registrado_por_nome:
+          registradoPorNome,
+
+        descricao:
+          descricaoNormalizada,
+
+        documento_tipo:
+          texto(
+            documentoTipo
+          ) || null,
+
+        documento_numero:
+          texto(
+            documentoNumero
+          ) || null,
+
+        documento_data:
+          documentoData ||
+          null,
+
+        observacoes:
+          texto(
+            observacoes
+          ) || null,
+
+        ativo:
+          true
+      })
+      .select()
+      .single()
+
+    if (error) {
+      throw error
+    }
+
+    extravioRegistrado =
+      data
+
+    try {
+      await registerAudit({
+        user,
+
+        action:
+          'EXTRAVIO_REGISTRADO',
+
+        tableName:
+          EXTRAVIOS_TABLE,
+
+        recordId:
+          data?.id ||
+          null,
+
+        description:
+          `${registradoPorNome || 'Usuário'} constatou EXTRAVIO de ${tonfa.tipo} no ${setorNormalizado}, ` +
+          `quantidade ${quantidadeAfetada}. ` +
+          `A responsabilidade permaneceu no ${setorNormalizado}. ` +
+          `Descrição: ${descricaoNormalizada}. ` +
+          `Referência patrimonial: ${tonfa.id}.`
+      })
+    } catch (auditError) {
+      console.error(
+        'Extravio registrado, mas não foi possível registrar toda a auditoria:',
+        auditError
+      )
+    }
+
+    return {
+      tonfa:
+        tonfaAtualizada,
+
+      extravio:
+        extravioRegistrado,
+
+      tipo_novidade:
+        'EXTRAVIO',
+
+      setor:
+        setorNormalizado
+    }
+  } catch (error) {
+    if (tonfaAtualizada) {
+      try {
+        const restaurada =
+          await atualizarSaldosTonfa({
+            id:
+              tonfa.id,
+
+            quantidadeP4:
+              saldoAnterior.quantidade_p4,
+
+            quantidadeSvdd:
+              saldoAnterior.quantidade_svdd,
+
+            quantidadeEmServico:
+              saldoAnterior.quantidade_em_servico,
+
+            quantidadeManutencao:
+              saldoAnterior.quantidade_manutencao,
+
+            quantidadeExtraviadaSvdd:
+              saldoAnterior.quantidade_extraviada_svdd,
+
+            quantidadeExtraviadaP4:
+              saldoAnterior.quantidade_extraviada_p4
+          })
+
+        await sincronizarPatrimonioTonfa(
+          restaurada,
+          user
+        )
+      } catch (rollbackError) {
+        console.error(
+          'Erro ao desfazer constatação de extravio de Tonfa/Cassetete:',
+          rollbackError
+        )
+      }
+    }
+
+    throw error
+  }
+}
+
+
+async function registrarExtravioTonfa({
+  tonfa,
+  cautela,
+  quantidade,
+  novidade = null,
+  observacoes = null,
+  user = null
+}) {
+  const valor =
+    validarQuantidade(quantidade)
+
+  const registradoPorNome =
+    texto(
+      user?.nome ||
+      user?.nome_guerra ||
+      user?.nome_completo ||
+      user?.email ||
+      'USUÁRIO SIGMO'
+    ) || null
+
+  const { data, error } = await supabase
+    .from(EXTRAVIOS_TABLE)
+    .insert({
+      tonfa_id: tonfa.id,
+      tipo_material: tonfa.tipo,
+      quantidade: valor,
+      status: 'EM_APURACAO',
+      responsavel_setor: 'SVDD',
+      policial_id:
+        cautela?.policial_id ||
+        novidade?.policial?.id ||
+        null,
+      policial_re:
+        texto(
+          cautela?.policial_re ||
+          novidade?.policial?.re
+        ) || null,
+      policial_nome:
+        texto(
+          cautela?.policial_nome ||
+          novidade?.policial?.nome_guerra ||
+          novidade?.policial?.nome
+        ) || null,
+      movimentacao_cautela_id:
+        cautela?.movimentacao_principal_id ||
+        null,
+      movimentacao_devolucao_id:
+        novidade?.movimentacao_devolucao_id ||
+        null,
+      movimentacao_item_id:
+        novidade?.movimentacao_item_id ||
+        null,
+      retirado_em:
+        cautela?.criado_em ||
+        cautela?.created_at ||
+        null,
+      devolucao_prevista:
+        cautela?.devolucao_prevista ||
+        null,
+      devolucao_solicitada_em:
+        novidade?.devolucao_solicitada_em ||
+        null,
+      extravio_constatado_em:
+        new Date().toISOString(),
+      registrado_por_id:
+        user?.id ||
+        null,
+      registrado_por_nome:
+        registradoPorNome,
+      descricao:
+        texto(
+          novidade?.descricao ||
+          observacoes ||
+          'EXTRAVIO CONSTATADO PELO SVDD NO RECEBIMENTO DA CAUTELA.'
+        ) || null,
+      documento_tipo:
+        novidade?.documento_tipo ||
+        null,
+      documento_numero:
+        novidade?.documento_numero ||
+        null,
+      documento_data:
+        novidade?.documento_data ||
+        null,
+      observacoes:
+        observacoes ||
+        null,
+      ativo: true
+    })
+    .select()
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  try {
+    await registerAudit({
+      user,
+
+      action:
+        'EXTRAVIO_REGISTRADO',
+
+      tableName:
+        EXTRAVIOS_TABLE,
+
+      recordId:
+        data?.id ||
+        null,
+
+      description:
+        `${registradoPorNome || 'Usuário'} registrou EXTRAVIO de ${tonfa.tipo}, ` +
+        `quantidade ${valor}, constatado pelo SVDD no recebimento da cautela. ` +
+        `Policial relacionado: ${
+          cautela?.policial_nome ||
+          novidade?.policial?.nome_guerra ||
+          novidade?.policial?.nome ||
+          'não informado'
+        }${
+          cautela?.policial_re ||
+          novidade?.policial?.re
+            ? `, RE ${
+                cautela?.policial_re ||
+                novidade?.policial?.re
+              }`
+            : ''
+        }. ` +
+        `Descrição: ${
+          texto(
+            novidade?.descricao ||
+            observacoes
+          ) ||
+          'não informada'
+        }.`
+    })
+  } catch (auditError) {
+    console.error(
+      'Extravio registrado, mas não foi possível registrar auditoria:',
+      auditError
+    )
+  }
+
+  return data
+}
+
+
 export async function receberCautelaTonfa({
   movimentacaoId,
   quantidade = 1,
@@ -1788,10 +2473,141 @@ export async function receberCautelaTonfa({
 
   let resultado
 
-if (
+const providenciaNormalizada =
   String(providencia || '')
     .trim()
-    .toUpperCase() ===
+    .toUpperCase()
+
+if (
+  providenciaNormalizada ===
+  'EXTRAVIO'
+) {
+  const tonfa =
+    await buscarTonfaPorId(
+      cautela.tonfa_id
+    )
+
+  if (
+    quantidadeRecebida >
+    tonfa.quantidade_em_servico
+  ) {
+    throw new Error(
+      `Existem apenas ${tonfa.quantidade_em_servico} unidade(s) registradas em serviço.`
+    )
+  }
+
+  const quantidadeExtraviada =
+    Math.max(
+      1,
+      Math.min(
+        quantidadeRecebida,
+        numeroInteiro(
+          novidade?.quantidade_afetada ||
+          1
+        ) || 1
+      )
+    )
+
+  const quantidadeParaSvdd =
+    quantidadeRecebida -
+    quantidadeExtraviada
+
+  let tonfaAtualizada = null
+  let extravioRegistrado = null
+
+  try {
+    tonfaAtualizada =
+      await atualizarSaldosTonfa({
+        id: tonfa.id,
+        quantidadeP4:
+          tonfa.quantidade_p4,
+        quantidadeSvdd:
+          tonfa.quantidade_svdd +
+          quantidadeParaSvdd,
+        quantidadeEmServico:
+          tonfa.quantidade_em_servico -
+          quantidadeRecebida,
+        quantidadeManutencao:
+          tonfa.quantidade_manutencao,
+        quantidadeExtraviadaSvdd:
+          tonfa.quantidade_extraviada_svdd +
+          quantidadeExtraviada,
+        quantidadeExtraviadaP4:
+          tonfa.quantidade_extraviada_p4
+      })
+
+    await sincronizarPatrimonioTonfa(
+      tonfaAtualizada,
+      user
+    )
+
+    extravioRegistrado =
+      await registrarExtravioTonfa({
+        tonfa,
+        cautela,
+        quantidade:
+          quantidadeExtraviada,
+        novidade,
+        observacoes,
+        user
+      })
+  } catch (error) {
+    if (tonfaAtualizada) {
+      try {
+        const restaurada =
+          await atualizarSaldosTonfa({
+            id: tonfa.id,
+            quantidadeP4:
+              tonfa.quantidade_p4,
+            quantidadeSvdd:
+              tonfa.quantidade_svdd,
+            quantidadeEmServico:
+              tonfa.quantidade_em_servico,
+            quantidadeManutencao:
+              tonfa.quantidade_manutencao,
+            quantidadeExtraviadaSvdd:
+              tonfa.quantidade_extraviada_svdd,
+            quantidadeExtraviadaP4:
+              tonfa.quantidade_extraviada_p4
+          })
+
+        await sincronizarPatrimonioTonfa(
+          restaurada,
+          user
+        )
+      } catch (rollbackError) {
+        console.error(
+          'Erro ao desfazer o registro de extravio de Tonfa/Cassetete:',
+          rollbackError
+        )
+      }
+    }
+
+    throw error
+  }
+
+  resultado = {
+    tonfa:
+      tonfaAtualizada,
+    extravio:
+      extravioRegistrado,
+    movimentacao: {
+      tipo:
+        'EXTRAVIO',
+      quantidade:
+        quantidadeExtraviada,
+      quantidade_recebida:
+        quantidadeRecebida,
+      quantidade_svdd:
+        quantidadeParaSvdd,
+      origem:
+        policial,
+      destino:
+        'EXTRAVIO_SVDD'
+    }
+  }
+} else if (
+  providenciaNormalizada ===
   'MANUTENCAO'
 ) {
   const tonfa =
@@ -1808,6 +2624,31 @@ if (
     )
   }
 
+  /*
+   * A devolução pode conter várias unidades, mas a novidade pode afetar
+   * somente parte delas. Ex.: recebe 3 e somente 1 está avariada.
+   *
+   * Nesse caso:
+   *   - todas as 3 saem de EM SERVIÇO;
+   *   - somente a quantidade afetada vai para MANUTENÇÃO;
+   *   - o restante retorna ao COFRE DO SVDD.
+   */
+  const quantidadeAfetada =
+    Math.max(
+      1,
+      Math.min(
+        quantidadeRecebida,
+        numeroInteiro(
+          novidade?.quantidade_afetada ||
+          1
+        ) || 1
+      )
+    )
+
+  const quantidadeParaSvdd =
+    quantidadeRecebida -
+    quantidadeAfetada
+
   const quantidadeManutencaoAtual =
     numeroInteiro(
       tonfa.quantidade_manutencao
@@ -1823,9 +2664,13 @@ if (
         tonfa.quantidade_em_servico -
         quantidadeRecebida,
 
+      quantidade_svdd:
+        tonfa.quantidade_svdd +
+        quantidadeParaSvdd,
+
       quantidade_manutencao:
         quantidadeManutencaoAtual +
-        quantidadeRecebida
+        quantidadeAfetada
     })
     .eq(
       'id',
@@ -1869,7 +2714,7 @@ if (
           patrimonio.id,
 
         quantidade:
-          quantidadeRecebida,
+          quantidadeAfetada,
 
         tipoNovidade:
           novidade?.tipo ||
@@ -1946,7 +2791,13 @@ if (
         'MANUTENCAO',
 
       quantidade:
+        quantidadeAfetada,
+
+      quantidade_recebida:
         quantidadeRecebida,
+
+      quantidade_svdd:
+        quantidadeParaSvdd,
 
       origem:
         policial,
@@ -2106,6 +2957,124 @@ export async function devolverTonfaDoSvddAoP4({
   })
 }
 
+
+export async function listarBaixasTonfasAprovadas() {
+  const {
+    data,
+    error
+  } = await supabase
+    .from(BAIXAS_TABLE)
+    .select(
+      'id, referencia_id, patrimonio, status, motivo, observacoes, status_anterior, local_anterior, solicitada_em, decidida_em'
+    )
+    .eq('modulo', 'TONFAS')
+    .eq('status', 'APROVADA')
+    .order(
+      'decidida_em',
+      { ascending: false }
+    )
+
+  if (error) {
+    throw error
+  }
+
+  return data || []
+}
+
+
+export async function obterResumoBaixasTonfas() {
+  const baixas =
+    await listarBaixasTonfasAprovadas()
+
+  const resumo = {
+    total:
+      0,
+
+    tonfas:
+      0,
+
+    cassetetes:
+      0,
+
+    porReferencia:
+      {}
+  }
+
+  baixas.forEach(
+    (baixa) => {
+      const tipo =
+        maiusculo(
+          baixa?.patrimonio
+        )
+
+      const referenciaId =
+        texto(
+          baixa?.referencia_id
+        )
+
+      resumo.total += 1
+
+      if (
+        tipo === 'CASSETETE'
+      ) {
+        resumo.cassetetes += 1
+      } else {
+        resumo.tonfas += 1
+      }
+
+      if (referenciaId) {
+        resumo.porReferencia[
+          referenciaId
+        ] =
+          numeroInteiro(
+            resumo.porReferencia[
+              referenciaId
+            ]
+          ) + 1
+      }
+    }
+  )
+
+  return resumo
+}
+
+
+export async function obterQuantidadeAtivaTonfa(
+  tonfaId
+) {
+  const tonfa =
+    await buscarTonfaPorId(
+      tonfaId
+    )
+
+  const resumoBaixas =
+    await obterResumoBaixasTonfas()
+
+  const quantidadeBaixada =
+    numeroInteiro(
+      resumoBaixas
+        .porReferencia?.[
+          tonfa.id
+        ]
+    )
+
+  return {
+    quantidade_original:
+      tonfa.quantidade,
+
+    quantidade_baixada:
+      quantidadeBaixada,
+
+    quantidade_ativa:
+      Math.max(
+        0,
+        tonfa.quantidade -
+        quantidadeBaixada
+      )
+  }
+}
+
+
 export async function conferirSaldoTonfa(
   tonfaId
 ) {
@@ -2119,11 +3088,35 @@ export async function conferirSaldoTonfa(
       tonfa
     )
 
+  const resumoBaixas =
+    await obterResumoBaixasTonfas()
+
+  const quantidadeBaixada =
+    numeroInteiro(
+      resumoBaixas
+        .porReferencia?.[
+          tonfa.id
+        ]
+    )
+
+  const quantidadeAtiva =
+    Math.max(
+      0,
+      tonfa.quantidade -
+      quantidadeBaixada
+    )
+
   return {
     tonfa,
 
     quantidade_total:
       tonfa.quantidade,
+
+    quantidade_ativa:
+      quantidadeAtiva,
+
+    quantidade_baixada:
+      quantidadeBaixada,
 
     quantidade_p4:
       tonfa.quantidade_p4,
@@ -2137,15 +3130,31 @@ export async function conferirSaldoTonfa(
     quantidade_manutencao:
       tonfa.quantidade_manutencao,
 
+    quantidade_extraviada_svdd:
+      tonfa.quantidade_extraviada_svdd,
+
+    quantidade_extraviada_p4:
+      tonfa.quantidade_extraviada_p4,
+
     total_sob_guarda:
       totalSobGuarda,
 
+    total_contabilizado:
+      totalSobGuarda +
+      quantidadeBaixada,
+
     divergencia:
-      totalSobGuarda !==
+      (
+        totalSobGuarda +
+        quantidadeBaixada
+      ) !==
       tonfa.quantidade,
 
     diferenca:
       tonfa.quantidade -
-      totalSobGuarda
+      (
+        totalSobGuarda +
+        quantidadeBaixada
+      )
   }
 }
