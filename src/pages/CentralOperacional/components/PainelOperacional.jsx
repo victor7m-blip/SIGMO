@@ -949,6 +949,36 @@ function ehExtravioPatrimonial(secao) {
   return secao?.key === 'extraviados'
 }
 
+// Responsável patrimonial: preserva o nome quando informado.
+// Para Tonfas/Cassetetes quantitativos, usa o setor de guarda
+// quando não há responsável individual identificado.
+function responsavelIndicadorPatrimonial(item) {
+  const nome = [
+    item?.responsavel_atual_nome,
+    item?.responsavel_nome
+  ].map(texto).find((valor) => valor && normalizarOperacional(valor) !== 'NAO INFORMADO')
+
+  if (nome) return nome
+
+  const material = normalizarOperacional(item?.tipo || item?.patrimonio)
+  if (material !== 'TONFA' && material !== 'CASSETETE') {
+    return 'Não informado'
+  }
+
+  const setor = normalizarOperacional(
+    item?.responsavel_setor ||
+    item?.setor_responsavel ||
+    item?.carga_atual ||
+    item?.responsabilidade_atual ||
+    item?.local_atual
+  )
+
+  if (setor.includes('SVDD') || setor.includes('SERVICO DE DIA')) return 'SVDD'
+  if (setor.includes('P4')) return 'P4'
+
+  return 'Não informado'
+}
+
 function tituloItem(item, secao) {
   if (ehExtravioPatrimonial(secao)) {
     const tipo =
@@ -1362,7 +1392,7 @@ function detalheItem(item, secao) {
       item?.tipo,
       item?.status_operacional || item?.status,
       item?.local_atual,
-      item?.responsavel_atual_nome || item?.responsavel_nome
+      responsavelIndicadorPatrimonial(item)
     ].map(texto).filter(Boolean).join(' • ')
   }
 
@@ -6982,7 +7012,32 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               <div><span>Patrimônio</span><strong>{item?.patrimonio || item?.identificador || 'Não informado'}</strong></div>
                               <div><span>Nº de série</span><strong>{item?.numero_serie || 'Não informado'}</strong></div>
                               <div><span>Local atual</span><strong>{item?.local_atual || 'Sem localização'}</strong></div>
-                              <div><span>Responsável</span><strong>{item?.responsavel_atual_nome || item?.responsavel_nome || 'Não informado'}</strong></div>
+                              <div><span>Responsável</span><strong>{responsavelIndicadorPatrimonial(item) || 'Não informado'}</strong></div>
+                              {selecionado?.key === 'baixados' && (
+                                <>
+                                  <div style={{ gridColumn: '1 / -1' }}>
+                                    <span>Observações / providências</span>
+                                    <strong>{[
+                                      item?.observacoes,
+                                      item?.observacao,
+                                      item?.decisao_observacoes,
+                                      item?.dados?.observacoes,
+                                      item?.metadata?.observacoes
+                                    ].map(texto).filter(Boolean).filter((valor, index, lista) => lista.indexOf(valor) === index).join(' • ') || 'Não informado'}</strong>
+                                  </div>
+                                  <div style={{ gridColumn: '1 / -1' }}>
+                                    <span>Documentação / referência</span>
+                                    <strong>{[
+                                      item?.documento_tipo,
+                                      item?.documento_numero,
+                                      item?.documento,
+                                      item?.documento_referencia,
+                                      item?.dados?.documento,
+                                      item?.metadata?.documento
+                                    ].map((valor) => typeof valor === 'string' || typeof valor === 'number' ? texto(valor) : '').filter(Boolean).filter((valor, index, lista) => lista.indexOf(valor) === index).join(' • ') || 'Não informado'}</strong>
+                                  </div>
+                                </>
+                              )}
                             </>
                           ) : (
                             ehAprovacaoComandante(

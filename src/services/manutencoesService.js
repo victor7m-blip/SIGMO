@@ -3934,13 +3934,22 @@ async function concluirNovidadePatrimonialDaManutencao(manutencao, user) {
 
   let queryNovidade = supabase
     .from('sigmo_patrimonio_novidades')
-    .select('id, patrimonio_id, titulo, status, created_at')
+    .select('id, patrimonio_id, titulo, descricao, status, created_at')
     .eq('status', 'registrada')
 
   if (novidadeVinculadaId) {
     queryNovidade = queryNovidade
       .eq('id', novidadeVinculadaId)
       .limit(1)
+  } else if (manutencao?.modulo === MODULOS_MANUTENCAO.TONFAS) {
+    // Tonfas/Cassetetes são controlados por quantidade e compartilham o
+    // mesmo patrimônio. Nunca encerrar a última novidade apenas pelo ID
+    // patrimonial: ela pode pertencer a outra avaria ainda pendente.
+    queryNovidade = queryNovidade
+      .eq('patrimonio_id', patrimonioId)
+      .lte('created_at', manutencao.registrada_em)
+      .order('created_at', { ascending: false })
+      .limit(100)
   } else {
     queryNovidade = queryNovidade
       .eq('patrimonio_id', patrimonioId)
@@ -3953,7 +3962,15 @@ async function concluirNovidadePatrimonialDaManutencao(manutencao, user) {
 
   if (buscaError) throw buscaError
 
-  const novidade = novidades?.[0] || null
+  let novidade = novidades?.[0] || null
+  if (!novidadeVinculadaId && manutencao?.modulo === MODULOS_MANUTENCAO.TONFAS) {
+    const descricaoManutencao = maiusculo(manutencao?.descricao)
+    // Sem correspondência inequívoca, preservar a novidade pendente.
+    const candidatas = (novidades || []).filter(
+      (item) => descricaoManutencao && maiusculo(item?.descricao) === descricaoManutencao
+    )
+    novidade = candidatas.length === 1 ? candidatas[0] : null
+  }
   if (!novidade?.id) {
 
     return null
@@ -4150,6 +4167,7 @@ export async function regularizarManutencaoTonfaP4({
   policialNome = null,
   documento = null,
   observacoes = null,
+  quantidadeSolicitada = null,
   user = null
 }) {
   if (!manutencaoId) {
@@ -4246,11 +4264,14 @@ export async function regularizarManutencaoTonfaP4({
     )
   }
 
-  const quantidade =
-    inteiroPositivo(
-      manutencao?.quantidade,
-      1
-    )
+  const quantidadeOriginal = inteiroPositivo(manutencao?.quantidade, 1)
+  const quantidade = quantidadeSolicitada == null
+    ? quantidadeOriginal
+    : Number(quantidadeSolicitada)
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > quantidadeOriginal) {
+    throw new Error(`Informe uma quantidade entre 1 e ${quantidadeOriginal}.`)
+  }
+  const quantidadeRestante = quantidadeOriginal - quantidade
 
   const {
     data: estoque,
@@ -4461,12 +4482,11 @@ export async function regularizarManutencaoTonfaP4({
     } = await supabase
       .from(TABLE)
       .update({
-        status:
-          STATUS_MANUTENCAO.CONCLUIDA,
+        quantidade: quantidadeRestante || quantidadeOriginal,
+        status: quantidadeRestante > 0 ? STATUS_MANUTENCAO.EM_MANUTENCAO : STATUS_MANUTENCAO.CONCLUIDA,
         observacoes:
           observacoesRegularizacao,
-        concluida_em:
-          agora,
+        concluida_em: quantidadeRestante > 0 ? manutencao.concluida_em : agora,
         concluida_por_id:
           usuarioId,
         concluida_por_nome:
@@ -4482,6 +4502,7 @@ export async function regularizarManutencaoTonfaP4({
         'status',
         STATUS_MANUTENCAO.EM_MANUTENCAO
       )
+      .eq('quantidade', quantidadeOriginal)
       .select('*')
       .maybeSingle()
 
@@ -4539,6 +4560,7 @@ export async function regularizarManutencaoTonfaP4({
       estoque:
         estoqueAtualizado,
       quantidade,
+      quantidadeRestante,
       policial_re:
         reResponsavel || null,
       policial_nome:
@@ -4574,6 +4596,7 @@ export async function regularizarExtravioTonfaP4({
   policialNome = null,
   documento = null,
   observacoes = null,
+  quantidadeSolicitada = null,
   user = null
 }) {
   if (!extravioId) {
@@ -4648,11 +4671,14 @@ export async function regularizarExtravioTonfaP4({
     )
   }
 
-  const quantidade =
-    inteiroPositivo(
-      extravio?.quantidade,
-      1
-    )
+  const quantidadeOriginal = inteiroPositivo(extravio?.quantidade, 1)
+  const quantidade = quantidadeSolicitada == null
+    ? quantidadeOriginal
+    : Number(quantidadeSolicitada)
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > quantidadeOriginal) {
+    throw new Error(`Informe uma quantidade entre 1 e ${quantidadeOriginal}.`)
+  }
+  const quantidadeRestante = quantidadeOriginal - quantidade
 
   const {
     data: estoque,
@@ -4811,6 +4837,7 @@ export async function regularizarExtravioTonfaP4({
       extravio.regularizacao_documento,
     regularizacao_observacoes:
       extravio.regularizacao_observacoes,
+    quantidade: extravio.quantidade,
     atualizado_em:
       extravio.atualizado_em
   }
@@ -4864,18 +4891,15 @@ export async function regularizarExtravioTonfaP4({
     } = await supabase
       .from('sigmo_tonfas_extravios')
       .update({
-        status:
-          'REGULARIZADO_REPOSICAO',
-        ativo:
-          false,
-        regularizado_em:
-          agora,
+        quantidade: quantidadeRestante || quantidadeOriginal,
+        status: quantidadeRestante > 0 ? extravio.status : 'REGULARIZADO_REPOSICAO',
+        ativo: quantidadeRestante > 0,
+        regularizado_em: quantidadeRestante > 0 ? extravio.regularizado_em : agora,
         regularizado_por_id:
           usuarioId,
         regularizado_por_nome:
           usuarioNome,
-        regularizacao_tipo:
-          'REPOSICAO',
+        regularizacao_tipo: quantidadeRestante > 0 ? extravio.regularizacao_tipo : 'REPOSICAO',
         regularizacao_documento:
           texto(documento)
             ? maiusculo(documento)
@@ -4902,6 +4926,7 @@ export async function regularizarExtravioTonfaP4({
       })
       .eq('id', extravio.id)
       .eq('ativo', true)
+      .eq('quantidade', quantidadeOriginal)
       .eq(
         'responsavel_setor',
         'P4'
@@ -4961,6 +4986,7 @@ export async function regularizarExtravioTonfaP4({
       estoque:
         estoqueAtualizado,
       quantidade,
+      quantidadeRestante,
       policial_re:
         reResponsavel || null,
       policial_nome:
@@ -5015,6 +5041,7 @@ export async function baixarManutencaoTonfaP4({
   motivo,
   documento = null,
   observacoes = null,
+  quantidadeSolicitada = null,
   user = null
 }) {
   if (!manutencaoId) {
@@ -5096,11 +5123,14 @@ export async function baixarManutencaoTonfaP4({
     )
   }
 
-  const quantidade =
-    inteiroPositivo(
-      manutencao?.quantidade,
-      1
-    )
+  const quantidadeOriginal = inteiroPositivo(manutencao?.quantidade, 1)
+  const quantidade = quantidadeSolicitada == null
+    ? quantidadeOriginal
+    : Number(quantidadeSolicitada)
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > quantidadeOriginal) {
+    throw new Error(`Informe uma quantidade entre 1 e ${quantidadeOriginal}.`)
+  }
+  const quantidadeRestante = quantidadeOriginal - quantidade
 
   const {
     data: estoque,
@@ -5386,12 +5416,11 @@ export async function baixarManutencaoTonfaP4({
     } = await supabase
       .from(TABLE)
       .update({
-        status:
-          STATUS_MANUTENCAO.CONCLUIDA,
+        quantidade: quantidadeRestante || quantidadeOriginal,
+        status: quantidadeRestante > 0 ? STATUS_MANUTENCAO.EM_MANUTENCAO : STATUS_MANUTENCAO.CONCLUIDA,
         observacoes:
           observacoesManutencao,
-        concluida_em:
-          agora,
+        concluida_em: quantidadeRestante > 0 ? manutencao.concluida_em : agora,
         concluida_por_id:
           usuarioId,
         concluida_por_nome:
@@ -5407,6 +5436,7 @@ export async function baixarManutencaoTonfaP4({
         'status',
         STATUS_MANUTENCAO.EM_MANUTENCAO
       )
+      .eq('quantidade', quantidadeOriginal)
       .select('*')
       .maybeSingle()
 
@@ -5418,6 +5448,20 @@ export async function baixarManutencaoTonfaP4({
       throw new Error(
         'A manutenção foi alterada por outro usuário. Atualize a tela e tente novamente.'
       )
+    }
+
+    // Somente após a baixa TOTAL e efetivamente concluída, encerrar a
+    // novidade vinculada. Falhas na atualização da novidade não devem
+    // reverter ou duplicar a baixa já consolidada.
+    if (quantidadeRestante === 0) {
+      try {
+        await concluirNovidadePatrimonialDaManutencao(manutencaoAtualizada, user)
+      } catch (erroNovidade) {
+        console.error(
+          'Baixa concluída, mas não foi possível encerrar a novidade patrimonial:',
+          erroNovidade
+        )
+      }
     }
 
     try {
@@ -5461,7 +5505,8 @@ export async function baixarManutencaoTonfaP4({
         estoqueAtualizado,
       baixas:
         baixasCriadas,
-      quantidade
+      quantidade,
+      quantidadeRestante
     }
   } catch (error) {
     if (
@@ -5529,6 +5574,7 @@ export async function baixarExtravioTonfaP4({
   motivo,
   documento = null,
   observacoes = null,
+  quantidadeSolicitada = null,
   user = null
 }) {
   if (!extravioId) {
@@ -5588,11 +5634,14 @@ export async function baixarExtravioTonfaP4({
     )
   }
 
-  const quantidade =
-    inteiroPositivo(
-      extravio?.quantidade,
-      1
-    )
+  const quantidadeOriginal = inteiroPositivo(extravio?.quantidade, 1)
+  const quantidade = quantidadeSolicitada == null
+    ? quantidadeOriginal
+    : Number(quantidadeSolicitada)
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > quantidadeOriginal) {
+    throw new Error(`Informe uma quantidade entre 1 e ${quantidadeOriginal}.`)
+  }
+  const quantidadeRestante = quantidadeOriginal - quantidade
 
   const {
     data: estoque,
@@ -5745,6 +5794,7 @@ export async function baixarExtravioTonfaP4({
       extravio.regularizacao_documento,
     regularizacao_observacoes:
       extravio.regularizacao_observacoes,
+    quantidade: extravio.quantidade,
     atualizado_em:
       extravio.atualizado_em
   }
@@ -5875,18 +5925,15 @@ export async function baixarExtravioTonfaP4({
     } = await supabase
       .from('sigmo_tonfas_extravios')
       .update({
-        status:
-          'ENCERRADO',
-        ativo:
-          false,
-        regularizado_em:
-          agora,
+        quantidade: quantidadeRestante || quantidadeOriginal,
+        status: quantidadeRestante > 0 ? extravio.status : 'ENCERRADO',
+        ativo: quantidadeRestante > 0,
+        regularizado_em: quantidadeRestante > 0 ? extravio.regularizado_em : agora,
         regularizado_por_id:
           usuarioId,
         regularizado_por_nome:
           usuarioNome,
-        regularizacao_tipo:
-          'BAIXA',
+        regularizacao_tipo: quantidadeRestante > 0 ? extravio.regularizacao_tipo : 'BAIXA',
         regularizacao_documento:
           texto(documento)
             ? maiusculo(documento)
@@ -5903,6 +5950,7 @@ export async function baixarExtravioTonfaP4({
       })
       .eq('id', extravio.id)
       .eq('ativo', true)
+      .eq('quantidade', quantidadeOriginal)
       .eq(
         'responsavel_setor',
         'P4'
@@ -5959,7 +6007,8 @@ export async function baixarExtravioTonfaP4({
         estoqueAtualizado,
       baixas:
         baixasCriadas,
-      quantidade
+      quantidade,
+      quantidadeRestante
     }
   } catch (error) {
     if (

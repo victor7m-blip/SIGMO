@@ -5225,16 +5225,9 @@ function CentralOperacional({ user, onAbrirRivViatura }) {
           )
       }
 
-      if (visaoP4) {
-        dadosOperacionaisComAlertas =
-          incluirRecebimentosManutencaoTonfasCentral(
-            dadosOperacionaisComAlertas,
-            recebimentosManutencaoTonfas,
-            {
-              visaoP4
-            }
-          )
-      }
+      // Transferências de Tonfas/Cassetetes em manutenção já integram
+      // "Transferências pendentes". Não duplicar em "Recebimentos pendentes".
+      // O aceite físico pelo P4 continua no fluxo da transferência.
 
       dadosOperacionaisComAlertas =
         incluirManutencoesTonfasComoBaixadosCentral(

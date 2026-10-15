@@ -865,6 +865,9 @@ export async function listarTonfas({
       count:
         'exact'
     })
+    // A listagem operacional usa apenas estoques ativos.
+    // Lotes desativados permanecem no banco para auditoria/historico.
+    .eq('ativo', true)
     .order(sortBy, {
       ascending:
         sortDirection ===

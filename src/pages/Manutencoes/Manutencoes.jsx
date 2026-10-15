@@ -37,7 +37,29 @@ function normalizarTexto(valor) {
     .toUpperCase()
 }
 
-function obterSetorManutencao(item) {
+function obterSetorManutencao(item, transferenciaPendenteP4 = false) {
+  // A custódia só muda depois que o P4 confirma o recebimento.
+  // Durante o encaminhamento pendente, continua pertencendo ao SVDD.
+  if (
+    normalizarTexto(item?.modulo) === 'TONFAS' &&
+    normalizarTexto(item?.status) === 'EM_MANUTENCAO'
+  ) {
+    if (transferenciaPendenteP4) return 'SVDD'
+
+    const destinoAtual = normalizarTexto(
+      item?.destino || item?.local_destino
+    )
+
+    if (
+      destinoAtual === 'P4' ||
+      destinoAtual.includes('MANUTENCAO / P4') ||
+      destinoAtual.includes('COFRE DO P4') ||
+      destinoAtual.includes('P4_MANUTENCAO')
+    ) {
+      return 'P4'
+    }
+  }
+
   const origemInstitucional =
     normalizarTexto(
       item?.origem_institucional
@@ -290,11 +312,15 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
         // As manutenções internas continuam separadas por responsabilidade.
         if (!setorUsuario) return true
 
-        return obterSetorManutencao(item) === setorUsuario
+        return obterSetorManutencao(
+          item,
+          transferenciasPendentesP4PorManutencao.has(String(item?.id || ''))
+        ) === setorUsuario
       })
   }, [
     manutencoes,
     manutencoesExternasAtivasPorManutencao,
+    transferenciasPendentesP4PorManutencao,
     filtros.dataInicial,
     filtros.dataFinal,
     user

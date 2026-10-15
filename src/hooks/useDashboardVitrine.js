@@ -18,7 +18,8 @@ import {
 } from '../services/armasService'
 
 import {
-  listarTonfas
+  listarTonfas,
+  obterResumoBaixasTonfas
 } from '../services/tonfasService'
 
 import {
@@ -366,10 +367,7 @@ function quantidade(item) {
       1
   )
 
-  return Number.isFinite(valor) &&
-    valor > 0
-    ? valor
-    : 1
+  return Number.isFinite(valor) && valor >= 0 ? valor : 0
 }
 
 function somar(lista, campo) {
@@ -428,14 +426,15 @@ function resumoTipo(lista) {
 }
 
 function resumirTonfas(lista) {
-  const tonfas = lista.filter(
+  const ativos = (lista || []).filter((item) => item?.ativo !== false)
+  const tonfas = ativos.filter(
     (item) =>
       normalizar(item?.tipo) ===
       'TONFA'
   )
 
   const cassetetes =
-    lista.filter(
+    ativos.filter(
       (item) =>
         normalizar(item?.tipo) ===
         'CASSETETE'
@@ -740,7 +739,8 @@ function filtrarArmasPorPerfil(
 
 function ajustarTonfasPorPerfil(
   resumo,
-  user
+  user,
+  manutencoesTonfasSvdd = null
 ) {
   const perfil =
     obterPerfilEfetivo(user)
@@ -767,8 +767,14 @@ function ajustarTonfasPorPerfil(
       PERFIS.AUXILIAR_SVDD
   ) {
     const ajustarDetalhe =
-      (detalhe) => ({
+      (detalhe, tipo) => ({
         ...detalhe,
+
+        manutencao: manutencoesTonfasSvdd === null
+          ? Number(detalhe.manutencao || 0)
+          : manutencoesTonfasSvdd
+              .filter((item) => normalizar(item?.tipo_material) === tipo)
+              .reduce((total, item) => total + Number(item?.quantidade || 1), 0),
 
         total:
           Number(
@@ -778,7 +784,11 @@ function ajustarTonfasPorPerfil(
             detalhe.emServico || 0
           ) +
           Number(
-            detalhe.manutencao || 0
+            manutencoesTonfasSvdd === null
+              ? detalhe.manutencao || 0
+              : manutencoesTonfasSvdd
+                  .filter((item) => normalizar(item?.tipo_material) === tipo)
+                  .reduce((total, item) => total + Number(item?.quantidade || 1), 0)
           ) +
           Number(
             detalhe.extravioSvdd || 0
@@ -796,12 +806,14 @@ function ajustarTonfasPorPerfil(
 
     const tonfasDetalhe =
       ajustarDetalhe(
-        resumo.tonfasDetalhe
+        resumo.tonfasDetalhe,
+        'TONFA'
       )
 
     const cassetetesDetalhe =
       ajustarDetalhe(
-        resumo.cassetetesDetalhe
+        resumo.cassetetesDetalhe,
+        'CASSETETE'
       )
 
     return {
@@ -1078,21 +1090,24 @@ export default function useDashboardVitrine(
             pagina: 1,
             limite: 200
           }),
-          resumirPatrimoniosIndividualizados(user)
+          resumirPatrimoniosIndividualizados(user),
+          obterResumoBaixasTonfas()
         ])
 
         const [
           armasRes,
           tonfasRes,
           manutencoesRes,
-          patrimoniosRes
+          patrimoniosRes,
+          baixasTonfasRes
         ] = resultados
 
         const falhas = [
           ['armas', armasRes],
           ['tonfas/cassetetes', tonfasRes],
           ['manutenÃ§Ãµes', manutencoesRes],
-          ['patrimÃ´nios individualizados', patrimoniosRes]
+          ['patrimÃ´nios individualizados', patrimoniosRes],
+          ['baixas tonfas/cassetetes', baixasTonfasRes]
         ].filter(
           ([, resultado]) =>
             resultado.status === 'rejected'
@@ -1127,6 +1142,8 @@ export default function useDashboardVitrine(
         const patrimoniosResumo =
           patrimoniosRes.value
 
+        const baixasTonfasResumo = baixasTonfasRes.value || {}
+
         const armasFiltradas =
   filtrarArmasPorPerfil(
     armasResultado?.data || [],
@@ -1134,9 +1151,24 @@ export default function useDashboardVitrine(
   )
 
 const tonfasResumoOriginal =
-  resumirTonfas(
-    tonfasResultado?.data || []
-  )
+  resumirTonfas(tonfasResultado?.data || [])
+
+// A quantidade original do lote permanece no cadastro após a descarga.
+// A mesma regra do módulo Tonfas/Cassetetes desconta baixas aprovadas
+// apenas do TOTAL ATIVO, preservando a distribuição dos saldos.
+const tonfasAtivas = Math.max(
+  0,
+  tonfasResumoOriginal.tonfasDetalhe.total - Number(baixasTonfasResumo.tonfas || 0)
+)
+const cassetetesAtivos = Math.max(
+  0,
+  tonfasResumoOriginal.cassetetesDetalhe.total - Number(baixasTonfasResumo.cassetetes || 0)
+)
+tonfasResumoOriginal.tonfasDetalhe.total = tonfasAtivas
+tonfasResumoOriginal.cassetetesDetalhe.total = cassetetesAtivos
+tonfasResumoOriginal.geral.tonfas = tonfasAtivas
+tonfasResumoOriginal.geral.cassetetes = cassetetesAtivos
+tonfasResumoOriginal.geral.total = tonfasAtivas + cassetetesAtivos
 
 const individuaisResumo = {
   ...(patrimoniosResumo?.individuais || {
@@ -1153,12 +1185,6 @@ const individuaisResumo = {
 const individuaisEmServico =
   individuaisResumo.emServico
 
-const tonfasResumo =
-  ajustarTonfasPorPerfil(
-    tonfasResumoOriginal,
-    user
-  )
-
 const manutencoesAtivasOriginais =
   manutencoesResultado?.data || []
 
@@ -1169,12 +1195,58 @@ const visaoManutencaoSomenteSvdd =
   perfilDashboard === PERFIS.ENCARREGADO_SVDD ||
   perfilDashboard === PERFIS.AUXILIAR_SVDD
 
+// Uma manutencao encaminhada ao P4 permanece com origem historica SVDD.
+// A custodia so muda depois do aceite: enquanto existir transferencia
+// pendente, o material continua na responsabilidade do SVDD.
+let manutencoesPendentesRecebimentoP4 = new Set()
+let podeVerificarCustodiaTonfas = true
+
+if (visaoManutencaoSomenteSvdd) {
+  const { data: pendentes, error: pendentesError } = await supabase
+    .from('sigmo_transferencias_patrimoniais')
+    .select('metadata')
+    .eq('status', 'PENDENTE')
+    .eq('destino_codigo', 'P4')
+    .limit(500)
+
+  if (pendentesError) {
+    // Em caso de falha, manter a contagem anterior, sem omitir material.
+    console.warn('Falha ao verificar transferencias pendentes de manutencao:', pendentesError)
+    podeVerificarCustodiaTonfas = false
+  } else {
+    manutencoesPendentesRecebimentoP4 = new Set(
+      (pendentes || [])
+        .filter((item) => normalizar(item?.metadata?.tipo_fluxo) === 'MANUTENCAO_SVDD_P4')
+        .map((item) => String(item?.metadata?.manutencao_id || ''))
+        .filter(Boolean)
+    )
+  }
+}
+
 const manutencoesAtivas =
   visaoManutencaoSomenteSvdd
-    ? manutencoesAtivasOriginais.filter((item) =>
-        normalizar(item?.origem_institucional) === 'SVDD'
-      )
+    ? manutencoesAtivasOriginais.filter((item) => {
+        if (normalizar(item?.origem_institucional) !== 'SVDD') return false
+        if (normalizar(item?.modulo) !== 'TONFAS') return true
+        if (!podeVerificarCustodiaTonfas) return true
+
+        const destino = normalizar(item?.destino || item?.local_destino)
+        const encaminhadaP4 = destino === 'P4' ||
+          destino.includes('COFRE DO P4') ||
+          destino.includes('MANUTENCAO / P4') ||
+          destino.includes('P4_MANUTENCAO')
+        return !encaminhadaP4 ||
+          manutencoesPendentesRecebimentoP4.has(String(item?.id || ''))
+      })
     : manutencoesAtivasOriginais
+
+const tonfasResumo = ajustarTonfasPorPerfil(
+  tonfasResumoOriginal,
+  user,
+  visaoManutencaoSomenteSvdd && podeVerificarCustodiaTonfas
+    ? manutencoesAtivas.filter((item) => normalizar(item?.modulo) === 'TONFAS')
+    : null
+)
 
 // A tabela de manutenções é a fonte de verdade para "EM MANUTENÇÃO".
 // Alguns módulos individualizados (TASER/HT/TPD) ainda podem permanecer

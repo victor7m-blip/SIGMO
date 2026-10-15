@@ -745,6 +745,7 @@ export default function Tonfas({ user }) {
     setFormRegularizacaoP4
   ] = useState({
     itemId: '',
+    quantidade: '1',
     policialRe: '',
     policialNome: '',
     documento: '',
@@ -2840,6 +2841,17 @@ export default function Tonfas({ user }) {
         ) || 1
       )
 
+    const respostaQuantidade = window.prompt(
+      `Quantas unidades deseja baixar? (1 a ${quantidade})`,
+      String(quantidade)
+    )
+    if (respostaQuantidade === null) return
+    const quantidadeEscolhida = Number(respostaQuantidade)
+    if (!Number.isInteger(quantidadeEscolhida) || quantidadeEscolhida < 1 || quantidadeEscolhida > quantidade) {
+      setErro(`Informe uma quantidade entre 1 e ${quantidade}.`)
+      return
+    }
+
     const motivo =
       window.prompt(
         `Informe o motivo da baixa definitiva de ${quantidade} ${tipo.toLowerCase()}(s):`
@@ -2892,7 +2904,7 @@ export default function Tonfas({ user }) {
     const confirmou =
       window.confirm(
         `CONFIRMAR BAIXA DEFINITIVA?\n\n` +
-        `${tipo}: ${quantidade} unidade(s)\n` +
+        `${tipo}: ${quantidadeEscolhida} unidade(s)\n` +
         `Motivo: ${motivoNormalizado}\n\n` +
         'Esta operação retirará definitivamente essa quantidade do saldo em manutenção. O material não retornará ao P4 nem ao SVDD.'
       )
@@ -2913,6 +2925,7 @@ export default function Tonfas({ user }) {
       await baixarManutencaoTonfaP4({
         manutencaoId:
           manutencao.id,
+        quantidadeSolicitada: quantidadeEscolhida,
         motivo:
           motivoNormalizado,
         documento:
@@ -2932,16 +2945,11 @@ export default function Tonfas({ user }) {
         user
       })
 
-      const restantes =
-        manutencoesBaixaP4.filter(
-          (item) =>
-            String(
-              item?.id || ''
-            ) !==
-            String(
-              manutencao.id
-            )
-        )
+      const restantes = manutencoesBaixaP4.flatMap(registro => {
+        if (String(registro?.id) !== String(manutencao.id)) return [registro]
+        const restante = quantidade - quantidadeEscolhida
+        return restante > 0 ? [{ ...registro, quantidade: restante }] : []
+      })
 
       setManutencoesBaixaP4(
         restantes
@@ -3007,6 +3015,17 @@ export default function Tonfas({ user }) {
         ) || 1
       )
 
+    const respostaQuantidade = window.prompt(
+      `Quantas unidades deseja baixar? (1 a ${quantidade})`,
+      String(quantidade)
+    )
+    if (respostaQuantidade === null) return
+    const quantidadeEscolhida = Number(respostaQuantidade)
+    if (!Number.isInteger(quantidadeEscolhida) || quantidadeEscolhida < 1 || quantidadeEscolhida > quantidade) {
+      setErro(`Informe uma quantidade entre 1 e ${quantidade}.`)
+      return
+    }
+
     const motivo =
       window.prompt(
         `Informe o motivo da baixa definitiva do extravio de ${quantidade} ${tipo.toLowerCase()}(s):`
@@ -3057,7 +3076,7 @@ export default function Tonfas({ user }) {
     const confirmou =
       window.confirm(
         `CONFIRMAR BAIXA DEFINITIVA DO EXTRAVIO?\n\n` +
-        `${tipo}: ${quantidade} unidade(s)\n` +
+        `${tipo}: ${quantidadeEscolhida} unidade(s)\n` +
         `Motivo: ${motivoNormalizado}\n\n` +
         'O extravio será encerrado definitivamente e sairá da responsabilidade do P4.'
       )
@@ -3076,6 +3095,7 @@ export default function Tonfas({ user }) {
       await baixarExtravioTonfaP4({
         extravioId:
           extravio.id,
+        quantidadeSolicitada: quantidadeEscolhida,
         motivo:
           motivoNormalizado,
         documento:
@@ -3095,16 +3115,11 @@ export default function Tonfas({ user }) {
         user
       })
 
-      const restantes =
-        manutencoesBaixaP4.filter(
-          (item) =>
-            String(
-              item?.id || ''
-            ) !==
-            String(
-              extravio.id
-            )
-        )
+      const restantes = manutencoesBaixaP4.flatMap(registro => {
+        if (String(registro?.id) !== String(extravio.id)) return [registro]
+        const restante = quantidade - quantidadeEscolhida
+        return restante > 0 ? [{ ...registro, quantidade: restante }] : []
+      })
 
       setManutencoesBaixaP4(
         restantes
@@ -3279,6 +3294,7 @@ export default function Tonfas({ user }) {
           item?.id ||
           ''
         ),
+      quantidade: String(Math.max(1, Number(item?.quantidade || 1))),
       policialRe:
         item?.policial_re ||
         '',
@@ -3315,6 +3331,13 @@ export default function Tonfas({ user }) {
       ) === 'CASSETETE'
         ? 'Cassetete'
         : 'Tonfa'
+
+    const quantidadeMaxima = Math.max(1, Number(item?.quantidade || 1))
+    const quantidadeEscolhida = Number(formRegularizacaoP4.quantidade)
+    if (!Number.isInteger(quantidadeEscolhida) || quantidadeEscolhida < 1 || quantidadeEscolhida > quantidadeMaxima) {
+      setErro(`Informe uma quantidade entre 1 e ${quantidadeMaxima}.`)
+      return
+    }
 
     const policialRe =
       String(
@@ -3369,6 +3392,7 @@ export default function Tonfas({ user }) {
 
       if (ehExtravio) {
         await regularizarExtravioTonfaP4({
+          quantidadeSolicitada: quantidadeEscolhida,
           extravioId:
             item.id,
           policialRe,
@@ -3379,6 +3403,7 @@ export default function Tonfas({ user }) {
         })
       } else {
         await regularizarManutencaoTonfaP4({
+          quantidadeSolicitada: quantidadeEscolhida,
           manutencaoId:
             item.id,
           policialRe,
@@ -3389,17 +3414,11 @@ export default function Tonfas({ user }) {
         })
       }
 
-      const restantes =
-        ocorrenciasRegularizacaoP4.filter(
-          (registro) =>
-            String(
-              registro?.id ||
-              ''
-            ) !==
-            String(
-              item.id
-            )
-        )
+      const restantes = ocorrenciasRegularizacaoP4.flatMap(registro => {
+        if (String(registro?.id) !== String(item.id)) return [registro]
+        const restante = quantidadeMaxima - quantidadeEscolhida
+        return restante > 0 ? [{ ...registro, quantidade: restante }] : []
+      })
 
       setOcorrenciasRegularizacaoP4(
         restantes
@@ -5371,6 +5390,14 @@ async function finalizarMovimentacao(resultado) {
                               borderTop: '1px solid #dbe3ee'
                             }}
                           >
+                             <label style={{ display: 'grid', gap: 6 }}>
+                               <span>Quantidade a regularizar (máximo {quantidade})</span>
+                               <input type="number" min="1" max={quantidade} step="1"
+                                 value={formRegularizacaoP4.quantidade}
+                                 onChange={(event) => setFormRegularizacaoP4(atual => ({ ...atual, quantidade: event.target.value }))}
+                               />
+                             </label>
+
                             <label
                               style={{
                                 display: 'grid',
@@ -5498,7 +5525,7 @@ async function finalizarMovimentacao(resultado) {
                               >
                                 {processando
                                   ? 'Regularizando...'
-                                  : `Confirmar reposição de ${quantidade} unidade(s)`}
+                                  : `Confirmar reposição de ${formRegularizacaoP4.quantidade || 0} unidade(s)`}
                               </button>
 
                               <button

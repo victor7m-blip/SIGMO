@@ -2131,6 +2131,11 @@ function PainelDashboard({
   const extravioIntegrado =
     Number(vitrine.tonfas?.extravio || 0)
 
+  // Resumo superior: inclui materiais em manutenção e extravios ativos.
+  // Os indicadores específicos permanecem separados nos demais painéis.
+  const manutencaoOuExtravioIntegrado =
+    manutencaoIntegrada + extravioIntegrado
+
   const armasGrafico = [
     ...(!visaoSVDD
       ? [{
@@ -2483,8 +2488,8 @@ function PainelDashboard({
           icon="◆"
           tone="red"
           label="Em manutenção"
-          value={manutencaoIntegrada}
-          detail="itens em manutenção"
+          value={manutencaoOuExtravioIntegrado}
+          detail="manutenção e extravios ativos"
           onClick={() => onNavegar('manutencoes')}
         />
 
