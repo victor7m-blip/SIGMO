@@ -567,6 +567,15 @@ async function aplicarEntradaManutencaoArma({
 
   if (error) throw error
 
+  // Arma individual somente pode sair de uma reserva fisica conhecida.
+  // Protege cautelas, cargas, baixas e manutencoes ja existentes.
+  const statusArma = maiusculo(arma.status)
+  const localArma = maiusculo(arma.local_atual)
+  if (statusArma !== 'RESERVA' ||
+      !['COFRE DO SVDD', 'COFRE DO P4'].includes(localArma)) {
+    throw new Error('A arma precisa estar em RESERVA no COFRE DO SVDD ou COFRE DO P4 para entrar em manutencao.')
+  }
+
   const payloadAnterior = {
     status: arma.status,
     local_atual: arma.local_atual,
@@ -595,10 +604,15 @@ async function aplicarEntradaManutencaoArma({
     .from('sigmo_armas')
     .update(payloadNovo)
     .eq('id', arma.id)
+    .eq('status', arma.status)
+    .eq('local_atual', arma.local_atual)
     .select()
-    .single()
+    .maybeSingle()
 
   if (updateError) throw updateError
+  if (!atualizada) {
+    throw new Error('A situacao da arma mudou durante a operacao. Atualize a tela e tente novamente.')
+  }
 
   try {
     await criarOuAtualizarPatrimonio({
@@ -1530,7 +1544,10 @@ async function registrarNovidadePatrimonialManutencaoDireta({
   // registrarManutencao.
   if (
     maiusculo(modulo) !== MODULOS_MANUTENCAO.MUNICAO &&
-    maiusculo(modulo) !== MODULOS_MANUTENCAO.TORNIQUETE
+    maiusculo(modulo) !== MODULOS_MANUTENCAO.TORNIQUETE &&
+    // Armas: cada abertura direta de manutenção possui sua própria novidade.
+    // Não associar uma novidade anterior de outra ocorrência.
+    maiusculo(modulo) !== MODULOS_MANUTENCAO.ARMAS
   ) {
     const { data: novidadesExistentes, error: buscaError } = await supabase
       .from('sigmo_patrimonio_novidades')
@@ -1693,6 +1710,46 @@ export async function registrarManutencao({
     )
   }
 
+  // Validacoes especificas de arma ANTES de criar registro/fotos/auditoria.
+  // Nao interfere nos demais modulos de manutencao.
+  if (moduloValido === MODULOS_MANUTENCAO.ARMAS) {
+    const { data: arma, error: armaError } = await supabase
+      .from('sigmo_armas')
+      .select('id, status, local_atual, propriedade')
+      .eq('id', referenciaValida)
+      .single()
+
+    if (armaError) throw armaError
+    const statusAtual = maiusculo(arma.status)
+    const localAtual = maiusculo(arma.local_atual)
+    const origemInformada = maiusculo(origem)
+    const origemEsperada = localAtual === 'COFRE DO P4' ? 'P4' : 'SVDD'
+    const origemCompativel = origemInformada.includes(origemEsperada)
+
+    if (maiusculo(arma.propriedade) === 'PARTICULAR') {
+      throw new Error('Armas particulares nao podem ser enviadas pela manutencao patrimonial institucional.')
+    }
+    if (statusAtual !== 'RESERVA' ||
+        !['COFRE DO SVDD', 'COFRE DO P4'].includes(localAtual)) {
+      throw new Error('Somente armas em RESERVA no COFRE DO SVDD ou COFRE DO P4 podem entrar em manutencao.')
+    }
+    if (!origemInformada || !origemCompativel) {
+      throw new Error(`A origem da manutencao deve corresponder ao local atual da arma: ${localAtual}.`)
+    }
+
+    const { data: abertas, error: abertasError } = await supabase
+      .from(TABLE)
+      .select('id')
+      .eq('modulo', MODULOS_MANUTENCAO.ARMAS)
+      .eq('referencia_id', referenciaValida)
+      .eq('status', STATUS_MANUTENCAO.EM_MANUTENCAO)
+      .limit(1)
+    if (abertasError) throw abertasError
+    if (abertas?.length) {
+      throw new Error('Ja existe uma manutencao aberta para esta arma.')
+    }
+  }
+
   const tipoValido =
     maiusculo(tipoMaterial)
 
@@ -1713,6 +1770,26 @@ export async function registrarManutencao({
 
   let patrimonioVinculado =
     patrimonioId || null
+
+  // A tela de armas pode enviar apenas referenciaId (ID em sigmo_armas).
+  // Resolver o ID da tabela patrimonial antes de registrar a novidade.
+  if (moduloValido === MODULOS_MANUTENCAO.ARMAS) {
+    const { data: patrimonioArma, error: patrimonioArmaError } = await supabase
+      .from('sigmo_patrimonios')
+      .select('id')
+      .eq('tipo', 'arma')
+      .eq('referencia_id', referenciaValida)
+      .maybeSingle()
+
+    if (patrimonioArmaError) throw patrimonioArmaError
+    if (!patrimonioArma?.id) {
+      throw new Error('O patrimônio vinculado à arma não foi localizado. Não é possível registrar a manutenção sem rastreabilidade.')
+    }
+    if (patrimonioVinculado && String(patrimonioVinculado) !== String(patrimonioArma.id)) {
+      throw new Error('O patrimônio informado não corresponde à arma selecionada.')
+    }
+    patrimonioVinculado = patrimonioArma.id
+  }
 
   if (
     moduloValido === MODULOS_MANUTENCAO.MUNICAO &&
@@ -1816,6 +1893,7 @@ export async function registrarManutencao({
     if (
       !novidadePatrimonial?.id &&
       (
+        moduloValido === MODULOS_MANUTENCAO.ARMAS ||
         moduloValido === MODULOS_MANUTENCAO.HT ||
         moduloValido === MODULOS_MANUTENCAO.COP ||
         moduloValido === MODULOS_MANUTENCAO.MUNICAO ||

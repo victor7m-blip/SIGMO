@@ -41,6 +41,15 @@ function upper(valor, fallback = '') {
   return texto(valor).toUpperCase() || fallback
 }
 
+// Localização patrimonial padrão para armamentos em transferências P4 ↔ SVDD.
+// Não altera a nomenclatura dos fluxos de outros materiais.
+function localTransferenciaArma(codigo, nomeInformado) {
+  const setor = upper(codigo)
+  if (setor === 'P4') return 'COFRE DO P4'
+  if (setor === 'SVDD') return 'COFRE DO SVDD'
+  return upper(nomeInformado)
+}
+
 function quantidadeInteira(valor) {
   const numero = Number(valor)
 
@@ -520,10 +529,14 @@ export async function criarTransferenciaPendente({
     quantidade: quantidadeNormalizada,
     origem_tipo: upper(origemTipo, 'SETOR'),
     origem_codigo: origemCodigoNormalizado || null,
-    origem_nome: upper(origemNome, 'GUARDA DO P4'),
+    origem_nome: categoriaNormalizada === 'ARMA'
+      ? localTransferenciaArma(origemCodigoNormalizado, origemNome)
+      : upper(origemNome, 'GUARDA DO P4'),
     destino_tipo: upper(destinoTipo, 'SETOR'),
     destino_codigo: destinoCodigoNormalizado || null,
-    destino_nome: upper(destinoNome, 'COFRE DO SVDD'),
+    destino_nome: categoriaNormalizada === 'ARMA'
+      ? localTransferenciaArma(destinoCodigoNormalizado, destinoNome)
+      : upper(destinoNome, 'COFRE DO SVDD'),
     status: STATUS_TRANSFERENCIA.PENDENTE,
     motivo: upper(motivo) || null,
     observacoes: texto(observacoes) || null,
@@ -737,13 +750,18 @@ async function aceitarTransferenciaDeArma({
   if (armaBuscaError) throw armaBuscaError
   if (!armaAnterior) throw new Error('A arma da transferência não foi encontrada.')
 
+  const localDestinoArma = localTransferenciaArma(
+    transferencia.destino_codigo,
+    transferencia.destino_nome
+  )
+
   let movimentacao = null
 
   try {
     movimentacao = await registrarMovimentacao({
       patrimonioId: transferencia.patrimonio_id,
       tipo: 'TRANSFERENCIA',
-      localDestino: transferencia.destino_nome,
+      localDestino: localDestinoArma,
       motivo: transferencia.motivo,
       observacao: transferencia.observacoes,
       dados: {
@@ -756,7 +774,7 @@ async function aceitarTransferenciaDeArma({
         origem_codigo: transferencia.origem_codigo,
         origem_nome: transferencia.origem_nome,
         destino_codigo: transferencia.destino_codigo,
-        destino_nome: transferencia.destino_nome,
+        destino_nome: localDestinoArma,
         guardiao_origem: {
           tipo: 'SETOR',
           codigo: transferencia.origem_codigo,
@@ -765,7 +783,7 @@ async function aceitarTransferenciaDeArma({
         guardiao_destino: {
           tipo: 'SETOR',
           codigo: transferencia.destino_codigo,
-          nome: transferencia.destino_nome
+          nome: localDestinoArma
         }
       },
       user
@@ -774,7 +792,7 @@ async function aceitarTransferenciaDeArma({
     const { data: armaAtualizada, error: armaError } = await supabase
       .from(ARMAS_TABLE)
       .update({
-        local_atual: transferencia.destino_nome
+        local_atual: localDestinoArma
       })
       .eq('id', armaId)
       .select('*')

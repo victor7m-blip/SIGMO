@@ -22,6 +22,7 @@ export const CALIBRES_ARMAS = [
   '.38 SPL',
   '.380 AUTO',
   '9x19mm',
+  '9 mm',
   '.40 S&W',
   '.45 ACP',
   '5,56x45mm',

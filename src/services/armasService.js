@@ -222,7 +222,195 @@ export async function buscarArmaPorId(id) {
     throw new Error('Arma não encontrada.')
   }
 
-  return normalizarArma(data)
+  const armaNormalizada = normalizarArma(data)
+
+  // As datas de cautela pertencem à movimentação, não ao cadastro da arma.
+  // Consulta somente a cautela ativa e já aceita pelo policial.
+  if (normalizarStatus(data.status) !== 'CAUTELADO') {
+    return armaNormalizada
+  }
+
+  const { data: patrimonio, error: patrimonioError } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id, responsavel_atual_id')
+    .eq('tipo', 'arma')
+    .eq('referencia_id', id)
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (patrimonioError) throw patrimonioError
+  if (!patrimonio) return armaNormalizada
+
+  const { data: itensMovimentacao, error: itensError } = await supabase
+    .from('sigmo_movimentacao_itens')
+    .select('movimentacao_id')
+    .eq('patrimonio_id', patrimonio.id)
+
+  if (itensError) throw itensError
+
+  const idsMovimentacoes = [
+    ...new Set(
+      (itensMovimentacao || [])
+        .map((item) => item.movimentacao_id)
+        .filter(Boolean)
+    )
+  ]
+
+  if (idsMovimentacoes.length === 0) return armaNormalizada
+
+  let consultaCautela = supabase
+    .from('sigmo_movimentacoes')
+    .select('id, created_at, finalizada_at, recebedor_id')
+    .in('id', idsMovimentacoes)
+    .eq('tipo_movimentacao', 'CAUTELA')
+    .eq('status', 'finalizada')
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  // Evita mostrar a data de uma cautela histórica de outro policial.
+  const responsavelId =
+    data.carga_policial_id || patrimonio.responsavel_atual_id
+
+  if (responsavelId) {
+    consultaCautela = consultaCautela.eq('recebedor_id', responsavelId)
+  }
+
+  const { data: cautelas, error: cautelasError } = await consultaCautela
+  if (cautelasError) throw cautelasError
+
+  const cautela = cautelas?.[0]
+  if (!cautela) return armaNormalizada
+
+  return {
+    ...armaNormalizada,
+    vinculo_patrimonial_em: cautela.created_at || null,
+    cautela_recebida_em: cautela.finalizada_at || null,
+    cautela_movimentacao_id: cautela.id
+  }
+}
+
+
+// Histórico patrimonial da arma: leitura das movimentações e transferências
+// originais. Não modifica saldos, situações, cautelas ou auditoria.
+export async function listarHistoricoMovimentacoesArma(armaId) {
+  if (!armaId) throw new Error('ID da arma não informado.')
+
+  const { data: patrimonios, error: patrimonioError } = await supabase
+    .from('sigmo_patrimonios')
+    .select('id')
+    .eq('tipo', 'arma')
+    .eq('referencia_id', armaId)
+
+  if (patrimonioError) throw patrimonioError
+
+  const patrimonioIds = (patrimonios || []).map((p) => p.id)
+  let movimentacoes = []
+
+  if (patrimonioIds.length > 0) {
+    const { data: itens, error: itensError } = await supabase
+      .from('sigmo_movimentacao_itens')
+      .select('movimentacao_id, patrimonio_id, quantidade')
+      .in('patrimonio_id', patrimonioIds)
+
+    if (itensError) throw itensError
+
+    const ids = [...new Set((itens || [])
+      .map((item) => item.movimentacao_id)
+      .filter(Boolean))]
+
+    if (ids.length > 0) {
+      const { data: registros, error: movimentacoesError } = await supabase
+        .from('sigmo_movimentacoes')
+        .select('id, tipo_movimentacao, status, created_at, finalizada_at, created_by_nome, recebedor_nome, origem_local, destino_local, observacoes')
+        .in('id', ids)
+        .order('created_at', { ascending: false })
+
+      if (movimentacoesError) throw movimentacoesError
+
+      const quantidadePorMovimentacao = new Map()
+      for (const item of (itens || [])) {
+        const atual = quantidadePorMovimentacao.get(item.movimentacao_id) || 0
+        quantidadePorMovimentacao.set(
+          item.movimentacao_id,
+          atual + Number(item.quantidade || 0)
+        )
+      }
+
+      movimentacoes = (registros || []).map((registro) => ({
+        id: `movimentacao:${registro.id}`,
+        registro_id: registro.id,
+        fonte: 'MOVIMENTACAO',
+        tipo: registro.tipo_movimentacao,
+        status: registro.status,
+        criado_em: registro.created_at,
+        concluido_em: registro.finalizada_at,
+        origem: registro.origem_local,
+        destino: registro.destino_local,
+        enviado_por: registro.created_by_nome,
+        recebido_por: registro.recebedor_nome,
+        quantidade: quantidadePorMovimentacao.get(registro.id) || null,
+        observacoes: registro.observacoes || null,
+        protocolo: null
+      }))
+    }
+  }
+
+  // A vinculação da transferência à arma é feita pelo ID original guardado
+  // no metadata. Inclui transferências canceladas e recusadas.
+  const { data: transferencias, error: transferenciasError } = await supabase
+    .from('sigmo_transferencias_patrimoniais')
+    .select('*')
+    .eq('categoria', 'ARMA')
+    .contains('metadata', { arma_id: armaId })
+    .order('enviado_em', { ascending: false })
+
+  if (transferenciasError) throw transferenciasError
+
+  const eventosTransferencia = (transferencias || []).map((registro) => {
+    const status = String(registro.status || '').trim().toUpperCase()
+    const cancelada = status === 'CANCELADA'
+    const recusada = status === 'RECUSADA'
+    const motivoEncerramento = recusada
+      ? registro.motivo_recusa
+      : cancelada
+        ? registro.motivo
+        : null
+    const observacoes = [
+      registro.observacoes,
+      motivoEncerramento
+        ? `${recusada ? 'Motivo da recusa' : 'Motivo do cancelamento'}: ${motivoEncerramento}`
+        : null
+    ].filter(Boolean).join(' | ') || null
+
+    return {
+      id: `transferencia:${registro.id}`,
+      registro_id: registro.id,
+      fonte: 'TRANSFERENCIA',
+      tipo: 'TRANSFERENCIA',
+      status: registro.status,
+      criado_em: registro.enviado_em,
+      concluido_em: cancelada
+        ? (registro.cancelado_em || registro.metadata?.cancelado_em || null)
+        : recusada
+          ? (registro.recusado_em || registro.metadata?.recusado_em || null)
+          : (registro.recebido_em || null),
+      origem: registro.origem_nome || registro.origem_codigo,
+      destino: registro.destino_nome || registro.destino_codigo,
+      enviado_por: registro.enviado_por_nome,
+      recebido_por: cancelada
+        ? (registro.metadata?.cancelado_por_nome || null)
+        : recusada
+          ? (registro.recusado_por_nome || registro.metadata?.recusado_por_nome || null)
+          : (registro.recebido_por_nome || null),
+      quantidade: registro.quantidade || null,
+      observacoes,
+      protocolo: registro.protocolo || null
+    }
+  })
+
+  return [...movimentacoes, ...eventosTransferencia].sort((a, b) =>
+    new Date(b.criado_em || 0).getTime() - new Date(a.criado_em || 0).getTime()
+  )
 }
 
 async function buscarValoresUnicos(
@@ -331,7 +519,7 @@ export async function cadastrarArma(
         (
           statusNormalizado === 'CARGA'
             ? 'Carga permanente'
-            : 'Guarda do Quartel'
+            : 'COFRE DO P4'
         ),
 
       companhia_atual:
@@ -477,7 +665,7 @@ export async function atualizarArma(
 
     local_atual:
       armaNormalizada.local_atual ||
-      'Guarda do Quartel',
+      'COFRE DO P4',
 
     companhia_atual:
       armaNormalizada.unidade || ''
@@ -542,7 +730,7 @@ export async function sincronizarArmasComPatrimonios(
 
       local_atual:
         arma.local_atual ||
-        'Guarda do Quartel',
+        'COFRE DO P4',
 
       companhia_atual:
         arma.unidade || ''
@@ -603,7 +791,7 @@ export async function finalizarDevolucaoCargaP4({
     .from(TABLE)
     .update({
       status: 'RESERVA',
-      local_atual: 'GUARDA DO P4',
+      local_atual: 'COFRE DO P4',
       carga_policial_id: null,
       carga_policial_re: null,
       carga_policial_nome: null,
@@ -626,7 +814,7 @@ export async function finalizarDevolucaoCargaP4({
     .from('sigmo_patrimonios')
     .update({
       status: 'RESERVA',
-      local_atual: 'DEPÓSITO DO P4'
+      local_atual: 'COFRE DO P4'
     })
     .in('id', idsPatrimonioArmas)
 

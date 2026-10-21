@@ -6,6 +6,8 @@ import {
   listarManutencoes
 } from '../../../services/manutencoesService'
 
+import { listarHistoricoMovimentacoesArma } from '../../../services/armasService'
+
 import './ArmaViewModal.css'
 
 export default function ArmaViewModal({
@@ -35,6 +37,11 @@ export default function ArmaViewModal({
   }, [arma?.foto_url, fotos])
 
   const [fotoSelecionada, setFotoSelecionada] = useState(fotoPrincipal)
+
+  const [historicoMovimentacoes, setHistoricoMovimentacoes] = useState([])
+  const [carregandoMovimentacoes, setCarregandoMovimentacoes] = useState(false)
+  const [erroMovimentacoes, setErroMovimentacoes] = useState('')
+  const [exibirMovimentacoes, setExibirMovimentacoes] = useState(true)
 
   const [historicoManutencoes, setHistoricoManutencoes] = useState([])
   const [fotosHistorico, setFotosHistorico] = useState({})
@@ -169,6 +176,35 @@ export default function ArmaViewModal({
     }
   }, [arma?.id])
 
+  useEffect(() => {
+    let ativo = true
+
+    if (!arma?.id) {
+      setHistoricoMovimentacoes([])
+      setErroMovimentacoes('')
+      setCarregandoMovimentacoes(false)
+      return undefined
+    }
+
+    setHistoricoMovimentacoes([])
+    setErroMovimentacoes('')
+    setCarregandoMovimentacoes(true)
+
+    listarHistoricoMovimentacoesArma(arma.id)
+      .then((registros) => {
+        if (ativo) setHistoricoMovimentacoes(Array.isArray(registros) ? registros : [])
+      })
+      .catch((error) => {
+        console.error('Erro ao consultar histórico patrimonial da arma:', error)
+        if (ativo) setErroMovimentacoes(error?.message || 'Não foi possível consultar o histórico.')
+      })
+      .finally(() => {
+        if (ativo) setCarregandoMovimentacoes(false)
+      })
+
+    return () => { ativo = false }
+  }, [arma?.id])
+
   if (!arma) return null
 
   const fotosDisponiveis =
@@ -245,358 +281,12 @@ export default function ArmaViewModal({
     return valor.replaceAll('_', ' ') || 'SEM STATUS'
   }
 
-  return (
-    <div
-      className="arma-view-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose?.()
-      }}
-    >
-      <section
-        className="arma-view-card"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Detalhes da arma"
-      >
-        <header className="arma-view-header">
-          <div>
-            <span>{arma.propriedade || 'PMESP'}</span>
-            <h2>
-              {arma.patrimonio ||
-                arma.numero_serie ||
-                'Arma'}
-            </h2>
-          </div>
 
-          <button
-            type="button"
-            className="arma-view-close"
-            aria-label="Fechar"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </header>
-
-        <div className="arma-view-content">
-          <div className="arma-view-grid">
-            <Info label="Patrimônio" value={arma.patrimonio} />
-            <Info label="Número de série" value={arma.numero_serie} />
-            <Info label="Espécie" value={arma.especie} />
-            <Info label="Marca" value={arma.marca} />
-            <Info label="Modelo" value={arma.modelo} />
-            <Info label="Calibre" value={arma.calibre} />
-            <Info label="Acabamento" value={arma.acabamento} />
-            <Info label="Unidade" value={arma.unidade} />
-            <Info
-              label="Status operacional"
-              value={arma.status_operacional || arma.status}
-            />
-
-            {arma.propriedade === 'PARTICULAR' && (
-              <>
-                <Info label="Número SIGMA" value={arma.numero_sigma} />
-                <Info
-                  label="Número do registro"
-                  value={arma.numero_registro || arma.registro}
-                />
-                <Info
-                  label="Validade do registro"
-                  value={arma.validade_registro || arma.validade}
-                />
-                <Info
-                  label="Comprimento do cano"
-                  value={arma.comprimento_cano}
-                />
-                <Info label="Capacidade" value={arma.capacidade} />
-                <Info
-                  label="País de fabricação"
-                  value={arma.pais_fabricacao}
-                />
-                <Info
-                  label="Ano de fabricação"
-                  value={arma.ano_fabricacao}
-                />
-                <Info
-                  label="Proprietário"
-                  value={
-                    arma.proprietario_nome ||
-                    arma.proprietario_policial_nome
-                  }
-                />
-                <Info
-                  label="RE do proprietário"
-                  value={
-                    arma.proprietario_re ||
-                    arma.proprietario_policial_re
-                  }
-                />
-                <Info
-                  label="Situação documental"
-                  value={arma.situacao_documental}
-                />
-              </>
-            )}
-          </div>
-
-          {(ehCarga || ehCautela || responsavelNome) && (
-            <section className="arma-view-vinculo">
-              <div className="arma-view-vinculo-header">
-                <span>Situação patrimonial</span>
-                <strong>{ehCarga ? 'Carga permanente' : ehCautela ? 'Cautela ativa' : 'Responsabilidade atual'}</strong>
-              </div>
-
-              <div className="arma-view-vinculo-grid">
-                <InfoLink
-                  label="Policial responsável"
-                  value={responsavelNome || 'Sem responsável informado'}
-                  disabled={!responsavelRe || !onAbrirPolicial}
-                  onClick={() => onAbrirPolicial?.(responsavelRe)}
-                />
-                <InfoLink
-                  label="RE"
-                  value={responsavelRe ? `RE ${responsavelRe}` : 'Não informado'}
-                  disabled={!responsavelRe || !onAbrirPolicial}
-                  onClick={() => onAbrirPolicial?.(responsavelRe)}
-                />
-                <Info
-                  label={ehCarga ? 'Carga paga em' : ehCautela ? 'Cautela paga em' : 'Vínculo registrado em'}
-                  value={formatarDataHora(dataVinculo)}
-                />
-                <Info
-                  label="Local atual"
-                  value={arma.local_atual || arma.unidade || '-'}
-                />
-              </div>
-            </section>
-          )}
-
-          <div className="arma-view-media-grid">
-            <div className="arma-view-media-card arma-view-qr-card">
-              <span className="arma-view-media-title">QR Code patrimonial</span>
-
-              {arma.qr_code ? (
-                <>
-                  <div className="arma-view-qr-box">
-                    <QRCodeCanvas
-                      value={arma.qr_code}
-                      size={190}
-                      level="H"
-                      includeMargin
-                    />
-                  </div>
-
-                  <strong>{arma.qr_code}</strong>
-                  <small>Use este código para localizar a arma no SIGMO.</small>
-                </>
-              ) : (
-                <div className="arma-view-message">
-                  Esta arma ainda não possui QR Code cadastrado.
-                </div>
-              )}
-            </div>
-
-            <div className="arma-view-media-card arma-view-gallery-card">
-              <span className="arma-view-media-title">Fotos da arma</span>
-
-              {carregandoFotos && (
-                <div className="arma-view-message">Carregando fotos...</div>
-              )}
-
-              {!carregandoFotos && erroFotos && (
-                <div className="arma-view-error">{erroFotos}</div>
-              )}
-
-              {!carregandoFotos && !erroFotos && fotoSelecionada && (
-                <>
-                  <div className="arma-view-photo-wrap">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFotoCadastroAmpliada(
-                          fotoSelecionada
-                        )
-                      }
-                      title="Clique para ampliar a foto"
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        padding: 0,
-                        border: 0,
-                        background: 'transparent',
-                        cursor: 'zoom-in'
-                      }}
-                    >
-                      <img
-                        src={fotoSelecionada.url}
-                        alt={`Foto da arma ${
-                          arma.patrimonio || arma.numero_serie || ''
-                        }`}
-                        className="arma-view-photo"
-                      />
-                    </button>
-
-                    {fotoSelecionada.principal && (
-                      <span className="arma-view-principal-badge">
-                        Principal
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      className="arma-view-ampliar"
-                      onClick={() =>
-                        setFotoCadastroAmpliada(
-                          fotoSelecionada
-                        )
-                      }
-                    >
-                      Ampliar
-                    </button>
-                  </div>
-
-                  {fotosDisponiveis.length > 1 && (
-                    <div className="arma-view-thumbnails">
-                      {fotosDisponiveis.map((foto, index) => {
-                        const selecionada =
-                          fotoSelecionada?.id === foto.id ||
-                          fotoSelecionada?.url === foto.url
-
-                        return (
-                          <button
-                            key={foto.id || `${foto.url}-${index}`}
-                            type="button"
-                            className={
-                              selecionada
-                                ? 'arma-view-thumbnail is-selected'
-                                : 'arma-view-thumbnail'
-                            }
-                            onClick={() => setFotoSelecionada(foto)}
-                            aria-label={`Visualizar foto ${index + 1}`}
-                          >
-                            <img
-                              src={foto.url}
-                              alt={`Miniatura ${index + 1} da arma`}
-                            />
-
-                            {foto.principal && <span>Principal</span>}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  <small className="arma-view-gallery-counter">
-                    {fotosDisponiveis.length}{' '}
-                    {fotosDisponiveis.length === 1
-                      ? 'foto cadastrada'
-                      : 'fotos cadastradas'}
-                  </small>
-                </>
-              )}
-
-              {!carregandoFotos && !erroFotos && !fotoSelecionada && (
-                <div className="arma-view-message">
-                  Nenhuma foto cadastrada.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <section
-            style={{
-              marginTop: '18px',
-              border: '1px solid #cbd5e1',
-              borderRadius: '14px',
-              overflow: 'hidden',
-              background: '#fff'
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '14px 16px',
-                background: '#eff6ff',
-                borderBottom: '1px solid #cbd5e1'
-              }}
-            >
-              <div>
-                <span
-                  style={{
-                    display: 'block',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    letterSpacing: '.08em',
-                    color: '#1d4ed8'
-                  }}
-                >
-                  HISTÓRICO PERMANENTE
-                </span>
-
-                <strong
-                  style={{
-                    display: 'block',
-                    marginTop: '3px'
-                  }}
-                >
-                  Manutenções da arma
-                </strong>
-              </div>
-
-              <strong
-                style={{
-                  minWidth: '36px',
-                  textAlign: 'center',
-                  padding: '6px 10px',
-                  borderRadius: '999px',
-                  background: '#dbeafe',
-                  color: '#1e40af'
-                }}
-              >
-                {historicoManutencoes.length}
-              </strong>
-            </div>
-
-            <div style={{ padding: '14px 16px' }}>
-              {loadingHistorico && (
-                <div className="arma-view-message">
-                  Carregando histórico de manutenções...
-                </div>
-              )}
-
-              {!loadingHistorico && erroHistorico && (
-                <div className="arma-view-error">
-                  {erroHistorico}
-                </div>
-              )}
-
-              {!loadingHistorico &&
-                !erroHistorico &&
-                historicoManutencoes.length === 0 && (
-                  <div className="arma-view-message">
-                    Esta arma ainda não possui manutenções registradas.
-                  </div>
-                )}
-
-              {!loadingHistorico &&
-                !erroHistorico &&
-                historicoManutencoes.length > 0 && (
-                  <div
-                    style={{
-                      display: 'grid',
-                      gap: '12px'
-                    }}
-                  >
-                    {historicoManutencoes.map(
-                      (manutencao, index) => {
-                        const fotosManutencao =
+  function renderizarManutencaoHistorico(manutencao) {
+    const fotosManutencao =
                           fotosHistorico[manutencao.id] || []
 
-                        return (
+    return (
                           <article
                             key={manutencao.id}
                             style={{
@@ -622,7 +312,7 @@ export default function ArmaViewModal({
                                     marginBottom: '3px'
                                   }}
                                 >
-                                  Manutenção #{historicoManutencoes.length - index}
+                                  Manutenção
                                 </small>
 
                                 <strong>
@@ -780,12 +470,350 @@ export default function ArmaViewModal({
                               </div>
                             )}
                           </article>
+    )
+  }
+
+  // Linha do tempo única: data de abertura de cada operação, não a data
+  // de encerramento, para preservar a sequência histórica real.
+  const eventosHistoricoOrdenados = [
+    ...historicoMovimentacoes.map((registro) => ({
+      ...registro,
+      classe_historico: 'MOVIMENTACAO',
+      data_ordenacao: registro.criado_em
+    })),
+    ...historicoManutencoes.map((registro) => ({
+      id: `manutencao:${registro.id}`,
+      classe_historico: 'MANUTENCAO',
+      registro,
+      data_ordenacao: registro.registrada_em || registro.created_at
+    }))
+  ].sort((a, b) => {
+    const horario = (valor) => {
+      const numero = Date.parse(valor || '')
+      return Number.isFinite(numero) ? numero : 0
+    }
+    return horario(b.data_ordenacao) - horario(a.data_ordenacao) ||
+      String(b.id).localeCompare(String(a.id))
+  })
+
+  return (
+    <div
+      className="arma-view-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose?.()
+      }}
+    >
+      <section
+        className="arma-view-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Detalhes da arma"
+      >
+        <header className="arma-view-header">
+          <div>
+            <span>{arma.propriedade || 'PMESP'}</span>
+            <h2>
+              {arma.patrimonio ||
+                arma.numero_serie ||
+                'Arma'}
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            className="arma-view-close"
+            aria-label="Fechar"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="arma-view-content">
+          <div className="arma-view-grid">
+            <Info label="Patrimônio" value={arma.patrimonio} />
+            <Info label="Número de série" value={arma.numero_serie} />
+            <Info label="Espécie" value={arma.especie} />
+            <Info label="Marca" value={arma.marca} />
+            <Info label="Modelo" value={arma.modelo} />
+            <Info label="Calibre" value={arma.calibre} />
+            <Info label="Acabamento" value={arma.acabamento} />
+            <Info label="Unidade" value={arma.unidade} />
+            <Info
+              label="Status operacional"
+              value={arma.status_operacional || arma.status}
+            />
+
+            {arma.propriedade === 'PARTICULAR' && (
+              <>
+                <Info label="Número SIGMA" value={arma.numero_sigma} />
+                <Info
+                  label="Número do registro"
+                  value={arma.numero_registro || arma.registro}
+                />
+                <Info
+                  label="Validade do registro"
+                  value={arma.validade_registro || arma.validade}
+                />
+                <Info
+                  label="Comprimento do cano"
+                  value={arma.comprimento_cano}
+                />
+                <Info label="Capacidade" value={arma.capacidade} />
+                <Info
+                  label="País de fabricação"
+                  value={arma.pais_fabricacao}
+                />
+                <Info
+                  label="Ano de fabricação"
+                  value={arma.ano_fabricacao}
+                />
+                <Info
+                  label="Proprietário"
+                  value={
+                    arma.proprietario_nome ||
+                    arma.proprietario_policial_nome
+                  }
+                />
+                <Info
+                  label="RE do proprietário"
+                  value={
+                    arma.proprietario_re ||
+                    arma.proprietario_policial_re
+                  }
+                />
+                <Info
+                  label="Situação documental"
+                  value={arma.situacao_documental}
+                />
+              </>
+            )}
+          </div>
+
+          {(ehCarga || ehCautela || responsavelNome) && (
+            <section className="arma-view-vinculo">
+              <div className="arma-view-vinculo-header">
+                <span>Situação patrimonial</span>
+                <strong>{ehCarga ? 'Carga permanente' : ehCautela ? 'Cautela ativa' : 'Responsabilidade atual'}</strong>
+              </div>
+
+              <div className="arma-view-vinculo-grid">
+                <InfoLink
+                  label="Policial responsável"
+                  value={responsavelNome || 'Sem responsável informado'}
+                  disabled={!responsavelRe || !onAbrirPolicial}
+                  onClick={() => onAbrirPolicial?.(responsavelRe)}
+                />
+                <InfoLink
+                  label="RE"
+                  value={responsavelRe ? `RE ${responsavelRe}` : 'Não informado'}
+                  disabled={!responsavelRe || !onAbrirPolicial}
+                  onClick={() => onAbrirPolicial?.(responsavelRe)}
+                />
+                <Info
+                  label={ehCarga ? 'Carga paga em' : ehCautela ? 'Cautela paga em' : 'Vínculo registrado em'}
+                  value={formatarDataHora(dataVinculo)}
+                />
+                {ehCautela && (
+                  <Info
+                    label="Recebida em"
+                    value={formatarDataHora(arma.cautela_recebida_em)}
+                  />
+                )}
+                <Info
+                  label="Local atual"
+                  value={arma.local_atual || arma.unidade || '-'}
+                />
+              </div>
+            </section>
+          )}
+
+          <div className="arma-view-media-grid">
+            <div className="arma-view-media-card arma-view-qr-card">
+              <span className="arma-view-media-title">QR Code patrimonial</span>
+
+              {arma.qr_code ? (
+                <>
+                  <div className="arma-view-qr-box">
+                    <QRCodeCanvas
+                      value={arma.qr_code}
+                      size={190}
+                      level="H"
+                      includeMargin
+                    />
+                  </div>
+
+                  <strong>{arma.qr_code}</strong>
+                  <small>Use este código para localizar a arma no SIGMO.</small>
+                </>
+              ) : (
+                <div className="arma-view-message">
+                  Esta arma ainda não possui QR Code cadastrado.
+                </div>
+              )}
+            </div>
+
+            <div className="arma-view-media-card arma-view-gallery-card">
+              <span className="arma-view-media-title">Fotos da arma</span>
+
+              {carregandoFotos && (
+                <div className="arma-view-message">Carregando fotos...</div>
+              )}
+
+              {!carregandoFotos && erroFotos && (
+                <div className="arma-view-error">{erroFotos}</div>
+              )}
+
+              {!carregandoFotos && !erroFotos && fotoSelecionada && (
+                <>
+                  <div className="arma-view-photo-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFotoCadastroAmpliada(
+                          fotoSelecionada
                         )
                       }
+                      title="Clique para ampliar a foto"
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: 0,
+                        border: 0,
+                        background: 'transparent',
+                        cursor: 'zoom-in'
+                      }}
+                    >
+                      <img
+                        src={fotoSelecionada.url}
+                        alt={`Foto da arma ${
+                          arma.patrimonio || arma.numero_serie || ''
+                        }`}
+                        className="arma-view-photo"
+                      />
+                    </button>
+
+                    {fotoSelecionada.principal && (
+                      <span className="arma-view-principal-badge">
+                        Principal
+                      </span>
                     )}
+
+                    <button
+                      type="button"
+                      className="arma-view-ampliar"
+                      onClick={() =>
+                        setFotoCadastroAmpliada(
+                          fotoSelecionada
+                        )
+                      }
+                    >
+                      Ampliar
+                    </button>
                   </div>
-                )}
+
+                  {fotosDisponiveis.length > 1 && (
+                    <div className="arma-view-thumbnails">
+                      {fotosDisponiveis.map((foto, index) => {
+                        const selecionada =
+                          fotoSelecionada?.id === foto.id ||
+                          fotoSelecionada?.url === foto.url
+
+                        return (
+                          <button
+                            key={foto.id || `${foto.url}-${index}`}
+                            type="button"
+                            className={
+                              selecionada
+                                ? 'arma-view-thumbnail is-selected'
+                                : 'arma-view-thumbnail'
+                            }
+                            onClick={() => setFotoSelecionada(foto)}
+                            aria-label={`Visualizar foto ${index + 1}`}
+                          >
+                            <img
+                              src={foto.url}
+                              alt={`Miniatura ${index + 1} da arma`}
+                            />
+
+                            {foto.principal && <span>Principal</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <small className="arma-view-gallery-counter">
+                    {fotosDisponiveis.length}{' '}
+                    {fotosDisponiveis.length === 1
+                      ? 'foto cadastrada'
+                      : 'fotos cadastradas'}
+                  </small>
+                </>
+              )}
+
+              {!carregandoFotos && !erroFotos && !fotoSelecionada && (
+                <div className="arma-view-message">
+                  Nenhuma foto cadastrada.
+                </div>
+              )}
             </div>
+          </div>
+
+          <section style={{ marginTop: '18px', border: '1px solid #cbd5e1', borderRadius: '14px', overflow: 'hidden', background: '#fff' }}>
+            <header style={{ padding: '14px 16px', background: '#eff6ff', borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <div>
+                <small style={{ display: 'block', color: '#1d4ed8', fontWeight: 800, letterSpacing: '.06em' }}>HISTÓRICO PATRIMONIAL</small>
+                <strong>Movimentações da arma</strong>
+              </div>
+              <button type="button" className="armas-btn-secondary" onClick={() => setExibirMovimentacoes((atual) => !atual)} aria-expanded={exibirMovimentacoes}>
+                {exibirMovimentacoes ? 'Ocultar' : 'Ver histórico'} ({eventosHistoricoOrdenados.length})
+              </button>
+            </header>
+            {exibirMovimentacoes && (
+              <div style={{ display: 'grid', gap: '12px', padding: '14px 16px' }}>
+                {(carregandoMovimentacoes || loadingHistorico) && <div className="arma-view-message">Carregando histórico...</div>}
+                {!carregandoMovimentacoes && erroMovimentacoes && (
+                  <div className="arma-view-error">{erroMovimentacoes}</div>
+                )}
+                {!loadingHistorico && erroHistorico && (
+                  <div className="arma-view-error">{erroHistorico}</div>
+                )}
+                {!carregandoMovimentacoes && !loadingHistorico && !erroMovimentacoes && !erroHistorico && eventosHistoricoOrdenados.length === 0 && (
+                  <div className="arma-view-message">Nenhuma movimentação ou manutenção registrada para esta arma.</div>
+                )}
+                {!carregandoMovimentacoes && !loadingHistorico && eventosHistoricoOrdenados.map((evento) => {
+                  if (evento.classe_historico === 'MANUTENCAO') {
+                    return renderizarManutencaoHistorico(evento.registro)
+                  }
+                  const situacao = String(evento.status || '').toUpperCase()
+                  const cancelado = ['CANCELADA', 'CANCELADO', 'RECUSADA', 'RECUSADO'].includes(situacao)
+                  const concluido = ['ACEITA', 'ACEITO', 'FINALIZADA', 'FINALIZADO'].includes(situacao)
+                  const nomeEvento = String(evento.tipo || 'MOVIMENTAÇÃO').replaceAll('_', ' ')
+                  const nomeStatus = situacao.replaceAll('_', ' ') || 'SEM STATUS'
+                  return (
+                    <article key={evento.id} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', background: '#f8fafc' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                        <strong>{nomeEvento}</strong>
+                        <span style={{ padding: '5px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 800, color: cancelado ? '#991b1b' : concluido ? '#166534' : '#92400e', background: cancelado ? '#fee2e2' : concluido ? '#dcfce7' : '#fef3c7' }}>{nomeStatus}</span>
+                      </div>
+                      {evento.protocolo && <small style={{ display: 'block', marginTop: '5px', overflowWrap: 'anywhere' }}>Protocolo: <strong>{evento.protocolo}</strong></small>}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '9px', marginTop: '10px', fontSize: '12px' }}>
+                        <span>Registrada em: <strong>{formatarDataHora(evento.criado_em)}</strong></span>
+                        <span>{cancelado ? 'Encerrada em' : 'Concluída / recebida em'}: <strong>{formatarDataHora(evento.concluido_em)}</strong></span>
+                        <span>Origem: <strong>{evento.origem || '—'}</strong></span>
+                        <span>Destino: <strong>{evento.destino || '—'}</strong></span>
+                        <span>Registrada por: <strong>{evento.enviado_por || '—'}</strong></span>
+                        <span>{cancelado ? 'Cancelada / recusada por' : 'Recebida por'}: <strong>{evento.recebido_por || '—'}</strong></span>
+                        {evento.quantidade != null && <span>Quantidade: <strong>{evento.quantidade}</strong></span>}
+                      </div>
+                      {evento.observacoes && <p style={{ margin: '10px 0 0', fontSize: '12px', whiteSpace: 'pre-wrap' }}><strong>Observações:</strong> {evento.observacoes}</p>}
+                    </article>
+                  )
+                })}
+              </div>
+            )}
           </section>
 
           <div className="arma-view-observacoes">

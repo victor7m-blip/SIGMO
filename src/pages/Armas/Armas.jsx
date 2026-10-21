@@ -42,6 +42,8 @@ import {
   listarFotosArma
 } from '../../services/armasFotosService'
 
+import { registrarManutencao } from '../../services/manutencoesService'
+
 import './styles/Armas.css'
 import './styles/ArmasOperacoes.css'
 import '../Policiais/components/policialViewModal.css'
@@ -453,6 +455,69 @@ export default function Armas({ user, onAbrirPolicial }) {
   const [processandoRecebimentoEmLote, setProcessandoRecebimentoEmLote] =
     useState(false)
 
+  const [manutencaoModalAberta, setManutencaoModalAberta] = useState(false)
+  const [armaManutencaoId, setArmaManutencaoId] = useState('')
+  const [pesquisaManutencao, setPesquisaManutencao] = useState('')
+  const [motivoManutencao, setMotivoManutencao] = useState('')
+  const [observacaoManutencao, setObservacaoManutencao] = useState('')
+  const [salvandoManutencao, setSalvandoManutencao] = useState(false)
+  const [fotosManutencao, setFotosManutencao] = useState([])
+  const fotosManutencaoRef = useRef([])
+
+  useEffect(() => {
+    fotosManutencaoRef.current = fotosManutencao
+  }, [fotosManutencao])
+
+  useEffect(() => () => {
+    fotosManutencaoRef.current.forEach((item) => URL.revokeObjectURL(item.preview))
+  }, [])
+
+  function limparFotosManutencao() {
+    setFotosManutencao((atuais) => {
+      atuais.forEach((item) => URL.revokeObjectURL(item.preview))
+      return []
+    })
+  }
+
+  function selecionarFotosManutencao(event) {
+    const arquivos = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!arquivos.length) return
+    if (fotosManutencao.length + arquivos.length > 10) {
+      setErro('Selecione no máximo 10 fotografias por manutenção.')
+      return
+    }
+    const invalida = arquivos.find((arquivo) =>
+      !arquivo.type.startsWith('image/') || arquivo.size > 5 * 1024 * 1024
+    )
+    if (invalida) {
+      setErro('Cada fotografia deve ser uma imagem de até 5 MB.')
+      return
+    }
+    setErro('')
+    setFotosManutencao((atuais) => [
+      ...atuais,
+      ...arquivos.map((arquivo) => ({
+        id: `${Date.now()}-${Math.random()}`,
+        arquivo,
+        preview: URL.createObjectURL(arquivo)
+      }))
+    ])
+  }
+
+  function removerFotoManutencao(id) {
+    setFotosManutencao((atuais) => atuais.filter((item) => {
+      if (item.id === id) URL.revokeObjectURL(item.preview)
+      return item.id !== id
+    }))
+  }
+
+  function fecharManutencaoArma() {
+    if (salvandoManutencao) return
+    limparFotosManutencao()
+    setManutencaoModalAberta(false)
+  }
+
   const [formAberto, setFormAberto] = useState(false)
   const [armaEditando, setArmaEditando] = useState(null)
   const [armaVisualizando, setArmaVisualizando] = useState(null)
@@ -535,6 +600,9 @@ export default function Armas({ user, onAbrirPolicial }) {
   const codigoDestinoTransferencia = contextoTransferenciaSVDD ? 'P4' : 'SVDD'
   const nomeDestinoTransferencia = contextoTransferenciaSVDD ? 'GUARDA DO P4' : 'COFRE DO SVDD'
   const podeReceberTransferencia = ehPerfilP4 || ehPerfilSVDD || ehPerfilGestor
+  // A abertura deve refletir o setor real do perfil, não somente o local da arma.
+  const podeEnviarManutencao = ehPerfilP4 || ehPerfilSVDD
+  const cofreManutencao = ehPerfilSVDD ? 'COFRE DO SVDD' : 'COFRE DO P4'
 
   const totalPaginas = useMemo(() => {
     return Math.max(1, Math.ceil(total / LIMITE))
@@ -1328,6 +1396,82 @@ setFotoSelecionadaVisualizacao(
       return alvo.includes(termo)
     })
   }, [armasResumo, pesquisaTransferencia, contextoTransferenciaSVDD])
+
+  const armasDisponiveisManutencao = useMemo(() =>
+    armasResumo.filter((arma) =>
+      normalizarTexto(arma.propriedade || 'PMESP') !== 'PARTICULAR' &&
+      obterStatusArma(arma) === 'RESERVA' &&
+      obterLocalArma(arma) === cofreManutencao
+    ), [armasResumo, cofreManutencao])
+
+  const armasVisiveisManutencao = useMemo(() => {
+    const termo = normalizarTexto(pesquisaManutencao)
+    if (!termo) return armasDisponiveisManutencao
+    return armasDisponiveisManutencao.filter((arma) =>
+      normalizarTexto([
+        arma.patrimonio, arma.numero_serie, arma.especie,
+        arma.marca, arma.modelo, arma.calibre
+      ].filter(Boolean).join(' ')).includes(termo)
+    )
+  }, [armasDisponiveisManutencao, pesquisaManutencao])
+
+  function abrirManutencaoArma() {
+    setPesquisaManutencao('')
+    setArmaManutencaoId('')
+    setMotivoManutencao('')
+    setObservacaoManutencao('')
+    limparFotosManutencao()
+    setErro('')
+    setMensagemSucesso('')
+    setManutencaoModalAberta(true)
+  }
+
+  async function confirmarManutencaoArma(event) {
+    event.preventDefault()
+    if (salvandoManutencao) return
+    const arma = armasDisponiveisManutencao.find((item) => item.id === armaManutencaoId)
+    if (!arma) {
+      setErro('Selecione uma arma em RESERVA no seu cofre.')
+      return
+    }
+    const descricao = motivoManutencao.trim()
+    if (!descricao) {
+      setErro('Informe o motivo da manutenção.')
+      return
+    }
+    if (!window.confirm(`Colocar a arma ${arma.patrimonio || arma.numero_serie} em manutenção interna?\n\nEla deixará de ficar disponível no ${cofreManutencao}.`)) return
+
+    try {
+      setSalvandoManutencao(true)
+      setErro('')
+      await registrarManutencao({
+        modulo: 'ARMAS',
+        tipoMaterial: 'ARMA',
+        referenciaId: arma.id,
+        patrimonioId: arma.patrimonio_id || null,
+        quantidade: 1,
+        tipoNovidade: 'MANUTENCAO INTERNA',
+        descricao,
+        observacoes: observacaoManutencao.trim() || null,
+        fotos: fotosManutencao.map((item) => item.arquivo),
+        origem: cofreManutencao,
+        destino: 'MANUTENCAO',
+        user
+      })
+      limparFotosManutencao()
+      setManutencaoModalAberta(false)
+      setArmaManutencaoId('')
+      setMotivoManutencao('')
+      setObservacaoManutencao('')
+      setMensagemSucesso(`Arma ${arma.patrimonio || arma.numero_serie} colocada em manutenção interna.`)
+      await Promise.all([carregarArmas(), carregarResumo()])
+    } catch (error) {
+      console.error('Erro ao colocar arma em manutenção:', error)
+      setErro(error?.message || 'Não foi possível colocar a arma em manutenção.')
+    } finally {
+      setSalvandoManutencao(false)
+    }
+  }
 
   function abrirTransferenciaEmLote() {
     setPesquisaTransferencia('')
@@ -2345,9 +2489,9 @@ setFotoSelecionadaVisualizacao(
             </div>
 
             <div className="armas-action-grid">
-              <button type="button" disabled>
-                <strong>Enviar manutenção</strong>
-                <span>Registrar saída para reparo</span>
+              <button type="button" disabled={!podeEnviarManutencao} onClick={abrirManutencaoArma}>
+                <strong>Colocar em manutenção</strong>
+                <span>Registrar manutenção interna de arma disponível no seu cofre</span>
               </button>
 
               <button type="button" disabled>
@@ -2363,6 +2507,143 @@ setFotoSelecionadaVisualizacao(
           </div>
         </div>
       </section>
+
+      {manutencaoModalAberta && (
+        <div
+          className="armas-transferencia-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !salvandoManutencao) {
+              fecharManutencaoArma()
+            }
+          }}
+        >
+          <section
+            className="armas-transferencia-modal"
+            style={{ maxHeight: 'calc(100dvh - 48px)', height: 'auto', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Colocar arma em manutenção"
+          >
+            <header>
+              <div>
+                <span>Gestão patrimonial</span>
+                <h2>Colocar arma em manutenção</h2>
+                <p>Manutenção interna • Origem: {cofreManutencao}</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar"
+                disabled={salvandoManutencao}
+                onClick={fecharManutencaoArma}
+              >×</button>
+            </header>
+
+            <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '16px 24px', display: 'grid', alignContent: 'start', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <input
+                  type="search"
+                  aria-label="Pesquisar armamento disponível"
+                  value={pesquisaManutencao}
+                  disabled={salvandoManutencao}
+                  onChange={(event) => setPesquisaManutencao(event.target.value)}
+                  placeholder="Pesquisar patrimônio, série, espécie, marca ou modelo"
+                  style={{ flex: 1, minWidth: 0, padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: '10px', fontSize: '15px' }}
+                />
+                <span style={{ whiteSpace: 'nowrap', color: '#166534', fontWeight: 700, fontSize: '13px' }}>
+                  {armaManutencaoId ? '1 selecionada' : '0 selecionadas'}
+                </span>
+              </div>
+
+              <div style={{ border: '1px solid #dbe4f0', borderRadius: '12px', padding: '8px', maxHeight: '176px', minHeight: '88px', overflowY: 'auto', background: '#fff' }}>
+                {armasVisiveisManutencao.length === 0 ? (
+                  <div className="armas-empty">Nenhuma arma disponível no {cofreManutencao} para esta pesquisa.</div>
+                ) : armasVisiveisManutencao.map((arma) => (
+                  <label key={arma.id} className="armas-transferencia-item" style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="arma-manutencao"
+                      checked={armaManutencaoId === arma.id}
+                      disabled={salvandoManutencao}
+                      onChange={() => setArmaManutencaoId(arma.id)}
+                    />
+                    <div>
+                      <strong>{[arma.especie, arma.marca, arma.modelo].filter(Boolean).join(' ') || 'Arma'}</strong>
+                      <span>Patrimônio: {arma.patrimonio || '-'} · Série: {arma.numero_serie || '-'} · Calibre: {arma.calibre || '-'}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <form id="form-manutencao-arma" onSubmit={confirmarManutencaoArma} style={{ display: 'grid', gap: '10px' }}>
+                <label style={{ display: 'grid', gap: '5px', fontWeight: 600 }}>
+                  Motivo da manutenção
+                  <textarea
+                    required
+                    rows={2}
+                    value={motivoManutencao}
+                    disabled={salvandoManutencao}
+                    onChange={(event) => setMotivoManutencao(event.target.value)}
+                    placeholder="Descreva o defeito ou a necessidade de manutenção"
+                    style={{ width: '100%', minHeight: '58px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '9px', resize: 'vertical', fontWeight: 400 }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: '5px', fontWeight: 600 }}>
+                  Observações adicionais (opcional)
+                  <textarea
+                    rows={2}
+                    value={observacaoManutencao}
+                    disabled={salvandoManutencao}
+                    onChange={(event) => setObservacaoManutencao(event.target.value)}
+                    style={{ width: '100%', minHeight: '58px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '9px', resize: 'vertical', fontWeight: 400 }}
+                  />
+                </label>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <label htmlFor="fotos-manutencao-armas" style={{ fontWeight: 700 }}>
+                    Fotografias da manutenção (opcional)
+                  </label>
+                  <input
+                    id="fotos-manutencao-armas"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={salvandoManutencao || fotosManutencao.length >= 10}
+                    onChange={selecionarFotosManutencao}
+                    style={{ width: '100%', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '9px' }}
+                  />
+                  <small style={{ color: '#64748b' }}>Até 10 fotos, 5 MB por imagem. Revise antes de confirmar.</small>
+                  {fotosManutencao.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: '10px' }}>
+                      {fotosManutencao.map((item) => (
+                        <div key={item.id} style={{ border: '1px solid #dbe4f0', borderRadius: '10px', padding: '6px', minWidth: 0 }}>
+                          <img src={item.preview} alt={`Foto selecionada: ${item.arquivo.name}`} style={{ width: '100%', height: '84px', objectFit: 'cover', borderRadius: '6px' }} />
+                          <button type="button" disabled={salvandoManutencao} onClick={() => removerFotoManutencao(item.id)} style={{ width: '100%', marginTop: '5px', padding: '5px', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', background: '#fff' }}>Remover</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>A arma selecionada ficará indisponível até a conclusão da manutenção.</p>
+              </form>
+            </div>
+
+            <footer style={{ flexShrink: 0, padding: '12px 24px', background: '#fff' }}>
+              <button
+                type="button"
+                className="armas-btn-secondary"
+                disabled={salvandoManutencao}
+                onClick={fecharManutencaoArma}
+              >Cancelar</button>
+              <button
+                type="submit"
+                form="form-manutencao-arma"
+                className="armas-btn-primary"
+                disabled={salvandoManutencao || !armaManutencaoId || !motivoManutencao.trim()}
+              >{salvandoManutencao ? 'Registrando...' : 'Colocar em manutenção'}</button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {recebimentoModalAberta && (
         <div

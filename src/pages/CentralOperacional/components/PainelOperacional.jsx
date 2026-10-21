@@ -225,6 +225,24 @@ function ehTransferencia(secao) {
 }
 
 
+// Permite cancelar somente a transferência de ARMA pendente
+// pelo perfil do setor que a enviou. Não modifica o estoque.
+function itemEhTransferenciaArmaPendenteOrigem(item, secao, user) {
+  if (!ehTransferencia(secao)) return false
+
+  const categoria = normalizarOperacional(item?.categoria || item?.modulo)
+  const origem = normalizarOperacional(item?.origem_codigo)
+  const destino = normalizarOperacional(item?.destino_codigo)
+  const status = normalizarOperacional(item?.status).replace(/ /g, '_')
+
+  if (categoria !== 'ARMA' || status !== 'PENDENTE') return false
+
+  return (
+    (origem === 'P4' && destino === 'SVDD' && ehP4(user)) ||
+    (origem === 'SVDD' && destino === 'P4' && ehEncarregado(user))
+  )
+}
+
 function itemEhTransferenciaTonfaSvddP4(
   item
 ) {
@@ -6189,6 +6207,54 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
   }
 
 
+  async function cancelarTransferenciaArmaOrigem(item) {
+    const transferenciaId = item?.transferencia_id || item?.id
+
+    if (!transferenciaId || cancelandoId || recebendoId) return
+    if (!itemEhTransferenciaArmaPendenteOrigem(item, selecionado, user)) return
+
+    const identificacao =
+      item?.metadata?.patrimonio_arma ||
+      item?.metadata?.descricao_arma ||
+      item?.protocolo ||
+      'ARMA'
+
+    const resposta = window.prompt(
+      `Informe o motivo do cancelamento da transferência da arma ${identificacao}:`
+    )
+    if (resposta === null) return
+
+    const motivo = resposta.trim().toUpperCase()
+    if (!motivo) {
+      window.alert('Informe o motivo do cancelamento.')
+      return
+    }
+
+    if (!window.confirm(
+      `Cancelar a transferência ${item?.protocolo || ''} da arma ${identificacao}?\n\n` +
+      `A transferência ficará registrada como CANCELADA, e a arma permanecerá no ${normalizarOperacional(item?.origem_codigo) === 'SVDD' ? 'COFRE DO SVDD' : 'COFRE DO P4'}.`
+    )) return
+
+    try {
+      setCancelandoId(transferenciaId)
+      await cancelarTransferencia({ transferenciaId, motivoCancelamento: motivo, user })
+      setRegistroAberto(null)
+      setSelecionado((atual) => {
+        if (!atual) return atual
+        const itens = (atual.itens || []).filter(
+          (registro) => String(registro?.transferencia_id || registro?.id || '') !== String(transferenciaId)
+        )
+        return { ...atual, total: itens.length, itens }
+      })
+      if (typeof onAtualizar === 'function') await onAtualizar()
+    } catch (error) {
+      console.error('Erro ao cancelar transferência de arma:', error)
+      window.alert(error?.message || 'Não foi possível cancelar a transferência da arma.')
+    } finally {
+      setCancelandoId(null)
+    }
+  }
+
   async function cancelarTransferenciaTonfaSvddP4(
     item
   ) {
@@ -7940,6 +8006,20 @@ export default function PainelOperacional({ dados, carregando, user, onAtualizar
                               : 'Receber'}
                           </button>
                         )}
+
+                      {itemEhTransferenciaArmaPendenteOrigem(item, selecionado, user) && (
+                        <button
+                          type="button"
+                          className="central-detalhe-button"
+                          disabled={Boolean(cancelandoId) || Boolean(recebendoId)}
+                          onClick={() => cancelarTransferenciaArmaOrigem(item)}
+                          style={{ borderColor: '#dc2626', color: '#dc2626', fontWeight: 800 }}
+                        >
+                          {String(cancelandoId || '') === String(item?.transferencia_id || item?.id || '')
+                            ? 'Cancelando...'
+                            : 'Cancelar transferência'}
+                        </button>
+                      )}
 
                       {itemEhTransferenciaTonfaSvddP4(
                         item
