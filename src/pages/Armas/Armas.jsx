@@ -42,7 +42,7 @@ import {
   listarFotosArma
 } from '../../services/armasFotosService'
 
-import { registrarManutencao } from '../../services/manutencoesService'
+import { listarManutencoes, registrarManutencao } from '../../services/manutencoesService'
 
 import './styles/Armas.css'
 import './styles/ArmasOperacoes.css'
@@ -209,6 +209,12 @@ function armaPertenceAoEscopoSVDD(arma) {
     normalizarTexto(arma?.propriedade) === 'PARTICULAR' ||
     estaEmCarga(arma)
   ) {
+    return false
+  }
+
+  // Uma manutenção recebida pelo P4 continua EM MANUTENÇÃO, mas
+  // deixa de pertencer à responsabilidade operacional do SVDD.
+  if (estaEmManutencao(arma) && obterLocalArma(arma).includes('P4')) {
     return false
   }
 
@@ -455,6 +461,12 @@ export default function Armas({ user, onAbrirPolicial }) {
   const [processandoRecebimentoEmLote, setProcessandoRecebimentoEmLote] =
     useState(false)
 
+  const [encaminhamentoP4Aberto, setEncaminhamentoP4Aberto] = useState(false)
+  const [manutencoesEncaminharP4, setManutencoesEncaminharP4] = useState([])
+  const [pesquisaEncaminhamentoP4, setPesquisaEncaminhamentoP4] = useState('')
+  const [carregandoEncaminhamentoP4, setCarregandoEncaminhamentoP4] = useState(false)
+  const [encaminhandoManutencaoP4Id, setEncaminhandoManutencaoP4Id] = useState(null)
+  const [erroEncaminhamentoP4, setErroEncaminhamentoP4] = useState('')
   const [manutencaoModalAberta, setManutencaoModalAberta] = useState(false)
   const [armaManutencaoId, setArmaManutencaoId] = useState('')
   const [pesquisaManutencao, setPesquisaManutencao] = useState('')
@@ -1211,8 +1223,9 @@ setFotoSelecionadaVisualizacao(
       })
 
       setMensagemSucesso(
-        `Transferência ${transferencia.protocolo} recebida. ` +
-        `A arma agora está ${ehPerfilP4 ? 'na Guarda do P4' : 'no Cofre do SVDD'}.`
+        transferencia?.metadata?.tipo_fluxo === 'MANUTENCAO_ARMA_SVDD_P4'
+          ? `Transferência ${transferencia.protocolo} recebida pelo P4. A arma continua em manutenção, agora sob responsabilidade do P4.`
+          : `Transferência ${transferencia.protocolo} recebida. A arma agora está ${ehPerfilP4 ? 'na Guarda do P4' : 'no Cofre do SVDD'}.`
       )
 
       await Promise.all([
@@ -1472,6 +1485,99 @@ setFotoSelecionadaVisualizacao(
       setSalvandoManutencao(false)
     }
   }
+
+  // O encaminhamento é uma transferência de CUSTÓDIA de uma manutenção já aberta.
+  // Não conclui a manutenção nem altera o local da arma antes do aceite do P4.
+  async function abrirEncaminharManutencaoP4() {
+    if (!ehPerfilSVDD || carregandoEncaminhamentoP4) return
+    try {
+      setCarregandoEncaminhamentoP4(true)
+      setErro('')
+      setErroEncaminhamentoP4('')
+      setMensagemSucesso('')
+      setPesquisaEncaminhamentoP4('')
+      const [resposta, pendentes] = await Promise.all([
+        listarManutencoes({ modulo: 'ARMAS', status: 'EM_MANUTENCAO', pagina: 1, limite: 200 }),
+        listarTransferenciasPendentes({ destinoCodigo: 'P4', categoria: 'ARMA', limite: 500 })
+      ])
+      const idsPendentes = new Set((pendentes || [])
+        .map((item) => String(item?.metadata?.manutencao_id || ''))
+        .filter(Boolean))
+      const registros = (resposta?.data || []).filter((item) => {
+        const origemGravada = normalizarTexto(item?.origem)
+        const destino = normalizarTexto(item?.destino)
+        const origem = origemGravada || normalizarTexto(item?.origem_institucional)
+        return origem.includes('SVDD') && !destino.includes('P4') &&
+          !idsPendentes.has(String(item?.id || '')) && Boolean(item?.referencia_id)
+      })
+      setManutencoesEncaminharP4(registros)
+      setEncaminhamentoP4Aberto(true)
+    } catch (error) {
+      console.error('Erro ao carregar manutenções de armas para o P4:', error)
+      setErro(error?.message || 'Não foi possível consultar as manutenções para encaminhamento.')
+    } finally {
+      setCarregandoEncaminhamentoP4(false)
+    }
+  }
+
+  async function encaminharManutencaoAoP4(manutencao) {
+    if (!ehPerfilSVDD || !manutencao?.id || encaminhandoManutencaoP4Id) return
+    const identificacao = manutencao.patrimonio || manutencao.numero_serie || 'arma selecionada'
+    const confirmou = window.confirm(
+      `Encaminhar a arma ${identificacao}, em manutenção, do SVDD ao P4?\n\n` +
+      'Será criada uma transferência pendente. A custódia só mudará depois do aceite do P4. A manutenção permanecerá aberta.'
+    )
+    if (!confirmou) return
+    try {
+      setEncaminhandoManutencaoP4Id(manutencao.id)
+      setErroEncaminhamentoP4('')
+      setErro('')
+      setMensagemSucesso('')
+      const transferencia = await criarTransferenciaPendente({
+        armaId: manutencao.referencia_id,
+        patrimonioId: manutencao.patrimonio_id || null,
+        categoria: 'ARMA',
+        quantidade: 1,
+        origemTipo: 'SETOR',
+        origemCodigo: 'SVDD',
+        origemNome: 'MANUTENCAO / SVDD',
+        destinoTipo: 'SETOR',
+        destinoCodigo: 'P4',
+        destinoNome: 'MANUTENCAO / P4',
+        motivo: 'ENCAMINHAMENTO_P4_MANUTENCAO',
+        observacoes: `ENCAMINHAMENTO DE ARMA EM MANUTENÇÃO DO SVDD AO P4. MANUTENÇÃO ${manutencao.id}.`,
+        metadata: {
+          tipo_fluxo: 'MANUTENCAO_ARMA_SVDD_P4',
+          manutencao_id: manutencao.id,
+          arma_id: manutencao.referencia_id,
+          patrimonio: manutencao.patrimonio || null,
+          numero_serie: manutencao.numero_serie || null,
+          preservar_manutencao: true
+        },
+        user
+      })
+      setManutencoesEncaminharP4((lista) => lista.filter((item) => item.id !== manutencao.id))
+      setEncaminhamentoP4Aberto(false)
+      setMensagemSucesso(
+        `Arma ${identificacao} encaminhada ao P4 na transferência ${transferencia.protocolo}. Aguardando aceite; manutenção permanece ativa.`
+      )
+      await Promise.all([carregarArmas(), carregarResumo(), carregarTransferenciasPendentesArmas()])
+    } catch (error) {
+      console.error('Erro ao encaminhar arma em manutenção para o P4:', error)
+      setErroEncaminhamentoP4(error?.message || 'Não foi possível encaminhar a arma ao P4.')
+    } finally {
+      setEncaminhandoManutencaoP4Id(null)
+    }
+  }
+
+  const manutencoesVisiveisEncaminhamentoP4 = manutencoesEncaminharP4.filter((item) => {
+    const termo = normalizarTexto(pesquisaEncaminhamentoP4)
+    if (!termo) return true
+    return normalizarTexto([
+      item.patrimonio, item.numero_serie, item.especie, item.marca,
+      item.modelo, item.descricao, item.tipo_novidade
+    ].filter(Boolean).join(' ')).includes(termo)
+  })
 
   function abrirTransferenciaEmLote() {
     setPesquisaTransferencia('')
@@ -2413,6 +2519,96 @@ setFotoSelecionadaVisualizacao(
           </div>
         </div>
 
+        {ehPerfilSVDD ? (
+        <div className="armas-movement-groups">
+          <div className="armas-movement-group">
+            <div className="armas-movement-group-header">
+              <div className="armas-movement-group-icon">↔️</div>
+              <div>
+                <h3>Movimentação interna</h3>
+                <p>Transferências entre o Cofre do P4 e o Cofre do SVDD.</p>
+              </div>
+            </div>
+            <div className="armas-action-grid">
+              <button
+                type="button"
+                disabled={!podeReceberTransferencia}
+                onClick={() => {
+                  setRecebimentoModalAberta(true)
+                  carregarTransferenciasPendentesArmas()
+                }}
+              >
+                <strong>Receber do P4</strong>
+                <span>Confirmar armamento enviado pelo P4 ao Cofre do SVDD</span>
+              </button>
+              <button
+                type="button"
+                disabled={!podeTransferirArmas}
+                onClick={abrirTransferenciaEmLote}
+              >
+                <strong>Devolver ao P4</strong>
+                <span>Selecionar uma ou várias armas disponíveis para devolver ao P4</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="armas-movement-group">
+            <div className="armas-movement-group-header">
+              <div className="armas-movement-group-icon">📤</div>
+              <div>
+                <h3>Cautelas</h3>
+                <p>Entrega temporária e recebimento de devoluções.</p>
+              </div>
+            </div>
+            <div className="armas-action-grid">
+              <button type="button" disabled title="A cautela de arma é realizada pelo fluxo global Pagar Material.">
+                <strong>Pagar cautela</strong>
+                <span>Entrega temporária ao policial — utilizar Pagar Material</span>
+              </button>
+              <button type="button" disabled title="A devolução de cautela é realizada pelo fluxo global Receber Material.">
+                <strong>Receber devolução</strong>
+                <span>Encerrar cautela — utilizar Receber Material</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="armas-movement-group">
+            <div className="armas-movement-group-header">
+              <div className="armas-movement-group-icon">🛠️</div>
+              <div>
+                <h3>Condição do material</h3>
+                <p>Manutenção interna, constatação de novidade e encaminhamento ao P4.</p>
+              </div>
+            </div>
+            <div className="armas-action-grid">
+              <button
+                type="button"
+                disabled={!podeEnviarManutencao}
+                onClick={abrirManutencaoArma}
+              >
+                <strong>Colocar em manutenção</strong>
+                <span>Registrar manutenção interna de arma disponível no Cofre do SVDD</span>
+              </button>
+              <button type="button" disabled title="Fluxo de constatação de avaria ou extravio ainda não conectado nesta página.">
+                <strong>Constatar novidade</strong>
+                <span>Registrar avaria ou extravio — fluxo a integrar</span>
+              </button>
+              <button
+                type="button"
+                disabled={carregandoEncaminhamentoP4 || Boolean(encaminhandoManutencaoP4Id)}
+                onClick={abrirEncaminharManutencaoP4}
+              >
+                <strong>{carregandoEncaminhamentoP4 ? 'Carregando...' : 'Encaminhar ao P4'}</strong>
+                <span>Enviar arma em manutenção ao P4, mediante aceite, mantendo a manutenção ativa</span>
+              </button>
+              <button type="button" disabled title="Fluxo de recebimento de manutenção ainda não conectado nesta página.">
+                <strong>Receber manutenção</strong>
+                <span>Registrar retorno da arma ao Cofre do SVDD — fluxo a integrar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        ) : (
         <div className="armas-movement-groups">
           <div className="armas-movement-group">
             <div className="armas-movement-group-header">
@@ -2506,7 +2702,81 @@ setFotoSelecionadaVisualizacao(
             </div>
           </div>
         </div>
+        )}
       </section>
+
+      {encaminhamentoP4Aberto && (
+        <div
+          className="armas-transferencia-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !encaminhandoManutencaoP4Id) {
+              setEncaminhamentoP4Aberto(false)
+            }
+          }}
+        >
+          <section
+            className="armas-transferencia-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Encaminhar arma em manutenção ao P4"
+            style={{ maxHeight: 'calc(100dvh - 48px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          >
+            <header>
+              <div>
+                <span>Gestão patrimonial · SVDD</span>
+                <h2>Encaminhar ao P4</h2>
+                <p>Selecione uma arma em manutenção. A custódia só muda após o aceite pelo P4.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar"
+                disabled={Boolean(encaminhandoManutencaoP4Id)}
+                onClick={() => setEncaminhamentoP4Aberto(false)}
+              >×</button>
+            </header>
+            <div style={{ padding: '16px 24px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
+              {erroEncaminhamentoP4 && (
+                <div className="armas-alert-error" role="alert">{erroEncaminhamentoP4}</div>
+              )}
+              <input
+                type="search"
+                aria-label="Pesquisar arma em manutenção"
+                placeholder="Pesquisar patrimônio, série ou descrição"
+                disabled={Boolean(encaminhandoManutencaoP4Id)}
+                value={pesquisaEncaminhamentoP4}
+                onChange={(event) => setPesquisaEncaminhamentoP4(event.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '9px', border: '1px solid #cbd5e1', marginBottom: '12px' }}
+              />
+              {manutencoesVisiveisEncaminhamentoP4.length === 0 ? (
+                <div className="armas-empty">
+                  Nenhuma manutenção de arma sob custódia do SVDD disponível para encaminhamento.
+                  Transferências já pendentes não aparecem nesta lista.
+                </div>
+              ) : manutencoesVisiveisEncaminhamentoP4.map((item) => (
+                <div
+                  key={item.id}
+                  className="armas-transferencia-item"
+                  style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}
+                >
+                  <div>
+                    <strong>{[item.especie, item.marca, item.modelo].filter(Boolean).join(' ') || 'ARMA'}</strong>
+                    <span>Patrimônio: {item.patrimonio || '-'} · Série: {item.numero_serie || '-'} · Calibre: {item.calibre || '-'}</span>
+                    <span>Manutenção: {item.descricao || item.tipo_novidade || 'Sem descrição'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={Boolean(encaminhandoManutencaoP4Id)}
+                    onClick={() => encaminharManutencaoAoP4(item)}
+                  >
+                    {encaminhandoManutencaoP4Id === item.id ? 'Enviando...' : 'Encaminhar'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
 
       {manutencaoModalAberta && (
         <div
@@ -2740,6 +3010,11 @@ setFotoSelecionadaVisualizacao(
                         <span>
                           Enviado por: {transferencia.enviado_por_nome || '-'}
                         </span>
+                        {transferencia?.metadata?.tipo_fluxo === 'MANUTENCAO_ARMA_SVDD_P4' && (
+                          <span style={{ color: '#92400e', fontWeight: 800 }}>
+                            MANUTENÇÃO — receber sob custódia do P4, sem concluir a manutenção
+                          </span>
+                        )}
                       </div>
                     </label>
 

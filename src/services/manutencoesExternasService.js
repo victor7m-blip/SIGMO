@@ -39,6 +39,39 @@ function origemEhP4(item) {
   )
 }
 
+// Armas vindas do SVDD continuam com origem historica SVDD depois do aceite.
+// Para manutencao externa, conferir a custodia atual no cadastro da arma.
+async function conferirCustodiaArmaP4(manutencoes) {
+  const itens = (manutencoes || []).filter((item) => maiusculo(item?.modulo) === 'ARMAS')
+  if (!itens.length) return new Set()
+
+  const referencias = [...new Set(itens.map((item) => texto(item?.referencia_id)).filter(Boolean))]
+  if (referencias.length !== itens.length) {
+    throw new Error('Manutencao de arma sem referencia individual valida.')
+  }
+  const { data: armas, error } = await supabase
+    .from('sigmo_armas')
+    .select('id, status, local_atual, propriedade')
+    .in('id', referencias)
+  if (error) throw error
+
+  const porId = new Map((armas || []).map((arma) => [String(arma.id), arma]))
+  const elegiveis = new Set()
+  for (const manutencao of itens) {
+    const arma = porId.get(String(manutencao.referencia_id))
+    if (!arma || maiusculo(arma.status) !== 'MANUTENCAO' || maiusculo(arma.propriedade) === 'PARTICULAR') {
+      continue
+    }
+    const local = maiusculo(arma.local_atual).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const destino = maiusculo(manutencao.destino).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const originalmenteP4 = origemEhP4(manutencao)
+    const recebidaP4 = destino === 'P4' && local === 'MANUTENCAO / P4'
+    const abertaP4 = originalmenteP4 && ['MANUTENCAO', 'MANUTENCAO / P4'].includes(local)
+    if (recebidaP4 || abertaP4) elegiveis.add(String(manutencao.id))
+  }
+  return elegiveis
+}
+
 function obterUsuarioId(user) {
   return user?.id || user?.user_id || user?.usuario_id || user?.usuario?.id || null
 }
@@ -184,6 +217,33 @@ export async function listarHTsElegiveisManutencaoExterna() {
   return manutencoes.filter((item) => !bloqueadas.has(String(item.id)))
 }
 
+export async function listarArmasElegiveisManutencaoExterna() {
+  const resposta = await listarManutencoes({
+    modulo: 'ARMAS',
+    status: 'EM_MANUTENCAO',
+    pagina: 1,
+    limite: 200
+  })
+  const manutencoes = resposta?.data || []
+  if (!manutencoes.length) return []
+  const elegiveisP4 = await conferirCustodiaArmaP4(manutencoes)
+  const candidatas = manutencoes.filter((item) => elegiveisP4.has(String(item.id)))
+  if (!candidatas.length) return []
+
+  const { data: vinculos, error } = await supabase
+    .from(TABLE_ITENS)
+    .select(`manutencao_id, sigmo_manutencoes_externas!inner(status)`)
+    .in('manutencao_id', candidatas.map((item) => item.id))
+  if (error) throw error
+  const bloqueadas = new Set((vinculos || []).filter((item) => [
+    STATUS_MANUTENCAO_EXTERNA.AGUARDANDO_APROVACAO,
+    STATUS_MANUTENCAO_EXTERNA.DILIGENCIA,
+    STATUS_MANUTENCAO_EXTERNA.APROVADA,
+    STATUS_MANUTENCAO_EXTERNA.EM_MANUTENCAO_EXTERNA
+  ].includes(maiusculo(item?.sigmo_manutencoes_externas?.status))).map((item) => String(item.manutencao_id)))
+  return candidatas.filter((item) => !bloqueadas.has(String(item.id)))
+}
+
 export async function listarTasersElegiveisManutencaoExterna() {
   const resultado = await listarManutencoes({
     modulo: 'TASER',
@@ -264,12 +324,17 @@ export async function criarSolicitacaoManutencaoExterna({
     throw new Error('Informe o motivo ou o serviço solicitado.')
   }
 
+  const armasElegiveis = await conferirCustodiaArmaP4(itens)
   for (const item of itens) {
     if (maiusculo(item?.status) !== 'EM_MANUTENCAO') {
       throw new Error('Todos os itens devem possuir manutenção interna ativa.')
     }
 
-    if (!origemEhP4(item)) {
+    if (maiusculo(item?.modulo) === 'ARMAS') {
+      if (!armasElegiveis.has(String(item.id))) {
+        throw new Error('Arma sem manutencao ativa sob custodia comprovada do P4.')
+      }
+    } else if (!origemEhP4(item)) {
       throw new Error(
         'Somente materiais sob responsabilidade institucional do P4 podem ser enviados por este fluxo.'
       )

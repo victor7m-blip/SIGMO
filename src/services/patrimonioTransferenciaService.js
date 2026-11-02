@@ -441,6 +441,28 @@ export async function criarTransferenciaPendente({
     )
   }
 
+  if (categoriaNormalizada === 'ARMA' &&
+      upper(metadata?.tipo_fluxo) === 'MANUTENCAO_ARMA_SVDD_P4') {
+    if (upper(origemCodigo) !== 'SVDD' || upper(destinoCodigo) !== 'P4') {
+      throw new Error('O encaminhamento de arma em manutenção deve partir do SVDD para o P4.')
+    }
+    const manutencaoId = texto(metadata?.manutencao_id)
+    if (!manutencaoId) throw new Error('Informe a manutenção da arma que será encaminhada.')
+
+    const { data: manutencao, error: erroManutencao } = await supabase
+      .from(MANUTENCOES_TABLE).select('id, modulo, referencia_id, origem, destino, status')
+      .eq('id', manutencaoId).maybeSingle()
+    if (erroManutencao) throw erroManutencao
+    if (!manutencao || upper(manutencao.modulo) !== 'ARMAS' ||
+        texto(manutencao.referencia_id) !== texto(vinculos.arma.id) ||
+        upper(manutencao.status) !== 'EM_MANUTENCAO' ||
+        !upper(manutencao.origem).includes('SVDD') ||
+        upper(manutencao.destino).includes('P4') ||
+        upper(vinculos.arma.status) !== 'MANUTENCAO') {
+      throw new Error('A arma não possui manutenção ativa sob responsabilidade do SVDD para encaminhar ao P4.')
+    }
+  }
+
   const origemCodigoNormalizado = upper(origemCodigo, 'P4')
   const destinoCodigoNormalizado = upper(destinoCodigo, 'SVDD')
 
@@ -836,6 +858,167 @@ async function aceitarTransferenciaDeArma({
       })
       .eq('id', armaId)
 
+    throw error
+  }
+}
+
+
+// Encaminhamento de ARMA EM MANUTENÇÃO: SVDD -> P4.
+// A arma NÃO volta à reserva no aceite. A manutenção permanece aberta.
+async function aceitarTransferenciaManutencaoArma({
+  transferencia,
+  ator,
+  horaServidor,
+  user
+}) {
+  const armaId = texto(transferencia?.metadata?.arma_id)
+  const manutencaoId = texto(transferencia?.metadata?.manutencao_id)
+
+  if (!armaId || !manutencaoId ||
+      upper(transferencia?.categoria) !== 'ARMA' ||
+      upper(transferencia?.origem_codigo) !== 'SVDD' ||
+      upper(transferencia?.destino_codigo) !== 'P4') {
+    throw new Error('O encaminhamento de manutenção da arma possui dados de origem ou vínculo inválidos.')
+  }
+
+  const { data: manutencao, error: erroManutencao } = await supabase
+    .from(MANUTENCOES_TABLE)
+    .select('*')
+    .eq('id', manutencaoId)
+    .maybeSingle()
+
+  if (erroManutencao) throw erroManutencao
+  if (!manutencao ||
+      upper(manutencao.modulo) !== 'ARMAS' ||
+      texto(manutencao.referencia_id) !== armaId ||
+      upper(manutencao.status) !== 'EM_MANUTENCAO') {
+    throw new Error('A manutenção da arma não foi encontrada ou já foi encerrada.')
+  }
+
+  const origemManutencao = upper(manutencao.origem)
+  const destinoManutencao = upper(manutencao.destino)
+  if (!origemManutencao.includes('SVDD') ||
+      destinoManutencao === 'P4' || destinoManutencao.includes('P4')) {
+    throw new Error('Esta manutenção não está disponível para encaminhamento do SVDD ao P4.')
+  }
+
+  const { data: armaAnterior, error: erroArma } = await supabase
+    .from(ARMAS_TABLE)
+    .select('*')
+    .eq('id', armaId)
+    .maybeSingle()
+
+  if (erroArma) throw erroArma
+  if (!armaAnterior || upper(armaAnterior.status) !== 'MANUTENCAO') {
+    throw new Error('A arma não está mais em manutenção. Atualize a tela.')
+  }
+
+  const novoLocal = 'MANUTENCAO / P4'
+  const complemento = [
+    'TRANSFERÊNCIA DE CUSTÓDIA DA MANUTENÇÃO: SVDD -> P4',
+    `PROTOCOLO: ${transferencia.protocolo}`,
+    `RECEBIDO POR: ${upper(ator.nome)}`,
+    ator.re ? `RE: ${ator.re}` : null,
+    `RECEBIDO EM: ${formatarDataHoraServidor(horaServidor)}`
+  ].filter(Boolean).join(' | ')
+
+  const { data: manutencaoAtualizada, error: erroAtualizacaoManutencao } = await supabase
+    .from(MANUTENCOES_TABLE)
+    .update({
+      destino: 'P4',
+      observacoes: [texto(manutencao.observacoes), complemento].filter(Boolean).join(' | '),
+      atualizado_em: horaServidor
+    })
+    .eq('id', manutencao.id)
+    .eq('status', 'EM_MANUTENCAO')
+    .eq('destino', manutencao.destino)
+    .select('*')
+    .maybeSingle()
+
+  if (erroAtualizacaoManutencao) throw erroAtualizacaoManutencao
+  if (!manutencaoAtualizada) {
+    throw new Error('A manutenção foi alterada por outro usuário. Atualize a tela.')
+  }
+
+  let armaAtualizada = null
+  let movimentacao = null
+  try {
+    movimentacao = await registrarMovimentacao({
+      patrimonioId: transferencia.patrimonio_id,
+      tipo: 'TRANSFERENCIA',
+      localDestino: novoLocal,
+      motivo: transferencia.motivo || 'ENCAMINHAMENTO_P4_MANUTENCAO',
+      observacao: transferencia.observacoes,
+      dados: {
+        transferencia_id: transferencia.id,
+        protocolo_transferencia: transferencia.protocolo,
+        categoria: 'ARMA',
+        quantidade: 1,
+        arma_id: armaId,
+        manutencao_id: manutencao.id,
+        tipo_fluxo: 'MANUTENCAO_ARMA_SVDD_P4',
+        origem_codigo: 'SVDD',
+        destino_codigo: 'P4',
+        preserva_manutencao: true
+      },
+      user
+    })
+
+    const { data: arma, error: erroLocal } = await supabase
+      .from(ARMAS_TABLE)
+      .update({ local_atual: novoLocal })
+      .eq('id', armaId)
+      .eq('status', 'MANUTENCAO')
+      .eq('local_atual', armaAnterior.local_atual)
+      .select('*')
+      .maybeSingle()
+
+    if (erroLocal) throw erroLocal
+    if (!arma) throw new Error('A localização da arma mudou. Atualize a tela.')
+    armaAtualizada = arma
+
+    const { data: aceita, error: erroAceite } = await supabase
+      .from(TABLE)
+      .update({
+        status: STATUS_TRANSFERENCIA.ACEITA,
+        recebido_por_id: ator.id,
+        recebido_por_re: ator.re,
+        recebido_por_nome: ator.nome,
+        recebido_em: horaServidor,
+        movimentacao_id: movimentacao?.id || movimentacao?.movimentacao?.id || null,
+        updated_at: horaServidor,
+        metadata: {
+          ...(transferencia.metadata || {}),
+          aceite_manutencao: true,
+          recebido_em: horaServidor
+        }
+      })
+      .eq('id', transferencia.id)
+      .eq('status', STATUS_TRANSFERENCIA.PENDENTE)
+      .select('*')
+      .maybeSingle()
+
+    if (erroAceite) throw erroAceite
+    if (!aceita) throw new Error('A transferência foi alterada por outro usuário.')
+
+    return { transferencia: aceita, arma: armaAtualizada, manutencao: manutencaoAtualizada, movimentacao }
+  } catch (error) {
+    // Compensação dos dados de custódia. A movimentação auditada, quando já
+    // registrada, permanece rastreável; não apagamos histórico patrimonial.
+    if (armaAtualizada) {
+      const { error: rollbackArma } = await supabase.from(ARMAS_TABLE)
+        .update({ local_atual: armaAnterior.local_atual })
+        .eq('id', armaId).eq('local_atual', novoLocal)
+      if (rollbackArma) console.error('Falha ao restaurar local da arma:', rollbackArma)
+    }
+    const { error: rollbackManutencao } = await supabase.from(MANUTENCOES_TABLE)
+      .update({
+        destino: manutencao.destino,
+        observacoes: manutencao.observacoes,
+        atualizado_em: manutencao.atualizado_em
+      })
+      .eq('id', manutencao.id).eq('status', 'EM_MANUTENCAO').eq('destino', 'P4')
+    if (rollbackManutencao) console.error('Falha ao restaurar custódia da manutenção:', rollbackManutencao)
     throw error
   }
 }
@@ -1625,14 +1808,15 @@ export async function aceitarTransferencia({
   let resultado
 
   const fluxoManutencaoTonfa =
-    upper(
-      transferencia?.metadata?.tipo_fluxo
-    ) === 'MANUTENCAO_SVDD_P4'
+    ['TONFA', 'CASSETETE'].includes(categoria) &&
+    upper(transferencia?.metadata?.tipo_fluxo) === 'MANUTENCAO_SVDD_P4'
 
   const fluxoExtravioTonfa =
-    upper(
-      transferencia?.metadata?.tipo_fluxo
-    ) === 'EXTRAVIO_SVDD_P4'
+    ['TONFA', 'CASSETETE'].includes(categoria) &&
+    upper(transferencia?.metadata?.tipo_fluxo) === 'EXTRAVIO_SVDD_P4'
+
+  const fluxoManutencaoArma = categoria === 'ARMA' &&
+    upper(transferencia?.metadata?.tipo_fluxo) === 'MANUTENCAO_ARMA_SVDD_P4'
 
   if (fluxoExtravioTonfa) {
     resultado =
@@ -1650,6 +1834,13 @@ export async function aceitarTransferencia({
         horaServidor,
         user
       })
+  } else if (fluxoManutencaoArma) {
+    resultado = await aceitarTransferenciaManutencaoArma({
+      transferencia,
+      ator,
+      horaServidor,
+      user
+    })
   } else if (categoria === 'ARMA') {
     resultado = await aceitarTransferenciaDeArma({
       transferencia,
@@ -1795,7 +1986,7 @@ export async function aceitarTransferencia({
           `Transferência ${transferencia.protocolo} concluída por ${ator.nome}` +
           `${ator.re ? `, RE ${ator.re}` : ''}, em ${formatarDataHoraServidor(horaServidor)}.`
         )
-      : fluxoManutencaoTonfa
+      : (fluxoManutencaoTonfa || fluxoManutencaoArma)
         ? (
           `O P4 confirmou o recebimento de ${material} em manutenção. ` +
           `A manutenção permanece ativa, agora sob custódia do P4. ` +
@@ -1847,12 +2038,14 @@ export async function aceitarTransferencia({
   await auditar({
     tipo: fluxoExtravioTonfa
       ? 'TRANSFERENCIA_EXTRAVIO_ACEITA'
+      : fluxoManutencaoArma
+        ? 'TRANSFERENCIA_MANUTENCAO_ARMA_ACEITA'
       : fluxoManutencaoTonfa
         ? 'TRANSFERENCIA_MANUTENCAO_ACEITA'
         : 'TRANSFERENCIA_PATRIMONIAL_ACEITA',
     descricao: fluxoExtravioTonfa
       ? `Aceitou a transferência ${transferencia.protocolo}: procedimento de extravio de ${material} avocado pelo P4, sem movimentação física do material.`
-      : fluxoManutencaoTonfa
+      : (fluxoManutencaoTonfa || fluxoManutencaoArma)
         ? `Aceitou a transferência ${transferencia.protocolo}: ${material} em manutenção recebido(s) pelo P4. A manutenção permaneceu ativa.`
         : `Aceitou a transferência ${transferencia.protocolo}: ${material} recebido(s) pelo ${setorDestino}.`,
     usuario: user,

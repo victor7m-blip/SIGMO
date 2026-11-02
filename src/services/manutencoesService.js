@@ -3238,8 +3238,16 @@ async function aplicarRetornoArma(manutencao, user) {
       manutencao
     )
 
+  // Após aceite de encaminhamento de manutenção SVDD -> P4,
+  // a responsabilidade passa ao P4. O retorno deve acompanhar a custódia
+  // atual (destino P4), não apenas a origem da abertura da manutenção.
+  const manutencaoSobP4 =
+    maiusculo(manutencao.destino) === 'P4' ||
+    maiusculo(manutencao.destino).includes('MANUTENCAO / P4') ||
+    maiusculo(manutencao.destino).includes('MANUTENÇÃO / P4')
+
   const localRetorno =
-    origemInstitucional.setor === 'P4'
+    manutencaoSobP4 || origemInstitucional.setor === 'P4'
       ? 'COFRE DO P4'
       : 'COFRE DO SVDD'
 
@@ -4089,6 +4097,28 @@ export async function concluirManutencao({
 
   if (atual.status !== STATUS_MANUTENCAO.EM_MANUTENCAO) {
     throw new Error('Esta manutenção não está mais ativa.')
+  }
+
+  if (atual.modulo === MODULOS_MANUTENCAO.ARMAS && atual.patrimonio_id) {
+    // Não concluir enquanto existir encaminhamento pendente para o P4.
+    // A manutenção continua ativa até aceite/recusa/cancelamento da transferência.
+    const { data: transferenciasPendentes, error: erroPendentes } = await supabase
+      .from('sigmo_transferencias_patrimoniais')
+      .select('id, metadata')
+      .eq('patrimonio_id', atual.patrimonio_id)
+      .eq('categoria', 'ARMA')
+      .eq('status', 'PENDENTE')
+      .eq('destino_codigo', 'P4')
+      .limit(100)
+
+    if (erroPendentes) throw erroPendentes
+    const encaminhamentoAberto = (transferenciasPendentes || []).some((transferencia) =>
+      maiusculo(transferencia?.metadata?.tipo_fluxo) === 'MANUTENCAO_ARMA_SVDD_P4' &&
+      String(transferencia?.metadata?.manutencao_id || '') === String(atual.id)
+    )
+    if (encaminhamentoAberto) {
+      throw new Error('Esta arma está aguardando aceite de manutenção pelo P4. Aguarde o recebimento, recusa ou cancelamento do encaminhamento antes de concluir a manutenção.')
+    }
   }
 
   const retorno = await aplicarRetornoPatrimonial(atual, user)

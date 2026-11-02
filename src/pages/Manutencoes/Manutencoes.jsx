@@ -18,6 +18,7 @@ import FiltrosManutencao from './components/FiltrosManutencao'
 import ManutencaoCard from './components/ManutencaoCard'
 import ManutencaoDetalhes from './components/ManutencaoDetalhes'
 import HTManutencaoExternaModal from '../HT/components/HTManutencaoExternaModal'
+import ArmasManutencaoExternaModal from './components/ArmasManutencaoExternaModal'
 import CentralManutencaoVtr from './CentralManutencaoVtr'
 import './Manutencoes.css'
 
@@ -41,7 +42,7 @@ function obterSetorManutencao(item, transferenciaPendenteP4 = false) {
   // A custódia só muda depois que o P4 confirma o recebimento.
   // Durante o encaminhamento pendente, continua pertencendo ao SVDD.
   if (
-    normalizarTexto(item?.modulo) === 'TONFAS' &&
+    ['TONFAS', 'ARMAS'].includes(normalizarTexto(item?.modulo)) &&
     normalizarTexto(item?.status) === 'EM_MANUTENCAO'
   ) {
     if (transferenciaPendenteP4) return 'SVDD'
@@ -188,9 +189,10 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
       setTransferenciasPendentesP4(
         (respostaTransferenciasP4 || []).filter(
           (item) =>
-            normalizarTexto(
-              item?.metadata?.tipo_fluxo
-            ) === 'MANUTENCAO_SVDD_P4' &&
+            [
+              'MANUTENCAO_SVDD_P4',
+              'MANUTENCAO_ARMA_SVDD_P4'
+            ].includes(normalizarTexto(item?.metadata?.tipo_fluxo)) &&
             Boolean(item?.metadata?.manutencao_id)
         )
       )
@@ -617,20 +619,23 @@ export default function Manutencoes({ user, onVoltar, onAbrirRivViatura }) {
         salvando={salvando}
       />
 
-      {manutencaoExternaSelecionada && (
-        <HTManutencaoExternaModal
-          user={user}
-          manutencaoInicial={manutencaoExternaSelecionada}
-          onClose={() => setManutencaoExternaSelecionada(null)}
-          onCreated={async (solicitacao) => {
-            setMensagem(
-              `Solicitação ${solicitacao?.protocolo || ''} enviada para aprovação do Cmt de Cia.`
-            )
-            setManutencaoExternaSelecionada(null)
-            await carregar()
-          }}
-        />
-      )}
+      {manutencaoExternaSelecionada && (() => {
+        const ModalExterno = normalizarTexto(manutencaoExternaSelecionada.modulo) === 'ARMAS'
+          ? ArmasManutencaoExternaModal
+          : HTManutencaoExternaModal
+        return (
+          <ModalExterno
+            user={user}
+            manutencaoInicial={manutencaoExternaSelecionada}
+            onClose={() => setManutencaoExternaSelecionada(null)}
+            onCreated={async (solicitacao) => {
+              setMensagem(`Solicitação ${solicitacao?.protocolo || ''} enviada para aprovação do Cmt de Cia.`)
+              setManutencaoExternaSelecionada(null)
+              await carregar()
+            }}
+          />
+        )
+      })()}
     </main>
   )
 }

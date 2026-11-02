@@ -214,19 +214,27 @@ if (!manutencao) return null
     envioP4Pendente &&
     typeof onCancelarEnvioP4 === 'function'
 
+  const moduloEhArmas = moduloNormalizado === 'ARMAS'
+  const destinoManutencao = normalizarComparacao(manutencao?.destino || '')
+  const custodiaArmaP4 = destinoManutencao === 'P4' ||
+    destinoManutencao.includes('MANUTENCAO / P4') ||
+    origemInstitucional.includes('P4')
   const podeEnviarManutencaoExterna =
     manutencaoInternaAtiva &&
     !temSolicitacaoExternaAtiva &&
-    manutencao.modulo === 'HT' &&
     perfilUsuario.includes('P4') &&
-    origemInstitucional.includes('P4')
+    ((manutencao.modulo === 'HT' && origemInstitucional.includes('P4')) ||
+      (moduloEhArmas && custodiaArmaP4))
 
   const podeRegistrarRetornoExterno =
     ativa &&
     emManutencaoExterna &&
-    manutencao.modulo === 'HT' &&
+    ['HT', 'ARMAS'].includes(manutencao.modulo) &&
     perfilUsuario.includes('P4') &&
     Boolean(historicoExterno?.id)
+
+  const armaComExternaEmAndamento = moduloEhArmas &&
+    temSolicitacaoExternaAtiva && !podeRegistrarRetornoExterno
 
   const novidadeAutomatica =
     novidadeGeradaAutomaticamentePelaManutencao(novidadeUsuario)
@@ -920,6 +928,10 @@ if (!manutencao) return null
               >
                 {salvando ? 'Registrando retorno...' : 'Registrar retorno da manutenção externa'}
               </button>
+            ) : armaComExternaEmAndamento ? (
+              <div role="status" style={{fontWeight: 700, padding: '10px 14px'}}>
+                Manutenção externa em acompanhamento — aguarde a decisão ou o retorno autorizado.
+              </div>
             ) : envioP4Pendente ? (
               <button
                 type="button"
